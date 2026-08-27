@@ -12,8 +12,9 @@ use tinyowl_tiles::{terrain, vector};
 #[derive(Parser)]
 #[command(
     name = "tinyowl-tiles",
-    about = "Transform geospatial sources into 3D Tiles (.3tz)",
-    version
+    about = "Transform geospatial sources into 3D Tiles (.3tz). createTilesetJson and convert match 3d-tiles-tools@0.5.4 argv.",
+    version,
+    arg_required_else_help = true
 )]
 struct Cli {
     #[command(subcommand)]
@@ -23,10 +24,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// GLB/glTF file or directory → tileset.json (3d-tiles-tools createTilesetJson)
+    #[command(name = "createTilesetJson", alias = "create-tileset-json")]
     CreateTilesetJson(IoArgs),
-    /// Tileset directory or tileset.json → .3tz ZIP (3d-tiles-tools convert)
+    /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(ConvertArgs),
-    /// GLB/glTF → .3tz (create-tileset-json + convert)
+    /// GLB/glTF → .3tz (createTilesetJson + convert)
+    #[command(name = "glb-to-3tz", alias = "glbTo3tz")]
     GlbTo3tz(IoArgs),
     /// GeoJSON/GPKG → 3D Tiles 2.0 vector tiles (not implemented until spec pin)
     Vector(BasicIo),
@@ -36,10 +39,8 @@ enum Command {
 
 #[derive(Args)]
 struct BasicIo {
-    /// Input path
     #[arg(short = 'i', long = "input")]
     input: PathBuf,
-    /// Output path
     #[arg(short = 'o', long = "output")]
     output: PathBuf,
 }
@@ -60,11 +61,21 @@ struct IoArgs {
     input: PathBuf,
     #[arg(short = 'o', long = "output")]
     output: PathBuf,
-    /// lon lat [height_m]
-    #[arg(long = "cartographic-position-degrees", num_args = 2..=3, allow_hyphen_values = true)]
+    /// lon lat [height_m] — 3d-tiles-tools --cartographicPositionDegrees
+    #[arg(
+        long = "cartographicPositionDegrees",
+        visible_alias = "cartographic-position-degrees",
+        num_args = 2..=3,
+        allow_hyphen_values = true
+    )]
     cartographic_position_degrees: Vec<f64>,
-    /// heading pitch roll (degrees)
-    #[arg(long = "rotation-degrees", num_args = 3, allow_hyphen_values = true)]
+    /// heading pitch roll (degrees) — 3d-tiles-tools --rotationDegrees
+    #[arg(
+        long = "rotationDegrees",
+        visible_alias = "rotation-degrees",
+        num_args = 3,
+        allow_hyphen_values = true
+    )]
     rotation_degrees: Vec<f64>,
     #[arg(short = 'f', long = "force")]
     force: bool,
@@ -126,7 +137,7 @@ fn tileset_opts(a: &IoArgs) -> Result<CreateTilesetOptions, Error> {
     };
     if rotation.is_some() && cartographic.is_none() {
         return Err(Error::msg(
-            "--rotation-degrees requires --cartographic-position-degrees",
+            "--rotationDegrees requires --cartographicPositionDegrees",
         ));
     }
     Ok(CreateTilesetOptions {

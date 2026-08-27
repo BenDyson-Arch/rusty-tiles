@@ -9,7 +9,6 @@ use walkdir::WalkDir;
 use crate::bbox::{aabb_to_box, bounding_box_from_gltf_path, box_to_aabb, union_aabb, BoundingBox};
 use crate::error::Error;
 use crate::georef::{root_transform, Cartographic, RotationDegrees};
-use crate::pack::convert_to_3tz;
 
 /// Leaf geometric error from 3d-tiles-tools TilesetJsonCreator.
 pub const LEAF_GEOMETRIC_ERROR: f64 = 512.0;
@@ -133,7 +132,7 @@ fn file_name(p: &Path) -> Result<String, Error> {
         .ok_or_else(|| Error::msg("path has no file name"))
 }
 
-/// Copy GLB into a work dir, write tileset.json, pack `.3tz`.
+/// Write tileset.json next to the source GLB URI, pack a 3TZ without copying the GLB.
 pub fn glb_to_3tz(input: &Path, output: &Path, opts: &CreateTilesetOptions) -> Result<(), Error> {
     if !input.is_file() || !is_gltf(input) {
         return Err(Error::NoContent(input.to_path_buf()));
@@ -147,12 +146,18 @@ pub fn glb_to_3tz(input: &Path, output: &Path, opts: &CreateTilesetOptions) -> R
     }
     fs::create_dir_all(&tmp)?;
     let name = file_name(input)?;
-    let dest_glb = tmp.join(&name);
-    fs::copy(input, &dest_glb)?;
     let json_path = tmp.join("tileset.json");
-    create_tileset_json(&dest_glb, &json_path, opts)?;
-    let pack_opts = crate::pack::PackOptions { force: true };
-    let result = convert_to_3tz(&tmp, output, &pack_opts);
+    let result = (|| {
+        create_tileset_json(input, &json_path, opts)?;
+        crate::pack::pack_named_files(
+            &[
+                ("tileset.json".to_string(), json_path.clone()),
+                (name, input.to_path_buf()),
+            ],
+            output,
+            &crate::pack::PackOptions { force: true },
+        )
+    })();
     let _ = fs::remove_dir_all(&tmp);
     result
 }

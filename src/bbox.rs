@@ -1,5 +1,7 @@
 //! Axis-aligned bounding volume.box from glTF POSITION data (3D Tiles 1.1).
 
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use gltf::buffer::Data as BufferData;
@@ -11,8 +13,40 @@ use crate::error::Error;
 pub type BoundingBox = [f64; 12];
 
 pub fn bounding_box_from_gltf_path(path: &Path) -> Result<BoundingBox, Error> {
-    let (gltf, buffers, _) = gltf::import(path)?;
-    bounding_box_from_gltf(&gltf, &buffers)
+    let document = read_gltf_document(path)?;
+    match bounding_box_from_gltf(&document, &[]) {
+        Ok(b) => Ok(b),
+        Err(_) => {
+            // Accessors without min/max: load BIN (still skip image decode).
+            let gltf = gltf::Gltf::open(path)?;
+            let buffers = gltf::import_buffers(&gltf.document, path.parent(), gltf.blob)?;
+            bounding_box_from_gltf(&gltf.document, &buffers)
+        }
+    }
+}
+
+/// Parse glTF JSON only. For `.glb` this reads the JSON chunk, not the 1.5 GiB BIN/textures.
+fn read_gltf_document(path: &Path) -> Result<gltf::Document, Error> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if ext == "glb" {
+        let mut f = File::open(path)?;
+        let mut header = [0u8; 20];
+        f.read_exact(&mut header)?;
+        if &header[0..4] != b"glTF" {
+            return Err(Error::msg("not a GLB"));
+        }
+        let json_len = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
+        let mut json = vec![0u8; json_len];
+        f.read_exact(&mut json)?;
+        Ok(gltf::Gltf::from_slice(&json)?.document)
+    } else {
+        let data = std::fs::read(path)?;
+        Ok(gltf::Gltf::from_slice(&data)?.document)
+    }
 }
 
 pub fn bounding_box_from_gltf(
@@ -72,28 +106,23 @@ fn collect_nodes<'a>(
         let world = mul4(parent, local);
         if let Some(mesh) = node.mesh() {
             for prim in mesh.primitives() {
-                let reader = prim.reader(|b| Some(&buffers[b.index()][..]));
-                if let Some(iter) = reader.read_positions() {
-                    for p in iter {
-                        let tp = y_up_to_z_up(transform_point(world, p));
-                        for i in 0..3 {
-                            min[i] = min[i].min(tp[i] as f64);
-                            max[i] = max[i].max(tp[i] as f64);
-                        }
-                        *any = true;
-                    }
-                } else if let Some(acc) = prim.get(&Semantic::Positions) {
+                if let Some(acc) = prim.get(&Semantic::Positions) {
                     if let (Some(mn), Some(mx)) = (acc.min(), acc.max()) {
                         let mn = json_vec3(&mn)?;
                         let mx = json_vec3(&mx)?;
                         for corner in aabb_corners(mn, mx) {
-                            let tp = y_up_to_z_up(transform_point(world, corner));
-                            for i in 0..3 {
-                                min[i] = min[i].min(tp[i] as f64);
-                                max[i] = max[i].max(tp[i] as f64);
-                            }
-                            *any = true;
+                            include(min, max, any, y_up_to_z_up(transform_point(world, corner)));
                         }
+                        continue;
+                    }
+                }
+                if buffers.is_empty() {
+                    continue;
+                }
+                let reader = prim.reader(|b| buffers.get(b.index()).map(|d| d.0.as_slice()));
+                if let Some(iter) = reader.read_positions() {
+                    for p in iter {
+                        include(min, max, any, y_up_to_z_up(transform_point(world, p)));
                     }
                 }
             }
@@ -101,6 +130,14 @@ fn collect_nodes<'a>(
         collect_nodes(node.children(), buffers, world, min, max, any)?;
     }
     Ok(())
+}
+
+fn include(min: &mut [f64; 3], max: &mut [f64; 3], any: &mut bool, p: [f32; 3]) {
+    for i in 0..3 {
+        min[i] = min[i].min(p[i] as f64);
+        max[i] = max[i].max(p[i] as f64);
+    }
+    *any = true;
 }
 
 fn json_vec3(v: &gltf::json::Value) -> Result<[f32; 3], Error> {

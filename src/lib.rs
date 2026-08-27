@@ -14,7 +14,7 @@ pub mod vector;
 
 pub use error::Error;
 pub use georef::{Cartographic, RotationDegrees};
-pub use pack::convert_to_3tz;
+pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
 pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 
 /// npm package pin used as the v0 oracle. Golden tests call this via `npx`.

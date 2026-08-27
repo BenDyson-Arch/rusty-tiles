@@ -1,8 +1,14 @@
-//! ENU → ECEF placement matching TinyOwl `modeltiles.eastNorthUpMatrix` for
-//! lon/lat/height (heading about up in Go is EN-plane clockwise-from-north).
-//! `--rotation-degrees` uses Cesium HPR (−heading, pitch, roll) and is **not**
-//! the Go heading contract — do not swap the worker onto this until heading-only
-//! 4×4s match.
+//! ENU → ECEF `root.transform` matching Cesium `3d-tiles-tools` `createTilesetJson`
+//! (`Transforms.eastNorthUpToFixedFrame` / `headingPitchRollQuaternion`).
+//!
+//! This is **not** TinyOwl Go `eastNorthUpMatrix` heading (EN-plane clockwise
+//! from north with a truncated Z). `model-worker` still applies Go placement
+//! after convert; do not pass `--rotationDegrees` from the worker until that
+//! contract is dropped.
+
+/// WGS84 as Cesium `Ellipsoid.WGS84`.
+const WGS84_A: f64 = 6_378_137.0;
+const WGS84_F: f64 = 1.0 / 298.257_223_563;
 
 /// Longitude/latitude in degrees, height in metres (WGS84).
 #[derive(Clone, Copy, Debug)]
@@ -22,7 +28,7 @@ impl Cartographic {
     }
 }
 
-/// Heading, pitch, roll in degrees (Cesium HPR: heading about up / −Z in ENU).
+/// Heading, pitch, roll in degrees (`3d-tiles-tools --rotationDegrees`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RotationDegrees {
     pub heading: f64,
@@ -30,7 +36,7 @@ pub struct RotationDegrees {
     pub roll: f64,
 }
 
-/// Column-major 4×4 tile `transform` (ENU→ECEF, optional HPR).
+/// Column-major 4×4 tile `transform` (ENU→ECEF, optional Cesium HPR).
 pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 16] {
     let enu = east_north_up(pos);
     match rot {
@@ -40,18 +46,17 @@ pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 
     }
 }
 
-/// WGS84 east-north-up to ECEF, column-major. Same ellipsoid as TinyOwl Go.
+/// WGS84 east-north-up to ECEF, column-major. Cesium `eastNorthUpToFixedFrame`.
 pub fn east_north_up(pos: Cartographic) -> [f64; 16] {
     let lon = pos.lon_deg.to_radians();
     let lat = pos.lat_deg.to_radians();
     let height = pos.height_m;
-    let a = 6378137.0;
-    let e2 = 6.69437999014e-3;
+    let e2 = WGS84_F * (2.0 - WGS84_F);
     let sin_lat = lat.sin();
     let cos_lat = lat.cos();
     let sin_lon = lon.sin();
     let cos_lon = lon.cos();
-    let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
+    let n = WGS84_A / (1.0 - e2 * sin_lat * sin_lat).sqrt();
     let x = (n + height) * cos_lat * cos_lon;
     let y = (n + height) * cos_lat * sin_lon;
     let z = (n * (1.0 - e2) + height) * sin_lat;
@@ -66,7 +71,7 @@ pub fn east_north_up(pos: Cartographic) -> [f64; 16] {
     ]
 }
 
-/// Local HPR in ENU: Cesium heading about −Z (up), pitch about −Y, roll about +X.
+/// Cesium `Matrix3.fromHeadingPitchRoll` as a 4×4 (heading about −Z, pitch −Y, roll +X).
 fn hpr_matrix(r: RotationDegrees) -> [f64; 16] {
     let h = -r.heading.to_radians();
     let p = -r.pitch.to_radians();
@@ -75,7 +80,6 @@ fn hpr_matrix(r: RotationDegrees) -> [f64; 16] {
     let (sp, cp) = (p.sin(), p.cos());
     let (sr, cr) = (roll.sin(), roll.cos());
 
-    // Rz(h) * Ry(p) * Rx(roll), column-major 3×3 embedded in 4×4.
     let r00 = ch * cp;
     let r01 = ch * sp * sr - sh * cr;
     let r02 = ch * sp * cr + sh * sr;
@@ -108,13 +112,75 @@ fn mul4(a: [f64; 16], b: [f64; 16]) -> [f64; 16] {
 mod tests {
     use super::*;
 
+    fn assert_mat(got: [f64; 16], want: [f64; 16], trans_eps: f64) {
+        for i in 0..16 {
+            let eps = if i == 12 || i == 13 || i == 14 {
+                trans_eps
+            } else {
+                1e-8
+            };
+            assert!(
+                (got[i] - want[i]).abs() < eps,
+                "m[{i}] got={} want={}",
+                got[i],
+                want[i]
+            );
+        }
+    }
+
     #[test]
-    fn sydney_enu_translation_is_earth_radius_scale() {
-        let t = east_north_up(Cartographic::new(151.2, -33.9, 0.0));
-        let x = t[12];
-        let y = t[13];
-        let z = t[14];
-        let r = (x * x + y * y + z * z).sqrt();
-        assert!((r - 6.37e6).abs() < 5e4, "r={r}");
+    fn sydney_enu_matches_cesium_east_north_up_to_fixed_frame() {
+        let t = east_north_up(Cartographic::new(151.2, -33.9, 10.0));
+        // Dumped from cesium@ used by 3d-tiles-tools@0.5.4.
+        let want = [
+            -0.481_753_674_101_715_55,
+            -0.876_306_680_043_863_5,
+            0.0,
+            0.0,
+            -0.488_755_768_314_889_65,
+            0.268_695_757_417_162_45,
+            0.830_012_282_369_929_5,
+            0.0,
+            -0.727_345_307_559_222_6,
+            0.399_861_466_581_264_1,
+            -0.557_745_113_035_57,
+            0.0,
+            -4_643_953.300_870_437,
+            2_553_034.931_719_495_4,
+            -3_537_250.925_356_345_7,
+            1.0,
+        ];
+        assert_mat(t, want, 1e-4);
+    }
+
+    #[test]
+    fn rotation_degrees_90_matches_cesium_heading_pitch_roll() {
+        let t = root_transform(
+            Cartographic::new(151.2, -33.9, 10.0),
+            Some(RotationDegrees {
+                heading: 90.0,
+                pitch: 0.0,
+                roll: 0.0,
+            }),
+        );
+        let want = [
+            0.488_755_768_314_889_6,
+            -0.268_695_757_417_162_7,
+            -0.830_012_282_369_929_3,
+            0.0,
+            -0.481_753_674_101_715_66,
+            -0.876_306_680_043_863_4,
+            0.0,
+            0.0,
+            -0.727_345_307_559_222_6,
+            0.399_861_466_581_264_1,
+            -0.557_745_113_035_570_1,
+            0.0,
+            -4_643_953.300_870_437,
+            2_553_034.931_719_495_4,
+            -3_537_250.925_356_345_7,
+            1.0,
+        ];
+        assert_mat(t, want, 1e-4);
     }
 }

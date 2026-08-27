@@ -1,40 +1,27 @@
 # Hub seam: `tinyowl-tiles` ↔ `tinyowl-server`
 
-Do **not** wire this into `model-worker` until:
+`createTilesetJson` and `convert` accept the same argv as `3d-tiles-tools@0.5.4`. That is enough for `TINYOWL_TILES_CMD=tinyowl-tiles` **without** cartographic flags: Go still writes `root.transform` via `eastNorthUpMatrix`.
 
-1. v0 golden tests pass against `3d-tiles-tools@0.5.4`
-2. Heading-only ENU 4×4 matches `modeltiles.eastNorthUpMatrix` (clockwise from north in the EN plane). Cesium HPR (`−heading`, pitch, roll) is a **later** flag — swapping now would rotate placed models.
-3. A later ticket explicitly asks for the swap (not implied by P2).
+Do **not** pass `--cartographicPositionDegrees` / `--rotationDegrees` from `model-worker` until a later ticket drops Go placement. Those flags match Cesium HPR (the tools oracle), not Go heading.
 
 `TINYOWL_TILES_CMD` is the swap valve. Default remains `npx --yes 3d-tiles-tools@0.5.4`.
 
 ## Contract
 
-`model-worker` (and later raster/vector jobs) should treat this CLI as a local filter:
+Drop-in for `tools.go` today:
 
 ```text
-tinyowl-tiles glb-to-3tz -i <src.glb> -o <out.3tz> [--cartographic-position-degrees LON LAT [H]] [--rotation-degrees H P R] -f
+tinyowl-tiles createTilesetJson -i <dir-with-glb> -o <dir>/tileset.json
+tinyowl-tiles convert -i <dir>/tileset.json -o <out.3tz>
 ```
 
-Suggested Go (when the gates above pass — not in P2):
-
-```go
-func tilesBin() string {
-    if p, err := exec.LookPath("tinyowl-tiles"); err == nil {
-        return p
-    }
-    return "" // fall back to npx 3d-tiles-tools@0.5.4
-}
-```
-
-Fallback recipe today:
+Convenience (not used by the worker):
 
 ```text
-npx --yes 3d-tiles-tools@0.5.4 createTilesetJson -i <dir-with-glb> -o <dir>/tileset.json -f
-npx --yes 3d-tiles-tools@0.5.4 convert -i <dir> -o <out.3tz> -f
+tinyowl-tiles glb-to-3tz -i <src.glb> -o <out.3tz> [--cartographicPositionDegrees LON LAT [H]] [--rotationDegrees H P R] -f
 ```
 
-`--cartographic-position-degrees` must not replace `modeltiles.eastNorthUpMatrix` until heading-only matrices match. Go applies heading as an EN-plane rotation (clockwise from north). This crate’s `--rotation-degrees` uses Cesium HPR (`−heading`, pitch, roll) — different 4×4 when heading ≠ 0.
+`.3tz` is a stored ZIP with `"@3dtilesIndex1@"` last (Cesium 3TZ). `tileset.ExtractZip` only needs a ZIP that contains `tileset.json`.
 
 ## Planes
 

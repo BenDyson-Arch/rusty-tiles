@@ -10,6 +10,7 @@ use tinyowl_tiles::tileset::{
     TILESET_GEOMETRIC_ERROR,
 };
 use tinyowl_tiles::vector;
+use tinyowl_tiles::TZ_INDEX_NAME;
 use tinyowl_tiles::{terrain, ORACLE_NPM};
 
 fn write_triangle(dir: &std::path::Path) -> std::path::PathBuf {
@@ -89,6 +90,10 @@ fn convert_and_glb_to_3tz_zip_layout() {
         .iter()
         .any(|n| n == "tileset.json" || n.ends_with("/tileset.json")));
     assert!(names.iter().any(|n| n.contains("triangle.glb")));
+    assert!(
+        names.iter().any(|n| n == TZ_INDEX_NAME),
+        "3TZ index missing: {names:?}"
+    );
 
     let raw = fs::read(&tz).unwrap();
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(raw)).unwrap();
@@ -98,6 +103,7 @@ fn convert_and_glb_to_3tz_zip_layout() {
     let v: serde_json::Value = serde_json::from_str(&s).unwrap();
     assert_eq!(v["asset"]["version"], "1.1");
     assert_eq!(v["root"]["content"]["uri"], "triangle.glb");
+    tinyowl_tiles::validate_3tz(&tz).unwrap();
 }
 
 #[test]
@@ -199,4 +205,146 @@ fn golden_vs_3d_tiles_tools_when_npx_present() {
     assert!((ub[0].as_f64().unwrap() - 0.5).abs() < 1e-4);
     assert!(ub[1].as_f64().unwrap().abs() < 1e-4);
     assert!((ub[2].as_f64().unwrap() - 0.5).abs() < 1e-4);
+}
+
+fn npx_create_tileset_json(
+    input: &std::path::Path,
+    output: &std::path::Path,
+    extra: &[&str],
+) -> bool {
+    let mut args = vec![
+        "--yes",
+        ORACLE_NPM,
+        "createTilesetJson",
+        "-i",
+        input.to_str().unwrap(),
+        "-o",
+        output.to_str().unwrap(),
+        "-f",
+    ];
+    args.extend(extra.iter().copied());
+    match Command::new("npx").args(&args).status() {
+        Ok(st) if st.success() => true,
+        Ok(st) => {
+            eprintln!("skip golden: {ORACLE_NPM} failed ({st})");
+            false
+        }
+        Err(_) => {
+            eprintln!("skip golden: npx not available");
+            false
+        }
+    }
+}
+
+fn f64_arr(v: &serde_json::Value) -> Vec<f64> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_f64().unwrap())
+        .collect()
+}
+
+#[test]
+fn golden_cartographic_and_rotation_match_3d_tiles_tools() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = write_triangle(tmp.path());
+    let opts = CreateTilesetOptions {
+        cartographic: Some(Cartographic::new(151.2, -33.9, 10.0)),
+        rotation: Some(tinyowl_tiles::RotationDegrees {
+            heading: 90.0,
+            pitch: 0.0,
+            roll: 0.0,
+        }),
+        force: true,
+    };
+    let our_json = tmp.path().join("ours.json");
+    create_tileset_json(&glb, &our_json, &opts).unwrap();
+    let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
+
+    let oracle_dir = tmp.path().join("oracle-in");
+    fs::create_dir(&oracle_dir).unwrap();
+    fs::copy(&glb, oracle_dir.join("triangle.glb")).unwrap();
+    let oracle_json = tmp.path().join("oracle.json");
+    if !npx_create_tileset_json(
+        &oracle_dir,
+        &oracle_json,
+        &[
+            "--cartographicPositionDegrees",
+            "151.2",
+            "-33.9",
+            "10",
+            "--rotationDegrees",
+            "90",
+            "0",
+            "0",
+        ],
+    ) {
+        return;
+    }
+    let oracle: serde_json::Value =
+        serde_json::from_slice(&fs::read(&oracle_json).unwrap()).unwrap();
+    let ot = f64_arr(&oracle["root"]["transform"]);
+    let ut = f64_arr(&ours["root"]["transform"]);
+    assert_eq!(ot.len(), 16);
+    assert_eq!(ut.len(), 16);
+    for i in 0..16 {
+        let eps = if i >= 12 { 1e-3 } else { 1e-8 };
+        assert!(
+            (ot[i] - ut[i]).abs() < eps,
+            "transform[{i}] oracle={} ours={}",
+            ot[i],
+            ut[i]
+        );
+    }
+}
+
+#[test]
+fn cli_create_tileset_json_camel_case_matches_tools_argv() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = write_triangle(tmp.path());
+    let out = tmp.path().join("tileset.json");
+    let bin = env!("CARGO_BIN_EXE_tinyowl-tiles");
+    let st = Command::new(bin)
+        .args([
+            "createTilesetJson",
+            "-i",
+            glb.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+            "-f",
+            "--cartographicPositionDegrees",
+            "151.2",
+            "-33.9",
+            "10",
+        ])
+        .status()
+        .unwrap();
+    assert!(st.success(), "{st}");
+    let ts: serde_json::Value = serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();
+    assert!(ts["root"]["transform"].is_array());
+    assert_eq!(ts["root"]["content"]["uri"], "triangle.glb");
+}
+
+#[test]
+fn convert_via_cli_accepts_tileset_json_path() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = write_triangle(tmp.path());
+    let json = tmp.path().join("tileset.json");
+    create_tileset_json(&glb, &json, &CreateTilesetOptions::default()).unwrap();
+    let tz = tmp.path().join("out.3tz");
+    let bin = env!("CARGO_BIN_EXE_tinyowl-tiles");
+    let st = Command::new(bin)
+        .args([
+            "convert",
+            "-i",
+            json.to_str().unwrap(),
+            "-o",
+            tz.to_str().unwrap(),
+            "-f",
+        ])
+        .status()
+        .unwrap();
+    assert!(st.success(), "{st}");
+    let names = list_zip_names(&tz).unwrap();
+    assert!(names.iter().any(|n| n == TZ_INDEX_NAME));
 }
