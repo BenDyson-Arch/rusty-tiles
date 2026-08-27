@@ -14,7 +14,7 @@ use crate::compress::write_glb_compressed;
 use crate::error::Error;
 use crate::georef::{mul4, root_transform, translation, Cartographic, RotationDegrees};
 use crate::glb_write::TilePrimitive;
-use crate::hlod::{sampled_hausdorff, simplify_primitive, MIN_PARENT_GE};
+use crate::hlod::{sampled_hausdorff, simplify_tile, MIN_PARENT_GE};
 use crate::mesh::{self, Scene};
 use crate::pack::{pack_named_files, PackOptions};
 use crate::split::{self, SplitNode, SplitOpts};
@@ -143,10 +143,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             .map(|(_, node)| -> Result<Vec<TilePrimitive>, Error> {
                 let ids = descendant_ids(node);
                 let prims = bake_ids(&scene, &ids, &decoded, parent_size)?;
-                prims
-                    .iter()
-                    .map(|p| simplify_primitive(p, opts.max_triangles))
-                    .collect()
+                simplify_tile(&prims, opts.max_triangles)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         let parent_tris: Vec<usize> = parent_prims.iter().map(|p| prim_tris(p)).collect();

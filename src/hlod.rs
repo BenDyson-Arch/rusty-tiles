@@ -1,7 +1,7 @@
-//! Parent-mesh simplify (meshopt LockBorder) and sampled Hausdorff geometricError.
+//! Parent-mesh simplify (meshopt) and sampled Hausdorff geometricError.
 
 use meshopt::optimize::optimize_vertex_fetch;
-use meshopt::simplify::{simplify, SimplifyOptions};
+use meshopt::simplify::{simplify, simplify_sloppy, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
 
 use crate::error::Error;
@@ -19,7 +19,8 @@ struct Vtx {
     t: [f32; 2],
 }
 
-/// Simplify to `target_tris` while locking the topological border.
+/// Simplify to `target_tris`. Photogrammetry borders/holes make LockBorder a
+/// no-op, so fall back until the budget is actually hit.
 pub fn simplify_primitive(
     prim: &TilePrimitive,
     target_tris: usize,
@@ -35,14 +36,7 @@ pub fn simplify_primitive(
     let pos_bytes: &[u8] = bytemuck::cast_slice(&prim.positions);
     let adapter = VertexDataAdapter::new(pos_bytes, 12, 0)
         .map_err(|e| Error::msg(format!("meshopt adapter: {e}")))?;
-    let simplified = simplify(
-        &prim.indices,
-        &adapter,
-        target_indices,
-        1.0,
-        SimplifyOptions::LockBorder,
-        None,
-    );
+    let simplified = reduce_indices(&prim.indices, &adapter, target_indices);
     if simplified.len() < 3 {
         return Ok(prim.clone());
     }
@@ -70,6 +64,59 @@ pub fn simplify_primitive(
         indices,
         jpeg: prim.jpeg.clone(),
     })
+}
+
+/// Split `budget` triangles across primitives (the parent tile, not each material).
+pub fn simplify_tile(
+    prims: &[TilePrimitive],
+    budget: usize,
+) -> Result<Vec<TilePrimitive>, Error> {
+    let counts: Vec<usize> = prims.iter().map(|p| p.indices.len() / 3).collect();
+    let total = counts.iter().sum::<usize>().max(1);
+    prims
+        .iter()
+        .zip(&counts)
+        .map(|(p, &n)| {
+            let share = budget.saturating_mul(n).max(1) / total;
+            simplify_primitive(p, share.max(1))
+        })
+        .collect()
+}
+
+fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
+    let cap = target.saturating_mul(2).min(indices.len());
+    let locked = simplify(
+        indices,
+        adapter,
+        target,
+        1.0,
+        SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
+        None,
+    );
+    if locked.len() >= 3 && locked.len() <= cap {
+        return locked;
+    }
+    let open = simplify(
+        indices,
+        adapter,
+        target,
+        1.0,
+        SimplifyOptions::Prune | SimplifyOptions::Permissive,
+        None,
+    );
+    if open.len() >= 3 && open.len() <= cap {
+        return open;
+    }
+    let sloppy = simplify_sloppy(indices, adapter, target, 1.0, None);
+    if sloppy.len() >= 3 {
+        sloppy
+    } else if open.len() >= 3 {
+        open
+    } else if locked.len() >= 3 {
+        locked
+    } else {
+        indices.to_vec()
+    }
 }
 
 /// Two-sided sampled point-to-mesh Hausdorff in model metres.
@@ -192,4 +239,55 @@ fn point_tri_dist2(p: [f32; 3], a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> f32 {
     let v = vb / denom;
     let w = vc / denom;
     dist2(p, add(a, add(scl(ab, v), scl(ac, w))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::glb_write::TilePrimitive;
+
+    fn soup_grid(nx: u32, ny: u32) -> TilePrimitive {
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+        for y in 0..ny {
+            for x in 0..nx {
+                let i = positions.len() as u32;
+                let fx = x as f32;
+                let fy = y as f32;
+                positions.push([fx, fy, 0.0]);
+                positions.push([fx + 1.0, fy, 0.0]);
+                positions.push([fx + 1.0, fy + 1.0, 0.0]);
+                positions.push([fx, fy + 1.0, 0.0]);
+                indices.extend_from_slice(&[i, i + 1, i + 2, i, i + 2, i + 3]);
+            }
+        }
+        TilePrimitive {
+            positions,
+            normals: Vec::new(),
+            uvs: Vec::new(),
+            indices,
+            jpeg: None,
+        }
+    }
+
+    #[test]
+    fn simplify_hits_budget_when_lock_border_cannot() {
+        let prim = soup_grid(40, 40);
+        assert_eq!(prim.indices.len() / 3, 3200);
+        let out = simplify_primitive(&prim, 64).unwrap();
+        assert!(
+            out.indices.len() / 3 <= 128,
+            "expected sloppy fallback, got {} tris",
+            out.indices.len() / 3
+        );
+    }
+
+    #[test]
+    fn simplify_tile_splits_budget_across_prims() {
+        let a = soup_grid(20, 20);
+        let b = soup_grid(20, 20);
+        let out = simplify_tile(&[a, b], 80).unwrap();
+        let tris: usize = out.iter().map(|p| p.indices.len() / 3).sum();
+        assert!(tris <= 160, "tile budget 80, got {tris}");
+    }
 }
