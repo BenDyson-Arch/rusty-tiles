@@ -1,0 +1,25 @@
+[package]
+name = "tinyowl-tiles"
+version = "0.1.0"
+edition = "2021"
+description = "Geospatial tiling: GLB/glTF → 3D Tiles (.3tz). Horizon: vector 2.0 and terrain."
+license = "MIT"
+repository = "https://github.com/tinyowl-labs/tinyowl-tiles"
+readme = "README.md"
+
+[[bin]]
+name = "tinyowl-tiles"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
