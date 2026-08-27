@@ -34,6 +34,9 @@ pub enum Error {
 
     #[error(transparent)]
     Zip(#[from] zip::result::ZipError),
+
+    #[error(transparent)]
+    Image(#[from] image::ImageError),
 }
 
 impl Error {

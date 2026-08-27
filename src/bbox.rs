@@ -169,7 +169,7 @@ fn aabb_corners(min: [f32; 3], max: [f32; 3]) -> [[f32; 3]; 8] {
     ]
 }
 
-fn mul4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+pub(crate) fn mul4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut c = [[0.0f32; 4]; 4];
     for col in 0..4 {
         for row in 0..4 {
@@ -182,7 +182,7 @@ fn mul4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     c
 }
 
-fn transform_point(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
+pub(crate) fn transform_point(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
     [
         m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
         m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
@@ -191,8 +191,15 @@ fn transform_point(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
 }
 
 /// glTF Y-up → 3D Tiles Z-up (Cesium `Axis.Y_UP_TO_Z_UP`).
-fn y_up_to_z_up(p: [f32; 3]) -> [f32; 3] {
+pub(crate) fn y_up_to_z_up(p: [f32; 3]) -> [f32; 3] {
     [p[0], -p[2], p[1]]
+}
+
+pub fn aabb_diagonal(min: [f64; 3], max: [f64; 3]) -> f64 {
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
 pub fn aabb_to_box(min: [f64; 3], max: [f64; 3]) -> BoundingBox {

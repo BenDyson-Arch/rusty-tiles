@@ -6,6 +6,7 @@ use clap::{Args, Parser, Subcommand};
 use tinyowl_tiles::error::Error;
 use tinyowl_tiles::georef::{Cartographic, RotationDegrees};
 use tinyowl_tiles::pack::{convert_to_3tz, PackOptions};
+use tinyowl_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
 use tinyowl_tiles::tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 use tinyowl_tiles::{terrain, vector};
 
@@ -31,6 +32,9 @@ enum Command {
     /// GLB/glTF → .3tz (createTilesetJson + convert)
     #[command(name = "glb-to-3tz", alias = "glbTo3tz")]
     GlbTo3tz(IoArgs),
+    /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
+    #[command(name = "mesh-to-3tz", alias = "meshTo3tz")]
+    MeshTo3tz(MeshArgs),
     /// GeoJSON/GPKG → 3D Tiles 2.0 vector tiles (not implemented until spec pin)
     Vector(BasicIo),
     /// DEM → 3D terrain tiles (not scheduled in v0)
@@ -109,6 +113,10 @@ fn run() -> Result<(), Error> {
             let opts = tileset_opts(&a)?;
             glb_to_3tz(&a.input, &a.output, &opts)?;
         }
+        Command::MeshTo3tz(a) => {
+            let opts = mesh_opts(&a)?;
+            mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
+        }
         Command::Vector(a) => vector::vector_to_3tz(&a.input, &a.output)?,
         Command::Terrain(a) => terrain::dem_to_terrain(&a.input, &a.output)?,
     }
@@ -144,5 +152,44 @@ fn tileset_opts(a: &IoArgs) -> Result<CreateTilesetOptions, Error> {
         cartographic,
         rotation,
         force: a.force,
+    })
+}
+
+#[derive(Args)]
+struct MeshArgs {
+    #[command(flatten)]
+    io: IoArgs,
+    /// Stop splitting a node at this many triangles (default 20000).
+    #[arg(
+        long = "maxTriangles",
+        visible_alias = "max-triangles",
+        default_value_t = tinyowl_tiles::DEFAULT_MAX_TRIANGLES
+    )]
+    max_triangles: usize,
+    /// Stop splitting a node at this many estimated payload bytes (default 204800).
+    #[arg(
+        long = "maxBytes",
+        visible_alias = "max-bytes",
+        default_value_t = tinyowl_tiles::DEFAULT_MAX_BYTES
+    )]
+    max_bytes: u64,
+    /// Max edge length in pixels of a cropped leaf texture (default 256).
+    #[arg(
+        long = "tileSize",
+        visible_alias = "tile-size",
+        default_value_t = tinyowl_tiles::DEFAULT_TILE_SIZE
+    )]
+    tile_size: u32,
+}
+
+fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
+    let ts = tileset_opts(&a.io)?;
+    Ok(MeshTo3tzOptions {
+        cartographic: ts.cartographic,
+        rotation: ts.rotation,
+        force: ts.force,
+        max_triangles: a.max_triangles,
+        max_bytes: a.max_bytes,
+        tile_size: a.tile_size,
     })
 }

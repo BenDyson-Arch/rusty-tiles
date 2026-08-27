@@ -28,8 +28,12 @@ tinyowl-tiles createTilesetJson -i model.glb -o tileset.json \
 # Directory with tileset.json → .3tz (ZIP; unzippable by tinyowl-server ExtractZip)
 tinyowl-tiles convert -i ./tileset-dir -o model.3tz
 
-# One shot: GLB → .3tz
+# One shot wrap (no split): GLB → .3tz
 tinyowl-tiles glb-to-3tz -i model.glb -o model.3tz \
+  --cartographicPositionDegrees 151.2 -33.9
+
+# Split into a REPLACE tree when over 20k triangles / ~200 KB
+tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
 # Stubs (exit 2) until spec / pipeline land
@@ -47,11 +51,17 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `src/bbox.rs` | glTF POSITION → `boundingVolume.box` |
 | `src/georef.rs` | Cesium ENU→ECEF + `--rotationDegrees` HPR |
 | `src/pack.rs` | `convert` → stored `.3tz` + `@3dtilesIndex1@` |
+| `src/tile.rs` | `mesh-to-3tz` wrap-or-split orchestrator |
+| `src/mesh.rs` | glTF IR (mmap, skip image decode) |
+| `src/split.rs` | k-d centroid split to 20k / 200 KB leaves |
+| `src/texture.rs` | UV crop, resize, JPEG |
+| `src/glb_write.rs` | per-tile GLB authoring |
 | `src/vector.rs` | v1 stub + spec URLs |
 | `src/terrain.rs` | later stub |
 | `oracle/package.json` | pinned `3d-tiles-tools` |
 | `tests/golden.rs` | semantic + transform compare vs `npx` |
 | `tests/demo_glb.rs` | ignored parity on `mgal_detail.glb` |
+| `tests/mesh_tile.rs` | wrap-or-split, 80k grid, texture crop |
 
 ## Tests
 

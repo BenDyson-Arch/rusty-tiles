@@ -119,7 +119,7 @@ fn collect_contents(input: &Path) -> Result<Vec<(PathBuf, String)>, Error> {
     Ok(out)
 }
 
-fn is_gltf(p: &Path) -> bool {
+pub(crate) fn is_gltf(p: &Path) -> bool {
     matches!(
         p.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()),
         Some(ref e) if e == "glb" || e == "gltf"
