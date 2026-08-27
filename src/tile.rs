@@ -1,9 +1,11 @@
 //! Orchestrate wrap-or-split → per-leaf GLB → REPLACE tileset → `.3tz`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use image::RgbaImage;
+use rayon::prelude::*;
 use serde_json::{json, Value};
 
 use crate::bbox::{aabb_diagonal, aabb_to_box};
@@ -13,7 +15,7 @@ use crate::glb_write::{write_glb, TilePrimitive};
 use crate::mesh::{self, Scene};
 use crate::pack::{pack_named_files, PackOptions};
 use crate::split::{self, SplitNode, SplitOpts};
-use crate::texture::{self, DecodedImages};
+use crate::texture;
 use crate::tileset::{glb_to_3tz, CreateTilesetOptions};
 
 pub const DEFAULT_MAX_TRIANGLES: usize = 20_000;
@@ -65,18 +67,16 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     if scene.under_budget(opts.max_triangles, opts.max_bytes) {
         return glb_to_3tz(input, output, &opts.into());
     }
+    eprintln!(
+        "mesh-to-3tz: {} triangles, {} images — splitting",
+        scene.triangle_count(),
+        scene.images.len()
+    );
 
-    let decoded = if scene.images.is_empty() {
-        None
-    } else {
-        Some(DecodedImages::decode(&scene.images)?)
-    };
     let tree = split::split(
         &scene,
         &SplitOpts {
             max_triangles: opts.max_triangles,
-            max_bytes: opts.max_bytes,
-            tile_size: opts.tile_size,
         },
     );
 
@@ -86,19 +86,34 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     }
     fs::create_dir_all(&tmp)?;
     let result = (|| {
-        let mut files: Vec<(String, PathBuf)> = Vec::new();
-        let mut leaf_i = 0u32;
-        let root = write_tree(
-            &tree,
-            &scene,
-            decoded.as_ref(),
-            opts,
-            &tmp,
-            &mut files,
-            &mut leaf_i,
-            0,
-        )?;
-        let mut root = root;
+        let mut leaves = Vec::new();
+        collect_leaves(&tree, 0, &mut leaves);
+        eprintln!(
+            "mesh-to-3tz: {} leaves — decoding {} textures once each",
+            leaves.len(),
+            scene.images.len()
+        );
+        let baked = bake_leaves(&scene, &leaves, opts.tile_size)?;
+        eprintln!("mesh-to-3tz: writing leaf GLBs and packing .3tz");
+
+        let glb_files: Vec<(String, PathBuf)> = leaves
+            .par_iter()
+            .enumerate()
+            .map(|(i, (depth, _))| -> Result<(String, PathBuf), Error> {
+                let uri = format!("t/{depth}/{i}.glb");
+                let path = tmp.join(&uri);
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(&path, write_glb(&baked[i])?)?;
+                Ok((uri, path))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let mut files = glb_files;
+
+        let uris: Vec<String> = files.iter().map(|(u, _)| u.clone()).collect();
+        let mut uri_i = 0usize;
+        let mut root = emit_tree(&tree, &uris, &mut uri_i)?;
         root["refine"] = json!("REPLACE");
         if let Some(pos) = opts.cartographic {
             let xf = root_transform(pos, opts.rotation);
@@ -119,32 +134,25 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     result
 }
 
-fn write_tree(
-    node: &SplitNode,
-    scene: &Scene,
-    decoded: Option<&DecodedImages>,
-    opts: &MeshTo3tzOptions,
-    tmp: &Path,
-    files: &mut Vec<(String, PathBuf)>,
-    leaf_i: &mut u32,
-    depth: u32,
-) -> Result<Value, Error> {
+fn collect_leaves<'a>(node: &'a SplitNode, depth: u32, out: &mut Vec<(u32, &'a SplitNode)>) {
     match node {
-        SplitNode::Leaf {
-            triangle_ids,
-            min,
-            max,
-        } => {
-            let prims = leaf_primitives(scene, triangle_ids, decoded, opts.tile_size)?;
-            let glb = write_glb(&prims)?;
-            let uri = format!("t/{depth}/{leaf_i}.glb");
-            *leaf_i += 1;
-            let path = tmp.join(&uri);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+        SplitNode::Leaf { .. } => out.push((depth, node)),
+        SplitNode::Branch { children, .. } => {
+            for c in children {
+                collect_leaves(c, depth + 1, out);
             }
-            fs::write(&path, glb)?;
-            files.push((uri.clone(), path));
+        }
+    }
+}
+
+fn emit_tree(node: &SplitNode, uris: &[String], uri_i: &mut usize) -> Result<Value, Error> {
+    match node {
+        SplitNode::Leaf { min, max, .. } => {
+            let uri = uris
+                .get(*uri_i)
+                .ok_or_else(|| Error::msg("leaf/uri mismatch"))?
+                .clone();
+            *uri_i += 1;
             Ok(json!({
                 "boundingVolume": { "box": aabb_to_box(*min, *max) },
                 "geometricError": 0.0,
@@ -154,16 +162,7 @@ fn write_tree(
         SplitNode::Branch { children, min, max } => {
             let mut kids = Vec::new();
             for c in children {
-                kids.push(write_tree(
-                    c,
-                    scene,
-                    decoded,
-                    opts,
-                    tmp,
-                    files,
-                    leaf_i,
-                    depth + 1,
-                )?);
+                kids.push(emit_tree(c, uris, uri_i)?);
             }
             Ok(json!({
                 "boundingVolume": { "box": aabb_to_box(*min, *max) },
@@ -174,31 +173,61 @@ fn write_tree(
     }
 }
 
-fn leaf_primitives(
+/// Decode each unique source image once, crop every leaf that uses it, then drop RGBA.
+fn bake_leaves(
     scene: &Scene,
-    triangle_ids: &[usize],
-    decoded: Option<&DecodedImages>,
+    leaves: &[(u32, &SplitNode)],
     tile_size: u32,
-) -> Result<Vec<TilePrimitive>, Error> {
-    let mut groups: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
-    for &id in triangle_ids {
-        groups
-            .entry(scene.triangles[id].image)
-            .or_default()
-            .push(id);
+) -> Result<Vec<Vec<TilePrimitive>>, Error> {
+    let mut groups: Vec<HashMap<Option<u32>, Vec<usize>>> = Vec::with_capacity(leaves.len());
+    let mut needed: HashSet<u32> = HashSet::new();
+    for (_, node) in leaves {
+        let SplitNode::Leaf { triangle_ids, .. } = node else {
+            return Err(Error::msg("collect_leaves returned a branch"));
+        };
+        let mut g: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
+        for &id in triangle_ids {
+            let img = scene.triangles[id].image;
+            if let Some(i) = img {
+                needed.insert(i);
+            }
+            g.entry(img).or_default().push(id);
+        }
+        groups.push(g);
     }
-    let mut prims = Vec::new();
-    for (image, ids) in groups {
-        prims.push(build_prim(scene, &ids, image, decoded, tile_size)?);
+
+    let mut out: Vec<Vec<TilePrimitive>> = vec![Vec::new(); leaves.len()];
+    for (i, g) in groups.iter().enumerate() {
+        if let Some(ids) = g.get(&None) {
+            out[i].push(build_prim(scene, ids, None, tile_size)?);
+        }
     }
-    Ok(prims)
+    let needed: Vec<u32> = needed.into_iter().collect();
+    let extras = needed
+        .into_par_iter()
+        .map(|img_id| -> Result<Vec<(usize, TilePrimitive)>, Error> {
+            let rgba = texture::decode_rgba(&scene.images[img_id as usize], tile_size)?;
+            let mut local = Vec::new();
+            for (i, g) in groups.iter().enumerate() {
+                if let Some(ids) = g.get(&Some(img_id)) {
+                    local.push((i, build_prim(scene, ids, Some(&rgba), tile_size)?));
+                }
+            }
+            Ok(local)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    for batch in extras {
+        for (i, prim) in batch {
+            out[i].push(prim);
+        }
+    }
+    Ok(out)
 }
 
 fn build_prim(
     scene: &Scene,
     ids: &[usize],
-    image: Option<u32>,
-    decoded: Option<&DecodedImages>,
+    rgba: Option<&RgbaImage>,
     tile_size: u32,
 ) -> Result<TilePrimitive, Error> {
     let mut remap: HashMap<u32, u32> = HashMap::new();
@@ -221,14 +250,10 @@ fn build_prim(
         }
     }
 
-    let jpeg = if let (Some(img_id), Some(cache)) = (image, decoded) {
-        if let Some(rgba) = cache.get(img_id) {
-            let (jpeg, remapped) = texture::crop_leaf(rgba, &uvs, tile_size)?;
-            uvs = remapped;
-            Some(jpeg)
-        } else {
-            None
-        }
+    let jpeg = if let Some(img) = rgba {
+        let (jpeg, remapped) = texture::crop_leaf(img, &uvs, tile_size)?;
+        uvs = remapped;
+        Some(jpeg)
     } else {
         None
     };

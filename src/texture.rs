@@ -1,4 +1,6 @@
-//! Decode each unique source image once; crop + resize + JPEG per leaf.
+//! Decode source images (JPEG at IDCT 1/8 when huge); crop + resize + JPEG per leaf.
+
+use std::io::Cursor;
 
 use image::imageops::{self, FilterType};
 use image::{DynamicImage, RgbaImage};
@@ -9,22 +11,54 @@ use crate::mesh::EncodedImage;
 const UV_PAD_PX: u32 = 2;
 const JPEG_QUALITY: u8 = 85;
 
-pub struct DecodedImages {
-    images: Vec<RgbaImage>,
+/// Decode, downsampling so the long edge is at most `4 * tile_size` (JPEG uses IDCT 1/8/4/2).
+pub fn decode_rgba(encoded: &EncodedImage, tile_size: u32) -> Result<RgbaImage, Error> {
+    let bytes = encoded.load()?;
+    if let Ok(img) = decode_jpeg_scaled(&bytes, tile_size) {
+        return Ok(img);
+    }
+    let dynimg = image::load_from_memory(&bytes)?;
+    let mut rgba = dynimg.to_rgba8();
+    let cap = decode_cap(tile_size);
+    let long = rgba.width().max(rgba.height());
+    if long > cap {
+        let s = cap as f32 / long as f32;
+        let nw = ((rgba.width() as f32) * s).round().max(1.0) as u32;
+        let nh = ((rgba.height() as f32) * s).round().max(1.0) as u32;
+        rgba = imageops::resize(&rgba, nw, nh, FilterType::Triangle);
+    }
+    Ok(rgba)
 }
 
-impl DecodedImages {
-    pub fn decode(encoded: &[EncodedImage]) -> Result<Self, Error> {
-        let mut images = Vec::with_capacity(encoded.len());
-        for img in encoded {
-            let dynimg = image::load_from_memory(&img.bytes)?;
-            images.push(dynimg.to_rgba8());
-        }
-        Ok(Self { images })
-    }
+fn decode_cap(tile_size: u32) -> u32 {
+    tile_size.max(1).saturating_mul(4).max(256)
+}
 
-    pub fn get(&self, id: u32) -> Option<&RgbaImage> {
-        self.images.get(id as usize)
+fn decode_jpeg_scaled(bytes: &[u8], tile_size: u32) -> Result<RgbaImage, Error> {
+    let mut dec = jpeg_decoder::Decoder::new(Cursor::new(bytes));
+    dec.read_info()
+        .map_err(|e| Error::msg(format!("jpeg: {e}")))?;
+    let cap = decode_cap(tile_size).min(u16::MAX as u32) as u16;
+    let (w, h) = dec
+        .scale(cap, cap)
+        .map_err(|e| Error::msg(format!("jpeg scale: {e}")))?;
+    let pixels = dec
+        .decode()
+        .map_err(|e| Error::msg(format!("jpeg decode: {e}")))?;
+    let info = dec.info().ok_or_else(|| Error::msg("jpeg lost header"))?;
+    let (w, h) = (w as u32, h as u32);
+    match info.pixel_format {
+        jpeg_decoder::PixelFormat::RGB24 => {
+            let rgb = image::RgbImage::from_raw(w, h, pixels)
+                .ok_or_else(|| Error::msg("jpeg RGB buffer size"))?;
+            Ok(DynamicImage::ImageRgb8(rgb).to_rgba8())
+        }
+        jpeg_decoder::PixelFormat::L8 => {
+            let gray = image::GrayImage::from_raw(w, h, pixels)
+                .ok_or_else(|| Error::msg("jpeg L buffer size"))?;
+            Ok(DynamicImage::ImageLuma8(gray).to_rgba8())
+        }
+        _ => Err(Error::msg("jpeg pixel format not RGB/L")),
     }
 }
 

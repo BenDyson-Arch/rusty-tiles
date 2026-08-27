@@ -32,7 +32,7 @@ tinyowl-tiles convert -i ./tileset-dir -o model.3tz
 tinyowl-tiles glb-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
-# Split into a REPLACE tree when over 20k triangles / ~200 KB
+# Split into a REPLACE tree when over 20k triangles
 tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
@@ -53,7 +53,7 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `src/pack.rs` | `convert` → stored `.3tz` + `@3dtilesIndex1@` |
 | `src/tile.rs` | `mesh-to-3tz` wrap-or-split orchestrator |
 | `src/mesh.rs` | glTF IR (mmap, skip image decode) |
-| `src/split.rs` | k-d centroid split to 20k / 200 KB leaves |
+| `src/split.rs` | k-d centroid split to 20k-triangle leaves |
 | `src/texture.rs` | UV crop, resize, JPEG |
 | `src/glb_write.rs` | per-tile GLB authoring |
 | `src/vector.rs` | v1 stub + spec URLs |
@@ -71,4 +71,4 @@ cargo test
 cd oracle && npm install
 ```
 
-`tests/demo_glb.rs` runs against `../tinyowl-demodata/glb/mgal_detail.glb` when that file is present (override with `TINYOWL_DEMO_GLB`).
+`tests/demo_glb.rs` runs wrap parity against `../tinyowl-demodata/glb/mgal_detail.glb` when that file is present (override with `TINYOWL_DEMO_GLB`). `tests/demo_mesh.rs` is ignored: `cargo test --release --test demo_mesh -- --ignored` runs `mesh-to-3tz` on the same file.

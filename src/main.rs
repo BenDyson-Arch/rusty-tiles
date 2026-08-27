@@ -166,7 +166,8 @@ struct MeshArgs {
         default_value_t = tinyowl_tiles::DEFAULT_MAX_TRIANGLES
     )]
     max_triangles: usize,
-    /// Stop splitting a node at this many estimated payload bytes (default 204800).
+    /// Source-file wrap threshold in bytes (default 204800). Split stop is
+    /// `--maxTriangles` until meshopt compression exists.
     #[arg(
         long = "maxBytes",
         visible_alias = "max-bytes",

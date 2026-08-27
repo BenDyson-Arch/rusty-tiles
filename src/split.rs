@@ -1,16 +1,13 @@
-//! k-d split by triangle centroid until leaf triangle and byte budgets.
-
-use std::collections::HashSet;
+//! k-d split by triangle centroid until the leaf triangle budget.
 
 use crate::bbox::y_up_to_z_up;
 use crate::mesh::{centroid, triangle_aabb_yup, Scene};
 
 pub const MAX_SPLIT_DEPTH: u32 = 12;
+const PARALLEL_AFTER: usize = 32_768;
 
 pub struct SplitOpts {
     pub max_triangles: usize,
-    pub max_bytes: u64,
-    pub tile_size: u32,
 }
 
 pub enum SplitNode {
@@ -27,45 +24,52 @@ pub enum SplitNode {
 }
 
 pub fn split(scene: &Scene, opts: &SplitOpts) -> SplitNode {
-    let ids: Vec<usize> = (0..scene.triangles.len()).collect();
-    split_ids(scene, &ids, 0, opts).unwrap_or_else(|| leaf(scene, ids))
+    let centroids: Vec<[f32; 3]> = scene.triangles.iter().map(|t| centroid(scene, t)).collect();
+    let mut ids: Vec<usize> = (0..scene.triangles.len()).collect();
+    split_ids(scene, &centroids, &mut ids, 0, opts).unwrap_or_else(|| leaf(scene, ids))
 }
 
-fn split_ids(scene: &Scene, ids: &[usize], depth: u32, opts: &SplitOpts) -> Option<SplitNode> {
+fn split_ids(
+    scene: &Scene,
+    centroids: &[[f32; 3]],
+    ids: &mut [usize],
+    depth: u32,
+    opts: &SplitOpts,
+) -> Option<SplitNode> {
     if ids.is_empty() {
         return None;
     }
-    if is_leaf(scene, ids, opts) || depth >= MAX_SPLIT_DEPTH {
+    if ids.len() <= opts.max_triangles || depth >= MAX_SPLIT_DEPTH || ids.len() < 2 {
         return Some(leaf(scene, ids.to_vec()));
     }
 
     let (ymin, ymax) = triangle_aabb_yup(scene, ids);
     let axis = longest_axis(ymin, ymax);
-
-    let mut ordered = ids.to_vec();
-    ordered.sort_by(|&a, &b| {
-        let ca = centroid(scene, &scene.triangles[a])[axis];
-        let cb = centroid(scene, &scene.triangles[b])[axis];
-        ca.partial_cmp(&cb).unwrap_or(std::cmp::Ordering::Equal)
+    let mid = ids.len() / 2;
+    ids.select_nth_unstable_by(mid, |&a, &b| {
+        centroids[a][axis]
+            .partial_cmp(&centroids[b][axis])
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let median = centroid(scene, &scene.triangles[ordered[ordered.len() / 2]])[axis];
-    let (mut left, mut right) = partition(scene, ids, axis, median, true);
+    let (left, right) = ids.split_at_mut(mid);
 
-    if left.is_empty() || right.is_empty() {
-        let mid = (ymin[axis] + ymax[axis]) * 0.5;
-        let parts = partition(scene, ids, axis, mid, false);
-        left = parts.0;
-        right = parts.1;
-    }
-    if left.is_empty() || right.is_empty() {
-        return Some(leaf(scene, ids.to_vec()));
-    }
+    let (l, r) = if left.len() >= PARALLEL_AFTER && right.len() >= PARALLEL_AFTER {
+        rayon::join(
+            || split_ids(scene, centroids, left, depth + 1, opts),
+            || split_ids(scene, centroids, right, depth + 1, opts),
+        )
+    } else {
+        (
+            split_ids(scene, centroids, left, depth + 1, opts),
+            split_ids(scene, centroids, right, depth + 1, opts),
+        )
+    };
 
     let mut children = Vec::new();
-    if let Some(n) = split_ids(scene, &left, depth + 1, opts) {
+    if let Some(n) = l {
         children.push(n);
     }
-    if let Some(n) = split_ids(scene, &right, depth + 1, opts) {
+    if let Some(n) = r {
         children.push(n);
     }
     match children.len() {
@@ -76,55 +80,6 @@ fn split_ids(scene: &Scene, ids: &[usize], depth: u32, opts: &SplitOpts) -> Opti
             Some(SplitNode::Branch { children, min, max })
         }
     }
-}
-
-fn partition(
-    scene: &Scene,
-    ids: &[usize],
-    axis: usize,
-    split: f32,
-    inclusive_left: bool,
-) -> (Vec<usize>, Vec<usize>) {
-    let mut left = Vec::new();
-    let mut right = Vec::new();
-    for &id in ids {
-        let c = centroid(scene, &scene.triangles[id])[axis];
-        if if inclusive_left {
-            c <= split
-        } else {
-            c < split
-        } {
-            left.push(id);
-        } else {
-            right.push(id);
-        }
-    }
-    (left, right)
-}
-
-fn is_leaf(scene: &Scene, ids: &[usize], opts: &SplitOpts) -> bool {
-    ids.len() <= opts.max_triangles && estimate_bytes(scene, ids, opts.tile_size) <= opts.max_bytes
-}
-
-pub fn estimate_bytes(scene: &Scene, ids: &[usize], tile_size: u32) -> u64 {
-    let mut verts = HashSet::new();
-    let mut textured = false;
-    for &id in ids {
-        let t = &scene.triangles[id];
-        verts.insert(t.verts[0]);
-        verts.insert(t.verts[1]);
-        verts.insert(t.verts[2]);
-        if t.image.is_some() {
-            textured = true;
-        }
-    }
-    let geom = verts.len() as u64 * 32 + ids.len() as u64 * 12;
-    let tex = if textured {
-        (tile_size as u64 * tile_size as u64) / 4
-    } else {
-        0
-    };
-    geom + tex
 }
 
 fn longest_axis(min: [f32; 3], max: [f32; 3]) -> usize {

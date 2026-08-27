@@ -5,7 +5,8 @@
 //! Never call `gltf::import()` — that decodes every texture.
 
 use std::fs::File;
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 
 use memmap2::Mmap;
 
@@ -32,9 +33,34 @@ pub struct Triangle {
     pub image: Option<u32>,
 }
 
+/// JPEG/PNG/WebP bytes live on disk; decode one image at a time (8K atlases
+/// in `mgal_detail.glb` are ~256 MiB RGBA each).
 #[derive(Clone, Debug)]
 pub struct EncodedImage {
-    pub bytes: Vec<u8>,
+    path: PathBuf,
+    offset: u64,
+    length: u64,
+    owned: Option<Vec<u8>>,
+}
+
+impl EncodedImage {
+    pub fn len(&self) -> usize {
+        self.owned
+            .as_ref()
+            .map(|b| b.len())
+            .unwrap_or(self.length as usize)
+    }
+
+    pub fn load(&self) -> Result<Vec<u8>, Error> {
+        if let Some(b) = &self.owned {
+            return Ok(b.clone());
+        }
+        let mut f = File::open(&self.path)?;
+        f.seek(SeekFrom::Start(self.offset))?;
+        let mut buf = vec![0u8; self.length as usize];
+        f.read_exact(&mut buf)?;
+        Ok(buf)
+    }
 }
 
 pub struct Scene {
@@ -72,15 +98,17 @@ fn load_bytes(path: &Path, bytes: &[u8], source_bytes: u64) -> Result<Scene, Err
         .to_ascii_lowercase();
 
     if ext == "glb" {
+        let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as u64;
+        let bin_start = 20 + json_len + 8;
         let glb = gltf::Glb::from_slice(bytes)?;
         let g = gltf::Gltf::from_slice(&glb.json)?;
         let bin = glb.bin.as_ref().map(|c| c.as_ref()).unwrap_or(&[]);
-        extract(&g.document, path, &[bin], source_bytes)
+        extract(&g.document, path, &[bin], Some(bin_start), source_bytes)
     } else {
         let g = gltf::Gltf::from_slice(bytes)?;
         let buffers = gltf::import_buffers(&g.document, path.parent(), g.blob)?;
         let slices: Vec<&[u8]> = buffers.iter().map(|b| b.0.as_slice()).collect();
-        extract(&g.document, path, &slices, source_bytes)
+        extract(&g.document, path, &slices, None, source_bytes)
     }
 }
 
@@ -88,9 +116,10 @@ fn extract(
     document: &gltf::Document,
     path: &Path,
     buffers: &[&[u8]],
+    glb_bin_start: Option<u64>,
     source_bytes: u64,
 ) -> Result<Scene, Error> {
-    let images = load_images(document, path, buffers)?;
+    let images = load_images(document, path, buffers, glb_bin_start)?;
     let mut vertices = Vec::new();
     let mut triangles = Vec::new();
 
@@ -132,29 +161,53 @@ fn load_images(
     document: &gltf::Document,
     path: &Path,
     buffers: &[&[u8]],
+    glb_bin_start: Option<u64>,
 ) -> Result<Vec<EncodedImage>, Error> {
     let mut out = Vec::new();
     for image in document.images() {
-        let bytes = match image.source() {
+        let img = match image.source() {
             gltf::image::Source::View { view, mime_type: _ } => {
-                let buf = buffers
-                    .get(view.buffer().index())
-                    .ok_or_else(|| Error::msg("image buffer view out of range"))?;
-                let start = view.offset();
-                let end = start
-                    .checked_add(view.length())
-                    .ok_or_else(|| Error::msg("image buffer view overflow"))?;
-                if end > buf.len() {
-                    return Err(Error::msg("image buffer view exceeds buffer"));
+                if let Some(bin_start) = glb_bin_start {
+                    if view.buffer().index() != 0 {
+                        return Err(Error::msg("GLB image is not in buffer 0"));
+                    }
+                    EncodedImage {
+                        path: path.to_path_buf(),
+                        offset: bin_start + view.offset() as u64,
+                        length: view.length() as u64,
+                        owned: None,
+                    }
+                } else {
+                    let buf = buffers
+                        .get(view.buffer().index())
+                        .ok_or_else(|| Error::msg("image buffer view out of range"))?;
+                    let start = view.offset();
+                    let end = start
+                        .checked_add(view.length())
+                        .ok_or_else(|| Error::msg("image buffer view overflow"))?;
+                    if end > buf.len() {
+                        return Err(Error::msg("image buffer view exceeds buffer"));
+                    }
+                    EncodedImage {
+                        path: path.to_path_buf(),
+                        offset: 0,
+                        length: (end - start) as u64,
+                        owned: Some(buf[start..end].to_vec()),
+                    }
                 }
-                buf[start..end].to_vec()
             }
             gltf::image::Source::Uri { uri, mime_type: _ } => {
-                let parent = path.parent().unwrap_or(Path::new("."));
-                std::fs::read(parent.join(uri))?
+                let p = path.parent().unwrap_or(Path::new(".")).join(uri);
+                let length = std::fs::metadata(&p)?.len();
+                EncodedImage {
+                    path: p,
+                    offset: 0,
+                    length,
+                    owned: None,
+                }
             }
         };
-        out.push(EncodedImage { bytes });
+        out.push(img);
     }
     Ok(out)
 }

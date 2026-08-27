@@ -217,7 +217,7 @@ fn texture_crop_shrinks_shared_atlas() {
 
     let tz = tmp.path().join("atlas.3tz");
     let opts = MeshTo3tzOptions {
-        max_bytes: 1024,
+        max_triangles: 2,
         tile_size: 256,
         ..MeshTo3tzOptions::default()
     };
@@ -237,9 +237,9 @@ fn texture_crop_shrinks_shared_atlas() {
         let leaf = mesh::load(&leaf_path).unwrap();
         assert!(!leaf.images.is_empty(), "{uri} missing embedded image");
         assert!(
-            leaf.images[0].bytes.len() < source_jpeg_len,
+            leaf.images[0].len() < source_jpeg_len,
             "leaf jpeg {} >= source {}",
-            leaf.images[0].bytes.len(),
+            leaf.images[0].len(),
             source_jpeg_len
         );
         for v in &leaf.vertices {
