@@ -1,17 +1,20 @@
-//! Orchestrate wrap-or-split → per-leaf GLB → REPLACE tileset → `.3tz`.
+//! Orchestrate wrap-or-split → leaf + HLOD parent GLBs → REPLACE tileset → `.3tz`.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use image::RgbaImage;
 use rayon::prelude::*;
 use serde_json::{json, Value};
 
-use crate::bbox::{aabb_diagonal, aabb_to_box};
+use crate::bbox::{aabb_center, aabb_to_box, z_up_to_y_up};
+use crate::compress::write_glb_compressed;
 use crate::error::Error;
-use crate::georef::{root_transform, Cartographic, RotationDegrees};
-use crate::glb_write::{write_glb, TilePrimitive};
+use crate::georef::{mul4, root_transform, translation, Cartographic, RotationDegrees};
+use crate::glb_write::TilePrimitive;
+use crate::hlod::{sampled_hausdorff, simplify_primitive, MIN_PARENT_GE};
 use crate::mesh::{self, Scene};
 use crate::pack::{pack_named_files, PackOptions};
 use crate::split::{self, SplitNode, SplitOpts};
@@ -55,6 +58,29 @@ impl From<&MeshTo3tzOptions> for CreateTilesetOptions {
     }
 }
 
+struct StageLog {
+    t0: Instant,
+    last: Instant,
+}
+
+impl StageLog {
+    fn new() -> Self {
+        let t = Instant::now();
+        Self { t0: t, last: t }
+    }
+
+    fn tick(&mut self, stage: &str, extra: impl std::fmt::Display) {
+        let ms = self.last.elapsed().as_secs_f64() * 1000.0;
+        eprintln!("mesh-to-3tz: {stage}  {ms:.0} ms  {extra}");
+        self.last = Instant::now();
+    }
+
+    fn done(&self, extra: impl std::fmt::Display) {
+        let ms = self.t0.elapsed().as_secs_f64() * 1000.0;
+        eprintln!("mesh-to-3tz: done  {ms:.0} ms  {extra}");
+    }
+}
+
 pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Result<(), Error> {
     if !input.is_file() || !crate::tileset::is_gltf(input) {
         return Err(Error::NoContent(input.to_path_buf()));
@@ -63,21 +89,37 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         return Err(Error::OutputExists(output.to_path_buf()));
     }
 
+    let mut log = StageLog::new();
     let scene = mesh::load(input)?;
-    if scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        return glb_to_3tz(input, output, &opts.into());
-    }
-    eprintln!(
-        "mesh-to-3tz: {} triangles, {} images — splitting",
-        scene.triangle_count(),
-        scene.images.len()
+    log.tick(
+        "load",
+        format!(
+            "tris={} images={} bytes={}",
+            scene.triangle_count(),
+            scene.images.len(),
+            scene.source_bytes
+        ),
     );
+    if scene.under_budget(opts.max_triangles, opts.max_bytes) {
+        glb_to_3tz(input, output, &opts.into())?;
+        log.tick("wrap", "under budget");
+        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
+        log.done(format!("{}  bytes={out_len}", output.display()));
+        return Ok(());
+    }
 
     let tree = split::split(
         &scene,
         &SplitOpts {
             max_triangles: opts.max_triangles,
         },
+    );
+    let mut leaves = Vec::new();
+    collect_leaves(&tree, 0, &mut leaves);
+    let max_depth = leaves.iter().map(|(d, _)| *d).max().unwrap_or(0);
+    log.tick(
+        "split",
+        format!("leaves={} depth={max_depth}", leaves.len()),
     );
 
     let tmp = output.with_extension("mesh-work");
@@ -86,51 +128,91 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     }
     fs::create_dir_all(&tmp)?;
     let result = (|| {
-        let mut leaves = Vec::new();
-        collect_leaves(&tree, 0, &mut leaves);
-        eprintln!(
-            "mesh-to-3tz: {} leaves — decoding {} textures once each",
-            leaves.len(),
-            scene.images.len()
+        let decoded = decode_referenced(&scene, opts.tile_size)?;
+        let baked = bake_leaves(&scene, &leaves, &decoded, opts.tile_size)?;
+        log.tick(
+            "bake-leaves",
+            format!("textures={} leafGlbs={}", decoded.len(), baked.len()),
         );
-        let baked = bake_leaves(&scene, &leaves, opts.tile_size)?;
-        eprintln!("mesh-to-3tz: writing leaf GLBs and packing .3tz");
 
-        let glb_files: Vec<(String, PathBuf)> = leaves
+        let mut branches = Vec::new();
+        collect_branches(&tree, 0, &mut branches);
+        let parent_size = (opts.tile_size / 2).max(1);
+        let parent_prims: Vec<Vec<TilePrimitive>> = branches
             .par_iter()
-            .enumerate()
-            .map(|(i, (depth, _))| -> Result<(String, PathBuf), Error> {
-                let uri = format!("t/{depth}/{i}.glb");
-                let path = tmp.join(&uri);
-                if let Some(parent) = path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                fs::write(&path, write_glb(&baked[i])?)?;
-                Ok((uri, path))
+            .map(|(_, node)| -> Result<Vec<TilePrimitive>, Error> {
+                let ids = descendant_ids(node);
+                let prims = bake_ids(&scene, &ids, &decoded, parent_size)?;
+                prims
+                    .iter()
+                    .map(|p| simplify_primitive(p, opts.max_triangles))
+                    .collect()
             })
             .collect::<Result<Vec<_>, Error>>()?;
-        let mut files = glb_files;
+        let parent_tris: Vec<usize> = parent_prims.iter().map(|p| prim_tris(p)).collect();
+        let max_tris = parent_tris.iter().copied().max().unwrap_or(0);
+        let sum_tris: usize = parent_tris.iter().sum();
+        log.tick(
+            "hlod",
+            format!(
+                "parents={} maxTris={max_tris} sumTris={sum_tris}",
+                parent_prims.len()
+            ),
+        );
 
-        let uris: Vec<String> = files.iter().map(|(u, _)| u.clone()).collect();
-        let mut uri_i = 0usize;
-        let mut root = emit_tree(&tree, &uris, &mut uri_i)?;
-        root["refine"] = json!("REPLACE");
-        if let Some(pos) = opts.cartographic {
-            let xf = root_transform(pos, opts.rotation);
-            root["transform"] = json!(xf.to_vec());
-        }
-        let (rmin, rmax) = tree.aabb();
+        let ge_cap = opts.max_triangles.saturating_mul(2);
+        let measured_ge: Vec<f64> = parent_prims
+            .par_iter()
+            .zip(branches.par_iter())
+            .zip(parent_tris.par_iter())
+            .map(|((prims, (_, node)), &ntris)| {
+                if ntris > ge_cap {
+                    0.0
+                } else {
+                    let ids = descendant_ids(node);
+                    sampled_hausdorff(prims, &scene, &ids)
+                }
+            })
+            .collect();
+        log.tick("ge", format!("parents={} cap={ge_cap}", measured_ge.len()));
+
+        let mut files: Vec<(String, PathBuf)> = Vec::new();
+        let mut leaf_i = 0usize;
+        let mut branch_i = 0usize;
+        let (root, root_ge) = emit_and_write(
+            &tree,
+            0,
+            [0.0; 3],
+            true,
+            opts,
+            &tmp,
+            &baked,
+            &parent_prims,
+            &measured_ge,
+            &mut leaf_i,
+            &mut branch_i,
+            &mut files,
+        )?;
+        log.tick("compress", format!("glbs={}", files.len()));
+
         let tileset = json!({
             "asset": { "version": "1.1" },
-            "geometricError": aabb_diagonal(rmin, rmax).max(1e-6),
+            "geometricError": root_ge.max(MIN_PARENT_GE),
             "root": root,
         });
         let json_path = tmp.join("tileset.json");
         fs::write(&json_path, serde_json::to_vec_pretty(&tileset)?)?;
         files.insert(0, ("tileset.json".into(), json_path));
-        pack_named_files(&files, output, &PackOptions { force: true })
+        pack_named_files(&files, output, &PackOptions { force: true })?;
+        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
+        log.tick("write+pack", format!("bytes={out_len}"));
+        Ok(())
     })();
     let _ = fs::remove_dir_all(&tmp);
+    if result.is_ok() {
+        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
+        log.done(format!("{}  bytes={out_len}", output.display()));
+    }
     result
 }
 
@@ -145,81 +227,234 @@ fn collect_leaves<'a>(node: &'a SplitNode, depth: u32, out: &mut Vec<(u32, &'a S
     }
 }
 
-fn emit_tree(node: &SplitNode, uris: &[String], uri_i: &mut usize) -> Result<Value, Error> {
-    match node {
-        SplitNode::Leaf { min, max, .. } => {
-            let uri = uris
-                .get(*uri_i)
-                .ok_or_else(|| Error::msg("leaf/uri mismatch"))?
-                .clone();
-            *uri_i += 1;
-            Ok(json!({
-                "boundingVolume": { "box": aabb_to_box(*min, *max) },
-                "geometricError": 0.0,
-                "content": { "uri": uri },
-            }))
-        }
-        SplitNode::Branch { children, min, max } => {
-            let mut kids = Vec::new();
-            for c in children {
-                kids.push(emit_tree(c, uris, uri_i)?);
-            }
-            Ok(json!({
-                "boundingVolume": { "box": aabb_to_box(*min, *max) },
-                "geometricError": aabb_diagonal(*min, *max) / 2.0,
-                "children": kids,
-            }))
+fn collect_branches<'a>(node: &'a SplitNode, depth: u32, out: &mut Vec<(u32, &'a SplitNode)>) {
+    if let SplitNode::Branch { children, .. } = node {
+        out.push((depth, node));
+        for c in children {
+            collect_branches(c, depth + 1, out);
         }
     }
 }
 
-/// Decode each unique source image once, crop every leaf that uses it, then drop RGBA.
+fn prim_tris(prims: &[TilePrimitive]) -> usize {
+    prims.iter().map(|p| p.indices.len() / 3).sum()
+}
+
+fn descendant_ids(node: &SplitNode) -> Vec<usize> {
+    match node {
+        SplitNode::Leaf { triangle_ids, .. } => triangle_ids.clone(),
+        SplitNode::Branch { children, .. } => {
+            let mut ids = Vec::new();
+            for c in children {
+                ids.extend(descendant_ids(c));
+            }
+            ids
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_and_write(
+    node: &SplitNode,
+    depth: u32,
+    parent_center: [f64; 3],
+    is_root: bool,
+    opts: &MeshTo3tzOptions,
+    tmp: &Path,
+    leaves: &[Vec<TilePrimitive>],
+    parents: &[Vec<TilePrimitive>],
+    measured_ge: &[f64],
+    leaf_i: &mut usize,
+    branch_i: &mut usize,
+    files: &mut Vec<(String, PathBuf)>,
+) -> Result<(Value, f64), Error> {
+    let (min, max) = node.aabb();
+    let center = aabb_center(min, max);
+    match node {
+        SplitNode::Leaf { .. } => {
+            let mut prims = leaves
+                .get(*leaf_i)
+                .ok_or_else(|| Error::msg("leaf/prim mismatch"))?
+                .clone();
+            *leaf_i += 1;
+            subtract_origin(&mut prims, center);
+            let uri = format!("t/{depth}/{}.glb", *leaf_i - 1);
+            write_tile_glb(tmp, &uri, &prims, files)?;
+            let mut tile = json!({
+                "boundingVolume": { "box": local_box(min, max) },
+                "geometricError": 0.0,
+                "content": { "uri": uri },
+            });
+            if let Some(xf) = tile_transform(center, parent_center, is_root, opts) {
+                tile["transform"] = json!(xf.to_vec());
+            }
+            if is_root {
+                tile["refine"] = json!("REPLACE");
+            }
+            Ok((tile, 0.0))
+        }
+        SplitNode::Branch { children, .. } => {
+            let mut prims = parents
+                .get(*branch_i)
+                .ok_or_else(|| Error::msg("branch/prim mismatch"))?
+                .clone();
+            let measured = measured_ge.get(*branch_i).copied().unwrap_or(MIN_PARENT_GE);
+            *branch_i += 1;
+            subtract_origin(&mut prims, center);
+            let uri = format!("t/{depth}/p{}.glb", *branch_i - 1);
+            write_tile_glb(tmp, &uri, &prims, files)?;
+
+            let mut kids = Vec::new();
+            let mut child_ge = 0.0f64;
+            for c in children {
+                let (kid, ge) = emit_and_write(
+                    c,
+                    depth + 1,
+                    center,
+                    false,
+                    opts,
+                    tmp,
+                    leaves,
+                    parents,
+                    measured_ge,
+                    leaf_i,
+                    branch_i,
+                    files,
+                )?;
+                child_ge = child_ge.max(ge);
+                kids.push(kid);
+            }
+            let ge = measured.max(child_ge).max(MIN_PARENT_GE);
+            let mut tile = json!({
+                "boundingVolume": { "box": local_box(min, max) },
+                "geometricError": ge,
+                "content": { "uri": uri },
+                "children": kids,
+            });
+            if let Some(xf) = tile_transform(center, parent_center, is_root, opts) {
+                tile["transform"] = json!(xf.to_vec());
+            }
+            if is_root {
+                tile["refine"] = json!("REPLACE");
+            }
+            Ok((tile, ge))
+        }
+    }
+}
+
+fn write_tile_glb(
+    tmp: &Path,
+    uri: &str,
+    prims: &[TilePrimitive],
+    files: &mut Vec<(String, PathBuf)>,
+) -> Result<(), Error> {
+    let path = tmp.join(uri);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, write_glb_compressed(prims)?)?;
+    files.push((uri.to_string(), path));
+    Ok(())
+}
+
+fn subtract_origin(prims: &mut [TilePrimitive], center_zup: [f64; 3]) {
+    let o = z_up_to_y_up(center_zup);
+    for prim in prims {
+        for p in &mut prim.positions {
+            p[0] -= o[0];
+            p[1] -= o[1];
+            p[2] -= o[2];
+        }
+    }
+}
+
+fn local_box(min: [f64; 3], max: [f64; 3]) -> [f64; 12] {
+    let c = aabb_center(min, max);
+    aabb_to_box(
+        [min[0] - c[0], min[1] - c[1], min[2] - c[2]],
+        [max[0] - c[0], max[1] - c[1], max[2] - c[2]],
+    )
+}
+
+fn tile_transform(
+    center: [f64; 3],
+    parent_center: [f64; 3],
+    is_root: bool,
+    opts: &MeshTo3tzOptions,
+) -> Option<[f64; 16]> {
+    let local = if is_root {
+        translation(center[0], center[1], center[2])
+    } else {
+        translation(
+            center[0] - parent_center[0],
+            center[1] - parent_center[1],
+            center[2] - parent_center[2],
+        )
+    };
+    if is_root {
+        if let Some(pos) = opts.cartographic {
+            Some(mul4(root_transform(pos, opts.rotation), local))
+        } else {
+            Some(local)
+        }
+    } else {
+        Some(local)
+    }
+}
+
+fn decode_referenced(scene: &Scene, tile_size: u32) -> Result<HashMap<u32, RgbaImage>, Error> {
+    let needed: Vec<u32> = {
+        let mut s = HashSet::new();
+        for t in &scene.triangles {
+            if let Some(i) = t.image {
+                s.insert(i);
+            }
+        }
+        s.into_iter().collect()
+    };
+    needed
+        .into_par_iter()
+        .map(|id| {
+            let rgba = texture::decode_rgba(&scene.images[id as usize], tile_size)?;
+            Ok((id, rgba))
+        })
+        .collect()
+}
+
 fn bake_leaves(
     scene: &Scene,
     leaves: &[(u32, &SplitNode)],
+    decoded: &HashMap<u32, RgbaImage>,
     tile_size: u32,
 ) -> Result<Vec<Vec<TilePrimitive>>, Error> {
-    let mut groups: Vec<HashMap<Option<u32>, Vec<usize>>> = Vec::with_capacity(leaves.len());
-    let mut needed: HashSet<u32> = HashSet::new();
-    for (_, node) in leaves {
-        let SplitNode::Leaf { triangle_ids, .. } = node else {
-            return Err(Error::msg("collect_leaves returned a branch"));
-        };
-        let mut g: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
-        for &id in triangle_ids {
-            let img = scene.triangles[id].image;
-            if let Some(i) = img {
-                needed.insert(i);
-            }
-            g.entry(img).or_default().push(id);
-        }
-        groups.push(g);
-    }
-
-    let mut out: Vec<Vec<TilePrimitive>> = vec![Vec::new(); leaves.len()];
-    for (i, g) in groups.iter().enumerate() {
-        if let Some(ids) = g.get(&None) {
-            out[i].push(build_prim(scene, ids, None, tile_size)?);
-        }
-    }
-    let needed: Vec<u32> = needed.into_iter().collect();
-    let extras = needed
-        .into_par_iter()
-        .map(|img_id| -> Result<Vec<(usize, TilePrimitive)>, Error> {
-            let rgba = texture::decode_rgba(&scene.images[img_id as usize], tile_size)?;
-            let mut local = Vec::new();
-            for (i, g) in groups.iter().enumerate() {
-                if let Some(ids) = g.get(&Some(img_id)) {
-                    local.push((i, build_prim(scene, ids, Some(&rgba), tile_size)?));
-                }
-            }
-            Ok(local)
+    leaves
+        .par_iter()
+        .map(|(_, node)| {
+            let SplitNode::Leaf { triangle_ids, .. } = node else {
+                return Err(Error::msg("collect_leaves returned a branch"));
+            };
+            bake_ids(scene, triangle_ids, decoded, tile_size)
         })
-        .collect::<Result<Vec<_>, Error>>()?;
-    for batch in extras {
-        for (i, prim) in batch {
-            out[i].push(prim);
-        }
+        .collect()
+}
+
+fn bake_ids(
+    scene: &Scene,
+    ids: &[usize],
+    decoded: &HashMap<u32, RgbaImage>,
+    tile_size: u32,
+) -> Result<Vec<TilePrimitive>, Error> {
+    let mut groups: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
+    for &id in ids {
+        groups
+            .entry(scene.triangles[id].image)
+            .or_default()
+            .push(id);
+    }
+    let mut out = Vec::new();
+    for (img, tri) in groups {
+        let rgba = img.and_then(|i| decoded.get(&i));
+        out.push(build_prim(scene, &tri, rgba, tile_size)?);
     }
     Ok(out)
 }

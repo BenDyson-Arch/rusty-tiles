@@ -4,10 +4,12 @@
 //! Vector (3D Tiles 2.0) and terrain are CLI-shaped stubs until those specs/pipelines land.
 
 pub mod bbox;
+pub mod compress;
 pub mod error;
 pub mod fixtures;
 pub mod georef;
 pub mod glb_write;
+pub mod hlod;
 pub mod mesh;
 pub mod pack;
 pub mod split;
@@ -17,6 +19,7 @@ pub mod tile;
 pub mod tileset;
 pub mod vector;
 
+pub use compress::write_glb_compressed;
 pub use error::Error;
 pub use georef::{Cartographic, RotationDegrees};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};

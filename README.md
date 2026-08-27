@@ -14,6 +14,8 @@ Hub worker integration: [`docs/HUB_SEAM.md`](docs/HUB_SEAM.md).
 cargo install --path .
 ```
 
+Building needs a C++ compiler (`g++` or `clang++`) for the `meshopt` crate (`cc`, not CMake).
+
 ## Commands
 
 ```bash
@@ -32,7 +34,7 @@ tinyowl-tiles convert -i ./tileset-dir -o model.3tz
 tinyowl-tiles glb-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
-# Split into a REPLACE tree when over 20k triangles
+# Split into a REPLACE HLOD tree when over 20k triangles
 tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
@@ -52,6 +54,8 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `src/georef.rs` | Cesium ENU→ECEF + `--rotationDegrees` HPR |
 | `src/pack.rs` | `convert` → stored `.3tz` + `@3dtilesIndex1@` |
 | `src/tile.rs` | `mesh-to-3tz` wrap-or-split orchestrator |
+| `src/hlod.rs` | parent simplify + sampled Hausdorff GE |
+| `src/compress.rs` | quantized meshopt GLB writer |
 | `src/mesh.rs` | glTF IR (mmap, skip image decode) |
 | `src/split.rs` | k-d centroid split to 20k-triangle leaves |
 | `src/texture.rs` | UV crop, resize, JPEG |
@@ -61,7 +65,7 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `oracle/package.json` | pinned `3d-tiles-tools` |
 | `tests/golden.rs` | semantic + transform compare vs `npx` |
 | `tests/demo_glb.rs` | ignored parity on `mgal_detail.glb` |
-| `tests/mesh_tile.rs` | wrap-or-split, 80k grid, texture crop |
+| `tests/mesh_tile.rs` | wrap-or-split, HLOD GE, meshopt size, texture crop |
 
 ## Tests
 

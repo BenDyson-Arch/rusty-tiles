@@ -95,7 +95,14 @@ fn hpr_matrix(r: RotationDegrees) -> [f64; 16] {
     ]
 }
 
-fn mul4(a: [f64; 16], b: [f64; 16]) -> [f64; 16] {
+/// Column-major translation (3D Tiles `tile.transform`).
+pub fn translation(tx: f64, ty: f64, tz: f64) -> [f64; 16] {
+    [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, tx, ty, tz, 1.0,
+    ]
+}
+
+pub(crate) fn mul4(a: [f64; 16], b: [f64; 16]) -> [f64; 16] {
     let mut c = [0.0; 16];
     for col in 0..4 {
         for row in 0..4 {

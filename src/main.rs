@@ -167,7 +167,7 @@ struct MeshArgs {
     )]
     max_triangles: usize,
     /// Source-file wrap threshold in bytes (default 204800). Split stop is
-    /// `--maxTriangles` until meshopt compression exists.
+    /// `--maxTriangles`; written tiles are meshopt-compressed.
     #[arg(
         long = "maxBytes",
         visible_alias = "max-bytes",
