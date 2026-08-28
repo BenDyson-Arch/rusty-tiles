@@ -4,7 +4,9 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 
 use tinyowl_tiles::error::Error;
-use tinyowl_tiles::georef::{Cartographic, RotationDegrees};
+use tinyowl_tiles::georef::{
+    parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
+};
 use tinyowl_tiles::pack::{convert_to_3tz, PackOptions};
 use tinyowl_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
 use tinyowl_tiles::tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
@@ -181,10 +183,52 @@ struct MeshArgs {
         default_value_t = tinyowl_tiles::DEFAULT_TILE_SIZE
     )]
     tile_size: u32,
+    /// POSITION CRS: auto (detect), geographic (lon°/height/−lat°), or epsg:3857.
+    #[arg(
+        long = "sourceCrs",
+        visible_alias = "source-crs",
+        default_value = "auto"
+    )]
+    source_crs: String,
+    /// Metashape Shift E N [A] in metres (Pseudo-Mercator). Added in f64, not f32.
+    #[arg(
+        long = "sourceOffset",
+        visible_alias = "source-offset",
+        num_args = 2..=3,
+        allow_hyphen_values = true
+    )]
+    source_offset: Vec<f64>,
+    /// Metashape offset.txt (`E: …` / `N: …` / `A: …`).
+    #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
+    source_offset_file: Option<PathBuf>,
 }
 
 fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
     let ts = tileset_opts(&a.io)?;
+    let source_crs = SourceCrs::parse_cli(&a.source_crs)?;
+    if !a.source_offset.is_empty() && a.source_offset_file.is_some() {
+        return Err(Error::msg(
+            "pass only one of --sourceOffset and --sourceOffsetFile",
+        ));
+    }
+    let source_offset = if !a.source_offset.is_empty() {
+        let v = &a.source_offset;
+        Some(SourceOffset {
+            easting: v[0],
+            northing: v[1],
+            height: v.get(2).copied().unwrap_or(0.0),
+        })
+    } else if let Some(path) = &a.source_offset_file {
+        let text = std::fs::read_to_string(path)?;
+        Some(parse_metashape_offset(&text)?)
+    } else {
+        None
+    };
+    if source_offset.is_some() && source_crs == SourceCrs::Geographic {
+        return Err(Error::msg(
+            "--sourceOffset requires --sourceCrs auto or epsg:3857",
+        ));
+    }
     Ok(MeshTo3tzOptions {
         cartographic: ts.cartographic,
         rotation: ts.rotation,
@@ -192,5 +236,7 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         max_triangles: a.max_triangles,
         max_bytes: a.max_bytes,
         tile_size: a.tile_size,
+        source_crs,
+        source_offset,
     })
 }

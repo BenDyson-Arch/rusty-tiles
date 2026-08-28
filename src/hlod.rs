@@ -67,10 +67,7 @@ pub fn simplify_primitive(
 }
 
 /// Split `budget` triangles across primitives (the parent tile, not each material).
-pub fn simplify_tile(
-    prims: &[TilePrimitive],
-    budget: usize,
-) -> Result<Vec<TilePrimitive>, Error> {
+pub fn simplify_tile(prims: &[TilePrimitive], budget: usize) -> Result<Vec<TilePrimitive>, Error> {
     let counts: Vec<usize> = prims.iter().map(|p| p.indices.len() / 3).collect();
     let total = counts.iter().sum::<usize>().max(1);
     prims

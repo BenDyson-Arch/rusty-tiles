@@ -56,3 +56,62 @@ pub fn triangle_glb() -> Vec<u8> {
     out.extend_from_slice(&bin);
     out
 }
+
+/// Metashape geographic Y-up: X=lon°, Y=height m, Z=−lat°.
+pub fn geographic_glb(positions: &[[f32; 3]]) -> Vec<u8> {
+    let n = positions.len();
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    let mut bin = Vec::with_capacity(n * 12);
+    for p in positions {
+        for i in 0..3 {
+            bin.extend_from_slice(&p[i].to_le_bytes());
+            min[i] = min[i].min(p[i]);
+            max[i] = max[i].max(p[i]);
+        }
+    }
+    let json = serde_json::json!({
+        "asset": { "version": "2.0", "generator": "Agisoft Metashape" },
+        "scene": 0,
+        "scenes": [{ "nodes": [0] }],
+        "nodes": [{ "mesh": 0 }],
+        "meshes": [{
+            "primitives": [{ "attributes": { "POSITION": 0 } }]
+        }],
+        "accessors": [{
+            "bufferView": 0,
+            "componentType": 5126,
+            "count": n,
+            "type": "VEC3",
+            "max": [max[0], max[1], max[2]],
+            "min": [min[0], min[1], min[2]]
+        }],
+        "bufferViews": [{
+            "buffer": 0,
+            "byteOffset": 0,
+            "byteLength": n * 12
+        }],
+        "buffers": [{ "byteLength": n * 12 }]
+    });
+    let mut json_bytes = serde_json::to_vec(&json).expect("json");
+    while json_bytes.len() % 4 != 0 {
+        json_bytes.push(b' ');
+    }
+    while bin.len() % 4 != 0 {
+        bin.push(0);
+    }
+    let json_len = json_bytes.len() as u32;
+    let bin_len = bin.len() as u32;
+    let total = 12 + 8 + json_len + 8 + bin_len;
+    let mut out = Vec::with_capacity(total as usize);
+    out.extend_from_slice(b"glTF");
+    out.extend_from_slice(&2u32.to_le_bytes());
+    out.extend_from_slice(&total.to_le_bytes());
+    out.extend_from_slice(&json_len.to_le_bytes());
+    out.extend_from_slice(&0x4E4F534Au32.to_le_bytes());
+    out.extend_from_slice(&json_bytes);
+    out.extend_from_slice(&bin_len.to_le_bytes());
+    out.extend_from_slice(&0x004E4942u32.to_le_bytes());
+    out.extend_from_slice(&bin);
+    out
+}

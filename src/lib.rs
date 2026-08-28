@@ -21,7 +21,7 @@ pub mod vector;
 
 pub use compress::write_glb_compressed;
 pub use error::Error;
-pub use georef::{Cartographic, RotationDegrees};
+pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
 pub use tile::{
     mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TRIANGLES, DEFAULT_TILE_SIZE,

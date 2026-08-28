@@ -46,6 +46,289 @@ pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 
     }
 }
 
+/// WGS84 geodetic → ECEF metres (same ellipsoid as [`east_north_up`]).
+pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
+    let lon = pos.lon_deg.to_radians();
+    let lat = pos.lat_deg.to_radians();
+    let e2 = WGS84_F * (2.0 - WGS84_F);
+    let sin_lat = lat.sin();
+    let cos_lat = lat.cos();
+    let n = WGS84_A / (1.0 - e2 * sin_lat * sin_lat).sqrt();
+    [
+        (n + pos.height_m) * cos_lat * lon.cos(),
+        (n + pos.height_m) * cos_lat * lon.sin(),
+        (n * (1.0 - e2) + pos.height_m) * sin_lat,
+    ]
+}
+
+/// ECEF origin plus ENU basis, reused when baking many vertices.
+#[derive(Clone, Copy, Debug)]
+pub struct EnuFrame {
+    origin_ecef: [f64; 3],
+    east: [f64; 3],
+    north: [f64; 3],
+    up: [f64; 3],
+}
+
+impl EnuFrame {
+    pub fn new(origin: Cartographic) -> Self {
+        let lon = origin.lon_deg.to_radians();
+        let lat = origin.lat_deg.to_radians();
+        let sin_lat = lat.sin();
+        let cos_lat = lat.cos();
+        let sin_lon = lon.sin();
+        let cos_lon = lon.cos();
+        Self {
+            origin_ecef: geodetic_to_ecef(origin),
+            east: [-sin_lon, cos_lon, 0.0],
+            north: [-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat],
+            up: [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat],
+        }
+    }
+
+    pub fn to_enu(&self, ecef: [f64; 3]) -> [f64; 3] {
+        let dx = ecef[0] - self.origin_ecef[0];
+        let dy = ecef[1] - self.origin_ecef[1];
+        let dz = ecef[2] - self.origin_ecef[2];
+        [
+            self.east[0] * dx + self.east[1] * dy + self.east[2] * dz,
+            self.north[0] * dx + self.north[1] * dy + self.north[2] * dz,
+            self.up[0] * dx + self.up[1] * dy + self.up[2] * dz,
+        ]
+    }
+
+    /// Metashape geographic Y-up (lon°, height m, −lat°) → ENU Y-up.
+    pub fn geog_yup_to_enu_yup(&self, pos: [f32; 3]) -> [f32; 3] {
+        let geog = Cartographic::new(pos[0] as f64, -(pos[2] as f64), pos[1] as f64);
+        let [e, n, u] = self.to_enu(geodetic_to_ecef(geog));
+        [e as f32, u as f32, (-n) as f32]
+    }
+
+    /// Metashape Web Mercator Y-up (easting m, height m, −northing m) → ENU Y-up.
+    pub fn mercator_yup_to_enu_yup(&self, pos: [f32; 3]) -> [f32; 3] {
+        self.mercator_enuh_to_enu_yup(pos[0] as f64, -(pos[2] as f64), pos[1] as f64)
+    }
+
+    /// Local Metashape Y-up plus [`SourceOffset`] (f64), then ENU Y-up.
+    /// easting = X+E, height = Y+A, northing = N−Z. Never add the shift in f32.
+    pub fn mercator_yup_offset_to_enu_yup(&self, pos: [f32; 3], off: SourceOffset) -> [f32; 3] {
+        let (easting, height, northing) = apply_mercator_offset(pos, off);
+        self.mercator_enuh_to_enu_yup(easting, northing, height)
+    }
+
+    fn mercator_enuh_to_enu_yup(&self, easting: f64, northing: f64, height: f64) -> [f32; 3] {
+        let (lon, lat) = mercator_to_geodetic(easting, northing);
+        let [e, n, u] = self.to_enu(geodetic_to_ecef(Cartographic::new(lon, lat, height)));
+        [e as f32, u as f32, (-n) as f32]
+    }
+}
+
+/// EPSG:3857 (spherical) easting/northing → lon/lat degrees.
+pub fn mercator_to_geodetic(easting: f64, northing: f64) -> (f64, f64) {
+    let lon = easting * 180.0 / (std::f64::consts::PI * WGS84_A);
+    let lat = (northing / WGS84_A).sinh().atan().to_degrees();
+    (lon, lat)
+}
+
+/// Metashape geographic glTF is Y-up: X=longitude°, Y=height m, Z=−latitude°.
+pub fn looks_geographic_yup(min: [f64; 3], max: [f64; 3]) -> bool {
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    let cx = (min[0] + max[0]) * 0.5;
+    let cy = (min[1] + max[1]) * 0.5;
+    let cz = (min[2] + max[2]) * 0.5;
+    if cx.abs() > 180.0 || cz.abs() > 90.0 {
+        return false;
+    }
+    if dx >= 1.0 || dz >= 1.0 {
+        return false;
+    }
+    if cx.abs() < 2.0 || cz.abs() < 1.0 {
+        return false;
+    }
+    if cy.abs() > 20_000.0 || dy > 20_000.0 {
+        return false;
+    }
+    if dy < 2.0 && cy.abs() < 20.0 {
+        return false;
+    }
+    dx < 0.5 && dz < 0.5
+}
+
+/// Metashape Web Mercator glTF is Y-up: X=easting m, Y=height m, Z=−northing m.
+pub fn looks_web_mercator_yup(min: [f64; 3], max: [f64; 3]) -> bool {
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    let cx = (min[0] + max[0]) * 0.5;
+    let cy = (min[1] + max[1]) * 0.5;
+    let cz = (min[2] + max[2]) * 0.5;
+    const LIMIT: f64 = 20_037_508.0;
+    if cx.abs() < 100_000.0 || cx.abs() > LIMIT {
+        return false;
+    }
+    if cz.abs() < 100_000.0 || cz.abs() > LIMIT {
+        return false;
+    }
+    if cy.abs() > 20_000.0 || dy > 20_000.0 {
+        return false;
+    }
+    if dx < 2.0 || dz < 2.0 {
+        return false;
+    }
+    dx <= 50_000.0 && dz <= 50_000.0
+}
+
+pub fn geographic_origin_yup(min: [f64; 3], max: [f64; 3]) -> Cartographic {
+    Cartographic::new(
+        (min[0] + max[0]) * 0.5,
+        -(min[2] + max[2]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+    )
+}
+
+pub fn geographic_bbox_wgs84(min: [f64; 3], max: [f64; 3]) -> [f64; 4] {
+    let west = min[0];
+    let east = max[0];
+    let mut south = -max[2];
+    let mut north = -min[2];
+    if south > north {
+        std::mem::swap(&mut south, &mut north);
+    }
+    [west, south, east, north]
+}
+
+pub fn mercator_origin_yup(min: [f64; 3], max: [f64; 3]) -> Cartographic {
+    let easting = (min[0] + max[0]) * 0.5;
+    let northing = -(min[2] + max[2]) * 0.5;
+    let (lon, lat) = mercator_to_geodetic(easting, northing);
+    Cartographic::new(lon, lat, (min[1] + max[1]) * 0.5)
+}
+
+pub fn mercator_bbox_wgs84(min: [f64; 3], max: [f64; 3]) -> [f64; 4] {
+    let (west, _) = mercator_to_geodetic(min[0], 0.0);
+    let (east, _) = mercator_to_geodetic(max[0], 0.0);
+    let (_, mut south) = mercator_to_geodetic(0.0, -max[2]);
+    let (_, mut north) = mercator_to_geodetic(0.0, -min[2]);
+    if south > north {
+        std::mem::swap(&mut south, &mut north);
+    }
+    [west, south, east, north]
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CrsKind {
+    Geographic,
+    WebMercator,
+}
+
+/// How to interpret glTF POSITION before the ENU bake.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SourceCrs {
+    #[default]
+    Auto,
+    Geographic,
+    WebMercator,
+}
+
+impl SourceCrs {
+    pub fn parse_cli(s: &str) -> Result<Self, crate::error::Error> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "geographic" | "wgs84" | "epsg:4326" | "4326" => Ok(Self::Geographic),
+            "webmercator" | "mercator" | "epsg:3857" | "3857" | "pseudo-mercator"
+            | "pseudomercator" => Ok(Self::WebMercator),
+            other => Err(crate::error::Error::msg(format!(
+                "unknown --sourceCrs {other:?} (auto|geographic|epsg:3857)"
+            ))),
+        }
+    }
+}
+
+/// Metashape Shift / offset.txt: world = local + (E, N, A).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SourceOffset {
+    pub easting: f64,
+    pub northing: f64,
+    pub height: f64,
+}
+
+/// easting = X+E, height = Y+A, northing = N−Z (Metashape Y-up, Z = −northing).
+pub fn apply_mercator_offset(pos: [f32; 3], off: SourceOffset) -> (f64, f64, f64) {
+    (
+        pos[0] as f64 + off.easting,
+        pos[1] as f64 + off.height,
+        off.northing - pos[2] as f64,
+    )
+}
+
+pub fn mercator_origin_yup_offset(min: [f64; 3], max: [f64; 3], off: SourceOffset) -> Cartographic {
+    let easting = (min[0] + max[0]) * 0.5 + off.easting;
+    let height = (min[1] + max[1]) * 0.5 + off.height;
+    let northing = off.northing - (min[2] + max[2]) * 0.5;
+    let (lon, lat) = mercator_to_geodetic(easting, northing);
+    Cartographic::new(lon, lat, height)
+}
+
+pub fn mercator_bbox_wgs84_offset(min: [f64; 3], max: [f64; 3], off: SourceOffset) -> [f64; 4] {
+    let (west, _) = mercator_to_geodetic(min[0] + off.easting, 0.0);
+    let (east, _) = mercator_to_geodetic(max[0] + off.easting, 0.0);
+    let (_, mut south) = mercator_to_geodetic(0.0, off.northing - max[2]);
+    let (_, mut north) = mercator_to_geodetic(0.0, off.northing - min[2]);
+    if south > north {
+        std::mem::swap(&mut south, &mut north);
+    }
+    [west, south, east, north]
+}
+
+/// Metashape `offset.txt`: `E: …` / `N: …` / `A: …`.
+pub fn parse_metashape_offset(text: &str) -> Result<SourceOffset, crate::error::Error> {
+    let mut easting = None;
+    let mut northing = None;
+    let mut height = 0.0;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (k, v) = if let Some(i) = line.find(':') {
+            (&line[..i], &line[i + 1..])
+        } else if let Some(i) = line.find('=') {
+            (&line[..i], &line[i + 1..])
+        } else {
+            return Err(crate::error::Error::msg(format!(
+                "offset line must be K: value, got {line:?}"
+            )));
+        };
+        let key = k.trim().to_ascii_uppercase();
+        let val: f64 = v.trim().parse().map_err(|_| {
+            crate::error::Error::msg(format!("offset {key} is not a number: {}", v.trim()))
+        })?;
+        match key.as_str() {
+            "E" | "EASTING" | "X" => easting = Some(val),
+            "N" | "NORTHING" => northing = Some(val),
+            "A" | "ALTITUDE" | "H" | "HEIGHT" | "Z" => height = val,
+            _ => {
+                return Err(crate::error::Error::msg(format!(
+                    "unknown offset key {key:?} (expected E, N, A)"
+                )));
+            }
+        }
+    }
+    Ok(SourceOffset {
+        easting: easting.ok_or_else(|| crate::error::Error::msg("offset missing E (easting)"))?,
+        northing: northing
+            .ok_or_else(|| crate::error::Error::msg("offset missing N (northing)"))?,
+        height,
+    })
+}
+
+/// Geographic Y-up vertex → glTF Y-up ENU (X east, Y up, Z −north).
+pub fn geog_yup_to_enu_yup(pos: [f32; 3], origin: Cartographic) -> [f32; 3] {
+    EnuFrame::new(origin).geog_yup_to_enu_yup(pos)
+}
+
 /// WGS84 east-north-up to ECEF, column-major. Cesium `eastNorthUpToFixedFrame`.
 pub fn east_north_up(pos: Cartographic) -> [f64; 16] {
     let lon = pos.lon_deg.to_radians();
@@ -189,5 +472,90 @@ mod tests {
             1.0,
         ];
         assert_mat(t, want, 1e-4);
+    }
+
+    #[test]
+    fn local_metre_aabb_is_not_projected() {
+        assert!(!looks_geographic_yup([0.0, 0.0, 0.0], [1.0, 1.0, 0.0]));
+        assert!(!looks_web_mercator_yup(
+            [-50.0, 0.0, -50.0],
+            [50.0, 10.0, 50.0]
+        ));
+    }
+
+    #[test]
+    fn metashape_injalak_aabb_is_geographic() {
+        let min = [133.0640, 120.0, 12.3350];
+        let max = [133.0650, 140.0, 12.3360];
+        assert!(looks_geographic_yup(min, max));
+        assert!(!looks_web_mercator_yup(min, max));
+        let o = geographic_origin_yup(min, max);
+        assert!((o.lon_deg - 133.0645).abs() < 1e-9);
+        assert!((o.lat_deg - (-12.3355)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn geog_vertex_bakes_to_enu_metres() {
+        let origin = Cartographic::new(133.0645, -12.3355, 130.0);
+        let p = geog_yup_to_enu_yup([133.0640, 120.0, 12.3360], origin);
+        assert!(
+            p[0].abs() < 200.0 && p[1].abs() < 50.0 && p[2].abs() < 200.0,
+            "baked vertex still not ENU metres: {p:?}"
+        );
+        let span = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+        assert!(
+            span > 5.0,
+            "expected ~10–100 m offset from centroid, got {span}"
+        );
+    }
+
+    #[test]
+    fn injalak_web_mercator_aabb_inverts_to_wgs84() {
+        let min = [14_812_634.0, 111.77, 1_383_892.5];
+        let max = [14_812_737.0, 143.51, 1_383_996.625];
+        assert!(looks_web_mercator_yup(min, max));
+        assert!(!looks_geographic_yup(min, max));
+        let o = mercator_origin_yup(min, max);
+        assert!((o.lon_deg - 133.06462).abs() < 1e-4, "lon {}", o.lon_deg);
+        assert!((o.lat_deg - (-12.33576)).abs() < 1e-4, "lat {}", o.lat_deg);
+        let p = EnuFrame::new(o).mercator_yup_to_enu_yup([min[0] as f32, 120.0, max[2] as f32]);
+        assert!(
+            p[0].abs() < 200.0 && p[2].abs() < 200.0,
+            "mercator corner not ENU metres: {p:?}"
+        );
+    }
+
+    #[test]
+    fn parse_metashape_offset_txt() {
+        let o = parse_metashape_offset("E: 14812000\nN: -1384000\nA: 100\n").unwrap();
+        assert_eq!(o.easting, 14_812_000.0);
+        assert_eq!(o.northing, -1_384_000.0);
+        assert_eq!(o.height, 100.0);
+    }
+
+    #[test]
+    fn offset_local_aabb_matches_world_mercator_origin() {
+        let off = SourceOffset {
+            easting: 14_812_000.0,
+            northing: -1_384_000.0,
+            height: 100.0,
+        };
+        let min = [634.353515625, 11.774118423461914, -107.52688598632812];
+        let max = [737.476806640625, 43.511756896972656, -3.414585828781128];
+        assert!(!looks_web_mercator_yup(min, max));
+        let o = mercator_origin_yup_offset(min, max, off);
+        assert!((o.lon_deg - 133.06462).abs() < 1e-4, "lon {}", o.lon_deg);
+        assert!((o.lat_deg - (-12.33576)).abs() < 1e-4, "lat {}", o.lat_deg);
+        assert!((o.height_m - 127.643).abs() < 0.01, "h {}", o.height_m);
+        let mid = [
+            ((min[0] + max[0]) * 0.5) as f32,
+            ((min[1] + max[1]) * 0.5) as f32,
+            ((min[2] + max[2]) * 0.5) as f32,
+        ];
+        let p = EnuFrame::new(o).mercator_yup_offset_to_enu_yup(mid, off);
+        assert!(
+            p[0].abs() < 2.0 && p[1].abs() < 2.0 && p[2].abs() < 2.0,
+            "centroid should bake near ENU origin, got {p:?}"
+        );
     }
 }

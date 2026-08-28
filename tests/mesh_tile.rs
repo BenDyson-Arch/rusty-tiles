@@ -5,13 +5,13 @@ use std::path::Path;
 use image::{Rgba, RgbaImage};
 use serde_json::Value;
 use tinyowl_tiles::bbox::bounding_box_from_gltf_path;
-use tinyowl_tiles::fixtures::triangle_glb;
+use tinyowl_tiles::fixtures::{geographic_glb, triangle_glb};
 use tinyowl_tiles::glb_write::{write_glb, TilePrimitive};
 use tinyowl_tiles::mesh;
 use tinyowl_tiles::pack::list_zip_names;
 use tinyowl_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
 use tinyowl_tiles::tileset::{glb_to_3tz, CreateTilesetOptions};
-use tinyowl_tiles::{validate_3tz, write_glb_compressed};
+use tinyowl_tiles::{validate_3tz, write_glb_compressed, Cartographic, SourceCrs, SourceOffset};
 
 fn zip_bytes(tz: &Path, name: &str) -> Vec<u8> {
     let mut z = zip::ZipArchive::new(fs::File::open(tz).unwrap()).unwrap();
@@ -437,4 +437,175 @@ fn grid_prim(nx: u32, ny: u32, z_at: impl Fn(u32, u32) -> f32) -> TilePrimitive 
         indices,
         jpeg: None,
     }
+}
+
+fn geog_verts() -> Vec<[f32; 3]> {
+    vec![
+        [133.0640, 120.0, 12.3360],
+        [133.0650, 140.0, 12.3350],
+        [133.0645, 130.0, 12.3355],
+    ]
+}
+
+#[test]
+fn bake_geographic_skips_local_metres() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("triangle.glb");
+    fs::write(&glb, triangle_glb()).unwrap();
+    let mut scene = mesh::load(&glb).unwrap();
+    assert!(mesh::bake_geographic(&mut scene, None).is_none());
+}
+
+#[test]
+fn bake_geographic_enu_metres_and_origin() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("geog.glb");
+    let src = geographic_glb(&geog_verts());
+    fs::write(&glb, &src).unwrap();
+
+    let mut scene = mesh::load(&glb).unwrap();
+    let baked = mesh::bake_geographic(&mut scene, None).expect("expected geographic bake");
+    assert!((baked.origin.lon_deg - 133.0645).abs() < 0.001);
+    assert!((baked.origin.lat_deg - (-12.3355)).abs() < 0.001);
+    assert!((baked.origin.height_m - 130.0).abs() < 1.0);
+    let bb = baked.bbox_wgs84;
+    assert!(
+        bb[0] <= 133.064 + 1e-3 && bb[2] >= 133.065 - 1e-3,
+        "bbox west/east {bb:?}"
+    );
+    assert!(
+        bb[1] <= -12.336 + 1e-3 && bb[3] >= -12.335 - 1e-3,
+        "bbox south/north {bb:?}"
+    );
+
+    let p = scene.vertices[0].pos;
+    assert!(
+        p[0].abs() < 200.0 && p[1].abs() < 50.0 && p[2].abs() < 200.0,
+        "baked vertex still not ENU metres: {p:?}"
+    );
+    let span = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+    assert!(
+        span > 5.0,
+        "expected ~10–100 m offset from centroid, got {span}"
+    );
+
+    assert_eq!(
+        fs::read(&glb).unwrap(),
+        src,
+        "source GLB must stay geographic"
+    );
+}
+
+#[test]
+fn mesh_to_3tz_bakes_geographic_and_places_on_globe() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("geog.glb");
+    let src = geographic_glb(&geog_verts());
+    fs::write(&glb, &src).unwrap();
+
+    let tz = tmp.path().join("geog.3tz");
+    mesh_to_3tz(&glb, &tz, &MeshTo3tzOptions::default()).unwrap();
+    validate_3tz(&tz).unwrap();
+    assert_eq!(fs::read(&glb).unwrap(), src);
+
+    let ts = tileset_json(&tz);
+    assert_eq!(ts["root"]["refine"], "REPLACE");
+    let xf = ts["root"]["transform"]
+        .as_array()
+        .expect("geog bake sets ENU→ECEF root.transform");
+    let tx = xf[12].as_f64().unwrap();
+    let ty = xf[13].as_f64().unwrap();
+    let tz_ecef = xf[14].as_f64().unwrap();
+    let r = (tx * tx + ty * ty + tz_ecef * tz_ecef).sqrt();
+    assert!(
+        (6.0e6..6.5e6).contains(&r),
+        "root translation should be ECEF metres, got {r}"
+    );
+
+    let b = ts["root"]["boundingVolume"]["box"].as_array().unwrap();
+    let hx = b[3].as_f64().unwrap().abs();
+    let hy = b[7].as_f64().unwrap().abs();
+    let hz = b[11].as_f64().unwrap().abs();
+    let half = hx.max(hy).max(hz);
+    assert!(
+        half > 5.0 && half < 200.0,
+        "local box should be tens of metres after bake, got {half}"
+    );
+
+    let names = list_zip_names(&tz).unwrap();
+    assert!(
+        !names.iter().any(|n| n.ends_with("geog.glb")),
+        "must not wrap the geographic source: {names:?}"
+    );
+}
+
+#[test]
+fn bake_geographic_prefer_pin() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("geog.glb");
+    fs::write(&glb, geographic_glb(&geog_verts())).unwrap();
+    let mut scene = mesh::load(&glb).unwrap();
+    let pin = Cartographic::new(133.07, -12.34, 200.0);
+    let baked = mesh::bake_geographic(&mut scene, Some(pin)).unwrap();
+    assert!((baked.origin.lon_deg - 133.07).abs() < 1e-12);
+    assert!((baked.origin.lat_deg - (-12.34)).abs() < 1e-12);
+    assert!((baked.origin.height_m - 200.0).abs() < 1e-12);
+}
+
+#[test]
+fn bake_mercator_offset_keeps_local_precision() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("offset.glb");
+    let verts = vec![
+        [634.35, 11.77, -107.53],
+        [737.48, 43.51, -3.41],
+        [685.92, 27.64, -55.47],
+    ];
+    fs::write(&glb, geographic_glb(&verts)).unwrap();
+    let mut scene = mesh::load(&glb).unwrap();
+    assert!(mesh::bake_geographic(&mut scene, None).is_none());
+
+    let off = SourceOffset {
+        easting: 14_812_000.0,
+        northing: -1_384_000.0,
+        height: 100.0,
+    };
+    let baked = mesh::bake_to_enu(
+        &mut scene,
+        &mesh::BakeToEnu {
+            prefer: None,
+            crs: SourceCrs::WebMercator,
+            offset: Some(off),
+        },
+    )
+    .expect("offset mercator bake");
+    assert!((baked.origin.lon_deg - 133.06462).abs() < 1e-4);
+    assert!((baked.origin.lat_deg - (-12.33576)).abs() < 1e-4);
+    let p = scene.vertices[2].pos;
+    assert!(
+        p[0].abs() < 5.0 && p[1].abs() < 5.0 && p[2].abs() < 5.0,
+        "centroid vertex should be near ENU origin: {p:?}"
+    );
+
+    let tz = tmp.path().join("offset.3tz");
+    mesh_to_3tz(
+        &glb,
+        &tz,
+        &MeshTo3tzOptions {
+            source_crs: SourceCrs::WebMercator,
+            source_offset: Some(off),
+            ..MeshTo3tzOptions::default()
+        },
+    )
+    .unwrap();
+    validate_3tz(&tz).unwrap();
+    let ts = tileset_json(&tz);
+    let xf = ts["root"]["transform"].as_array().unwrap();
+    let r = {
+        let tx = xf[12].as_f64().unwrap();
+        let ty = xf[13].as_f64().unwrap();
+        let tz = xf[14].as_f64().unwrap();
+        (tx * tx + ty * ty + tz * tz).sqrt()
+    };
+    assert!((6.0e6..6.5e6).contains(&r), "ECEF r {r}");
 }

@@ -12,7 +12,9 @@ use serde_json::{json, Value};
 use crate::bbox::{aabb_center, aabb_to_box, z_up_to_y_up};
 use crate::compress::write_glb_compressed;
 use crate::error::Error;
-use crate::georef::{mul4, root_transform, translation, Cartographic, RotationDegrees};
+use crate::georef::{
+    mul4, root_transform, translation, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
+};
 use crate::glb_write::TilePrimitive;
 use crate::hlod::{sampled_hausdorff, simplify_tile, MIN_PARENT_GE};
 use crate::mesh::{self, Scene};
@@ -33,6 +35,8 @@ pub struct MeshTo3tzOptions {
     pub max_triangles: usize,
     pub max_bytes: u64,
     pub tile_size: u32,
+    pub source_crs: SourceCrs,
+    pub source_offset: Option<SourceOffset>,
 }
 
 impl Default for MeshTo3tzOptions {
@@ -44,6 +48,8 @@ impl Default for MeshTo3tzOptions {
             max_triangles: DEFAULT_MAX_TRIANGLES,
             max_bytes: DEFAULT_MAX_BYTES,
             tile_size: DEFAULT_TILE_SIZE,
+            source_crs: SourceCrs::Auto,
+            source_offset: None,
         }
     }
 }
@@ -90,7 +96,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     }
 
     let mut log = StageLog::new();
-    let scene = mesh::load(input)?;
+    let mut scene = mesh::load(input)?;
     log.tick(
         "load",
         format!(
@@ -100,8 +106,55 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             scene.source_bytes
         ),
     );
-    if scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        glb_to_3tz(input, output, &opts.into())?;
+
+    let mut opts = opts.clone();
+    let baked_geog = mesh::bake_to_enu(
+        &mut scene,
+        &mesh::BakeToEnu {
+            prefer: opts.cartographic,
+            crs: opts.source_crs,
+            offset: opts.source_offset,
+        },
+    );
+    if let Some(baked) = baked_geog {
+        opts.cartographic = Some(baked.origin);
+        let stage = match baked.kind {
+            crate::georef::CrsKind::Geographic => "geog",
+            crate::georef::CrsKind::WebMercator => "mercator",
+        };
+        let extra = if let Some(off) = opts.source_offset {
+            format!(
+                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6} offset E={} N={} A={}",
+                baked.origin.lon_deg,
+                baked.origin.lat_deg,
+                baked.origin.height_m,
+                baked.bbox_wgs84[0],
+                baked.bbox_wgs84[1],
+                baked.bbox_wgs84[2],
+                baked.bbox_wgs84[3],
+                off.easting,
+                off.northing,
+                off.height
+            )
+        } else {
+            format!(
+                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6}",
+                baked.origin.lon_deg,
+                baked.origin.lat_deg,
+                baked.origin.height_m,
+                baked.bbox_wgs84[0],
+                baked.bbox_wgs84[1],
+                baked.bbox_wgs84[2],
+                baked.bbox_wgs84[3]
+            )
+        };
+        log.tick(stage, extra);
+    }
+
+    // Geographic sources must not wrap the degree-space GLB. Local metre
+    // meshes still wrap when under the leaf budget.
+    if baked_geog.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
+        glb_to_3tz(input, output, &CreateTilesetOptions::from(&opts))?;
         log.tick("wrap", "under budget");
         let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
         log.done(format!("{}  bytes={out_len}", output.display()));
@@ -181,7 +234,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             0,
             [0.0; 3],
             true,
-            opts,
+            &opts,
             &tmp,
             &baked,
             &parent_prims,

@@ -9,9 +9,15 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use memmap2::Mmap;
+use rayon::prelude::*;
 
 use crate::bbox::{mul4, transform_point};
 use crate::error::Error;
+use crate::georef::{
+    geographic_bbox_wgs84, geographic_origin_yup, looks_geographic_yup, looks_web_mercator_yup,
+    mercator_bbox_wgs84, mercator_bbox_wgs84_offset, mercator_origin_yup,
+    mercator_origin_yup_offset, Cartographic, CrsKind, EnuFrame, SourceCrs, SourceOffset,
+};
 
 const IDENTITY: [[f32; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
@@ -155,6 +161,141 @@ fn extract(
         images,
         source_bytes,
     })
+}
+
+/// Result of rewriting projected/geographic positions into local ENU metres.
+#[derive(Clone, Copy, Debug)]
+pub struct GeographicBake {
+    pub origin: Cartographic,
+    pub bbox_wgs84: [f64; 4],
+    pub kind: CrsKind,
+}
+
+pub fn position_aabb_yup(scene: &Scene) -> ([f64; 3], [f64; 3]) {
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for v in &scene.vertices {
+        for i in 0..3 {
+            min[i] = min[i].min(v.pos[i] as f64);
+            max[i] = max[i].max(v.pos[i] as f64);
+        }
+    }
+    (min, max)
+}
+
+/// How to bake POSITION into local ENU metres.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BakeToEnu {
+    pub prefer: Option<Cartographic>,
+    pub crs: SourceCrs,
+    pub offset: Option<SourceOffset>,
+}
+
+/// Rewrite Metashape Y-up POSITION into local ENU metres (X east, Y up, Z −north).
+/// Detects geographic degrees or EPSG:3857, or uses an explicit CRS + Metashape offset.
+/// Source file is not modified.
+pub fn bake_to_enu(scene: &mut Scene, opts: &BakeToEnu) -> Option<GeographicBake> {
+    let (min, max) = position_aabb_yup(scene);
+    let offset = opts.offset;
+    let crs = match opts.crs {
+        SourceCrs::Auto if offset.is_some() => SourceCrs::WebMercator,
+        other => other,
+    };
+    let (mut origin, bbox_wgs84, kind) = match crs {
+        SourceCrs::Geographic => {
+            if opts.crs == SourceCrs::Auto && !looks_geographic_yup(min, max) {
+                return None;
+            }
+            (
+                geographic_origin_yup(min, max),
+                geographic_bbox_wgs84(min, max),
+                CrsKind::Geographic,
+            )
+        }
+        SourceCrs::WebMercator => {
+            if let Some(off) = offset {
+                (
+                    mercator_origin_yup_offset(min, max, off),
+                    mercator_bbox_wgs84_offset(min, max, off),
+                    CrsKind::WebMercator,
+                )
+            } else {
+                if opts.crs == SourceCrs::Auto && !looks_web_mercator_yup(min, max) {
+                    return None;
+                }
+                (
+                    mercator_origin_yup(min, max),
+                    mercator_bbox_wgs84(min, max),
+                    CrsKind::WebMercator,
+                )
+            }
+        }
+        SourceCrs::Auto => {
+            if looks_geographic_yup(min, max) {
+                (
+                    geographic_origin_yup(min, max),
+                    geographic_bbox_wgs84(min, max),
+                    CrsKind::Geographic,
+                )
+            } else if looks_web_mercator_yup(min, max) {
+                (
+                    mercator_origin_yup(min, max),
+                    mercator_bbox_wgs84(min, max),
+                    CrsKind::WebMercator,
+                )
+            } else {
+                return None;
+            }
+        }
+    };
+    if let Some(p) = opts.prefer {
+        origin.lon_deg = p.lon_deg;
+        origin.lat_deg = p.lat_deg;
+        if p.height_m != 0.0 {
+            origin.height_m = p.height_m;
+        }
+    }
+    let frame = EnuFrame::new(origin);
+    match (kind, offset) {
+        (CrsKind::Geographic, _) => scene
+            .vertices
+            .par_iter_mut()
+            .for_each(|v| v.pos = frame.geog_yup_to_enu_yup(v.pos)),
+        (CrsKind::WebMercator, Some(off)) => scene
+            .vertices
+            .par_iter_mut()
+            .for_each(|v| v.pos = frame.mercator_yup_offset_to_enu_yup(v.pos, off)),
+        (CrsKind::WebMercator, None) => scene
+            .vertices
+            .par_iter_mut()
+            .for_each(|v| v.pos = frame.mercator_yup_to_enu_yup(v.pos)),
+    }
+    recompute_normals(scene);
+    Some(GeographicBake {
+        origin,
+        bbox_wgs84,
+        kind,
+    })
+}
+
+/// Auto-detect geographic or world Web Mercator (no Metashape shift).
+pub fn bake_geographic(scene: &mut Scene, prefer: Option<Cartographic>) -> Option<GeographicBake> {
+    bake_to_enu(
+        scene,
+        &BakeToEnu {
+            prefer,
+            ..BakeToEnu::default()
+        },
+    )
+}
+
+fn recompute_normals(scene: &mut Scene) {
+    let positions: Vec<[f32; 3]> = scene.vertices.iter().map(|v| v.pos).collect();
+    let indices: Vec<u32> = scene.triangles.iter().flat_map(|t| t.verts).collect();
+    let nrms = vertex_normals(&positions, &indices);
+    for (v, n) in scene.vertices.iter_mut().zip(nrms) {
+        v.nrm = n;
+    }
 }
 
 fn load_images(

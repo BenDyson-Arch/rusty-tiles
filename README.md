@@ -35,8 +35,15 @@ tinyowl-tiles glb-to-3tz -i model.glb -o model.3tz \
   --cartographicPositionDegrees 151.2 -33.9
 
 # Split into a REPLACE HLOD tree when over 20k triangles
-tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz \
-  --cartographicPositionDegrees 151.2 -33.9
+# Metashape geographic (lon° / height m / −lat°) and world EPSG:3857
+# (easting / height / −northing) GLBs are baked to ENU metres automatically.
+tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz
+
+# Metashape Shift export: local metres + offset.txt (keep f32 precision)
+tinyowl-tiles mesh-to-3tz -i mgal_detail_offset.glb -o model.3tz \
+  --sourceCrs epsg:3857 \
+  --sourceOffsetFile offset.txt
+# or: --sourceOffset 14812000 -1384000 100
 
 # Stubs (exit 2) until spec / pipeline land
 tinyowl-tiles vector -i features.geojson -o features.3tz
@@ -51,7 +58,7 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 |------|------|
 | `src/tileset.rs` | `create-tileset-json`, `glb-to-3tz` |
 | `src/bbox.rs` | glTF POSITION → `boundingVolume.box` |
-| `src/georef.rs` | Cesium ENU→ECEF + `--rotationDegrees` HPR |
+| `src/georef.rs` | Cesium ENU→ECEF, `--rotationDegrees` HPR, Metashape geographic→ENU |
 | `src/pack.rs` | `convert` → stored `.3tz` + `@3dtilesIndex1@` |
 | `src/tile.rs` | `mesh-to-3tz` wrap-or-split orchestrator |
 | `src/hlod.rs` | parent simplify + sampled Hausdorff GE |

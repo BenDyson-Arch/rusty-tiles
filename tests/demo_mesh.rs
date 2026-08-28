@@ -67,6 +67,17 @@ fn mesh_to_3tz_mgal_detail() {
     );
     let ts: Value = serde_json::from_slice(&zip_bytes(&tz, "tileset.json")).unwrap();
     assert_eq!(ts["root"]["refine"], "REPLACE");
+    let xf = ts["root"]["transform"]
+        .as_array()
+        .expect("geog bake sets root.transform");
+    let tx = xf[12].as_f64().unwrap();
+    let ty = xf[13].as_f64().unwrap();
+    let tz_ecef = xf[14].as_f64().unwrap();
+    let r = (tx * tx + ty * ty + tz_ecef * tz_ecef).sqrt();
+    assert!(
+        (6.0e6..6.5e6).contains(&r),
+        "root translation should be ECEF metres, got {r}"
+    );
     let mut uris = Vec::new();
     collect_uris(&ts["root"], &mut uris);
     assert!(
