@@ -176,7 +176,7 @@ struct MeshArgs {
         default_value_t = tinyowl_tiles::DEFAULT_MAX_BYTES
     )]
     max_bytes: u64,
-    /// Max edge length in pixels of a cropped leaf texture (default 256).
+    /// Max edge length in pixels of a cropped leaf texture (default 512).
     #[arg(
         long = "tileSize",
         visible_alias = "tile-size",

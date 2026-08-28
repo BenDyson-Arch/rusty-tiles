@@ -275,8 +275,8 @@ fn eighty_k_grid_splits_under_budget() {
         assert!(used.iter().any(|v| v == "EXT_meshopt_compression"));
         if !uri.contains("/p") {
             let tris = glb_index_count(&bytes) / 3;
-            // Overlap band can push a leaf a little over the split budget.
-            assert!(tris <= 22_000, "{uri} has {tris} tris");
+            // Final-cut overlap + border seal can grow a leaf past the split budget.
+            assert!(tris <= 25_000, "{uri} has {tris} tris");
         }
     }
 }
@@ -352,13 +352,13 @@ fn texture_crop_shrinks_shared_atlas() {
 
     for uri in &uris {
         if uri.contains("/p") {
-            // Parent has a baked atlas (may be one image).
+            // Packed parent atlas (one image).
             let bytes = zip_bytes(&tz, uri);
             let imgs = glb_json(&bytes)["images"]
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
-            assert_eq!(imgs.len(), 1, "parent should have one baked atlas");
+            assert_eq!(imgs.len(), 1, "parent should have one packed atlas");
             continue;
         }
         let bytes = zip_bytes(&tz, uri);

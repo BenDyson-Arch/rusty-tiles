@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use meshopt::optimize::optimize_vertex_fetch;
-use meshopt::simplify::{simplify, SimplifyOptions};
+use meshopt::simplify::{simplify, simplify_with_attributes_and_locks, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
 
 use crate::error::Error;
@@ -13,8 +13,7 @@ use crate::mesh::Scene;
 const SOURCE_SAMPLE_CAP: usize = 2_048;
 pub(crate) const MIN_PARENT_GE: f64 = 1e-3;
 
-/// SSE floor from the tile AABB (max half-extent / 8), matching Metashape’s
-/// cube-half/8 on tight boxes.
+/// SSE floor from the tile AABB (max half-extent / 8).
 ///
 /// Sampled Hausdorff alone under-reports bad simplifies; this floor keeps
 /// REPLACE refinement moving toward leaves when the camera is close.
@@ -41,12 +40,28 @@ struct Vtx {
 }
 
 /// Simplify to `target_tris`, preferring a watertight mesh over hitting the
-/// budget. Photogrammetry UV seams duplicate positions; we weld by position
-/// first so meshopt sees a connected surface. Never use `simplify_sloppy`
+/// budget. Untextured soup is welded by position. Never use `simplify_sloppy`
 /// (it punches holes that show up as shattered parent tiles).
 pub fn simplify_primitive(
     prim: &TilePrimitive,
     target_tris: usize,
+) -> Result<TilePrimitive, Error> {
+    simplify_primitive_with(prim, target_tris, WeldMode::PositionOnly)
+}
+
+#[derive(Clone, Copy)]
+enum WeldMode {
+    /// Manifold weld for untextured proxies (may average UVs — do not use
+    /// when a JPEG is present).
+    PositionOnly,
+    /// Keep UV discontinuities so each material stays in its own 0–1.
+    PositionUv,
+}
+
+fn simplify_primitive_with(
+    prim: &TilePrimitive,
+    target_tris: usize,
+    weld: WeldMode,
 ) -> Result<TilePrimitive, Error> {
     if prim.indices.len() < 3 || prim.positions.is_empty() {
         return Ok(prim.clone());
@@ -56,14 +71,22 @@ pub fn simplify_primitive(
         return Ok(prim.clone());
     }
 
-    let welded = weld_by_position(prim);
+    let welded = match weld {
+        WeldMode::PositionOnly => weld_by_position_only(prim),
+        WeldMode::PositionUv => weld_by_position_uv(prim),
+    };
     if welded.indices.len() < 3 {
         return Ok(prim.clone());
     }
     let pos_bytes: &[u8] = bytemuck::cast_slice(&welded.positions);
     let adapter = VertexDataAdapter::new(pos_bytes, 12, 0)
         .map_err(|e| Error::msg(format!("meshopt adapter: {e}")))?;
-    let simplified = reduce_indices(&welded.indices, &adapter, target_indices);
+    let simplified = match weld {
+        WeldMode::PositionOnly => reduce_indices(&welded.indices, &adapter, target_indices),
+        WeldMode::PositionUv => {
+            reduce_indices_uv(&welded.indices, &adapter, &welded.uvs, target_indices)
+        }
+    };
     if simplified.len() < 3 {
         return Ok(prim.clone());
     }
@@ -93,112 +116,98 @@ pub fn simplify_primitive(
     })
 }
 
-/// Build one parent proxy: weld+simplify as a single mesh, then closest-point
-/// bake source chart albedos into a downscaled atlas (`atlas_size` edge).
+/// Parent proxy: weld + simplify for a watertight mesh, then bake a new atlas
+/// by sampling the high-res source at each simplified texel.
 pub fn simplify_tile(
     prims: &[TilePrimitive],
+    sampler: Option<&crate::texture::SceneSampler<'_>>,
     budget: usize,
     atlas_size: u32,
 ) -> Result<Vec<TilePrimitive>, Error> {
     if prims.is_empty() {
         return Ok(Vec::new());
     }
-    let sampler = match crate::texture::SourceSampler::from_prims(prims) {
-        Ok(s) => Some(s),
-        Err(_) => None,
-    };
-
-    let merged = merge_geometry(prims);
-    let mut simplified = simplify_primitive(&merged, budget)?;
-    simplified.jpeg = None;
-
-    if let Some(sampler) = sampler.as_ref() {
-        match crate::texture::bake_lod_atlas(
-            &simplified.positions,
-            &simplified.normals,
-            &simplified.indices,
-            sampler,
-            atlas_size,
-        ) {
-            Ok(baked) => {
-                simplified.positions = baked.positions;
-                simplified.normals = baked.normals;
-                simplified.uvs = baked.uvs;
-                simplified.indices = baked.indices;
-                simplified.jpeg = Some(baked.jpeg);
-            }
-            Err(_) => {
-                simplified.uvs.clear();
-            }
-        }
-    } else {
-        simplified.uvs.clear();
-    }
-    Ok(vec![simplified])
-}
-
-fn merge_geometry(prims: &[TilePrimitive]) -> TilePrimitive {
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut indices = Vec::new();
     let mut any_n = false;
+    let mut any_tex = sampler.is_some();
     for p in prims {
         let base = positions.len() as u32;
         let has_n = p.normals.len() == p.positions.len();
         any_n |= has_n;
+        any_tex |= p.jpeg.is_some() && p.uvs.len() == p.positions.len();
         for i in 0..p.positions.len() {
             positions.push(p.positions[i]);
             normals.push(if has_n { p.normals[i] } else { [0.0, 1.0, 0.0] });
         }
         indices.extend(p.indices.iter().map(|i| i + base));
     }
-    TilePrimitive {
+    let merged = TilePrimitive {
         positions,
         normals: if any_n { normals } else { Vec::new() },
         uvs: Vec::new(),
         indices,
         jpeg: None,
+    };
+    let simplified = simplify_primitive_with(&merged, budget, WeldMode::PositionOnly)?;
+    if !any_tex {
+        let mut s = simplified;
+        s.jpeg = None;
+        s.uvs.clear();
+        return Ok(vec![s]);
+    }
+    let owned;
+    let baked = if let Some(s) = sampler {
+        crate::texture::bake_simplified(&simplified, s, atlas_size)
+    } else {
+        match crate::texture::SceneSampler::from_prims(prims) {
+            Ok(s) => {
+                owned = s;
+                crate::texture::bake_simplified(&simplified, &owned, atlas_size)
+            }
+            Err(e) => Err(e),
+        }
+    };
+    match baked {
+        Ok(b) => Ok(vec![b]),
+        Err(_) => {
+            let mut s = simplified;
+            s.jpeg = None;
+            s.uvs.clear();
+            Ok(vec![s])
+        }
     }
 }
 
-/// Merge vertices that share a position (UV-seam duplicates). Keeps the mesh
-/// manifold for meshopt; UVs/normals are averaged.
-fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
+/// Weld vertices that share a position only (manifold far LODs).
+fn weld_by_position_only(prim: &TilePrimitive) -> TilePrimitive {
     let mut extent = 0.0f32;
     for p in &prim.positions {
         extent = extent.max(p[0].abs()).max(p[1].abs()).max(p[2].abs());
     }
     let cell = (extent * 1e-6).max(1e-5);
+    let has_n = prim.normals.len() == prim.positions.len();
+    let has_uv = prim.uvs.len() == prim.positions.len();
 
     let mut map: HashMap<[i64; 3], u32> = HashMap::new();
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
     let mut counts: Vec<u32> = Vec::new();
-    let has_n = prim.normals.len() == prim.positions.len();
-    let has_uv = prim.uvs.len() == prim.positions.len();
-
-    let key = |p: [f32; 3]| -> [i64; 3] {
-        [
+    let mut remap = vec![0u32; prim.positions.len()];
+    for (i, &p) in prim.positions.iter().enumerate() {
+        let k = [
             (p[0] / cell).round() as i64,
             (p[1] / cell).round() as i64,
             (p[2] / cell).round() as i64,
-        ]
-    };
-
-    let mut remap = vec![0u32; prim.positions.len()];
-    for (i, &p) in prim.positions.iter().enumerate() {
-        let k = key(p);
+        ];
         if let Some(&id) = map.get(&k) {
             let j = id as usize;
             if has_n {
                 normals[j][0] += prim.normals[i][0];
                 normals[j][1] += prim.normals[i][1];
                 normals[j][2] += prim.normals[i][2];
-            }
-            if has_uv {
-                uvs[j][0] += prim.uvs[i][0];
-                uvs[j][1] += prim.uvs[i][1];
             }
             counts[j] += 1;
             remap[i] = id;
@@ -229,8 +238,107 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
         normals[i][0] /= len;
         normals[i][1] /= len;
         normals[i][2] /= len;
-        uvs[i][0] *= inv;
-        uvs[i][1] *= inv;
+        // Keep the first UV at this position — averaging seam UVs samples
+        // the middle of the image.
+    }
+    let indices: Vec<u32> = prim.indices.iter().map(|&i| remap[i as usize]).collect();
+    let mut out_idx = Vec::with_capacity(indices.len());
+    for tri in indices.chunks_exact(3) {
+        if tri[0] != tri[1] && tri[1] != tri[2] && tri[2] != tri[0] {
+            out_idx.extend_from_slice(tri);
+        }
+    }
+    TilePrimitive {
+        positions,
+        normals: if has_n { normals } else { Vec::new() },
+        uvs: if has_uv { uvs } else { Vec::new() },
+        indices: out_idx,
+        jpeg: None,
+    }
+}
+
+/// Weld vertices that share a position **and** UV.
+///
+/// Position-only welding averages UVs across materials and samples the wrong
+/// image. Keep UV discontinuities.
+fn weld_by_position_uv(prim: &TilePrimitive) -> TilePrimitive {
+    let mut extent = 0.0f32;
+    for p in &prim.positions {
+        extent = extent.max(p[0].abs()).max(p[1].abs()).max(p[2].abs());
+    }
+    let cell = (extent * 1e-6).max(1e-5);
+    // ~0.5 texel in a 1024 atlas — tight enough to keep distinct charts apart.
+    const UV_CELL: f32 = 1.0 / 2048.0;
+
+    let has_n = prim.normals.len() == prim.positions.len();
+    let has_uv = prim.uvs.len() == prim.positions.len();
+
+    let key = |p: [f32; 3], uv: [f32; 2]| -> [i64; 5] {
+        [
+            (p[0] / cell).round() as i64,
+            (p[1] / cell).round() as i64,
+            (p[2] / cell).round() as i64,
+            if has_uv {
+                (uv[0].clamp(0.0, 1.0) / UV_CELL).round() as i64
+            } else {
+                0
+            },
+            if has_uv {
+                (uv[1].clamp(0.0, 1.0) / UV_CELL).round() as i64
+            } else {
+                0
+            },
+        ]
+    };
+
+    let mut map: HashMap<[i64; 5], u32> = HashMap::new();
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut counts: Vec<u32> = Vec::new();
+
+    let mut remap = vec![0u32; prim.positions.len()];
+    for (i, &p) in prim.positions.iter().enumerate() {
+        let uv = if has_uv { prim.uvs[i] } else { [0.0, 0.0] };
+        let k = key(p, uv);
+        if let Some(&id) = map.get(&k) {
+            let j = id as usize;
+            if has_n {
+                normals[j][0] += prim.normals[i][0];
+                normals[j][1] += prim.normals[i][1];
+                normals[j][2] += prim.normals[i][2];
+            }
+            // UVs already match within UV_CELL — keep the first, do not average
+            // toward a neighbor chart.
+            counts[j] += 1;
+            remap[i] = id;
+        } else {
+            let id = positions.len() as u32;
+            map.insert(k, id);
+            positions.push(p);
+            normals.push(if has_n {
+                prim.normals[i]
+            } else {
+                [0.0, 1.0, 0.0]
+            });
+            uvs.push(uv);
+            counts.push(1);
+            remap[i] = id;
+        }
+    }
+    for (i, c) in counts.iter().enumerate() {
+        let inv = 1.0 / (*c as f32);
+        normals[i][0] *= inv;
+        normals[i][1] *= inv;
+        normals[i][2] *= inv;
+        let len = (normals[i][0] * normals[i][0]
+            + normals[i][1] * normals[i][1]
+            + normals[i][2] * normals[i][2])
+            .sqrt()
+            .max(1e-20);
+        normals[i][0] /= len;
+        normals[i][1] /= len;
+        normals[i][2] /= len;
     }
 
     let indices: Vec<u32> = prim.indices.iter().map(|&i| remap[i as usize]).collect();
@@ -251,7 +359,6 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
 }
 
 fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
-    // Prefer the smallest topology-preserving result. Never use simplify_sloppy.
     let attempts: [(SimplifyOptions, f32); 4] = [
         (
             SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
@@ -261,8 +368,74 @@ fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usiz
         (SimplifyOptions::Permissive, 1.0),
         (SimplifyOptions::None, 1.0),
     ];
+    pick_reduce(indices, adapter, target, &attempts)
+}
+
+fn reduce_indices_uv(
+    indices: &[u32],
+    adapter: &VertexDataAdapter<'_>,
+    uvs: &[[f32; 2]],
+    target: usize,
+) -> Vec<u32> {
+    let nvert = adapter.vertex_count;
+    let mut attrs = vec![0.0f32; nvert * 2];
+    for i in 0..nvert {
+        let uv = uvs.get(i).copied().unwrap_or([0.0, 0.0]);
+        attrs[i * 2] = uv[0];
+        attrs[i * 2 + 1] = uv[1];
+    }
+    // UV weight << position (metres): prefer hitting the triangle budget over
+    // freezing every chart. Seams stay as duplicate verts from PositionUv weld.
+    let weights = [0.1f32, 0.1];
+    let locks = vec![false; nvert];
+    let stride = std::mem::size_of::<f32>() * 2;
+    let attempts: [(SimplifyOptions, f32); 2] =
+        [(SimplifyOptions::Prune, 1.0), (SimplifyOptions::None, 1.0)];
     let mut best: Option<Vec<u32>> = None;
-    for (opts, err) in attempts {
+    for &(opts, err) in &attempts {
+        let out = simplify_with_attributes_and_locks(
+            indices, adapter, &attrs, &weights, stride, &locks, target, err, opts, None,
+        );
+        if out.len() < 3 {
+            continue;
+        }
+        let better = match &best {
+            None => true,
+            Some(b) => out.len() < b.len(),
+        };
+        if better {
+            best = Some(out);
+            if best.as_ref().map(|b| b.len()).unwrap_or(usize::MAX) <= target.saturating_mul(2) {
+                break;
+            }
+        }
+    }
+    if best
+        .as_ref()
+        .map(|b| b.len() > target.saturating_mul(4))
+        .unwrap_or(true)
+    {
+        let geo = pick_reduce(
+            indices,
+            adapter,
+            target,
+            &[(SimplifyOptions::Prune, 1.0), (SimplifyOptions::None, 1.0)],
+        );
+        if geo.len() >= 3 && best.as_ref().map(|b| geo.len() < b.len()).unwrap_or(true) {
+            best = Some(geo);
+        }
+    }
+    best.unwrap_or_else(|| indices.to_vec())
+}
+
+fn pick_reduce(
+    indices: &[u32],
+    adapter: &VertexDataAdapter<'_>,
+    target: usize,
+    attempts: &[(SimplifyOptions, f32)],
+) -> Vec<u32> {
+    let mut best: Option<Vec<u32>> = None;
+    for &(opts, err) in attempts {
         let out = simplify(indices, adapter, target, err, opts, None);
         if out.len() < 3 {
             continue;
@@ -491,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn simplify_tile_bakes_single_atlas() {
+    fn simplify_tile_packs_into_one_mesh() {
         fn textured_quad(origin: [f32; 3], rgb: [u8; 3]) -> TilePrimitive {
             let mut img = image::RgbImage::new(16, 16);
             for p in img.pixels_mut() {
@@ -517,10 +690,37 @@ mod tests {
         }
         let a = textured_quad([0.0, 0.0, 0.0], [200, 40, 40]);
         let b = textured_quad([2.0, 0.0, 0.0], [40, 200, 40]);
-        let out = simplify_tile(&[a, b], 8, 64).unwrap();
-        assert_eq!(out.len(), 1);
+        let out = simplify_tile(&[a, b], None, 8, 64).unwrap();
+        assert_eq!(out.len(), 1, "packed parent is one mesh");
         assert!(out[0].jpeg.as_ref().unwrap().len() > 32);
         assert_eq!(out[0].uvs.len(), out[0].positions.len());
         assert!(!out[0].indices.is_empty());
+        assert!(
+            out[0].positions.len() < out[0].indices.len(),
+            "chart unwrap should share vertices, got {} verts / {} indices",
+            out[0].positions.len(),
+            out[0].indices.len()
+        );
+        for uv in &out[0].uvs {
+            assert!((0.0..=1.0).contains(&uv[0]));
+            assert!((0.0..=1.0).contains(&uv[1]));
+        }
+        let img = image::load_from_memory(out[0].jpeg.as_ref().unwrap())
+            .unwrap()
+            .to_rgba8();
+        let mut red = 0u32;
+        let mut green = 0u32;
+        for p in img.pixels() {
+            if p[0] > 140 && p[1] < 90 {
+                red += 1;
+            }
+            if p[1] > 140 && p[0] < 90 {
+                green += 1;
+            }
+        }
+        assert!(
+            red > 10 && green > 10,
+            "baked atlas should keep both source colours, red={red} green={green}"
+        );
     }
 }

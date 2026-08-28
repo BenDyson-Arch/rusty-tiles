@@ -304,11 +304,12 @@ fn build_primitive(
             extensions: Default::default(),
             extras: Default::default(),
         });
+        let sampler = push_clamp_linear_sampler(root);
         let tex = root.push(texture::Texture {
             extensions: Default::default(),
             extras: Default::default(),
             name: None,
-            sampler: None,
+            sampler: Some(sampler),
             source: image,
         });
         let mut pbr = material::PbrMetallicRoughness::default();
@@ -350,6 +351,20 @@ fn pad4(buf: &mut Vec<u8>) {
     while buf.len() % 4 != 0 {
         buf.push(0);
     }
+}
+
+/// No mipmaps + clamp: photogrammetry atlas crops have dead space between UV
+/// islands; default mipmap filtering smears that junk into the mesh as wobble.
+fn push_clamp_linear_sampler(root: &mut Root) -> Index<texture::Sampler> {
+    root.push(texture::Sampler {
+        mag_filter: Some(Valid(texture::MagFilter::Linear)),
+        min_filter: Some(Valid(texture::MinFilter::Linear)),
+        name: None,
+        wrap_s: Valid(texture::WrappingMode::ClampToEdge),
+        wrap_t: Valid(texture::WrappingMode::ClampToEdge),
+        extensions: Default::default(),
+        extras: Default::default(),
+    })
 }
 
 fn min_max_vec3(pts: &[[f32; 3]]) -> ([f32; 3], [f32; 3]) {

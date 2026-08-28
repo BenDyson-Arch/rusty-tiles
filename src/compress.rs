@@ -486,11 +486,12 @@ fn push_jpeg(
         extensions: Default::default(),
         extras: Default::default(),
     });
+    let sampler = push_clamp_linear_sampler(root);
     let tex = root.push(texture::Texture {
         extensions: Default::default(),
         extras: Default::default(),
         name: None,
-        sampler: None,
+        sampler: Some(sampler),
         source: image,
     });
     let pbr = material::PbrMetallicRoughness {
@@ -540,4 +541,16 @@ fn pad4(buf: &mut Vec<u8>) {
     while !buf.len().is_multiple_of(4) {
         buf.push(0);
     }
+}
+
+fn push_clamp_linear_sampler(root: &mut Root) -> Index<texture::Sampler> {
+    root.push(texture::Sampler {
+        mag_filter: Some(Valid(texture::MagFilter::Linear)),
+        min_filter: Some(Valid(texture::MinFilter::Linear)),
+        name: None,
+        wrap_s: Valid(texture::WrappingMode::ClampToEdge),
+        wrap_t: Valid(texture::WrappingMode::ClampToEdge),
+        extensions: Default::default(),
+        extras: Default::default(),
+    })
 }

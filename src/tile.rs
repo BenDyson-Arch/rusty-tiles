@@ -26,7 +26,7 @@ use crate::tileset::{glb_to_3tz, CreateTilesetOptions};
 
 pub const DEFAULT_MAX_TRIANGLES: usize = 20_000;
 pub const DEFAULT_MAX_BYTES: u64 = 204_800;
-pub const DEFAULT_TILE_SIZE: u32 = 256;
+pub const DEFAULT_TILE_SIZE: u32 = 512;
 
 #[derive(Clone, Debug)]
 pub struct MeshTo3tzOptions {
@@ -178,6 +178,8 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             max_triangles: opts.max_triangles,
         },
     );
+    let mut tree = tree;
+    split::seal_leaf_borders(&scene, &mut tree, opts.max_triangles);
     let mut leaves = Vec::new();
     collect_leaves(&tree, 0, &mut leaves);
     let max_depth = leaves.iter().map(|(d, _)| *d).max().unwrap_or(0);
@@ -204,14 +206,25 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         // a few coarse GLBs; spatial GE floors force refinement when close.
         let mut branches = Vec::new();
         collect_branches(&tree, 0, &mut branches);
-        let parent_size = opts.tile_size.max(64);
+        let sampler = texture::SceneSampler::from_scene(&scene, &decoded).ok();
+        log.tick(
+            "sampler",
+            if sampler.is_some() {
+                "scene-wide source grid"
+            } else {
+                "untextured"
+            },
+        );
+        // Near: 1024 baked atlas. Far: 512. Sample the decoded source images.
         let parent_prims: Vec<Vec<TilePrimitive>> = branches
             .par_iter()
-            .map(|(_, node)| -> Result<Vec<TilePrimitive>, Error> {
+            .map(|(depth, node)| -> Result<Vec<TilePrimitive>, Error> {
                 let ids = descendant_ids(node);
                 let budget = parent_triangle_budget(ids.len(), opts.max_triangles);
-                let prims = bake_ids(&scene, &ids, &decoded, parent_size)?;
-                simplify_tile(&prims, budget, parent_size)
+                let near = (*depth as i32) >= (max_depth as i32).saturating_sub(3);
+                let atlas = if near { 1024 } else { 512 };
+                let geom = geom_from_ids(&scene, &ids);
+                simplify_tile(&[geom], sampler.as_ref(), budget, atlas)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         let parent_tris: Vec<usize> = parent_prims.iter().map(|p| prim_tris(p)).collect();
@@ -470,9 +483,36 @@ fn bake_leaves(
             let SplitNode::Leaf { triangle_ids, .. } = node else {
                 return Err(Error::msg("collect_leaves returned a branch"));
             };
-            bake_ids(scene, triangle_ids, decoded, tile_size)
+            bake_ids(scene, triangle_ids, decoded, tile_size, true)
         })
         .collect()
+}
+
+fn geom_from_ids(scene: &Scene, ids: &[usize]) -> TilePrimitive {
+    let mut remap: HashMap<u32, u32> = HashMap::new();
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut indices = Vec::new();
+    for &id in ids {
+        let t = &scene.triangles[id];
+        for v in t.verts {
+            let n = *remap.entry(v).or_insert_with(|| {
+                let vert = &scene.vertices[v as usize];
+                let i = positions.len() as u32;
+                positions.push(vert.pos);
+                normals.push(vert.nrm);
+                i
+            });
+            indices.push(n);
+        }
+    }
+    TilePrimitive {
+        positions,
+        normals,
+        uvs: Vec::new(),
+        indices,
+        jpeg: None,
+    }
 }
 
 fn bake_ids(
@@ -480,6 +520,7 @@ fn bake_ids(
     ids: &[usize],
     decoded: &HashMap<u32, RgbaImage>,
     tile_size: u32,
+    crop: bool,
 ) -> Result<Vec<TilePrimitive>, Error> {
     let mut groups: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
     for &id in ids {
@@ -491,7 +532,7 @@ fn bake_ids(
     let mut out = Vec::new();
     for (img, tri) in groups {
         let rgba = img.and_then(|i| decoded.get(&i));
-        out.push(build_prim(scene, &tri, rgba, tile_size)?);
+        out.push(build_prim(scene, &tri, rgba, tile_size, crop)?);
     }
     Ok(out)
 }
@@ -501,6 +542,7 @@ fn build_prim(
     ids: &[usize],
     rgba: Option<&RgbaImage>,
     tile_size: u32,
+    crop: bool,
 ) -> Result<TilePrimitive, Error> {
     let mut remap: HashMap<u32, u32> = HashMap::new();
     let mut positions = Vec::new();
@@ -523,9 +565,13 @@ fn build_prim(
     }
 
     let jpeg = if let Some(img) = rgba {
-        let (jpeg, remapped) = texture::crop_leaf(img, &uvs, tile_size)?;
-        uvs = remapped;
-        Some(jpeg)
+        if crop {
+            let (jpeg, remapped) = texture::crop_leaf(img, &uvs, &indices, tile_size)?;
+            uvs = remapped;
+            Some(jpeg)
+        } else {
+            Some(texture::downscale_jpeg(img, tile_size)?)
+        }
     } else {
         None
     };

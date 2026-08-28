@@ -3,6 +3,10 @@
 //! The final cut into two leaves duplicates a thin band around the split
 //! plane so adjacent leaves share a strip of triangles (hides hairline seams).
 //! Deeper splits stay a hard median partition so the tree does not explode.
+//! After the tree is built, [`seal_leaf_borders`] grows every leaf by a world
+//! margin so seams from *earlier* split axes are covered too.
+
+use std::collections::{HashMap, HashSet};
 
 use crate::bbox::y_up_to_z_up;
 use crate::mesh::{centroid, triangle_aabb_yup, Scene};
@@ -10,7 +14,10 @@ use crate::mesh::{centroid, triangle_aabb_yup, Scene};
 pub const MAX_SPLIT_DEPTH: u32 = 12;
 const PARALLEL_AFTER: usize = 32_768;
 /// Fraction of the split-axis extent duplicated into both final leaves.
-const LEAF_OVERLAP_FRAC: f32 = 0.03;
+const LEAF_OVERLAP_FRAC: f32 = 0.05;
+/// Expand each leaf AABB by this fraction of its max half-extent, then pull in
+/// any intersecting triangles (covers seams from non-final split axes).
+const BORDER_SEAL_FRAC: f32 = 0.06;
 
 pub struct SplitOpts {
     pub max_triangles: usize,
@@ -192,4 +199,170 @@ impl SplitNode {
             SplitNode::Leaf { min, max, .. } | SplitNode::Branch { min, max, .. } => (*min, *max),
         }
     }
+}
+
+/// Grow every leaf so triangles near its boundary are duplicated into the leaf.
+///
+/// Centroid k-d only overlaps the *last* split; earlier planes still crack.
+/// This post-pass pulls in any triangle whose AABB intersects an expanded leaf
+/// box, capped so leaves stay near the triangle budget.
+pub fn seal_leaf_borders(scene: &Scene, root: &mut SplitNode, max_triangles: usize) {
+    if scene.triangles.is_empty() {
+        return;
+    }
+    let mut scene_min = [f32::INFINITY; 3];
+    let mut scene_max = [f32::NEG_INFINITY; 3];
+    let mut tri_aabb = Vec::with_capacity(scene.triangles.len());
+    let mut tri_cent = Vec::with_capacity(scene.triangles.len());
+    for t in &scene.triangles {
+        let mut mn = [f32::INFINITY; 3];
+        let mut mx = [f32::NEG_INFINITY; 3];
+        let mut c = [0.0f32; 3];
+        for &v in &t.verts {
+            let p = y_up_to_z_up(scene.vertices[v as usize].pos);
+            for i in 0..3 {
+                mn[i] = mn[i].min(p[i]);
+                mx[i] = mx[i].max(p[i]);
+                scene_min[i] = scene_min[i].min(p[i]);
+                scene_max[i] = scene_max[i].max(p[i]);
+                c[i] += p[i];
+            }
+        }
+        c = [c[0] / 3.0, c[1] / 3.0, c[2] / 3.0];
+        tri_aabb.push((mn, mx));
+        tri_cent.push(c);
+    }
+    let extent = (scene_max[0] - scene_min[0])
+        .max(scene_max[1] - scene_min[1])
+        .max(scene_max[2] - scene_min[2])
+        .max(1e-3);
+    let cell = extent / 64.0;
+    let mut bins: HashMap<(i32, i32, i32), Vec<usize>> = HashMap::new();
+    for (i, c) in tri_cent.iter().enumerate() {
+        let key = (
+            ((c[0] - scene_min[0]) / cell).floor() as i32,
+            ((c[1] - scene_min[1]) / cell).floor() as i32,
+            ((c[2] - scene_min[2]) / cell).floor() as i32,
+        );
+        bins.entry(key).or_default().push(i);
+    }
+    let cap = max_triangles + max_triangles / 4;
+    seal_node(
+        root, &tri_aabb, &tri_cent, &bins, scene_min, cell, cap, scene,
+    );
+}
+
+fn seal_node(
+    node: &mut SplitNode,
+    tri_aabb: &[([f32; 3], [f32; 3])],
+    tri_cent: &[[f32; 3]],
+    bins: &HashMap<(i32, i32, i32), Vec<usize>>,
+    scene_min: [f32; 3],
+    cell: f32,
+    cap: usize,
+    scene: &Scene,
+) {
+    match node {
+        SplitNode::Leaf {
+            triangle_ids,
+            min,
+            max,
+        } => {
+            let hx = ((max[0] - min[0]) * 0.5).max(0.0);
+            let hy = ((max[1] - min[1]) * 0.5).max(0.0);
+            let hz = ((max[2] - min[2]) * 0.5).max(0.0);
+            let margin = hx.max(hy).max(hz) * BORDER_SEAL_FRAC as f64;
+            if margin <= 0.0 {
+                return;
+            }
+            let emin = [
+                (min[0] - margin) as f32,
+                (min[1] - margin) as f32,
+                (min[2] - margin) as f32,
+            ];
+            let emax = [
+                (max[0] + margin) as f32,
+                (max[1] + margin) as f32,
+                (max[2] + margin) as f32,
+            ];
+            let mut have: HashSet<usize> = triangle_ids.iter().copied().collect();
+            let mut extras: Vec<(f32, usize)> = Vec::new();
+            let i0 = (((emin[0] - scene_min[0]) / cell).floor() as i32 - 1).max(0);
+            let j0 = (((emin[1] - scene_min[1]) / cell).floor() as i32 - 1).max(0);
+            let k0 = (((emin[2] - scene_min[2]) / cell).floor() as i32 - 1).max(0);
+            let i1 = ((emax[0] - scene_min[0]) / cell).floor() as i32 + 1;
+            let j1 = ((emax[1] - scene_min[1]) / cell).floor() as i32 + 1;
+            let k1 = ((emax[2] - scene_min[2]) / cell).floor() as i32 + 1;
+            for ix in i0..=i1 {
+                for iy in j0..=j1 {
+                    for iz in k0..=k1 {
+                        let Some(bin) = bins.get(&(ix, iy, iz)) else {
+                            continue;
+                        };
+                        for &id in bin {
+                            if have.contains(&id) {
+                                continue;
+                            }
+                            let (tn, tx) = tri_aabb[id];
+                            if !aabb_overlap(tn, tx, emin, emax) {
+                                continue;
+                            }
+                            // Prefer triangles near the original (unexpanded) surface.
+                            let c = tri_cent[id];
+                            let d = dist_point_aabb(
+                                c,
+                                [min[0] as f32, min[1] as f32, min[2] as f32],
+                                [max[0] as f32, max[1] as f32, max[2] as f32],
+                            );
+                            extras.push((d, id));
+                        }
+                    }
+                }
+            }
+            extras.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            for (_, id) in extras {
+                if triangle_ids.len() >= cap {
+                    break;
+                }
+                if have.insert(id) {
+                    triangle_ids.push(id);
+                }
+            }
+            let (nmin, nmax) = zup_aabb(scene, triangle_ids);
+            *min = nmin;
+            *max = nmax;
+        }
+        SplitNode::Branch { children, min, max } => {
+            for c in children.iter_mut() {
+                seal_node(c, tri_aabb, tri_cent, bins, scene_min, cell, cap, scene);
+            }
+            let (nmin, nmax) = union_zup(children);
+            *min = nmin;
+            *max = nmax;
+        }
+    }
+}
+
+fn aabb_overlap(a0: [f32; 3], a1: [f32; 3], b0: [f32; 3], b1: [f32; 3]) -> bool {
+    a0[0] <= b1[0]
+        && a1[0] >= b0[0]
+        && a0[1] <= b1[1]
+        && a1[1] >= b0[1]
+        && a0[2] <= b1[2]
+        && a1[2] >= b0[2]
+}
+
+fn dist_point_aabb(p: [f32; 3], mn: [f32; 3], mx: [f32; 3]) -> f32 {
+    let mut d2 = 0.0f32;
+    for i in 0..3 {
+        let v = if p[i] < mn[i] {
+            mn[i] - p[i]
+        } else if p[i] > mx[i] {
+            p[i] - mx[i]
+        } else {
+            0.0
+        };
+        d2 += v * v;
+    }
+    d2
 }
