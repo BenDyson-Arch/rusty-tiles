@@ -206,6 +206,12 @@ pub fn mercator_origin_yup(min: [f64; 3], max: [f64; 3]) -> Cartographic {
     Cartographic::new(lon, lat, (min[1] + max[1]) * 0.5)
 }
 
+/// ENU origin at the Metashape Shift (E, N, A), matching unmoved local vertices.
+pub fn mercator_shift_origin(off: SourceOffset) -> Cartographic {
+    let (lon, lat) = mercator_to_geodetic(off.easting, off.northing);
+    Cartographic::new(lon, lat, off.height)
+}
+
 pub fn mercator_bbox_wgs84(min: [f64; 3], max: [f64; 3]) -> [f64; 4] {
     let (west, _) = mercator_to_geodetic(min[0], 0.0);
     let (east, _) = mercator_to_geodetic(max[0], 0.0);
@@ -557,5 +563,21 @@ mod tests {
             p[0].abs() < 2.0 && p[1].abs() < 2.0 && p[2].abs() < 2.0,
             "centroid should bake near ENU origin, got {p:?}"
         );
+    }
+
+    #[test]
+    fn mercator_shift_origin_pins_enu_at_e_n_a() {
+        let off = SourceOffset {
+            easting: 14_812_000.0,
+            northing: -1_384_000.0,
+            height: 100.0,
+        };
+        let o = mercator_shift_origin(off);
+        let (lon, lat) = mercator_to_geodetic(off.easting, off.northing);
+        assert!((o.lon_deg - lon).abs() < 1e-12);
+        assert!((o.lat_deg - lat).abs() < 1e-12);
+        assert!((o.height_m - 100.0).abs() < 1e-12);
+        assert!((o.lon_deg - 133.058).abs() < 0.01, "lon {}", o.lon_deg);
+        assert!((o.lat_deg - (-12.34)).abs() < 0.02, "lat {}", o.lat_deg);
     }
 }

@@ -70,8 +70,10 @@ pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
         .map(|p| quantize_prim(p, scale))
         .collect();
 
+    // Required-extension style (gltf-transform): one BIN-backed buffer holds
+    // meshopt streams. No empty fallback buffer — consumers without a decoder
+    // must reject via extensionsRequired rather than read missing bytes.
     let mut bin: Vec<u8> = Vec::new();
-    let mut fallback_len = 0usize;
     let mut root = Root::default();
     root.asset.generator = Some("tinyowl-tiles".into());
     root.extensions_used = vec![
@@ -80,19 +82,10 @@ pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
     ];
     root.extensions_required = root.extensions_used.clone();
 
-    let dummy0 = Index::new(0);
-    let dummy1 = Index::new(1);
-
+    let dummy = Index::new(0);
     let mut primitives = Vec::new();
     for p in &prepared {
-        primitives.push(build_compressed_primitive(
-            &mut root,
-            &mut bin,
-            &mut fallback_len,
-            dummy0,
-            dummy1,
-            p,
-        )?);
+        primitives.push(build_compressed_primitive(&mut root, &mut bin, dummy, p)?);
     }
 
     pad4(&mut bin);
@@ -103,21 +96,8 @@ pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
         extensions: Default::default(),
         extras: Default::default(),
     });
-    let fallback_buffer = root.push(gltf_json::Buffer {
-        byte_length: USize64::from(fallback_len.max(1)),
-        name: None,
-        uri: None,
-        extensions: Some(gltf_json::extensions::buffer::Buffer {
-            others: ext_map(json!({ "EXT_meshopt_compression": { "fallback": true } })),
-        }),
-        extras: Default::default(),
-    });
     for view in &mut root.buffer_views {
-        if view.buffer == dummy1 {
-            view.buffer = fallback_buffer;
-        } else {
-            view.buffer = data_buffer;
-        }
+        view.buffer = data_buffer;
     }
 
     let mesh = root.push(mesh::Mesh {
@@ -265,9 +245,7 @@ fn quantize_prim(p: PackedPrim, scale: f32) -> Prepared {
 fn build_compressed_primitive(
     root: &mut Root,
     bin: &mut Vec<u8>,
-    fallback_len: &mut usize,
     data_buf: Index<gltf_json::Buffer>,
-    fallback_buf: Index<gltf_json::Buffer>,
     p: &Prepared,
 ) -> Result<mesh::Primitive, Error> {
     let nvert = p.pos.len();
@@ -286,9 +264,7 @@ fn build_compressed_primitive(
     let acc_pos = push_attr_view(
         root,
         bin,
-        fallback_len,
         data_buf,
-        fallback_buf,
         &pos_enc,
         nvert,
         8,
@@ -313,9 +289,7 @@ fn build_compressed_primitive(
     let acc_nrm = push_attr_view(
         root,
         bin,
-        fallback_len,
         data_buf,
-        fallback_buf,
         &nrm_enc,
         nvert,
         4,
@@ -336,9 +310,7 @@ fn build_compressed_primitive(
         let acc_uv = push_attr_view(
             root,
             bin,
-            fallback_len,
             data_buf,
-            fallback_buf,
             &enc,
             nvert,
             4,
@@ -353,9 +325,7 @@ fn build_compressed_primitive(
     let acc_idx = push_index_view(
         root,
         bin,
-        fallback_len,
         data_buf,
-        fallback_buf,
         &idx_enc,
         p.indices.len(),
         idx_stride,
@@ -383,9 +353,7 @@ fn build_compressed_primitive(
 fn push_attr_view(
     root: &mut Root,
     bin: &mut Vec<u8>,
-    fallback_len: &mut usize,
     data_buf: Index<gltf_json::Buffer>,
-    fallback_buf: Index<gltf_json::Buffer>,
     encoded: &[u8],
     count: usize,
     stride: usize,
@@ -399,14 +367,10 @@ fn push_attr_view(
     bin.extend_from_slice(encoded);
     let enc_len = encoded.len();
 
-    let uncomp = stride * count;
-    let fb_off = *fallback_len;
-    *fallback_len += uncomp;
-
     let view = root.push(buffer::View {
-        buffer: fallback_buf,
-        byte_length: USize64::from(uncomp),
-        byte_offset: Some(USize64::from(fb_off)),
+        buffer: data_buf,
+        byte_length: USize64::from(enc_len),
+        byte_offset: Some(USize64::from(off)),
         byte_stride: Some(buffer::Stride(stride)),
         extensions: Some(gltf_json::extensions::buffer::View {
             others: ext_map(json!({
@@ -440,13 +404,10 @@ fn push_attr_view(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn push_index_view(
     root: &mut Root,
     bin: &mut Vec<u8>,
-    fallback_len: &mut usize,
     data_buf: Index<gltf_json::Buffer>,
-    fallback_buf: Index<gltf_json::Buffer>,
     encoded: &[u8],
     count: usize,
     stride: usize,
@@ -456,14 +417,11 @@ fn push_index_view(
     let off = bin.len();
     bin.extend_from_slice(encoded);
     let enc_len = encoded.len();
-    let uncomp = stride * count;
-    let fb_off = *fallback_len;
-    *fallback_len += uncomp;
 
     let view = root.push(buffer::View {
-        buffer: fallback_buf,
-        byte_length: USize64::from(uncomp),
-        byte_offset: Some(USize64::from(fb_off)),
+        buffer: data_buf,
+        byte_length: USize64::from(enc_len),
+        byte_offset: Some(USize64::from(off)),
         byte_stride: None,
         extensions: Some(gltf_json::extensions::buffer::View {
             others: ext_map(json!({

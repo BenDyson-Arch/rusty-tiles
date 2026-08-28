@@ -15,8 +15,8 @@ use crate::bbox::{mul4, transform_point};
 use crate::error::Error;
 use crate::georef::{
     geographic_bbox_wgs84, geographic_origin_yup, looks_geographic_yup, looks_web_mercator_yup,
-    mercator_bbox_wgs84, mercator_bbox_wgs84_offset, mercator_origin_yup,
-    mercator_origin_yup_offset, Cartographic, CrsKind, EnuFrame, SourceCrs, SourceOffset,
+    mercator_bbox_wgs84, mercator_bbox_wgs84_offset, mercator_origin_yup, mercator_shift_origin,
+    Cartographic, CrsKind, EnuFrame, SourceCrs, SourceOffset,
 };
 
 const IDENTITY: [[f32; 4]; 4] = [
@@ -215,7 +215,7 @@ pub fn bake_to_enu(scene: &mut Scene, opts: &BakeToEnu) -> Option<GeographicBake
         SourceCrs::WebMercator => {
             if let Some(off) = offset {
                 (
-                    mercator_origin_yup_offset(min, max, off),
+                    mercator_shift_origin(off),
                     mercator_bbox_wgs84_offset(min, max, off),
                     CrsKind::WebMercator,
                 )
@@ -248,29 +248,36 @@ pub fn bake_to_enu(scene: &mut Scene, opts: &BakeToEnu) -> Option<GeographicBake
             }
         }
     };
-    if let Some(p) = opts.prefer {
-        origin.lon_deg = p.lon_deg;
-        origin.lat_deg = p.lat_deg;
-        if p.height_m != 0.0 {
-            origin.height_m = p.height_m;
+    if offset.is_none() {
+        if let Some(p) = opts.prefer {
+            origin.lon_deg = p.lon_deg;
+            origin.lat_deg = p.lat_deg;
+            if p.height_m != 0.0 {
+                origin.height_m = p.height_m;
+            }
         }
     }
-    let frame = EnuFrame::new(origin);
     match (kind, offset) {
-        (CrsKind::Geographic, _) => scene
-            .vertices
-            .par_iter_mut()
-            .for_each(|v| v.pos = frame.geog_yup_to_enu_yup(v.pos)),
-        (CrsKind::WebMercator, Some(off)) => scene
-            .vertices
-            .par_iter_mut()
-            .for_each(|v| v.pos = frame.mercator_yup_offset_to_enu_yup(v.pos, off)),
-        (CrsKind::WebMercator, None) => scene
-            .vertices
-            .par_iter_mut()
-            .for_each(|v| v.pos = frame.mercator_yup_to_enu_yup(v.pos)),
+        (CrsKind::WebMercator, Some(_)) => {
+            // Local metres already (east, up, −north). Shift is only the ENU pin.
+        }
+        (CrsKind::Geographic, _) => {
+            let frame = EnuFrame::new(origin);
+            scene
+                .vertices
+                .par_iter_mut()
+                .for_each(|v| v.pos = frame.geog_yup_to_enu_yup(v.pos));
+            recompute_normals(scene);
+        }
+        (CrsKind::WebMercator, None) => {
+            let frame = EnuFrame::new(origin);
+            scene
+                .vertices
+                .par_iter_mut()
+                .for_each(|v| v.pos = frame.mercator_yup_to_enu_yup(v.pos));
+            recompute_normals(scene);
+        }
     }
-    recompute_normals(scene);
     Some(GeographicBake {
         origin,
         bbox_wgs84,

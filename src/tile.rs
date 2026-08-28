@@ -9,14 +9,15 @@ use image::RgbaImage;
 use rayon::prelude::*;
 use serde_json::{json, Value};
 
-use crate::bbox::{aabb_center, aabb_to_box, z_up_to_y_up};
+use crate::bbox::aabb_to_box;
 use crate::compress::write_glb_compressed;
 use crate::error::Error;
-use crate::georef::{
-    mul4, root_transform, translation, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
+use crate::georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
+use crate::glb_write::{write_glb, TilePrimitive};
+use crate::hlod::{
+    parent_triangle_budget, sampled_hausdorff, simplify_tile, spatial_geometric_error,
+    MIN_PARENT_GE,
 };
-use crate::glb_write::TilePrimitive;
-use crate::hlod::{sampled_hausdorff, simplify_tile, MIN_PARENT_GE};
 use crate::mesh::{self, Scene};
 use crate::pack::{pack_named_files, PackOptions};
 use crate::split::{self, SplitNode, SplitOpts};
@@ -37,6 +38,8 @@ pub struct MeshTo3tzOptions {
     pub tile_size: u32,
     pub source_crs: SourceCrs,
     pub source_offset: Option<SourceOffset>,
+    /// Quantized EXT_meshopt_compression GLBs (default). `--noMeshopt` writes float32.
+    pub meshopt: bool,
 }
 
 impl Default for MeshTo3tzOptions {
@@ -50,6 +53,7 @@ impl Default for MeshTo3tzOptions {
             tile_size: DEFAULT_TILE_SIZE,
             source_crs: SourceCrs::Auto,
             source_offset: None,
+            meshopt: true,
         }
     }
 }
@@ -108,6 +112,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     );
 
     let mut opts = opts.clone();
+    let auto_crs = opts.source_crs == SourceCrs::Auto;
     let baked_geog = mesh::bake_to_enu(
         &mut scene,
         &mesh::BakeToEnu {
@@ -122,9 +127,15 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             crate::georef::CrsKind::Geographic => "geog",
             crate::georef::CrsKind::WebMercator => "mercator",
         };
+        if auto_crs && opts.source_offset.is_none() {
+            eprintln!(
+                "mesh-to-3tz: warning  auto-detected {stage} CRS from AABB; \
+                 pass --sourceCrs geographic|epsg:3857 to pin it"
+            );
+        }
         let extra = if let Some(off) = opts.source_offset {
             format!(
-                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6} offset E={} N={} A={}",
+                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6} offset E={} N={} A={} local-frame",
                 baked.origin.lon_deg,
                 baked.origin.lat_deg,
                 baked.origin.height_m,
@@ -188,15 +199,19 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             format!("textures={} leafGlbs={}", decoded.len(), baked.len()),
         );
 
+        // Full REPLACE pyramid: every branch has a simplified proxy. Parent
+        // triangle budgets scale with descendant count so far views stay on
+        // a few coarse GLBs; spatial GE floors force refinement when close.
         let mut branches = Vec::new();
         collect_branches(&tree, 0, &mut branches);
-        let parent_size = (opts.tile_size / 2).max(1);
+        let parent_size = opts.tile_size.max(64);
         let parent_prims: Vec<Vec<TilePrimitive>> = branches
             .par_iter()
             .map(|(_, node)| -> Result<Vec<TilePrimitive>, Error> {
                 let ids = descendant_ids(node);
+                let budget = parent_triangle_budget(ids.len(), opts.max_triangles);
                 let prims = bake_ids(&scene, &ids, &decoded, parent_size)?;
-                simplify_tile(&prims, opts.max_triangles)
+                simplify_tile(&prims, budget, parent_size)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         let parent_tris: Vec<usize> = parent_prims.iter().map(|p| prim_tris(p)).collect();
@@ -232,7 +247,6 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         let (root, root_ge) = emit_and_write(
             &tree,
             0,
-            [0.0; 3],
             true,
             &opts,
             &tmp,
@@ -243,7 +257,14 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             &mut branch_i,
             &mut files,
         )?;
-        log.tick("compress", format!("glbs={}", files.len()));
+        log.tick(
+            if opts.meshopt {
+                "compress"
+            } else {
+                "write-glb"
+            },
+            format!("glbs={} meshopt={}", files.len(), opts.meshopt),
+        );
 
         let tileset = json!({
             "asset": { "version": "1.1" },
@@ -291,14 +312,20 @@ fn prim_tris(prims: &[TilePrimitive]) -> usize {
 }
 
 fn descendant_ids(node: &SplitNode) -> Vec<usize> {
+    let mut ids = Vec::new();
+    collect_descendant_ids(node, &mut ids);
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+fn collect_descendant_ids(node: &SplitNode, out: &mut Vec<usize>) {
     match node {
-        SplitNode::Leaf { triangle_ids, .. } => triangle_ids.clone(),
+        SplitNode::Leaf { triangle_ids, .. } => out.extend_from_slice(triangle_ids),
         SplitNode::Branch { children, .. } => {
-            let mut ids = Vec::new();
             for c in children {
-                ids.extend(descendant_ids(c));
+                collect_descendant_ids(c, out);
             }
-            ids
         }
     }
 }
@@ -307,7 +334,6 @@ fn descendant_ids(node: &SplitNode) -> Vec<usize> {
 fn emit_and_write(
     node: &SplitNode,
     depth: u32,
-    parent_center: [f64; 3],
     is_root: bool,
     opts: &MeshTo3tzOptions,
     tmp: &Path,
@@ -319,40 +345,35 @@ fn emit_and_write(
     files: &mut Vec<(String, PathBuf)>,
 ) -> Result<(Value, f64), Error> {
     let (min, max) = node.aabb();
-    let center = aabb_center(min, max);
     match node {
         SplitNode::Leaf { .. } => {
-            let mut prims = leaves
+            let prims = leaves
                 .get(*leaf_i)
-                .ok_or_else(|| Error::msg("leaf/prim mismatch"))?
-                .clone();
+                .ok_or_else(|| Error::msg("leaf/prim mismatch"))?;
             *leaf_i += 1;
-            subtract_origin(&mut prims, center);
             let uri = format!("t/{depth}/{}.glb", *leaf_i - 1);
-            write_tile_glb(tmp, &uri, &prims, files)?;
+            write_tile_glb(tmp, &uri, prims, opts.meshopt, files)?;
             let mut tile = json!({
-                "boundingVolume": { "box": local_box(min, max) },
+                "boundingVolume": { "box": aabb_to_box(min, max) },
                 "geometricError": 0.0,
                 "content": { "uri": uri },
             });
-            if let Some(xf) = tile_transform(center, parent_center, is_root, opts) {
-                tile["transform"] = json!(xf.to_vec());
-            }
             if is_root {
+                if let Some(xf) = root_ecef(opts) {
+                    tile["transform"] = json!(xf.to_vec());
+                }
                 tile["refine"] = json!("REPLACE");
             }
             Ok((tile, 0.0))
         }
         SplitNode::Branch { children, .. } => {
-            let mut prims = parents
+            let prims = parents
                 .get(*branch_i)
-                .ok_or_else(|| Error::msg("branch/prim mismatch"))?
-                .clone();
+                .ok_or_else(|| Error::msg("branch/prim mismatch"))?;
             let measured = measured_ge.get(*branch_i).copied().unwrap_or(MIN_PARENT_GE);
             *branch_i += 1;
-            subtract_origin(&mut prims, center);
             let uri = format!("t/{depth}/p{}.glb", *branch_i - 1);
-            write_tile_glb(tmp, &uri, &prims, files)?;
+            write_tile_glb(tmp, &uri, prims, opts.meshopt, files)?;
 
             let mut kids = Vec::new();
             let mut child_ge = 0.0f64;
@@ -360,7 +381,6 @@ fn emit_and_write(
                 let (kid, ge) = emit_and_write(
                     c,
                     depth + 1,
-                    center,
                     false,
                     opts,
                     tmp,
@@ -374,17 +394,18 @@ fn emit_and_write(
                 child_ge = child_ge.max(ge);
                 kids.push(kid);
             }
-            let ge = measured.max(child_ge).max(MIN_PARENT_GE);
+            let spatial = spatial_geometric_error(min, max);
+            let ge = measured.max(child_ge).max(spatial).max(MIN_PARENT_GE);
             let mut tile = json!({
-                "boundingVolume": { "box": local_box(min, max) },
+                "boundingVolume": { "box": aabb_to_box(min, max) },
                 "geometricError": ge,
                 "content": { "uri": uri },
                 "children": kids,
             });
-            if let Some(xf) = tile_transform(center, parent_center, is_root, opts) {
-                tile["transform"] = json!(xf.to_vec());
-            }
             if is_root {
+                if let Some(xf) = root_ecef(opts) {
+                    tile["transform"] = json!(xf.to_vec());
+                }
                 tile["refine"] = json!("REPLACE");
             }
             Ok((tile, ge))
@@ -396,60 +417,26 @@ fn write_tile_glb(
     tmp: &Path,
     uri: &str,
     prims: &[TilePrimitive],
+    meshopt: bool,
     files: &mut Vec<(String, PathBuf)>,
 ) -> Result<(), Error> {
     let path = tmp.join(uri);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&path, write_glb_compressed(prims)?)?;
+    let bytes = if meshopt {
+        write_glb_compressed(prims)?
+    } else {
+        write_glb(prims)?
+    };
+    fs::write(&path, bytes)?;
     files.push((uri.to_string(), path));
     Ok(())
 }
 
-fn subtract_origin(prims: &mut [TilePrimitive], center_zup: [f64; 3]) {
-    let o = z_up_to_y_up(center_zup);
-    for prim in prims {
-        for p in &mut prim.positions {
-            p[0] -= o[0];
-            p[1] -= o[1];
-            p[2] -= o[2];
-        }
-    }
-}
-
-fn local_box(min: [f64; 3], max: [f64; 3]) -> [f64; 12] {
-    let c = aabb_center(min, max);
-    aabb_to_box(
-        [min[0] - c[0], min[1] - c[1], min[2] - c[2]],
-        [max[0] - c[0], max[1] - c[1], max[2] - c[2]],
-    )
-}
-
-fn tile_transform(
-    center: [f64; 3],
-    parent_center: [f64; 3],
-    is_root: bool,
-    opts: &MeshTo3tzOptions,
-) -> Option<[f64; 16]> {
-    let local = if is_root {
-        translation(center[0], center[1], center[2])
-    } else {
-        translation(
-            center[0] - parent_center[0],
-            center[1] - parent_center[1],
-            center[2] - parent_center[2],
-        )
-    };
-    if is_root {
-        if let Some(pos) = opts.cartographic {
-            Some(mul4(root_transform(pos, opts.rotation), local))
-        } else {
-            Some(local)
-        }
-    } else {
-        Some(local)
-    }
+fn root_ecef(opts: &MeshTo3tzOptions) -> Option<[f64; 16]> {
+    opts.cartographic
+        .map(|pos| root_transform(pos, opts.rotation))
 }
 
 fn decode_referenced(scene: &Scene, tile_size: u32) -> Result<HashMap<u32, RgbaImage>, Error> {

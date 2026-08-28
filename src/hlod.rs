@@ -1,7 +1,9 @@
 //! Parent-mesh simplify (meshopt) and sampled Hausdorff geometricError.
 
+use std::collections::HashMap;
+
 use meshopt::optimize::optimize_vertex_fetch;
-use meshopt::simplify::{simplify, simplify_sloppy, SimplifyOptions};
+use meshopt::simplify::{simplify, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
 
 use crate::error::Error;
@@ -11,6 +13,25 @@ use crate::mesh::Scene;
 const SOURCE_SAMPLE_CAP: usize = 2_048;
 pub(crate) const MIN_PARENT_GE: f64 = 1e-3;
 
+/// SSE floor from the tile AABB (max half-extent / 8), matching Metashape’s
+/// cube-half/8 on tight boxes.
+///
+/// Sampled Hausdorff alone under-reports bad simplifies; this floor keeps
+/// REPLACE refinement moving toward leaves when the camera is close.
+pub(crate) fn spatial_geometric_error(min: [f64; 3], max: [f64; 3]) -> f64 {
+    let hx = (max[0] - min[0]) * 0.5;
+    let hy = (max[1] - min[1]) * 0.5;
+    let hz = (max[2] - min[2]) * 0.5;
+    hx.max(hy).max(hz) / 8.0
+}
+
+/// Triangle budget for a parent covering `descendant_tris` source triangles.
+/// Far parents stay coarse so Cesium can show one GLB instead of a leaf stampede.
+pub(crate) fn parent_triangle_budget(descendant_tris: usize, max_triangles: usize) -> usize {
+    let cap = (max_triangles / 2).max(256);
+    (descendant_tris / 32).clamp(256, cap)
+}
+
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 struct Vtx {
@@ -19,8 +40,10 @@ struct Vtx {
     t: [f32; 2],
 }
 
-/// Simplify to `target_tris`. Photogrammetry borders/holes make LockBorder a
-/// no-op, so fall back until the budget is actually hit.
+/// Simplify to `target_tris`, preferring a watertight mesh over hitting the
+/// budget. Photogrammetry UV seams duplicate positions; we weld by position
+/// first so meshopt sees a connected surface. Never use `simplify_sloppy`
+/// (it punches holes that show up as shattered parent tiles).
 pub fn simplify_primitive(
     prim: &TilePrimitive,
     target_tris: usize,
@@ -33,26 +56,30 @@ pub fn simplify_primitive(
         return Ok(prim.clone());
     }
 
-    let pos_bytes: &[u8] = bytemuck::cast_slice(&prim.positions);
+    let welded = weld_by_position(prim);
+    if welded.indices.len() < 3 {
+        return Ok(prim.clone());
+    }
+    let pos_bytes: &[u8] = bytemuck::cast_slice(&welded.positions);
     let adapter = VertexDataAdapter::new(pos_bytes, 12, 0)
         .map_err(|e| Error::msg(format!("meshopt adapter: {e}")))?;
-    let simplified = reduce_indices(&prim.indices, &adapter, target_indices);
+    let simplified = reduce_indices(&welded.indices, &adapter, target_indices);
     if simplified.len() < 3 {
         return Ok(prim.clone());
     }
 
-    let mut packed = Vec::with_capacity(prim.positions.len());
-    let has_n = prim.normals.len() == prim.positions.len();
-    let has_uv = prim.uvs.len() == prim.positions.len();
-    for i in 0..prim.positions.len() {
+    let mut packed = Vec::with_capacity(welded.positions.len());
+    let has_n = welded.normals.len() == welded.positions.len();
+    let has_uv = welded.uvs.len() == welded.positions.len();
+    for i in 0..welded.positions.len() {
         packed.push(Vtx {
-            p: prim.positions[i],
+            p: welded.positions[i],
             n: if has_n {
-                prim.normals[i]
+                welded.normals[i]
             } else {
                 [0.0, 1.0, 0.0]
             },
-            t: if has_uv { prim.uvs[i] } else { [0.0, 0.0] },
+            t: if has_uv { welded.uvs[i] } else { [0.0, 0.0] },
         });
     }
     let mut indices = simplified;
@@ -66,54 +93,192 @@ pub fn simplify_primitive(
     })
 }
 
-/// Split `budget` triangles across primitives (the parent tile, not each material).
-pub fn simplify_tile(prims: &[TilePrimitive], budget: usize) -> Result<Vec<TilePrimitive>, Error> {
-    let counts: Vec<usize> = prims.iter().map(|p| p.indices.len() / 3).collect();
-    let total = counts.iter().sum::<usize>().max(1);
-    prims
-        .iter()
-        .zip(&counts)
-        .map(|(p, &n)| {
-            let share = budget.saturating_mul(n).max(1) / total;
-            simplify_primitive(p, share.max(1))
-        })
-        .collect()
+/// Build one parent proxy: weld+simplify as a single mesh, then closest-point
+/// bake source chart albedos into a downscaled atlas (`atlas_size` edge).
+pub fn simplify_tile(
+    prims: &[TilePrimitive],
+    budget: usize,
+    atlas_size: u32,
+) -> Result<Vec<TilePrimitive>, Error> {
+    if prims.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sampler = match crate::texture::SourceSampler::from_prims(prims) {
+        Ok(s) => Some(s),
+        Err(_) => None,
+    };
+
+    let merged = merge_geometry(prims);
+    let mut simplified = simplify_primitive(&merged, budget)?;
+    simplified.jpeg = None;
+
+    if let Some(sampler) = sampler.as_ref() {
+        match crate::texture::bake_lod_atlas(
+            &simplified.positions,
+            &simplified.normals,
+            &simplified.indices,
+            sampler,
+            atlas_size,
+        ) {
+            Ok(baked) => {
+                simplified.positions = baked.positions;
+                simplified.normals = baked.normals;
+                simplified.uvs = baked.uvs;
+                simplified.indices = baked.indices;
+                simplified.jpeg = Some(baked.jpeg);
+            }
+            Err(_) => {
+                simplified.uvs.clear();
+            }
+        }
+    } else {
+        simplified.uvs.clear();
+    }
+    Ok(vec![simplified])
+}
+
+fn merge_geometry(prims: &[TilePrimitive]) -> TilePrimitive {
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut indices = Vec::new();
+    let mut any_n = false;
+    for p in prims {
+        let base = positions.len() as u32;
+        let has_n = p.normals.len() == p.positions.len();
+        any_n |= has_n;
+        for i in 0..p.positions.len() {
+            positions.push(p.positions[i]);
+            normals.push(if has_n { p.normals[i] } else { [0.0, 1.0, 0.0] });
+        }
+        indices.extend(p.indices.iter().map(|i| i + base));
+    }
+    TilePrimitive {
+        positions,
+        normals: if any_n { normals } else { Vec::new() },
+        uvs: Vec::new(),
+        indices,
+        jpeg: None,
+    }
+}
+
+/// Merge vertices that share a position (UV-seam duplicates). Keeps the mesh
+/// manifold for meshopt; UVs/normals are averaged.
+fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
+    let mut extent = 0.0f32;
+    for p in &prim.positions {
+        extent = extent.max(p[0].abs()).max(p[1].abs()).max(p[2].abs());
+    }
+    let cell = (extent * 1e-6).max(1e-5);
+
+    let mut map: HashMap<[i64; 3], u32> = HashMap::new();
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut counts: Vec<u32> = Vec::new();
+    let has_n = prim.normals.len() == prim.positions.len();
+    let has_uv = prim.uvs.len() == prim.positions.len();
+
+    let key = |p: [f32; 3]| -> [i64; 3] {
+        [
+            (p[0] / cell).round() as i64,
+            (p[1] / cell).round() as i64,
+            (p[2] / cell).round() as i64,
+        ]
+    };
+
+    let mut remap = vec![0u32; prim.positions.len()];
+    for (i, &p) in prim.positions.iter().enumerate() {
+        let k = key(p);
+        if let Some(&id) = map.get(&k) {
+            let j = id as usize;
+            if has_n {
+                normals[j][0] += prim.normals[i][0];
+                normals[j][1] += prim.normals[i][1];
+                normals[j][2] += prim.normals[i][2];
+            }
+            if has_uv {
+                uvs[j][0] += prim.uvs[i][0];
+                uvs[j][1] += prim.uvs[i][1];
+            }
+            counts[j] += 1;
+            remap[i] = id;
+        } else {
+            let id = positions.len() as u32;
+            map.insert(k, id);
+            positions.push(p);
+            normals.push(if has_n {
+                prim.normals[i]
+            } else {
+                [0.0, 1.0, 0.0]
+            });
+            uvs.push(if has_uv { prim.uvs[i] } else { [0.0, 0.0] });
+            counts.push(1);
+            remap[i] = id;
+        }
+    }
+    for (i, c) in counts.iter().enumerate() {
+        let inv = 1.0 / (*c as f32);
+        normals[i][0] *= inv;
+        normals[i][1] *= inv;
+        normals[i][2] *= inv;
+        let len = (normals[i][0] * normals[i][0]
+            + normals[i][1] * normals[i][1]
+            + normals[i][2] * normals[i][2])
+            .sqrt()
+            .max(1e-20);
+        normals[i][0] /= len;
+        normals[i][1] /= len;
+        normals[i][2] /= len;
+        uvs[i][0] *= inv;
+        uvs[i][1] *= inv;
+    }
+
+    let indices: Vec<u32> = prim.indices.iter().map(|&i| remap[i as usize]).collect();
+    let mut out_idx = Vec::with_capacity(indices.len());
+    for tri in indices.chunks_exact(3) {
+        if tri[0] != tri[1] && tri[1] != tri[2] && tri[2] != tri[0] {
+            out_idx.extend_from_slice(tri);
+        }
+    }
+
+    TilePrimitive {
+        positions,
+        normals: if has_n { normals } else { Vec::new() },
+        uvs: if has_uv { uvs } else { Vec::new() },
+        indices: out_idx,
+        jpeg: None,
+    }
 }
 
 fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
-    let cap = target.saturating_mul(2).min(indices.len());
-    let locked = simplify(
-        indices,
-        adapter,
-        target,
-        1.0,
-        SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
-        None,
-    );
-    if locked.len() >= 3 && locked.len() <= cap {
-        return locked;
+    // Prefer the smallest topology-preserving result. Never use simplify_sloppy.
+    let attempts: [(SimplifyOptions, f32); 4] = [
+        (
+            SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
+            1.0,
+        ),
+        (SimplifyOptions::Prune | SimplifyOptions::Permissive, 1.0),
+        (SimplifyOptions::Permissive, 1.0),
+        (SimplifyOptions::None, 1.0),
+    ];
+    let mut best: Option<Vec<u32>> = None;
+    for (opts, err) in attempts {
+        let out = simplify(indices, adapter, target, err, opts, None);
+        if out.len() < 3 {
+            continue;
+        }
+        let better = match &best {
+            None => true,
+            Some(b) => out.len() < b.len(),
+        };
+        if better {
+            best = Some(out);
+            if best.as_ref().map(|b| b.len()).unwrap_or(usize::MAX) <= target.saturating_mul(2) {
+                break;
+            }
+        }
     }
-    let open = simplify(
-        indices,
-        adapter,
-        target,
-        1.0,
-        SimplifyOptions::Prune | SimplifyOptions::Permissive,
-        None,
-    );
-    if open.len() >= 3 && open.len() <= cap {
-        return open;
-    }
-    let sloppy = simplify_sloppy(indices, adapter, target, 1.0, None);
-    if sloppy.len() >= 3 {
-        sloppy
-    } else if open.len() >= 3 {
-        open
-    } else if locked.len() >= 3 {
-        locked
-    } else {
-        indices.to_vec()
-    }
+    best.unwrap_or_else(|| indices.to_vec())
 }
 
 /// Two-sided sampled point-to-mesh Hausdorff in model metres.
@@ -268,23 +433,94 @@ mod tests {
     }
 
     #[test]
-    fn simplify_hits_budget_when_lock_border_cannot() {
+    fn simplify_welds_soup_and_hits_budget() {
+        // Disconnected quads share positions; after weld they form a grid
+        // that topology-preserving simplify can reduce (no sloppy).
         let prim = soup_grid(40, 40);
         assert_eq!(prim.indices.len() / 3, 3200);
         let out = simplify_primitive(&prim, 64).unwrap();
         assert!(
             out.indices.len() / 3 <= 128,
-            "expected sloppy fallback, got {} tris",
+            "expected weld+simplify to hit budget, got {} tris",
             out.indices.len() / 3
         );
     }
 
     #[test]
-    fn simplify_tile_splits_budget_across_prims() {
-        let a = soup_grid(20, 20);
-        let b = soup_grid(20, 20);
-        let out = simplify_tile(&[a, b], 80).unwrap();
-        let tris: usize = out.iter().map(|p| p.indices.len() / 3).sum();
-        assert!(tris <= 160, "tile budget 80, got {tris}");
+    fn simplify_never_punches_holes_on_connected_grid() {
+        // Shared-vertex grid: output must stay a continuous surface (every
+        // edge shared by 1–2 tris; no isolated spikes from sloppy).
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+        let nx = 30u32;
+        let ny = 30u32;
+        for y in 0..=ny {
+            for x in 0..=nx {
+                positions.push([x as f32, y as f32, 0.0]);
+            }
+        }
+        let w = nx + 1;
+        for y in 0..ny {
+            for x in 0..nx {
+                let i = y * w + x;
+                indices.extend_from_slice(&[i, i + 1, i + w + 1, i, i + w + 1, i + w]);
+            }
+        }
+        let prim = TilePrimitive {
+            positions,
+            normals: Vec::new(),
+            uvs: Vec::new(),
+            indices,
+            jpeg: None,
+        };
+        let src_tris = prim.indices.len() / 3;
+        let out = simplify_primitive(&prim, 100).unwrap();
+        let out_tris = out.indices.len() / 3;
+        assert!(
+            out_tris < src_tris,
+            "should reduce {src_tris} → got {out_tris}"
+        );
+        assert!(out_tris >= 3);
+        // Manifold-ish: index refs in range, no degenerate tris.
+        for t in out.indices.chunks_exact(3) {
+            assert!(t[0] != t[1] && t[1] != t[2] && t[2] != t[0]);
+            assert!((t[0] as usize) < out.positions.len());
+            assert!((t[1] as usize) < out.positions.len());
+            assert!((t[2] as usize) < out.positions.len());
+        }
+    }
+
+    #[test]
+    fn simplify_tile_bakes_single_atlas() {
+        fn textured_quad(origin: [f32; 3], rgb: [u8; 3]) -> TilePrimitive {
+            let mut img = image::RgbImage::new(16, 16);
+            for p in img.pixels_mut() {
+                *p = image::Rgb(rgb);
+            }
+            let mut jpeg = Vec::new();
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 90)
+                .encode(img.as_raw(), 16, 16, image::ExtendedColorType::Rgb8)
+                .unwrap();
+            let o = origin;
+            TilePrimitive {
+                positions: vec![
+                    [o[0], o[1], o[2]],
+                    [o[0] + 2.0, o[1], o[2]],
+                    [o[0] + 2.0, o[1], o[2] + 2.0],
+                    [o[0], o[1], o[2] + 2.0],
+                ],
+                normals: vec![[0.0, 1.0, 0.0]; 4],
+                uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                indices: vec![0, 1, 2, 0, 2, 3],
+                jpeg: Some(jpeg),
+            }
+        }
+        let a = textured_quad([0.0, 0.0, 0.0], [200, 40, 40]);
+        let b = textured_quad([2.0, 0.0, 0.0], [40, 200, 40]);
+        let out = simplify_tile(&[a, b], 8, 64).unwrap();
+        assert_eq!(out.len(), 1);
+        assert!(out[0].jpeg.as_ref().unwrap().len() > 32);
+        assert_eq!(out[0].uvs.len(), out[0].positions.len());
+        assert!(!out[0].indices.is_empty());
     }
 }

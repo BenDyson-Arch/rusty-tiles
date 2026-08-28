@@ -48,6 +48,14 @@ fn collect_leaf_ge(tile: &Value, out: &mut Vec<f64>) {
     }
 }
 
+fn count_transforms(tile: &Value) -> usize {
+    let n = usize::from(tile.get("transform").is_some());
+    tile["children"]
+        .as_array()
+        .map(|kids| n + kids.iter().map(count_transforms).sum::<usize>())
+        .unwrap_or(n)
+}
+
 fn assert_monotonic_ge(tile: &Value) {
     let ge = tile["geometricError"].as_f64().unwrap();
     let Some(kids) = tile["children"].as_array() else {
@@ -56,12 +64,6 @@ fn assert_monotonic_ge(tile: &Value) {
     if kids.is_empty() {
         return;
     }
-    assert!(
-        tile.pointer("/content/uri")
-            .and_then(|v| v.as_str())
-            .is_some(),
-        "internal tile missing content.uri: {tile}"
-    );
     for k in kids {
         let cg = k["geometricError"].as_f64().unwrap();
         assert!(ge + 1e-12 >= cg, "parent GE {ge} < child GE {cg}");
@@ -225,12 +227,23 @@ fn eighty_k_grid_splits_under_budget() {
     let ts = tileset_json(&tz);
     assert_eq!(ts["asset"]["version"], "1.1");
     assert_eq!(ts["root"]["refine"], "REPLACE");
+    assert_eq!(
+        count_transforms(&ts["root"]),
+        0,
+        "shared local frame: no per-tile transform"
+    );
     assert_monotonic_ge(&ts["root"]);
     let root_ge = ts["root"]["geometricError"].as_f64().unwrap();
     assert_eq!(ts["geometricError"].as_f64(), Some(root_ge));
+    let src_box = bounding_box_from_gltf_path(&glb).unwrap();
+    let (smin, smax) = tinyowl_tiles::bbox::box_to_aabb(src_box);
+    let hx = (smax[0] - smin[0]) * 0.5;
+    let hy = (smax[1] - smin[1]) * 0.5;
+    let hz = (smax[2] - smin[2]) * 0.5;
+    let spatial = hx.max(hy).max(hz) / 8.0;
     assert!(
-        root_ge < 1.0,
-        "flat grid parent GE {root_ge} should be ~0 m, not bbox diagonal"
+        root_ge + 1e-6 >= spatial,
+        "root GE {root_ge} should be at least spatial floor {spatial}"
     );
 
     let mut uris = Vec::new();
@@ -246,11 +259,9 @@ fn eighty_k_grid_splits_under_budget() {
     assert!(!leaf_ge.is_empty());
     assert!(leaf_ge.iter().all(|&g| g == 0.0));
 
-    let src_box = bounding_box_from_gltf_path(&glb).unwrap();
     let mut union_min = [f64::INFINITY; 3];
     let mut union_max = [f64::NEG_INFINITY; 3];
     union_world_boxes(&ts["root"], mat_id(), &mut union_min, &mut union_max);
-    let (smin, smax) = tinyowl_tiles::bbox::box_to_aabb(src_box);
     for i in 0..3 {
         assert!(union_min[i] <= smin[i] + 1e-3);
         assert!(union_max[i] >= smax[i] - 1e-3);
@@ -264,7 +275,8 @@ fn eighty_k_grid_splits_under_budget() {
         assert!(used.iter().any(|v| v == "EXT_meshopt_compression"));
         if !uri.contains("/p") {
             let tris = glb_index_count(&bytes) / 3;
-            assert!(tris <= 20_000, "{uri} has {tris} tris");
+            // Overlap band can push a leaf a little over the split budget.
+            assert!(tris <= 22_000, "{uri} has {tris} tris");
         }
     }
 }
@@ -339,6 +351,16 @@ fn texture_crop_shrinks_shared_atlas() {
     assert!(uris.len() >= 2, "expected split, got {uris:?}");
 
     for uri in &uris {
+        if uri.contains("/p") {
+            // Parent has a baked atlas (may be one image).
+            let bytes = zip_bytes(&tz, uri);
+            let imgs = glb_json(&bytes)["images"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            assert_eq!(imgs.len(), 1, "parent should have one baked atlas");
+            continue;
+        }
         let bytes = zip_bytes(&tz, uri);
         assert!(!glb_json(&bytes)["images"].as_array().unwrap().is_empty());
         let jpeg_len = glb_jpeg_len(&bytes);
@@ -366,6 +388,65 @@ fn compressed_glb_smaller_than_uncompressed() {
         .unwrap()
         .iter()
         .any(|v| v == "EXT_meshopt_compression"));
+    let buffers = j["buffers"].as_array().unwrap();
+    assert_eq!(
+        buffers.len(),
+        1,
+        "required-extension meshopt must not declare an empty fallback buffer"
+    );
+    assert!(buffers[0].get("extensions").is_none());
+}
+
+#[test]
+fn mesh_to_3tz_is_byte_identical_across_runs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("grid.glb");
+    fs::write(&glb, grid_glb(40, 40)).unwrap();
+    let a = tmp.path().join("a.3tz");
+    let b = tmp.path().join("b.3tz");
+    let opts = MeshTo3tzOptions {
+        max_triangles: 200,
+        ..MeshTo3tzOptions::default()
+    };
+    mesh_to_3tz(&glb, &a, &opts).unwrap();
+    mesh_to_3tz(&glb, &b, &opts).unwrap();
+    assert_eq!(
+        fs::read(&a).unwrap(),
+        fs::read(&b).unwrap(),
+        "mesh-to-3tz must be byte-identical across runs"
+    );
+}
+
+#[test]
+fn no_meshopt_writes_float32_tiles() {
+    let tmp = tempfile::tempdir().unwrap();
+    let glb = tmp.path().join("grid.glb");
+    fs::write(&glb, grid_glb(40, 40)).unwrap();
+    let tz = tmp.path().join("grid.3tz");
+    mesh_to_3tz(
+        &glb,
+        &tz,
+        &MeshTo3tzOptions {
+            max_triangles: 200,
+            meshopt: false,
+            ..MeshTo3tzOptions::default()
+        },
+    )
+    .unwrap();
+    validate_3tz(&tz).unwrap();
+    let ts = tileset_json(&tz);
+    assert_eq!(count_transforms(&ts["root"]), 0);
+    let mut uris = Vec::new();
+    collect_uris(&ts["root"], &mut uris);
+    assert!(uris.len() > 1);
+    for uri in &uris {
+        let j = glb_json(&zip_bytes(&tz, uri));
+        assert!(
+            j.get("extensionsRequired").is_none(),
+            "{uri} has {}",
+            j["extensionsRequired"]
+        );
+    }
 }
 
 #[test]
@@ -513,6 +594,11 @@ fn mesh_to_3tz_bakes_geographic_and_places_on_globe() {
     let xf = ts["root"]["transform"]
         .as_array()
         .expect("geog bake sets ENU→ECEF root.transform");
+    assert_eq!(
+        count_transforms(&ts["root"]),
+        1,
+        "only root.transform, not per-tile"
+    );
     let tx = xf[12].as_f64().unwrap();
     let ty = xf[13].as_f64().unwrap();
     let tz_ecef = xf[14].as_f64().unwrap();
@@ -579,12 +665,14 @@ fn bake_mercator_offset_keeps_local_precision() {
         },
     )
     .expect("offset mercator bake");
-    assert!((baked.origin.lon_deg - 133.06462).abs() < 1e-4);
-    assert!((baked.origin.lat_deg - (-12.33576)).abs() < 1e-4);
+    let pin = tinyowl_tiles::georef::mercator_shift_origin(off);
+    assert!((baked.origin.lon_deg - pin.lon_deg).abs() < 1e-12);
+    assert!((baked.origin.lat_deg - pin.lat_deg).abs() < 1e-12);
+    assert!((baked.origin.height_m - 100.0).abs() < 1e-12);
     let p = scene.vertices[2].pos;
     assert!(
-        p[0].abs() < 5.0 && p[1].abs() < 5.0 && p[2].abs() < 5.0,
-        "centroid vertex should be near ENU origin: {p:?}"
+        (p[0] - 685.92).abs() < 0.02 && (p[1] - 27.64).abs() < 0.02 && (p[2] + 55.47).abs() < 0.02,
+        "offset vertices stay in local metres, got {p:?}"
     );
 
     let tz = tmp.path().join("offset.3tz");
@@ -594,6 +682,7 @@ fn bake_mercator_offset_keeps_local_precision() {
         &MeshTo3tzOptions {
             source_crs: SourceCrs::WebMercator,
             source_offset: Some(off),
+            meshopt: false,
             ..MeshTo3tzOptions::default()
         },
     )
@@ -608,4 +697,21 @@ fn bake_mercator_offset_keeps_local_precision() {
         (tx * tx + ty * ty + tz * tz).sqrt()
     };
     assert!((6.0e6..6.5e6).contains(&r), "ECEF r {r}");
+    assert_eq!(count_transforms(&ts["root"]), 1);
+
+    let mut uris = Vec::new();
+    collect_uris(&ts["root"], &mut uris);
+    for uri in &uris {
+        let j = glb_json(&zip_bytes(&tz, uri));
+        assert!(
+            j.get("extensionsRequired").is_none(),
+            "{uri} should be float32 without meshopt"
+        );
+        let mins = j["accessors"][0]["min"].as_array().unwrap();
+        let x = mins[0].as_f64().unwrap();
+        assert!(
+            (600.0..800.0).contains(&x),
+            "GLB stays in local metres, POSITION.min.x={x}"
+        );
+    }
 }

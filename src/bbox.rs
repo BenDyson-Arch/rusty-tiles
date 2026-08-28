@@ -195,11 +195,6 @@ pub(crate) fn y_up_to_z_up(p: [f32; 3]) -> [f32; 3] {
     [p[0], -p[2], p[1]]
 }
 
-/// Inverse of [`y_up_to_z_up`].
-pub(crate) fn z_up_to_y_up(p: [f64; 3]) -> [f32; 3] {
-    [p[0] as f32, p[2] as f32, -p[1] as f32]
-}
-
 pub fn aabb_center(min: [f64; 3], max: [f64; 3]) -> [f64; 3] {
     [
         (min[0] + max[0]) * 0.5,

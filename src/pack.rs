@@ -167,6 +167,12 @@ fn write_stored_zip(output: &Path, files: &[ZipFile], index: &[u8]) -> Result<()
     let mut central = Vec::new();
     let mut local_off = 0u32;
     let n = files.len() + 1;
+    if n > u16::MAX as usize {
+        return Err(Error::msg(format!(
+            "3TZ archive has {n} members; classic ZIP EOCD only supports {}",
+            u16::MAX
+        )));
+    }
 
     for f in files {
         write_local_and_data(
@@ -221,6 +227,12 @@ fn write_local_and_data(
     payload: FilePayload<'_>,
 ) -> Result<(), Error> {
     let name_b = name.as_bytes();
+    if name_b.len() > u16::MAX as usize {
+        return Err(Error::msg(format!(
+            "ZIP entry name longer than {} bytes: {name}",
+            u16::MAX
+        )));
+    }
     // Local file header
     w.write_all(&0x0403_4b50u32.to_le_bytes())?;
     w.write_all(&20u16.to_le_bytes())?;

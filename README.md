@@ -37,13 +37,17 @@ tinyowl-tiles glb-to-3tz -i model.glb -o model.3tz \
 # Split into a REPLACE HLOD tree when over 20k triangles
 # Metashape geographic (lon° / height m / −lat°) and world EPSG:3857
 # (easting / height / −northing) GLBs are baked to ENU metres automatically.
-tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz
+# Prefer an explicit --sourceCrs; auto-detect warns on stderr.
+tinyowl-tiles mesh-to-3tz -i model.glb -o model.3tz --sourceCrs geographic
 
-# Metashape Shift export: local metres + offset.txt (keep f32 precision)
+# Metashape Shift export: keep local metres; E/N/A pins root ECEF only
 tinyowl-tiles mesh-to-3tz -i mgal_detail_offset.glb -o model.3tz \
   --sourceCrs epsg:3857 \
   --sourceOffsetFile offset.txt
 # or: --sourceOffset 14812000 -1384000 100
+# Diagnostic: float32 tiles (default is quantized meshopt)
+tinyowl-tiles mesh-to-3tz -i mgal_detail_offset.glb -o model.3tz -f \
+  --sourceCrs epsg:3857 --sourceOffsetFile offset.txt --noMeshopt
 
 # Stubs (exit 2) until spec / pipeline land
 tinyowl-tiles vector -i features.geojson -o features.3tz
@@ -51,6 +55,15 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 ```
 
 `-f` / `--force` overwrites the output path.
+
+## Conventions (lossy + placement)
+
+`mesh-to-3tz` is a **photogrammetry** pipe, not a full glTF round-trip:
+
+- Kept: `POSITION`, `NORMAL`, `TEXCOORD_0`, base-color JPEG.
+- Dropped silently: vertex colors, PBR beyond base color, skins, morphs, animations, instancing, extras.
+- Default tile GLBs use `KHR_mesh_quantization` + `EXT_meshopt_compression` as **required** extensions (no empty fallback buffer). Consumers need a meshopt decoder (CesiumJS ships one). Use `--noMeshopt` for float32 GLBs.
+- Local-metre meshes (no CRS bake, no `--cartographicPositionDegrees`) get **no** `root.transform` — content sits in a local ENU-like frame at the origin. Placement is the hub/viewer’s job ([`docs/HUB_SEAM.md`](docs/HUB_SEAM.md)). Geographic / offset bakes set `root.transform` to ENU→ECEF.
 
 ## Layout
 
@@ -65,7 +78,7 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `src/compress.rs` | quantized meshopt GLB writer |
 | `src/mesh.rs` | glTF IR (mmap, skip image decode) |
 | `src/split.rs` | k-d centroid split to 20k-triangle leaves |
-| `src/texture.rs` | UV crop, resize, JPEG |
+| `src/texture.rs` | UV crop, resize, JPEG; parent LOD atlas bake |
 | `src/glb_write.rs` | per-tile GLB authoring |
 | `src/vector.rs` | v1 stub + spec URLs |
 | `src/terrain.rs` | later stub |

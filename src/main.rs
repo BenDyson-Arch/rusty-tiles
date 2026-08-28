@@ -169,7 +169,7 @@ struct MeshArgs {
     )]
     max_triangles: usize,
     /// Source-file wrap threshold in bytes (default 204800). Split stop is
-    /// `--maxTriangles`; written tiles are meshopt-compressed.
+    /// `--maxTriangles`; written tiles are meshopt-compressed unless `--noMeshopt`.
     #[arg(
         long = "maxBytes",
         visible_alias = "max-bytes",
@@ -201,6 +201,9 @@ struct MeshArgs {
     /// Metashape offset.txt (`E: …` / `N: …` / `A: …`).
     #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
     source_offset_file: Option<PathBuf>,
+    /// Write float32 GLBs (skip KHR_mesh_quantization + EXT_meshopt_compression).
+    #[arg(long = "noMeshopt", visible_alias = "no-meshopt")]
+    no_meshopt: bool,
 }
 
 fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
@@ -238,5 +241,6 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         tile_size: a.tile_size,
         source_crs,
         source_offset,
+        meshopt: !a.no_meshopt,
     })
 }
