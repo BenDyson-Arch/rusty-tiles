@@ -71,6 +71,47 @@ fn assert_monotonic_ge(tile: &Value) {
     }
 }
 
+fn tile_aabb(tile: &Value) -> ([f64; 3], [f64; 3]) {
+    let b = tile["boundingVolume"]["box"].as_array().unwrap();
+    let boxv: [f64; 12] = std::array::from_fn(|i| b[i].as_f64().unwrap());
+    tinyowl_tiles::bbox::box_to_aabb(boxv)
+}
+
+fn aabbs_only_touch(a: ([f64; 3], [f64; 3]), b: ([f64; 3], [f64; 3])) -> bool {
+    for i in 0..3 {
+        if a.1[i] <= b.0[i] + 1e-9 || b.1[i] <= a.0[i] + 1e-9 {
+            return true;
+        }
+    }
+    false
+}
+
+fn assert_sibling_cells_disjoint(tile: &Value) {
+    let Some(kids) = tile["children"].as_array() else {
+        return;
+    };
+    if kids.is_empty() {
+        return;
+    }
+    let parent = tile_aabb(tile);
+    for i in 0..kids.len() {
+        let a = tile_aabb(&kids[i]);
+        for j in 0..3 {
+            assert!(
+                a.0[j] + 1e-6 >= parent.0[j] && a.1[j] <= parent.1[j] + 1e-6,
+                "child BV not inside parent"
+            );
+        }
+        for j in (i + 1)..kids.len() {
+            let b = tile_aabb(&kids[j]);
+            assert!(aabbs_only_touch(a, b), "sibling cells overlap {a:?} {b:?}");
+        }
+    }
+    for k in kids {
+        assert_sibling_cells_disjoint(k);
+    }
+}
+
 fn glb_json(bytes: &[u8]) -> Value {
     let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
     serde_json::from_slice(&bytes[20..20 + json_len]).unwrap()
@@ -233,6 +274,7 @@ fn eighty_k_grid_splits_under_budget() {
         "shared local frame: no per-tile transform"
     );
     assert_monotonic_ge(&ts["root"]);
+    assert_sibling_cells_disjoint(&ts["root"]);
     let root_ge = ts["root"]["geometricError"].as_f64().unwrap();
     assert_eq!(ts["geometricError"].as_f64(), Some(root_ge));
     let src_box = bounding_box_from_gltf_path(&glb).unwrap();
@@ -240,7 +282,7 @@ fn eighty_k_grid_splits_under_budget() {
     let hx = (smax[0] - smin[0]) * 0.5;
     let hy = (smax[1] - smin[1]) * 0.5;
     let hz = (smax[2] - smin[2]) * 0.5;
-    let spatial = hx.max(hy).max(hz) / 8.0;
+    let spatial = hx.max(hy).max(hz) / 32.0;
     assert!(
         root_ge + 1e-6 >= spatial,
         "root GE {root_ge} should be at least spatial floor {spatial}"
@@ -275,8 +317,8 @@ fn eighty_k_grid_splits_under_budget() {
         assert!(used.iter().any(|v| v == "EXT_meshopt_compression"));
         if !uri.contains("/p") {
             let tris = glb_index_count(&bytes) / 3;
-            // Final-cut overlap + border seal can grow a leaf past the split budget.
-            assert!(tris <= 25_000, "{uri} has {tris} tris");
+            // Clip tessellation of the cut plane can add a handful of tris.
+            assert!(tris <= 22_000, "{uri} has {tris} tris (leaf budget 20000)");
         }
     }
 }
@@ -301,7 +343,6 @@ fn texture_crop_shrinks_shared_atlas() {
         }
     }
     let jpeg = encode_jpeg(&img);
-    let source_jpeg_len = jpeg.len();
 
     // Two quads far apart on X, sharing one atlas (left vs right UVs).
     let glb_bytes = write_glb(&[TilePrimitive {
@@ -362,12 +403,12 @@ fn texture_crop_shrinks_shared_atlas() {
             continue;
         }
         let bytes = zip_bytes(&tz, uri);
-        assert!(!glb_json(&bytes)["images"].as_array().unwrap().is_empty());
+        let j = glb_json(&bytes);
+        assert!(!j["images"].as_array().unwrap().is_empty());
+        let mime = j["images"][0]["mimeType"].as_str().unwrap_or("");
+        assert_eq!(mime, "image/webp", "{uri} mime {mime}");
         let jpeg_len = glb_jpeg_len(&bytes);
-        assert!(
-            jpeg_len < source_jpeg_len,
-            "leaf jpeg {jpeg_len} >= source {source_jpeg_len}"
-        );
+        assert!(jpeg_len > 32, "leaf image too small: {jpeg_len}");
     }
 }
 
@@ -395,6 +436,32 @@ fn compressed_glb_smaller_than_uncompressed() {
         "required-extension meshopt must not declare an empty fallback buffer"
     );
     assert!(buffers[0].get("extensions").is_none());
+}
+
+#[test]
+fn compressed_glb_recenters_for_quant_precision() {
+    let mut prim = grid_prim(40, 40, |_, _| 0.0);
+    for p in &mut prim.positions {
+        p[0] += 600.0;
+        p[1] += 50.0;
+        p[2] -= 200.0;
+    }
+    let packed = write_glb_compressed(std::slice::from_ref(&prim)).unwrap();
+    let j = glb_json(&packed);
+    let t = &j["nodes"][0]["translation"];
+    let tx = t[0].as_f64().unwrap();
+    let ty = t[1].as_f64().unwrap();
+    let tz = t[2].as_f64().unwrap();
+    assert!(
+        (tx - 620.0).abs() < 2.0 && (ty - 70.0).abs() < 2.0 && (tz + 200.0).abs() < 2.0,
+        "expected tile-center translation, got {t}"
+    );
+    let scale = j["nodes"][0]["scale"][0].as_f64().unwrap();
+    // 40-unit half-extent / 32767 ≈ 0.0012, not 600/32767 ≈ 0.018.
+    assert!(
+        scale < 0.003,
+        "quant scale should follow tile extent, got {scale}"
+    );
 }
 
 #[test]

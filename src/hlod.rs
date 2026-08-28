@@ -11,24 +11,52 @@ use crate::glb_write::TilePrimitive;
 use crate::mesh::Scene;
 
 const SOURCE_SAMPLE_CAP: usize = 2_048;
-pub(crate) const MIN_PARENT_GE: f64 = 1e-3;
+pub(crate) const MIN_PARENT_GE: f64 = 0.02;
 
-/// SSE floor from the tile AABB (max half-extent / 8).
+/// SSE floor from the tile AABB (max half-extent / 32).
 ///
-/// Sampled Hausdorff alone under-reports bad simplifies; this floor keeps
-/// REPLACE refinement moving toward leaves when the camera is close.
+/// `/4` was so large that every parent failed SSE at cave viewing
+/// distances, so Cesium never parked on a mid LOD.
 pub(crate) fn spatial_geometric_error(min: [f64; 3], max: [f64; 3]) -> f64 {
     let hx = (max[0] - min[0]) * 0.5;
     let hy = (max[1] - min[1]) * 0.5;
     let hz = (max[2] - min[2]) * 0.5;
-    hx.max(hy).max(hz) / 8.0
+    hx.max(hy).max(hz) / 32.0
 }
 
-/// Triangle budget for a parent covering `descendant_tris` source triangles.
-/// Far parents stay coarse so Cesium can show one GLB instead of a leaf stampede.
-pub(crate) fn parent_triangle_budget(descendant_tris: usize, max_triangles: usize) -> usize {
-    let cap = (max_triangles / 2).max(256);
-    (descendant_tris / 32).clamp(256, cap)
+/// Metres of visual error from a packed atlas (extent / pixels × 8 texels).
+pub(crate) fn texel_geometric_error(min: [f64; 3], max: [f64; 3], atlas_px: u32) -> f64 {
+    let extent = (max[0] - min[0])
+        .max(max[1] - min[1])
+        .max(max[2] - min[2])
+        .max(1e-6);
+    (extent / atlas_px.max(1) as f64) * 8.0
+}
+
+/// Atlas size by *subtree* height (1 = parent of leaves), not global depth.
+pub(crate) fn parent_atlas_size(from_leaf: u32) -> u32 {
+    match from_leaf {
+        0..=2 => 1024,
+        3..=5 => 512,
+        _ => 256,
+    }
+}
+
+/// Triangle budget by subtree height so the last few parents look like mid LODs.
+pub(crate) fn parent_triangle_budget(
+    descendant_tris: usize,
+    max_triangles: usize,
+    from_leaf: u32,
+) -> usize {
+    let (div, cap) = match from_leaf {
+        0..=1 => (3, max_triangles),
+        2 => (4, max_triangles),
+        3..=4 => (8, (max_triangles * 3 / 4).max(256)),
+        _ => (16, (max_triangles / 4).max(256)),
+    };
+    let cap = cap.max(1);
+    let lo = 256.min(cap);
+    (descendant_tris / div.max(1)).clamp(lo, cap)
 }
 
 #[derive(Clone, Copy, Default)]
@@ -603,6 +631,32 @@ mod tests {
             indices,
             jpeg: None,
         }
+    }
+
+    #[test]
+    fn spatial_ge_is_half_extent_over_thirty_two() {
+        let min = [0.0, 0.0, 0.0];
+        let max = [40.0, 10.0, 8.0];
+        let ge = spatial_geometric_error(min, max);
+        assert!(
+            (ge - 0.625).abs() < 1e-9,
+            "20-unit half-extent / 32 should be 0.625, got {ge}"
+        );
+        let texel = texel_geometric_error(min, max, 512);
+        assert!(texel > 0.5, "texel floor should be metres, got {texel}");
+    }
+
+    #[test]
+    fn parent_budget_uses_subtree_height() {
+        let far = parent_triangle_budget(200_000, 20_000, 8);
+        let mid = parent_triangle_budget(80_000, 20_000, 3);
+        let near = parent_triangle_budget(40_000, 20_000, 1);
+        assert!(far <= 5_000, "far parent should stay coarse, got {far}");
+        assert!(near >= far, "near {near} should be >= far {far}");
+        assert!(mid >= far, "mid {mid} should be >= far {far}");
+        assert_eq!(parent_atlas_size(1), 1024);
+        assert_eq!(parent_atlas_size(8), 256);
+        assert_eq!(parent_atlas_size(4), 512);
     }
 
     #[test]

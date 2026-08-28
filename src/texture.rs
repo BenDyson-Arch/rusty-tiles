@@ -1,4 +1,4 @@
-//! Decode source images (JPEG at IDCT scale when huge); crop + resize + JPEG per leaf.
+//! Decode source images (JPEG at IDCT scale when huge); crop + resize + WebP per leaf.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::Cursor;
@@ -10,7 +10,6 @@ use crate::error::Error;
 use crate::mesh::EncodedImage;
 
 const UV_PAD_PX: u32 = 8;
-const JPEG_QUALITY: u8 = 92;
 
 /// Decode, downsampling so the long edge is at most `8 * tile_size`.
 pub fn decode_rgba(encoded: &EncodedImage, tile_size: u32) -> Result<RgbaImage, Error> {
@@ -32,7 +31,8 @@ pub fn decode_rgba(encoded: &EncodedImage, tile_size: u32) -> Result<RgbaImage, 
 }
 
 fn decode_cap(tile_size: u32) -> u32 {
-    tile_size.max(1).saturating_mul(8).max(512)
+    // Cap at 4K so 89 source atlases stay in RAM (~6 GiB), not 8K (~22 GiB).
+    tile_size.max(1).saturating_mul(8).max(512).min(4096)
 }
 
 fn decode_jpeg_scaled(bytes: &[u8], tile_size: u32) -> Result<RgbaImage, Error> {
@@ -700,16 +700,24 @@ fn fit(w: u32, h: u32, tile_size: u32) -> (u32, u32) {
 }
 
 fn encode_jpeg(img: &RgbaImage) -> Result<Vec<u8>, Error> {
+    encode_texture(img)
+}
+
+/// Lossy WebP (q90): full chroma vs JPEG 4:2:0, similar payload.
+fn encode_texture(img: &RgbaImage) -> Result<Vec<u8>, Error> {
     let rgb = DynamicImage::ImageRgba8(img.clone()).to_rgb8();
-    let mut buf = Vec::new();
-    let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, JPEG_QUALITY);
-    enc.encode(
+    let cfg = zenwebp::LossyConfig::new()
+        .with_quality(90.0)
+        .with_method(3);
+    zenwebp::EncodeRequest::lossy(
+        &cfg,
         rgb.as_raw(),
+        zenwebp::PixelLayout::Rgb8,
         rgb.width(),
         rgb.height(),
-        image::ExtendedColorType::Rgb8,
-    )?;
-    Ok(buf)
+    )
+    .encode()
+    .map_err(|e| Error::msg(format!("webp: {e}")))
 }
 
 /// Pack each material’s JPEG into one atlas and concatenate geometry with remapped UVs.

@@ -10,7 +10,7 @@ use meshopt::optimize::{optimize_vertex_cache, optimize_vertex_fetch};
 use serde_json::{json, Map, Value};
 
 use crate::error::Error;
-use crate::glb_write::TilePrimitive;
+use crate::glb_write::{attach_webp_extension, image_mime, TilePrimitive};
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
@@ -38,8 +38,23 @@ struct QuantUv {
     v: [u16; 2],
 }
 
-/// Author a quantized, meshopt-compressed GLB. JPEG payloads stay raw.
+/// Author a quantized, meshopt-compressed GLB. Image payloads stay raw.
+///
+/// Positions are recentered on the tile AABB so i16 quantization tracks the
+/// tile extent (sub-mm on a few-metre leaf), not the distance from the
+/// scene origin. Node `translation` + `scale` restore world metres.
 pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
+    write_glb_compressed_localized(prims)
+}
+
+pub fn write_glb_compressed_with_scale(
+    prims: &[TilePrimitive],
+    _quant_scale: Option<f32>,
+) -> Result<Vec<u8>, Error> {
+    write_glb_compressed_localized(prims)
+}
+
+fn write_glb_compressed_localized(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
     if prims.is_empty() {
         return Err(Error::msg("no primitives to write"));
     }
@@ -55,16 +70,7 @@ pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
         return Err(Error::msg("no primitives to write"));
     }
 
-    let mut max_abs = 0.0f32;
-    for p in &packed_prims {
-        for v in &p.verts {
-            max_abs = max_abs
-                .max(v.p[0].abs())
-                .max(v.p[1].abs())
-                .max(v.p[2].abs());
-        }
-    }
-    let scale = (max_abs / 32767.0).max(1e-20);
+    let (center, scale) = localize_packed(&mut packed_prims);
     let prepared: Vec<Prepared> = packed_prims
         .into_iter()
         .map(|p| quantize_prim(p, scale))
@@ -117,7 +123,7 @@ pub fn write_glb_compressed(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
         name: None,
         rotation: None,
         scale: Some([scale, scale, scale]),
-        translation: None,
+        translation: Some(center),
         skin: None,
         weights: None,
     });
@@ -167,6 +173,37 @@ struct Prepared {
     jpeg: Option<Vec<u8>>,
     pos_min: [i16; 3],
     pos_max: [i16; 3],
+}
+
+fn localize_packed(packed: &mut [PackedPrim]) -> ([f32; 3], f32) {
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in packed.iter() {
+        for v in &p.verts {
+            for i in 0..3 {
+                min[i] = min[i].min(v.p[i]);
+                max[i] = max[i].max(v.p[i]);
+            }
+        }
+    }
+    let center = [
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5,
+    ];
+    let mut max_abs = 0.0f32;
+    for p in packed.iter_mut() {
+        for v in &mut p.verts {
+            v.p[0] -= center[0];
+            v.p[1] -= center[1];
+            v.p[2] -= center[2];
+            max_abs = max_abs
+                .max(v.p[0].abs())
+                .max(v.p[1].abs())
+                .max(v.p[2].abs());
+        }
+    }
+    (center, (max_abs / 32767.0).max(1e-20))
 }
 
 fn pack_prim(prim: &TilePrimitive) -> PackedPrim {
@@ -333,7 +370,7 @@ fn build_compressed_primitive(
     )?;
 
     let material = if let Some(jpeg) = &p.jpeg {
-        Some(push_jpeg(root, bin, data_buf, jpeg)?)
+        Some(push_albedo(root, bin, data_buf, jpeg)?)
     } else {
         None
     };
@@ -459,7 +496,7 @@ fn push_index_view(
     }))
 }
 
-fn push_jpeg(
+fn push_albedo(
     root: &mut Root,
     bin: &mut Vec<u8>,
     data_buf: Index<gltf_json::Buffer>,
@@ -480,20 +517,22 @@ fn push_jpeg(
     });
     let image = root.push(gimage::Image {
         buffer_view: Some(view),
-        mime_type: Some(gimage::MimeType("image/jpeg".into())),
+        mime_type: Some(gimage::MimeType(image_mime(jpeg).into())),
         name: None,
         uri: None,
         extensions: Default::default(),
         extras: Default::default(),
     });
     let sampler = push_clamp_linear_sampler(root);
-    let tex = root.push(texture::Texture {
+    let mut tex = texture::Texture {
         extensions: Default::default(),
         extras: Default::default(),
         name: None,
         sampler: Some(sampler),
         source: image,
-    });
+    };
+    attach_webp_extension(root, &mut tex, image, jpeg);
+    let tex = root.push(tex);
     let pbr = material::PbrMetallicRoughness {
         base_color_texture: Some(texture::Info {
             extensions: Default::default(),

@@ -285,7 +285,8 @@ fn build_primitive(
         type_: Valid(accessor::Type::Scalar),
     });
 
-    let material = if let Some((off, len)) = jpeg_view {
+    let material = if let Some(bytes) = prim.jpeg.as_ref() {
+        let (off, len) = jpeg_view.expect("image bytes were written");
         let view = root.push(buffer::View {
             buffer: dummy_buffer,
             byte_length: USize64::from(len),
@@ -298,20 +299,22 @@ fn build_primitive(
         });
         let image = root.push(gimage::Image {
             buffer_view: Some(view),
-            mime_type: Some(gimage::MimeType("image/jpeg".into())),
+            mime_type: Some(gimage::MimeType(image_mime(bytes).into())),
             name: None,
             uri: None,
             extensions: Default::default(),
             extras: Default::default(),
         });
         let sampler = push_clamp_linear_sampler(root);
-        let tex = root.push(texture::Texture {
+        let mut tex = texture::Texture {
             extensions: Default::default(),
             extras: Default::default(),
             name: None,
             sampler: Some(sampler),
             source: image,
-        });
+        };
+        attach_webp_extension(root, &mut tex, image, bytes);
+        let tex = root.push(tex);
         let mut pbr = material::PbrMetallicRoughness::default();
         pbr.base_color_texture = Some(texture::Info {
             extensions: Default::default(),
@@ -351,6 +354,35 @@ fn pad4(buf: &mut Vec<u8>) {
     while buf.len() % 4 != 0 {
         buf.push(0);
     }
+}
+
+/// MIME for an encoded albedo payload (WebP from the tiler, JPEG from tests).
+pub fn image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        "image/jpeg"
+    }
+}
+
+pub(crate) fn attach_webp_extension(
+    root: &mut Root,
+    tex: &mut texture::Texture,
+    image: Index<gimage::Image>,
+    bytes: &[u8],
+) {
+    if image_mime(bytes) != "image/webp" {
+        return;
+    }
+    if !root.extensions_used.iter().any(|e| e == "EXT_texture_webp") {
+        root.extensions_used.push("EXT_texture_webp".into());
+    }
+    let mut others = serde_json::Map::new();
+    others.insert(
+        "EXT_texture_webp".into(),
+        serde_json::json!({ "source": image.value() }),
+    );
+    tex.extensions = Some(gltf_json::extensions::texture::Texture { others });
 }
 
 /// No mipmaps + clamp: photogrammetry atlas crops have dead space between UV

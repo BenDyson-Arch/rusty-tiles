@@ -60,9 +60,9 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 
 `mesh-to-3tz` is a **photogrammetry** pipe, not a full glTF round-trip:
 
-- Kept: `POSITION`, `NORMAL`, `TEXCOORD_0`, base-color JPEG.
+- Kept: `POSITION`, `NORMAL`, `TEXCOORD_0`, base-color **WebP** (lossy q90; JPEG only if a test fixture supplies it).
 - Dropped silently: vertex colors, PBR beyond base color, skins, morphs, animations, instancing, extras.
-- Default tile GLBs use `KHR_mesh_quantization` + `EXT_meshopt_compression` as **required** extensions (no empty fallback buffer). Consumers need a meshopt decoder (CesiumJS ships one). Use `--noMeshopt` for float32 GLBs.
+- Default tile GLBs use `KHR_mesh_quantization` + `EXT_meshopt_compression` as **required** extensions (no empty fallback buffer). Positions are recentered per tile so i16 precision follows tile size, not distance from the origin. Consumers need a meshopt decoder (CesiumJS ships one). Use `--noMeshopt` for float32 GLBs.
 - Local-metre meshes (no CRS bake, no `--cartographicPositionDegrees`) get **no** `root.transform` — content sits in a local ENU-like frame at the origin. Placement is the hub/viewer’s job ([`docs/HUB_SEAM.md`](docs/HUB_SEAM.md)). Geographic / offset bakes set `root.transform` to ENU→ECEF.
 
 ## Layout
@@ -77,8 +77,8 @@ tinyowl-tiles terrain -i dem.tif -o terrain.3tz
 | `src/hlod.rs` | parent simplify + sampled Hausdorff GE |
 | `src/compress.rs` | quantized meshopt GLB writer |
 | `src/mesh.rs` | glTF IR (mmap, skip image decode) |
-| `src/split.rs` | k-d centroid split to 20k-triangle leaves |
-| `src/texture.rs` | UV crop, resize, JPEG; parent LOD atlas bake |
+| `src/split.rs` | spatial k-d + triangle clip to 20k-triangle leaves |
+| `src/texture.rs` | UV crop, resize, WebP; parent LOD atlas bake |
 | `src/glb_write.rs` | per-tile GLB authoring |
 | `src/vector.rs` | v1 stub + spec URLs |
 | `src/terrain.rs` | later stub |

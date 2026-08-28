@@ -1,6 +1,6 @@
 //! Orchestrate wrap-or-split → leaf + HLOD parent GLBs → REPLACE tileset → `.3tz`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -15,18 +15,18 @@ use crate::error::Error;
 use crate::georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 use crate::glb_write::{write_glb, TilePrimitive};
 use crate::hlod::{
-    parent_triangle_budget, sampled_hausdorff, simplify_tile, spatial_geometric_error,
-    MIN_PARENT_GE,
+    parent_atlas_size, parent_triangle_budget, sampled_hausdorff, simplify_tile,
+    spatial_geometric_error, texel_geometric_error, MIN_PARENT_GE,
 };
 use crate::mesh::{self, Scene};
 use crate::pack::{pack_named_files, PackOptions};
-use crate::split::{self, SplitNode, SplitOpts};
+use crate::split::{self, ClippedTri, SplitNode, SplitOpts};
 use crate::texture;
 use crate::tileset::{glb_to_3tz, CreateTilesetOptions};
 
 pub const DEFAULT_MAX_TRIANGLES: usize = 20_000;
 pub const DEFAULT_MAX_BYTES: u64 = 204_800;
-pub const DEFAULT_TILE_SIZE: u32 = 512;
+pub const DEFAULT_TILE_SIZE: u32 = 1024;
 
 #[derive(Clone, Debug)]
 pub struct MeshTo3tzOptions {
@@ -178,8 +178,6 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             max_triangles: opts.max_triangles,
         },
     );
-    let mut tree = tree;
-    split::seal_leaf_borders(&scene, &mut tree, opts.max_triangles);
     let mut leaves = Vec::new();
     collect_leaves(&tree, 0, &mut leaves);
     let max_depth = leaves.iter().map(|(d, _)| *d).max().unwrap_or(0);
@@ -218,12 +216,14 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         // Near: 1024 baked atlas. Far: 512. Sample the decoded source images.
         let parent_prims: Vec<Vec<TilePrimitive>> = branches
             .par_iter()
-            .map(|(depth, node)| -> Result<Vec<TilePrimitive>, Error> {
+            .map(|(_depth, node)| -> Result<Vec<TilePrimitive>, Error> {
                 let ids = descendant_ids(node);
-                let budget = parent_triangle_budget(ids.len(), opts.max_triangles);
-                let near = (*depth as i32) >= (max_depth as i32).saturating_sub(3);
-                let atlas = if near { 1024 } else { 512 };
-                let geom = geom_from_ids(&scene, &ids);
+                let from_leaf = node.subtree_height();
+                let budget = parent_triangle_budget(ids.len(), opts.max_triangles, from_leaf);
+                let atlas = parent_atlas_size(from_leaf);
+                let (min, max) = node.aabb();
+                let clipped = split::clip_to_cell(&scene, &ids, min, max);
+                let geom = geom_from_clipped(&clipped);
                 simplify_tile(&[geom], sampler.as_ref(), budget, atlas)
             })
             .collect::<Result<Vec<_>, Error>>()?;
@@ -261,6 +261,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             &tree,
             0,
             true,
+            max_depth,
             &opts,
             &tmp,
             &baked,
@@ -348,6 +349,7 @@ fn emit_and_write(
     node: &SplitNode,
     depth: u32,
     is_root: bool,
+    max_depth: u32,
     opts: &MeshTo3tzOptions,
     tmp: &Path,
     leaves: &[Vec<TilePrimitive>],
@@ -395,6 +397,7 @@ fn emit_and_write(
                     c,
                     depth + 1,
                     false,
+                    max_depth,
                     opts,
                     tmp,
                     leaves,
@@ -408,7 +411,17 @@ fn emit_and_write(
                 kids.push(kid);
             }
             let spatial = spatial_geometric_error(min, max);
-            let ge = measured.max(child_ge).max(spatial).max(MIN_PARENT_GE);
+            let from_leaf = node.subtree_height();
+            let textured = prims.iter().any(|p| p.jpeg.is_some());
+            let texel = if textured {
+                texel_geometric_error(min, max, parent_atlas_size(from_leaf))
+            } else {
+                0.0
+            };
+            // Parent GE must exceed children so Cesium has a reason to refine.
+            // `.max(child)` alone flattens the pyramid (137/945 tiles had equal GE).
+            let local = measured.max(spatial).max(texel).max(MIN_PARENT_GE);
+            let ge = local.max(child_ge * 1.15);
             let mut tile = json!({
                 "boundingVolume": { "box": aabb_to_box(min, max) },
                 "geometricError": ge,
@@ -480,27 +493,32 @@ fn bake_leaves(
     leaves
         .par_iter()
         .map(|(_, node)| {
-            let SplitNode::Leaf { triangle_ids, .. } = node else {
+            let SplitNode::Leaf {
+                triangle_ids,
+                min,
+                max,
+            } = node
+            else {
                 return Err(Error::msg("collect_leaves returned a branch"));
             };
-            bake_ids(scene, triangle_ids, decoded, tile_size, true)
+            let clipped = split::clip_to_cell(scene, triangle_ids, *min, *max);
+            bake_clipped(&clipped, decoded, tile_size)
         })
         .collect()
 }
 
-fn geom_from_ids(scene: &Scene, ids: &[usize]) -> TilePrimitive {
-    let mut remap: HashMap<u32, u32> = HashMap::new();
+fn geom_from_clipped(tris: &[ClippedTri]) -> TilePrimitive {
+    let mut remap: HashMap<[i64; 3], u32> = HashMap::new();
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut indices = Vec::new();
-    for &id in ids {
-        let t = &scene.triangles[id];
-        for v in t.verts {
-            let n = *remap.entry(v).or_insert_with(|| {
-                let vert = &scene.vertices[v as usize];
+    for t in tris {
+        for v in &t.verts {
+            let k = pos_key(v.pos);
+            let n = *remap.entry(k).or_insert_with(|| {
                 let i = positions.len() as u32;
-                positions.push(vert.pos);
-                normals.push(vert.nrm);
+                positions.push(v.pos);
+                normals.push(v.nrm);
                 i
             });
             indices.push(n);
@@ -515,49 +533,41 @@ fn geom_from_ids(scene: &Scene, ids: &[usize]) -> TilePrimitive {
     }
 }
 
-fn bake_ids(
-    scene: &Scene,
-    ids: &[usize],
+fn bake_clipped(
+    tris: &[ClippedTri],
     decoded: &HashMap<u32, RgbaImage>,
     tile_size: u32,
-    crop: bool,
 ) -> Result<Vec<TilePrimitive>, Error> {
-    let mut groups: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
-    for &id in ids {
-        groups
-            .entry(scene.triangles[id].image)
-            .or_default()
-            .push(id);
+    let mut groups: BTreeMap<Option<u32>, Vec<&ClippedTri>> = BTreeMap::new();
+    for t in tris {
+        groups.entry(t.image).or_default().push(t);
     }
     let mut out = Vec::new();
-    for (img, tri) in groups {
+    for (img, group) in groups {
         let rgba = img.and_then(|i| decoded.get(&i));
-        out.push(build_prim(scene, &tri, rgba, tile_size, crop)?);
+        out.push(build_clipped(&group, rgba, tile_size)?);
     }
     Ok(out)
 }
 
-fn build_prim(
-    scene: &Scene,
-    ids: &[usize],
+fn build_clipped(
+    tris: &[&ClippedTri],
     rgba: Option<&RgbaImage>,
     tile_size: u32,
-    crop: bool,
 ) -> Result<TilePrimitive, Error> {
-    let mut remap: HashMap<u32, u32> = HashMap::new();
+    let mut remap: HashMap<([i64; 3], [i64; 2]), u32> = HashMap::new();
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
-    for &id in ids {
-        let t = &scene.triangles[id];
-        for v in t.verts {
-            let n = *remap.entry(v).or_insert_with(|| {
-                let vert = &scene.vertices[v as usize];
+    for t in tris {
+        for v in &t.verts {
+            let k = (pos_key(v.pos), uv_key(v.uv));
+            let n = *remap.entry(k).or_insert_with(|| {
                 let i = positions.len() as u32;
-                positions.push(vert.pos);
-                normals.push(vert.nrm);
-                uvs.push(vert.uv);
+                positions.push(v.pos);
+                normals.push(v.nrm);
+                uvs.push(v.uv);
                 i
             });
             indices.push(n);
@@ -565,13 +575,9 @@ fn build_prim(
     }
 
     let jpeg = if let Some(img) = rgba {
-        if crop {
-            let (jpeg, remapped) = texture::crop_leaf(img, &uvs, &indices, tile_size)?;
-            uvs = remapped;
-            Some(jpeg)
-        } else {
-            Some(texture::downscale_jpeg(img, tile_size)?)
-        }
+        let (jpeg, remapped) = texture::crop_leaf(img, &uvs, &indices, tile_size)?;
+        uvs = remapped;
+        Some(jpeg)
     } else {
         None
     };
@@ -583,4 +589,19 @@ fn build_prim(
         indices,
         jpeg,
     })
+}
+
+fn pos_key(p: [f32; 3]) -> [i64; 3] {
+    [
+        (p[0] as f64 * 1e7).round() as i64,
+        (p[1] as f64 * 1e7).round() as i64,
+        (p[2] as f64 * 1e7).round() as i64,
+    ]
+}
+
+fn uv_key(uv: [f32; 2]) -> [i64; 2] {
+    [
+        (uv[0] as f64 * 1e7).round() as i64,
+        (uv[1] as f64 * 1e7).round() as i64,
+    ]
 }
