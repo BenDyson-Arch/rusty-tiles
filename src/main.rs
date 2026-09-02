@@ -176,8 +176,9 @@ struct MeshArgs {
         default_value_t = tinyowl_tiles::DEFAULT_MAX_BYTES
     )]
     max_bytes: u64,
-    /// Max atlas edge in pixels for leaf and parent tiles (default 1024).
-    /// Leaves keep source resolution up to this cap; 2048 needs ~4× the RAM.
+    /// Max atlas edge in pixels for parent tiles and the *preferred* leaf
+    /// size (default 1024). Leaves that would crush source texels grow up to
+    /// 4096 before downscaling.
     #[arg(
         long = "tileSize",
         visible_alias = "tile-size",

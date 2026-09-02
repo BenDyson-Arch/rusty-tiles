@@ -24,6 +24,9 @@ pub const CHART_GUTTER_PX: u32 = 4;
 /// Parent atlas: how far baked colour is dilated into uncovered texels.
 const PARENT_DILATE_PX: u32 = 16;
 const MIN_ATLAS: u32 = 64;
+/// `--tileSize` is the *preferred* leaf atlas. Charts that would otherwise
+/// downscale grow up to this edge first (one 4096² atlas, not a crushed 1024).
+pub const MAX_LEAF_ATLAS: u32 = 4096;
 
 // ---------------------------------------------------------------------------
 // Source image access
@@ -199,38 +202,39 @@ pub fn plan_leaf_atlas(
         });
     }
 
-    // Charts per group: union-find over vertex indices through triangles.
+    // Charts: bin triangles by a UV-grid cell. Mesh connectivity on a
+    // photogrammetry island yields one AABB that can be thousands of px —
+    // mostly *other* photos' pixels on an 8K atlas — and packing that AABB
+    // with the rest of the leaf crushes the texels the triangles actually
+    // sample. Adjacent cells whose rects overlap still merge below.
+    const UV_CELL: i64 = 128;
     let mut charts: Vec<Chart> = Vec::new();
-    let mut chart_of: Vec<Vec<u32>> = Vec::with_capacity(textured.len());
+    let mut tri_chart: Vec<Vec<u32>> = Vec::with_capacity(textured.len());
     for (img, prim) in &textured {
         let (w, h) = image_dims[*img as usize];
-        let n = prim.positions.len();
-        let mut uf = UnionFind::new(n);
+        let mut cell_chart: HashMap<(i64, i64), u32> = HashMap::new();
+        let mut per_tri = Vec::with_capacity(prim.indices.len() / 3);
         for t in prim.indices.chunks_exact(3) {
-            uf.union(t[0] as usize, t[1] as usize);
-            uf.union(t[0] as usize, t[2] as usize);
-        }
-        let mut comp_chart: HashMap<usize, u32> = HashMap::new();
-        let mut per_vertex = vec![u32::MAX; n];
-        let mut used = vec![false; n];
-        for &vi in &prim.indices {
-            used[vi as usize] = true;
-        }
-        for vi in 0..n {
-            if !used[vi] {
-                continue;
-            }
-            let root = uf.find(vi);
-            let uv = prim.uvs[vi];
-            let px = (uv[0].clamp(0.0, 1.0) * w as f32) as f64;
-            let py = (uv[1].clamp(0.0, 1.0) * h as f32) as f64;
-            let ci = *comp_chart.entry(root).or_insert_with(|| {
+            let uv = [
+                prim.uvs[t[0] as usize],
+                prim.uvs[t[1] as usize],
+                prim.uvs[t[2] as usize],
+            ];
+            let px = |u: f32, s: u32| (u.clamp(0.0, 1.0) * s as f32) as f64;
+            let pts = [
+                (px(uv[0][0], w), px(uv[0][1], h)),
+                (px(uv[1][0], w), px(uv[1][1], h)),
+                (px(uv[2][0], w), px(uv[2][1], h)),
+            ];
+            let cu = ((pts[0].0 + pts[1].0 + pts[2].0) / 3.0).floor() as i64 / UV_CELL;
+            let cv = ((pts[0].1 + pts[1].1 + pts[2].1) / 3.0).floor() as i64 / UV_CELL;
+            let ci = *cell_chart.entry((cu, cv)).or_insert_with(|| {
                 charts.push(Chart {
                     image: *img,
-                    x0: px.floor() as i64,
-                    y0: py.floor() as i64,
-                    x1: px.ceil() as i64,
-                    y1: py.ceil() as i64,
+                    x0: i64::MAX,
+                    y0: i64::MAX,
+                    x1: i64::MIN,
+                    y1: i64::MIN,
                     pre: 1.0,
                     area_m2: 0.0,
                     texels: 0.0,
@@ -238,39 +242,25 @@ pub fn plan_leaf_atlas(
                 (charts.len() - 1) as u32
             });
             let c = &mut charts[ci as usize];
-            c.x0 = c.x0.min(px.floor() as i64);
-            c.y0 = c.y0.min(py.floor() as i64);
-            c.x1 = c.x1.max(px.ceil() as i64);
-            c.y1 = c.y1.max(py.ceil() as i64);
-            per_vertex[vi] = ci;
-        }
-        for t in prim.indices.chunks_exact(3) {
-            let ci = per_vertex[t[0] as usize];
-            if ci == u32::MAX {
-                continue;
+            for (u, v) in pts {
+                c.x0 = c.x0.min(u.floor() as i64);
+                c.y0 = c.y0.min(v.floor() as i64);
+                c.x1 = c.x1.max(u.ceil() as i64);
+                c.y1 = c.y1.max(v.ceil() as i64);
             }
-            let p = [
+            let pos = [
                 prim.positions[t[0] as usize],
                 prim.positions[t[1] as usize],
                 prim.positions[t[2] as usize],
             ];
-            let uv = [
-                prim.uvs[t[0] as usize],
-                prim.uvs[t[1] as usize],
-                prim.uvs[t[2] as usize],
-            ];
-            let c = &mut charts[ci as usize];
-            c.area_m2 += grid::face_normal_area(p[0], p[1], p[2]).1 as f64;
-            let (ua, ub, uc) = (
-                [uv[0][0] * w as f32, uv[0][1] * h as f32],
-                [uv[1][0] * w as f32, uv[1][1] * h as f32],
-                [uv[2][0] * w as f32, uv[2][1] * h as f32],
-            );
+            c.area_m2 += grid::face_normal_area(pos[0], pos[1], pos[2]).1 as f64;
             c.texels += 0.5
-                * ((ub[0] - ua[0]) * (uc[1] - ua[1]) - (uc[0] - ua[0]) * (ub[1] - ua[1])).abs()
-                    as f64;
+                * ((pts[1].0 - pts[0].0) * (pts[2].1 - pts[0].1)
+                    - (pts[2].0 - pts[0].0) * (pts[1].1 - pts[0].1))
+                    .abs();
+            per_tri.push(ci);
         }
-        chart_of.push(per_vertex);
+        tri_chart.push(per_tri);
     }
     for c in &mut charts {
         c.x1 = c.x1.max(c.x0 + 1);
@@ -278,8 +268,11 @@ pub fn plan_leaf_atlas(
     }
 
     // Merge overlapping rects on the same image when the union wastes little.
-    let remap = merge_overlapping(&mut charts);
-    for pv in &mut chart_of {
+    // Cap the union so a C-shaped island cannot become an 8K AABB that then
+    // forces the whole leaf to downscale.
+    let max_chart = tile_size.max(MAX_LEAF_ATLAS) as i64;
+    let remap = merge_overlapping(&mut charts, max_chart);
+    for pv in &mut tri_chart {
         for c in pv.iter_mut() {
             if *c != u32::MAX {
                 *c = remap[*c as usize];
@@ -312,8 +305,9 @@ pub fn plan_leaf_atlas(
     let area1 = padded_area(1.0);
     // Candidate atlases in ascending area: square, then 2:1, then the next
     // square… A 2:1 atlas halves the dead space for leaves that need just
-    // over half a square.
-    let max_edge = tile_size.max(MIN_ATLAS);
+    // over half a square. Prefer `--tileSize`, then grow toward
+    // MAX_LEAF_ATLAS before backing scale off.
+    let max_edge = tile_size.max(MIN_ATLAS).max(MAX_LEAF_ATLAS);
     let mut sizes: Vec<(u32, u32)> = Vec::new();
     let mut e = MIN_ATLAS;
     loop {
@@ -355,6 +349,21 @@ pub fn plan_leaf_atlas(
             scale = implied.min(scale * 0.96);
         }
     }
+    // Grow back toward source res while it still packs: shrink-to-fit can
+    // leave tens of percent empty that should have been extra texels.
+    if let Some(p0) = packed {
+        packed = Some(p0);
+        while scale < 0.999 {
+            let next = (scale * 1.04).min(1.0);
+            match pack_charts(&charts, &live, next, atlas) {
+                Some(p) => {
+                    scale = next;
+                    packed = Some(p);
+                }
+                None => break,
+            }
+        }
+    }
     let cap = (atlas.0 * atlas.1) as f32;
     let Some((rects, gutters)) = packed else {
         return Err(Error::msg("leaf charts do not fit the atlas"));
@@ -393,34 +402,40 @@ pub fn plan_leaf_atlas(
     let mut merged = TilePrimitive::default();
     let mut any_n = false;
     for (gi, (_, prim)) in textured.iter().enumerate() {
-        let base = merged.positions.len() as u32;
         let has_n = prim.normals.len() == prim.positions.len();
         any_n |= has_n;
-        for (vi, (&pos, &uv)) in prim.positions.iter().zip(&prim.uvs).enumerate() {
-            merged.positions.push(pos);
-            merged.normals.push(if has_n {
-                prim.normals[vi]
-            } else {
-                [0.0, 1.0, 0.0]
-            });
-            let ci = chart_of[gi][vi];
-            let out = if ci == u32::MAX {
-                [0.0, 0.0]
-            } else {
-                let (k, src) = chart_dst[&ci];
-                let d = rects[k];
-                let fu = ((uv[0].clamp(0.0, 1.0) - src[0]) / (src[2] - src[0]).max(1e-9))
-                    .clamp(0.0, 1.0);
-                let fv = ((uv[1].clamp(0.0, 1.0) - src[1]) / (src[3] - src[1]).max(1e-9))
-                    .clamp(0.0, 1.0);
-                [
-                    (d[0] as f32 + fu * d[2] as f32) / aw,
-                    (d[1] as f32 + fv * d[3] as f32) / ah,
-                ]
+        let mut weld: HashMap<(u32, u32), u32> = HashMap::new();
+        for (ti, t) in prim.indices.chunks_exact(3).enumerate() {
+            let ci = tri_chart[gi][ti];
+            let Some(&(k, src)) = chart_dst.get(&ci) else {
+                continue;
             };
-            merged.uvs.push(out);
+            let d = rects[k];
+            let mut ids = [0u32; 3];
+            for e in 0..3 {
+                let vi = t[e];
+                ids[e] = *weld.entry((ci, vi)).or_insert_with(|| {
+                    let uv = prim.uvs[vi as usize];
+                    let fu = ((uv[0].clamp(0.0, 1.0) - src[0]) / (src[2] - src[0]).max(1e-9))
+                        .clamp(0.0, 1.0);
+                    let fv = ((uv[1].clamp(0.0, 1.0) - src[1]) / (src[3] - src[1]).max(1e-9))
+                        .clamp(0.0, 1.0);
+                    let id = merged.positions.len() as u32;
+                    merged.positions.push(prim.positions[vi as usize]);
+                    merged.normals.push(if has_n {
+                        prim.normals[vi as usize]
+                    } else {
+                        [0.0, 1.0, 0.0]
+                    });
+                    merged.uvs.push([
+                        (d[0] as f32 + fu * d[2] as f32) / aw,
+                        (d[1] as f32 + fv * d[3] as f32) / ah,
+                    ]);
+                    id
+                });
+            }
+            merged.indices.extend_from_slice(&ids);
         }
-        merged.indices.extend(prim.indices.iter().map(|i| i + base));
     }
     if !any_n {
         merged.normals.clear();
@@ -456,42 +471,15 @@ fn concat_prims(prims: &[TilePrimitive]) -> TilePrimitive {
     out
 }
 
-struct UnionFind {
-    parent: Vec<u32>,
-}
-
-impl UnionFind {
-    fn new(n: usize) -> Self {
-        Self {
-            parent: (0..n as u32).collect(),
-        }
-    }
-    fn find(&mut self, mut i: usize) -> usize {
-        while self.parent[i] as usize != i {
-            let p = self.parent[i] as usize;
-            self.parent[i] = self.parent[p];
-            i = p;
-        }
-        i
-    }
-    fn union(&mut self, a: usize, b: usize) {
-        let ra = self.find(a);
-        let rb = self.find(b);
-        if ra != rb {
-            self.parent[ra.max(rb)] = ra.min(rb) as u32;
-        }
-    }
-}
-
 /// Merge intersecting rects on the same image while the union AABB does not
 /// grow more than 25 % over the pair. Returns old chart → surviving chart.
-fn merge_overlapping(charts: &mut [Chart]) -> Vec<u32> {
+fn merge_overlapping(charts: &mut [Chart], max_edge: i64) -> Vec<u32> {
     let n = charts.len();
     let mut alive: Vec<bool> = vec![true; n];
     let mut remap: Vec<u32> = (0..n as u32).collect();
     let mut changed = true;
     let mut rounds = 0;
-    while changed && rounds < 16 {
+    while changed && rounds < 128 {
         changed = false;
         rounds += 1;
         for i in 0..n {
@@ -503,18 +491,30 @@ fn merge_overlapping(charts: &mut [Chart]) -> Vec<u32> {
                     continue;
                 }
                 let (a, b) = (&charts[i], &charts[j]);
-                let ix = a.x0.max(b.x0)..a.x1.min(b.x1);
-                let iy = a.y0.max(b.y0)..a.y1.min(b.y1);
-                if ix.is_empty() || iy.is_empty() {
+                // Overlap *or* touch: UV-grid cells abut and would otherwise
+                // stay 128 px islands with a gutter between them.
+                let ix0 = a.x0.max(b.x0);
+                let ix1 = a.x1.min(b.x1);
+                let iy0 = a.y0.max(b.y0);
+                let iy1 = a.y1.min(b.y1);
+                if ix0 > ix1 + 1 || iy0 > iy1 + 1 {
                     continue;
                 }
-                let inter = (ix.end - ix.start) * (iy.end - iy.start);
+                let inter = (ix1 - ix0).max(0) * (iy1 - iy0).max(0);
                 let area_a = (a.x1 - a.x0) * (a.y1 - a.y0);
                 let area_b = (b.x1 - b.x0) * (b.y1 - b.y0);
                 let ux0 = a.x0.min(b.x0);
                 let uy0 = a.y0.min(b.y0);
                 let ux1 = a.x1.max(b.x1);
                 let uy1 = a.y1.max(b.y1);
+                // Identical / contained rects may already exceed max_edge
+                // (one triangle spanning an 8K photo). Still merge those;
+                // only refuse *growth* past the cap.
+                let grew = ux1 - ux0 > (a.x1 - a.x0).max(b.x1 - b.x0)
+                    || uy1 - uy0 > (a.y1 - a.y0).max(b.y1 - b.y0);
+                if grew && (ux1 - ux0 > max_edge || uy1 - uy0 > max_edge) {
+                    continue;
+                }
                 let union_area = (ux1 - ux0) * (uy1 - uy0);
                 let covered = area_a + area_b - inter;
                 if union_area as f64 <= covered as f64 * 1.25 {
@@ -1654,6 +1654,43 @@ mod tests {
     }
 
     #[test]
+    fn leaf_plan_merges_touching_uv_cells() {
+        let mut prim = TilePrimitive::default();
+        let n = 4u32;
+        for y in 0..=n {
+            for x in 0..=n {
+                prim.positions.push([x as f32, y as f32, 0.0]);
+                prim.uvs
+                    .push([x as f32 / n as f32 * 0.16, y as f32 / n as f32 * 0.16]);
+            }
+        }
+        let w = n + 1;
+        for y in 0..n {
+            for x in 0..n {
+                let i = y * w + x;
+                prim.indices
+                    .extend_from_slice(&[i, i + 1, i + w + 1, i, i + w + 1, i + w]);
+            }
+        }
+        let plan = plan_leaf_atlas(
+            vec![LeafGroup {
+                image: Some(0),
+                prim,
+            }],
+            &[(1024, 1024)],
+            1024,
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(
+            plan.blits.len(),
+            1,
+            "touching 128 px UV cells must merge, got {}",
+            plan.blits.len()
+        );
+    }
+
+    #[test]
     fn leaf_plan_downscales_when_over_cap() {
         let prim = TilePrimitive {
             positions: vec![
@@ -1677,10 +1714,53 @@ mod tests {
             0.0,
         )
         .unwrap();
-        assert_eq!(plan.atlas_wh, (512, 512));
         assert!(
-            plan.scale < 0.07,
-            "8K into 512 needs ~1/16, got {}",
+            plan.atlas_wh.0 <= MAX_LEAF_ATLAS && plan.atlas_wh.1 <= MAX_LEAF_ATLAS,
+            "8K full-bleed grows to MAX_LEAF_ATLAS then downscales, got {:?}",
+            plan.atlas_wh
+        );
+        assert!(
+            plan.scale < 0.55,
+            "8K into 4096 needs ~1/2, got {}",
+            plan.scale
+        );
+        assert!(
+            plan.scale > 0.4,
+            "should not crush below the 4096 cap, got {}",
+            plan.scale
+        );
+    }
+
+    #[test]
+    fn leaf_plan_grows_atlas_before_downscale() {
+        // A 1024² source island into a 512 preference: grow to 1024, keep
+        // source scale, rather than crushing into 512.
+        let prim = TilePrimitive {
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            normals: Vec::new(),
+            uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            jpeg: None,
+        };
+        let plan = plan_leaf_atlas(
+            vec![LeafGroup {
+                image: Some(0),
+                prim,
+            }],
+            &[(1024, 1024)],
+            512,
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(plan.atlas_wh.0, 2048);
+        assert!(
+            (plan.scale - 1.0).abs() < 1e-6,
+            "source resolution kept by growing atlas, got {}",
             plan.scale
         );
     }

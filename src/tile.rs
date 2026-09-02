@@ -38,9 +38,13 @@ pub const DEFAULT_MAX_TRIANGLES: usize = 20_000;
 pub const DEFAULT_MAX_BYTES: u64 = 204_800;
 /// Max atlas edge for leaves and parents.
 pub const DEFAULT_TILE_SIZE: u32 = 1024;
-/// GE = this × metres-per-texel: refine before a parent texel spans 2 px at
-/// Cesium's default `maximumScreenSpaceError` of 16… at the 4 this app uses.
-const TEXEL_GE_FACTOR: f64 = 2.0;
+/// GE = this × metres-per-texel. Cesium SSE is
+/// `GE * height / (distance * 2 tan(fov/2))` and refines when SSE >
+/// `maximumScreenSpaceError` (16 in stock Cesium, 4 in the hub). A factor of
+/// 16 means one parent texel ≈ one pixel at Cesium's default — factor 2 was
+/// tuned for the hub and left Cesium stuck on muddy parents until centimetres
+/// from the wall.
+const TEXEL_GE_FACTOR: f64 = 16.0;
 /// Max source images decoded at once, and the RGB bytes they may occupy
 /// together (an 8K JPEG is ~200 MB decoded).
 const DECODE_CHUNK_CAP: usize = 8;
@@ -322,10 +326,14 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             .filter(|w| w.plan.textured.is_some())
             .map(|w| w.plan.fill)
             .collect();
+        let overflow_atlases = works
+            .iter()
+            .filter(|w| w.plan.atlas_wh.0 > opts.tile_size || w.plan.atlas_wh.1 > opts.tile_size)
+            .count();
         log.tick(
             "plan-leaves",
             format!(
-                "tris={planned_tris} charts={} tiny={} scale(min/med)={:.2}/{:.2} fill(med)={:.2} atlas(max)={} halfAtlases={half_atlases}",
+                "tris={planned_tris} charts={} tiny={} scale(min/med)={:.2}/{:.2} fill(med)={:.2} atlas(max)={} halfAtlases={half_atlases} overflowAtlases={overflow_atlases}",
                 works.iter().map(|w| w.plan.blits.len()).sum::<usize>(),
                 works.iter().map(|w| w.plan.tiny_charts).sum::<usize>(),
                 scales.iter().cloned().fold(1.0f32, f32::min),
@@ -713,6 +721,12 @@ fn build_clipped(tris: &[&ClippedTri]) -> TilePrimitive {
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
     for t in tris {
+        let a = t.verts[0].pos;
+        let b = t.verts[1].pos;
+        let c = t.verts[2].pos;
+        if sliver_area2(a, b, c) {
+            continue;
+        }
         for v in &t.verts {
             let k = (pos_key(v.pos), uv_key(v.uv));
             let n = *remap.entry(k).or_insert_with(|| {
@@ -766,10 +780,14 @@ fn finalize_leaf(w: &mut LeafWork, nodes: &[Node], tmp: &Path, meshopt: bool) ->
             let _ = fs::remove_file(&path);
         }
         t.jpeg = Some(texture::finish_leaf_atlas(atlas, &w.plan.blits)?);
-        prims.push(t);
+        if t.indices.len() >= 3 {
+            prims.push(t);
+        }
     }
     if let Some(u) = w.plan.untextured.take() {
-        prims.push(u);
+        if u.indices.len() >= 3 {
+            prims.push(u);
+        }
     }
     write_tile_glb(tmp, &nodes[w.node].uri, &prims, meshopt)?;
     w.out = Some(prims);
@@ -802,8 +820,9 @@ fn median_f32(xs: &[f32]) -> f32 {
 
 /// Tile JSON + this node's GE. Parent GE = max(measured two-sided error,
 /// texel term, child GE + ε) so REPLACE always has a reason to refine and the
-/// pyramid never inverts. Boxes are tight content boxes (parent = union of
-/// children + own proxy), which keeps SSE honest on hollow scenes.
+/// pyramid never inverts. Boxes are the k-d cells (expanded to cover content),
+/// not skin-tight OBBs: Cesium's distance-to-volume is 0 inside the cell, so
+/// a camera in a cave actually refines.
 fn emit(
     nodes: &[Node],
     baked: &[Option<Baked>],
@@ -813,13 +832,13 @@ fn emit(
 ) -> (Value, f64) {
     let node = &nodes[ni];
     let b = baked[ni].as_ref();
-    let obb = b
+    let content = b
         .map(|b| b.obb)
         .filter(|o| o.center[0].is_finite())
         .unwrap_or_else(|| Obb::from_aabb(node.cell_min, node.cell_max));
-    // Degenerate (flat) boxes still need a hair of thickness for Cesium.
+    let obb = Obb::for_tile(node.cell_min, node.cell_max, content);
     let mut tile = json!({
-        "boundingVolume": { "box": obb.padded_flat(5e-4).to_box() },
+        "boundingVolume": { "box": obb.to_box() },
     });
     let ge = if node.leaf.is_some() {
         tile["geometricError"] = json!(0.0);
@@ -833,7 +852,16 @@ fn emit(
             kids.push(kid);
         }
         let (measured, texel) = b.map(|b| (b.error_m, b.texel_m)).unwrap_or((0.0, 0.0));
-        let local = measured.max(texel * TEXEL_GE_FACTOR).max(MIN_PARENT_GE);
+        // Average texel size can be optimistic (dense packed charts); also
+        // take the atlas stretched across the content's longest edge.
+        let span = if texel > 0.0 {
+            let longest = 2.0 * content.half.iter().fold(0.0f64, |a, &h| a.max(h));
+            let atlas = opts.tile_size.max(1) as f64;
+            texel.max(longest / atlas)
+        } else {
+            texel
+        };
+        let local = measured.max(span * TEXEL_GE_FACTOR).max(MIN_PARENT_GE);
         let ge = local.max(child_ge * 1.05 + MIN_PARENT_GE);
         tile["geometricError"] = json!(ge);
         tile["children"] = json!(kids);
@@ -886,4 +914,17 @@ fn uv_key(uv: [f32; 2]) -> [i64; 2] {
         (uv[0] as f64 * 1e7).round() as i64,
         (uv[1] as f64 * 1e7).round() as i64,
     ]
+}
+
+/// Squared area of the cross product. Drop clip slivers that survive
+/// AREA2_EPS then bloom into white shards after i16 quantization.
+fn sliver_area2(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> bool {
+    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let cr = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    cr[0] * cr[0] + cr[1] * cr[1] + cr[2] * cr[2] < 1e-16
 }

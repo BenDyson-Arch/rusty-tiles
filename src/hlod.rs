@@ -300,10 +300,12 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
 const SIMPLIFY_ERRORS: [f32; 4] = [0.01, 0.03, 0.1, 1.0];
 
 fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
+    // Prune last: a cave wall is often several welded islands, and deleting
+    // one leaves a hole (white slivers / light leaks) until children load.
     let attempts: [SimplifyOptions; 3] = [
-        SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
-        SimplifyOptions::Prune | SimplifyOptions::Permissive,
+        SimplifyOptions::LockBorder | SimplifyOptions::Permissive,
         SimplifyOptions::Permissive,
+        SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
     ];
     let mut best: Option<Vec<u32>> = None;
     for &err in &SIMPLIFY_ERRORS {

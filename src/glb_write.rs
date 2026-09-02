@@ -315,28 +315,14 @@ fn build_primitive(
         };
         attach_webp_extension(root, &mut tex, image, bytes);
         let tex = root.push(tex);
-        let mut pbr = material::PbrMetallicRoughness::default();
-        pbr.base_color_texture = Some(texture::Info {
+        Some(root.push(photo_material(photo_pbr(Some(texture::Info {
             extensions: Default::default(),
             extras: Default::default(),
             index: tex,
             tex_coord: 0,
-        });
-        Some(root.push(material::Material {
-            alpha_cutoff: None,
-            alpha_mode: Valid(material::AlphaMode::Opaque),
-            double_sided: false,
-            extensions: Default::default(),
-            extras: Default::default(),
-            name: None,
-            pbr_metallic_roughness: pbr,
-            normal_texture: None,
-            occlusion_texture: None,
-            emissive_texture: None,
-            emissive_factor: material::EmissiveFactor([0.0, 0.0, 0.0]),
-        }))
+        })))))
     } else {
-        None
+        Some(root.push(photo_material(untextured_pbr())))
     };
 
     Ok(mesh::Primitive {
@@ -353,6 +339,45 @@ fn build_primitive(
 fn pad4(buf: &mut Vec<u8>) {
     while buf.len() % 4 != 0 {
         buf.push(0);
+    }
+}
+
+/// Photogrammetry albedo: dielectric, fully rough, two-sided (cave interiors).
+pub(crate) fn photo_pbr(
+    base_color_texture: Option<texture::Info>,
+) -> material::PbrMetallicRoughness {
+    material::PbrMetallicRoughness {
+        base_color_factor: material::PbrBaseColorFactor([1.0, 1.0, 1.0, 1.0]),
+        base_color_texture,
+        metallic_factor: material::StrengthFactor(0.0),
+        roughness_factor: material::StrengthFactor(1.0),
+        ..Default::default()
+    }
+}
+
+/// Untextured clip leftover: dark rock, never the glTF default white metal.
+pub(crate) fn untextured_pbr() -> material::PbrMetallicRoughness {
+    material::PbrMetallicRoughness {
+        base_color_factor: material::PbrBaseColorFactor([0.22, 0.20, 0.18, 1.0]),
+        metallic_factor: material::StrengthFactor(0.0),
+        roughness_factor: material::StrengthFactor(1.0),
+        ..Default::default()
+    }
+}
+
+pub(crate) fn photo_material(pbr: material::PbrMetallicRoughness) -> material::Material {
+    material::Material {
+        alpha_cutoff: None,
+        alpha_mode: Valid(material::AlphaMode::Opaque),
+        double_sided: true,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: None,
+        pbr_metallic_roughness: pbr,
+        normal_texture: None,
+        occlusion_texture: None,
+        emissive_texture: None,
+        emissive_factor: material::EmissiveFactor([0.0, 0.0, 0.0]),
     }
 }
 

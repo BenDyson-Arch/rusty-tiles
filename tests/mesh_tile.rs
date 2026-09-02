@@ -77,8 +77,8 @@ fn tile_obb(tile: &Value) -> tinyowl_tiles::bbox::Obb {
     tinyowl_tiles::bbox::Obb::from_box(boxv)
 }
 
-/// Every child box (possibly oriented) must sit inside its parent's box.
-/// Sibling boxes may overlap once oriented: the geometry is still disjoint.
+/// Every child box must sit inside its parent's box (k-d cells nest;
+/// content that pokes out is absorbed into both).
 fn assert_child_boxes_nested(tile: &Value) {
     let Some(kids) = tile["children"].as_array() else {
         return;
@@ -379,6 +379,13 @@ fn texture_crop_shrinks_shared_atlas() {
 
     let ts = tileset_json(&tz);
     assert_eq!(ts["root"]["refine"], "REPLACE");
+    let atlas_root_ge = ts["root"]["geometricError"].as_f64().unwrap();
+    // ~50 m of atlas across a 256 px parent → ≥ a few metres of texel GE so
+    // Cesium (MSE 16) will refine instead of keeping the muddy parent.
+    assert!(
+        atlas_root_ge > 1.0,
+        "textured parent GE {atlas_root_ge} too small to refine in Cesium"
+    );
     let mut uris = Vec::new();
     collect_uris(&ts["root"], &mut uris);
     assert!(uris.len() >= 2, "expected split, got {uris:?}");

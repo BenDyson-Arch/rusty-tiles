@@ -2,8 +2,8 @@
 //!
 //! The node *is* the cell (Z-up). Siblings share a face and do not overlap.
 //! Leaves keep source vertices except at the cut, where new verts are snapped
-//! onto the shared plane in f64. `boundingVolume.box` is the tight content
-//! box computed later, not the cell.
+//! onto the shared plane in f64. `boundingVolume.box` is the k-d cell
+//! (expanded to cover content), so a camera in empty space still refines.
 //!
 //! The binary k-d tree is folded bottom-up into the emitted tree: a node
 //! absorbs its children's children while its fan-out stays ≤ MAX_CHILDREN,

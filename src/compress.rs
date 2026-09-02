@@ -10,7 +10,9 @@ use meshopt::optimize::{optimize_vertex_cache, optimize_vertex_fetch};
 use serde_json::{json, Map, Value};
 
 use crate::error::Error;
-use crate::glb_write::{attach_webp_extension, image_mime, TilePrimitive};
+use crate::glb_write::{
+    attach_webp_extension, image_mime, photo_material, photo_pbr, untextured_pbr, TilePrimitive,
+};
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
@@ -372,7 +374,7 @@ fn build_compressed_primitive(
     let material = if let Some(jpeg) = &p.jpeg {
         Some(push_albedo(root, bin, data_buf, jpeg)?)
     } else {
-        None
+        Some(root.push(photo_material(untextured_pbr())))
     };
 
     Ok(mesh::Primitive {
@@ -533,28 +535,12 @@ fn push_albedo(
     };
     attach_webp_extension(root, &mut tex, image, jpeg);
     let tex = root.push(tex);
-    let pbr = material::PbrMetallicRoughness {
-        base_color_texture: Some(texture::Info {
-            extensions: Default::default(),
-            extras: Default::default(),
-            index: tex,
-            tex_coord: 0,
-        }),
-        ..Default::default()
-    };
-    Ok(root.push(material::Material {
-        alpha_cutoff: None,
-        alpha_mode: Valid(material::AlphaMode::Opaque),
-        double_sided: false,
+    Ok(root.push(photo_material(photo_pbr(Some(texture::Info {
         extensions: Default::default(),
         extras: Default::default(),
-        name: None,
-        pbr_metallic_roughness: pbr,
-        normal_texture: None,
-        occlusion_texture: None,
-        emissive_texture: None,
-        emissive_factor: material::EmissiveFactor([0.0, 0.0, 0.0]),
-    }))
+        index: tex,
+        tex_coord: 0,
+    })))))
 }
 
 fn ext_map(v: Value) -> Map<String, Value> {

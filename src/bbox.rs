@@ -399,12 +399,45 @@ impl Obb {
         (0..3).all(|k| dot(d, self.axes[k]).abs() <= self.half[k] + eps)
     }
 
+    pub fn aabb(&self) -> ([f64; 3], [f64; 3]) {
+        box_to_aabb(self.to_box())
+    }
+
+    /// Spatial tile volume: the k-d cell, expanded to cover content that
+    /// pokes out (clip snap, quantization, simplify). Axis-aligned so a
+    /// camera in the empty half of a cave cell is *inside* the volume and
+    /// Cesium SSE goes to infinity (always refine). Tight content OBBs leave
+    /// that camera in a gap, so parents never refine and the view stays muddy.
+    pub fn for_tile(cell_min: [f64; 3], cell_max: [f64; 3], content: Obb) -> Obb {
+        let (cmin, cmax) = content.aabb();
+        let min = [
+            cell_min[0].min(cmin[0]),
+            cell_min[1].min(cmin[1]),
+            cell_min[2].min(cmin[2]),
+        ];
+        let max = [
+            cell_max[0].max(cmax[0]),
+            cell_max[1].max(cmax[1]),
+            cell_max[2].max(cmax[2]),
+        ];
+        // i16 meshopt can push a vert out by ~extent/32k; 1 mm covers that
+        // and keeps Cesium's plane tests away from a zero-thickness slab.
+        Obb::from_aabb(min, max).padded_flat(5e-4).expanded(1e-3)
+    }
+
     /// Cesium needs a hair of thickness on every axis.
     pub fn padded_flat(mut self, min_half: f64) -> Obb {
         for h in &mut self.half {
             if *h < min_half {
                 *h = min_half;
             }
+        }
+        self
+    }
+
+    pub fn expanded(mut self, pad: f64) -> Obb {
+        for h in &mut self.half {
+            *h += pad;
         }
         self
     }
@@ -559,6 +592,24 @@ mod obb_tests {
         let parent = Obb::fit(&pts).unwrap();
         for c in child.corners() {
             assert!(parent.contains(c, 1e-9));
+        }
+    }
+
+    #[test]
+    fn tile_box_is_the_cell_and_covers_content() {
+        let cell_min = [0.0, 0.0, 0.0];
+        let cell_max = [10.0, 4.0, 8.0];
+        let content = Obb::from_aabb([1.0, 1.0, 7.5], [2.0, 2.0, 8.2]); // pokes past z=8
+        let tile = Obb::for_tile(cell_min, cell_max, content);
+        assert_eq!(tile.axes, AXIS_ALIGNED);
+        // Cell empty space is inside (camera in the cave).
+        assert!(tile.contains([9.0, 3.0, 1.0], 0.0));
+        // Content that poked out of the cell is still inside.
+        assert!(tile.contains([1.5, 1.5, 8.2], 1e-6));
+        // Nested child cell stays inside.
+        let child = Obb::for_tile([0.0, 0.0, 0.0], [5.0, 4.0, 8.0], content);
+        for c in child.corners() {
+            assert!(tile.contains(c, 1e-6), "{c:?} outside {tile:?}");
         }
     }
 }
