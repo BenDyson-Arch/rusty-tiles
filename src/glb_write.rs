@@ -385,12 +385,12 @@ pub(crate) fn attach_webp_extension(
     tex.extensions = Some(gltf_json::extensions::texture::Texture { others });
 }
 
-/// No mipmaps + clamp: photogrammetry atlas crops have dead space between UV
-/// islands; default mipmap filtering smears that junk into the mesh as wobble.
+/// Trilinear + clamp. Atlases are gutter-padded with dead space filled by the
+/// mean chart colour, so mips no longer smear grey into the mesh.
 fn push_clamp_linear_sampler(root: &mut Root) -> Index<texture::Sampler> {
     root.push(texture::Sampler {
         mag_filter: Some(Valid(texture::MagFilter::Linear)),
-        min_filter: Some(Valid(texture::MinFilter::Linear)),
+        min_filter: Some(Valid(texture::MinFilter::LinearMipmapLinear)),
         name: None,
         wrap_s: Valid(texture::WrappingMode::ClampToEdge),
         wrap_t: Valid(texture::WrappingMode::ClampToEdge),

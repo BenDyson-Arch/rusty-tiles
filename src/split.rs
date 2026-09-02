@@ -1,20 +1,58 @@
 //! Spatial k-d: partition the scene AABB, clip triangles to each cell.
 //!
-//! The node *is* the cell (Z-up, same frame as `boundingVolume.box`). Siblings
-//! share a face and do not overlap. Leaves keep source vertices except at the
-//! cut, where new verts are snapped onto the shared plane in f64.
+//! The node *is* the cell (Z-up). Siblings share a face and do not overlap.
+//! Leaves keep source vertices except at the cut, where new verts are snapped
+//! onto the shared plane in f64. `boundingVolume.box` is the tight content
+//! box computed later, not the cell.
+//!
+//! The binary k-d tree is folded bottom-up into the emitted tree: a node
+//! absorbs its children's children while its fan-out stays ≤ MAX_CHILDREN,
+//! so REPLACE nodes are as full as the (unbalanced) tree allows and a
+//! 20-deep binary tree becomes a ~5-deep tileset.
 
 use crate::bbox::{aabb_zup_to_yup, y_up_to_z_up};
 use crate::mesh::Scene;
 
-pub const MAX_SPLIT_DEPTH: u32 = 20;
+pub const MAX_SPLIT_DEPTH: u32 = 24;
+/// Fan-out cap of the emitted tree.
+pub const MAX_CHILDREN: usize = 8;
 const PARALLEL_AFTER: usize = 32_768;
 /// Metres: treat a vertex this close to a clip plane as on it.
 const SNAP: f64 = 1e-7;
 const AREA2_EPS: f64 = 1e-24;
+/// Midpoint split is kept only if the lighter side holds at least this share.
+const BALANCE_MIN: f64 = 0.25;
 
-pub struct SplitOpts {
+pub struct SplitOpts<'a> {
     pub max_triangles: usize,
+    /// Source texels each triangle covers (density-capped); empty = ignore.
+    pub tri_texels: &'a [f32],
+    /// A leaf must fit both budgets. Texture-dense patches (rock art shot
+    /// close up) therefore get small leaves instead of a crushed atlas.
+    pub max_texels: f64,
+}
+
+impl Default for SplitOpts<'static> {
+    fn default() -> Self {
+        SplitOpts {
+            max_triangles: 20_000,
+            tri_texels: &[],
+            max_texels: f64::INFINITY,
+        }
+    }
+}
+
+impl SplitOpts<'_> {
+    fn texels(&self, ids: &[usize]) -> f64 {
+        if self.tri_texels.is_empty() {
+            return 0.0;
+        }
+        ids.iter().map(|&id| self.tri_texels[id] as f64).sum()
+    }
+
+    fn fits(&self, ids: &[usize]) -> bool {
+        ids.len() <= self.max_triangles && self.texels(ids) <= self.max_texels
+    }
 }
 
 pub enum SplitNode {
@@ -50,6 +88,101 @@ impl SplitNode {
             }
         }
     }
+
+    pub fn leaf_count(&self) -> usize {
+        match self {
+            SplitNode::Leaf { .. } => 1,
+            SplitNode::Branch { children, .. } => children.iter().map(SplitNode::leaf_count).sum(),
+        }
+    }
+
+    fn triangle_total(&self) -> usize {
+        match self {
+            SplitNode::Leaf { triangle_ids, .. } => triangle_ids.len(),
+            SplitNode::Branch { children, .. } => {
+                children.iter().map(SplitNode::triangle_total).sum()
+            }
+        }
+    }
+}
+
+/// Split, merge micro-leaves, and fold binary levels into an n-ary tree.
+pub fn split_grouped(scene: &Scene, opts: &SplitOpts) -> SplitNode {
+    let tree = split(scene, opts);
+    let tree = merge_small_leaves(tree, opts);
+    group_fanout(tree, MAX_CHILDREN)
+}
+
+/// Fold binary levels bottom-up: after grouping its children, a branch
+/// absorbs the children of its smallest branch child while the fan-out stays
+/// ≤ `max_children`. Fixed-depth folding left 2-way nodes wherever the k-d
+/// tree was ragged (1085 parents for 2443 leaves on the demo cave).
+pub fn group_fanout(node: SplitNode, max_children: usize) -> SplitNode {
+    match node {
+        SplitNode::Leaf { .. } => node,
+        SplitNode::Branch { children, min, max } => {
+            let mut kids: Vec<SplitNode> = children
+                .into_iter()
+                .map(|c| group_fanout(c, max_children))
+                .collect();
+            loop {
+                let mut pick: Option<(usize, usize)> = None;
+                for (i, k) in kids.iter().enumerate() {
+                    if let SplitNode::Branch { children: gc, .. } = k {
+                        if kids.len() - 1 + gc.len() <= max_children
+                            && pick.is_none_or(|(_, n)| gc.len() < n)
+                        {
+                            pick = Some((i, gc.len()));
+                        }
+                    }
+                }
+                let Some((i, _)) = pick else { break };
+                if let SplitNode::Branch { children: gc, .. } = kids.remove(i) {
+                    kids.extend(gc);
+                }
+            }
+            SplitNode::Branch {
+                children: kids,
+                min,
+                max,
+            }
+        }
+    }
+}
+
+/// A branch whose children are all leaves and fit one budget becomes a leaf.
+/// Straddling triangles were duplicated into both halves, so dedup.
+pub fn merge_small_leaves(node: SplitNode, opts: &SplitOpts) -> SplitNode {
+    match node {
+        SplitNode::Leaf { .. } => node,
+        SplitNode::Branch { children, min, max } => {
+            let children: Vec<SplitNode> = children
+                .into_iter()
+                .map(|c| merge_small_leaves(c, opts))
+                .collect();
+            let all_leaves = children.iter().all(|c| matches!(c, SplitNode::Leaf { .. }));
+            let total: usize = children.iter().map(SplitNode::triangle_total).sum();
+            let smallest = children
+                .iter()
+                .map(SplitNode::triangle_total)
+                .min()
+                .unwrap_or(0);
+            if all_leaves && total <= opts.max_triangles && smallest < opts.max_triangles / 8 {
+                let mut ids = Vec::with_capacity(total);
+                for c in &children {
+                    if let SplitNode::Leaf { triangle_ids, .. } = c {
+                        ids.extend(triangle_ids);
+                    }
+                }
+                ids.sort_unstable();
+                ids.dedup();
+                if opts.fits(&ids) {
+                    return leaf(ids, min, max);
+                }
+            }
+            SplitNode::Branch { children, min, max }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -82,7 +215,7 @@ fn split_cell(
     if ids.is_empty() {
         return None;
     }
-    if ids.len() <= opts.max_triangles || depth >= MAX_SPLIT_DEPTH || ids.len() < 2 {
+    if opts.fits(&ids) || depth >= MAX_SPLIT_DEPTH || ids.len() < 2 {
         return Some(leaf(ids, min, max));
     }
 
@@ -91,7 +224,7 @@ fn split_cell(
     if span < 1e-3 {
         return Some(leaf(ids, min, max));
     }
-    let split_at = split_plane(scene, &ids, min, max, axis);
+    let split_at = split_plane(scene, &ids, min, max, axis, opts);
     if split_at <= min[axis] + SNAP || split_at >= max[axis] - SNAP {
         return Some(leaf(ids, min, max));
     }
@@ -174,31 +307,66 @@ fn longest_axis(min: [f64; 3], max: [f64; 3]) -> usize {
     }
 }
 
-/// Spatial midpoint, unless that leaves one side empty — then centroid median.
-fn split_plane(scene: &Scene, ids: &[usize], min: [f64; 3], max: [f64; 3], axis: usize) -> f64 {
+/// Spatial midpoint when it is reasonably balanced, else centroid median.
+///
+/// Midpoint-only on hollow geometry (cave walls) produced 16-triangle leaves
+/// next to full ones and pushed the tree to the depth cap.
+///
+/// Balance is measured in budget fractions (triangles or texels, whichever
+/// the triangle costs more of), so texture-dense patches split evenly too.
+fn split_plane(
+    scene: &Scene,
+    ids: &[usize],
+    min: [f64; 3],
+    max: [f64; 3],
+    axis: usize,
+    opts: &SplitOpts,
+) -> f64 {
+    let tri_w = 1.0 / opts.max_triangles.max(1) as f64;
+    let weight = |id: usize| -> f64 {
+        if opts.tri_texels.is_empty() || !opts.max_texels.is_finite() {
+            tri_w
+        } else {
+            tri_w.max(opts.tri_texels[id] as f64 / opts.max_texels.max(1.0))
+        }
+    };
     let mid = (min[axis] + max[axis]) * 0.5;
-    let mut left = 0usize;
-    let mut right = 0usize;
+    let mut left = 0.0;
+    let mut right = 0.0;
+    let mut total = 0.0;
     for &id in ids {
+        let w = weight(id);
+        total += w;
         let (tmin, tmax) = tri_axis_zup(scene, id, axis);
         if tmax < mid + SNAP {
-            left += 1;
+            left += w;
         } else if tmin > mid - SNAP {
-            right += 1;
+            right += w;
         } else {
-            left += 1;
-            right += 1;
+            left += w;
+            right += w;
         }
     }
-    if left > 0 && right > 0 && left < ids.len() && right < ids.len() {
+    let lighter = left.min(right);
+    if left > 0.0 && right > 0.0 && left < total && right < total && lighter >= BALANCE_MIN * total
+    {
         return mid;
     }
-    let mut cs: Vec<f64> = ids
+    let mut cs: Vec<(f64, f64)> = ids
         .iter()
-        .map(|&id| tri_centroid_zup(scene, id)[axis])
+        .map(|&id| (tri_centroid_zup(scene, id)[axis], weight(id)))
         .collect();
-    cs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let med = cs[cs.len() / 2];
+    cs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let half = total * 0.5;
+    let mut acc = 0.0;
+    let mut med = cs[cs.len() / 2].0;
+    for (c, w) in &cs {
+        acc += w;
+        if acc >= half {
+            med = *c;
+            break;
+        }
+    }
     let pad = ((max[axis] - min[axis]) * 0.01).max(SNAP * 10.0);
     med.clamp(min[axis] + pad, max[axis] - pad)
 }
@@ -511,7 +679,13 @@ mod tests {
     #[test]
     fn sibling_cells_disjoint() {
         let scene = grid_scene(8, 8);
-        let tree = split(&scene, &SplitOpts { max_triangles: 8 });
+        let tree = split(
+            &scene,
+            &SplitOpts {
+                max_triangles: 8,
+                ..SplitOpts::default()
+            },
+        );
         let branch = first_branch(&tree).expect("expected a split");
         let SplitNode::Branch { children, min, max } = branch else {
             panic!("not a branch");
@@ -526,11 +700,129 @@ mod tests {
         }
     }
 
+    fn all_ids(node: &SplitNode, out: &mut Vec<usize>) {
+        match node {
+            SplitNode::Leaf { triangle_ids, .. } => out.extend_from_slice(triangle_ids),
+            SplitNode::Branch { children, .. } => {
+                for c in children {
+                    all_ids(c, out);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn grouped_tree_is_wide_shallow_and_lossless() {
+        let scene = grid_scene(64, 64); // 8192 tris
+        let opts = SplitOpts {
+            max_triangles: 64,
+            ..SplitOpts::default()
+        };
+        let binary = split(&scene, &opts);
+        let grouped = split_grouped(&scene, &opts);
+        let bin_h = binary.subtree_height();
+        let grp_h = grouped.subtree_height();
+        assert!(bin_h >= 7, "binary depth {bin_h}");
+        assert!(
+            grp_h <= bin_h.div_ceil(3) + 1,
+            "grouped depth {grp_h} vs binary {bin_h}"
+        );
+        fn max_fanout(n: &SplitNode) -> usize {
+            match n {
+                SplitNode::Leaf { .. } => 0,
+                SplitNode::Branch { children, .. } => children
+                    .len()
+                    .max(children.iter().map(max_fanout).max().unwrap_or(0)),
+            }
+        }
+        let fan = max_fanout(&grouped);
+        assert!(fan > 2 && fan <= MAX_CHILDREN, "fan-out {fan}");
+        // Bottom-up folding keeps the average fan-out high (≥ 4): 2-way nodes
+        // only survive between two full children.
+        fn branches(n: &SplitNode) -> usize {
+            match n {
+                SplitNode::Leaf { .. } => 0,
+                SplitNode::Branch { children, .. } => {
+                    1 + children.iter().map(branches).sum::<usize>()
+                }
+            }
+        }
+        let (b, l) = (branches(&grouped), grouped.leaf_count());
+        assert!(b * 4 <= l, "{b} parents for {l} leaves");
+        let mut ids = Vec::new();
+        all_ids(&grouped, &mut ids);
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(
+            ids.len(),
+            scene.triangles.len(),
+            "every triangle lands in a leaf"
+        );
+        // Siblings stay disjoint after grouping.
+        fn check(n: &SplitNode) {
+            if let SplitNode::Branch { children, .. } = n {
+                for i in 0..children.len() {
+                    for j in (i + 1)..children.len() {
+                        assert!(boxes_only_touch(children[i].aabb(), children[j].aabb()));
+                    }
+                    check(&children[i]);
+                }
+            }
+        }
+        check(&grouped);
+    }
+
+    #[test]
+    fn micro_leaves_merge_into_parent_cell() {
+        // Dense cluster + far outlier: midpoint splits would peel a 2-triangle
+        // leaf; merge folds it back with its sibling under one budget.
+        let mut scene = grid_scene(4, 4); // 32 tris in 0..4
+        let base = scene.vertices.len() as u32;
+        for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)] {
+            scene.vertices.push(Vertex {
+                pos: [100.0 + dx, dy, 0.0],
+                nrm: [0.0, 0.0, 1.0],
+                uv: [0.0, 0.0],
+            });
+        }
+        scene.triangles.push(Triangle {
+            verts: [base, base + 1, base + 2],
+            image: None,
+        });
+        let opts = SplitOpts {
+            max_triangles: 40,
+            ..SplitOpts::default()
+        };
+        let tree = split_grouped(&scene, &opts);
+        let mut leaves = Vec::new();
+        leaves_of(&tree, &mut leaves);
+        for l in &leaves {
+            if let SplitNode::Leaf { triangle_ids, .. } = l {
+                assert!(
+                    triangle_ids.len() >= 5,
+                    "micro leaf survived: {} tris",
+                    triangle_ids.len()
+                );
+            }
+        }
+        let mut ids = Vec::new();
+        all_ids(&tree, &mut ids);
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), 33);
+    }
+
     #[test]
     fn clip_shares_cut_edge() {
         // One quad 0..2 on X, split must cut at x=1 (longest axis, midpoint).
         let scene = grid_scene(2, 1);
-        let tree = split(&scene, &SplitOpts { max_triangles: 2 });
+        let tree = split(
+            &scene,
+            &SplitOpts {
+                max_triangles: 2,
+                ..SplitOpts::default()
+            },
+        );
         let mut leaves = Vec::new();
         leaves_of(&tree, &mut leaves);
         assert!(leaves.len() >= 2, "expected a split, got {}", leaves.len());
@@ -587,7 +879,13 @@ mod tests {
     #[test]
     fn interior_verts_match_source() {
         let scene = grid_scene(4, 4);
-        let tree = split(&scene, &SplitOpts { max_triangles: 8 });
+        let tree = split(
+            &scene,
+            &SplitOpts {
+                max_triangles: 8,
+                ..SplitOpts::default()
+            },
+        );
         let mut leaves = Vec::new();
         leaves_of(&tree, &mut leaves);
         let mut source_pos = std::collections::HashSet::new();

@@ -176,13 +176,22 @@ struct MeshArgs {
         default_value_t = tinyowl_tiles::DEFAULT_MAX_BYTES
     )]
     max_bytes: u64,
-    /// Max edge length in pixels of a cropped leaf texture (default 512).
+    /// Max atlas edge in pixels for leaf and parent tiles (default 1024).
+    /// Leaves keep source resolution up to this cap; 2048 needs ~4× the RAM.
     #[arg(
         long = "tileSize",
         visible_alias = "tile-size",
         default_value_t = tinyowl_tiles::DEFAULT_TILE_SIZE
     )]
     tile_size: u32,
+    /// Max source texels per metre kept in leaves (default 2000 = 0.5 mm).
+    /// Leaves split until their texels fit one atlas; 0 = keep everything.
+    #[arg(
+        long = "maxTexelDensity",
+        visible_alias = "max-texel-density",
+        default_value_t = tinyowl_tiles::DEFAULT_MAX_TEXEL_DENSITY
+    )]
+    max_texel_density: f64,
     /// POSITION CRS: auto (detect), geographic (lon°/height/−lat°), or epsg:3857.
     #[arg(
         long = "sourceCrs",
@@ -239,6 +248,7 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         max_triangles: a.max_triangles,
         max_bytes: a.max_bytes,
         tile_size: a.tile_size,
+        max_texel_density: a.max_texel_density,
         source_crs,
         source_offset,
         meshopt: !a.no_meshopt,

@@ -58,12 +58,18 @@ impl EncodedImage {
     }
 
     pub fn load(&self) -> Result<Vec<u8>, Error> {
+        self.load_prefix(usize::MAX)
+    }
+
+    /// First `max` bytes — enough for image headers without reading 15 MB.
+    pub fn load_prefix(&self, max: usize) -> Result<Vec<u8>, Error> {
+        let n = (self.length as usize).min(max);
         if let Some(b) = &self.owned {
-            return Ok(b.clone());
+            return Ok(b[..n.min(b.len())].to_vec());
         }
         let mut f = File::open(&self.path)?;
         f.seek(SeekFrom::Start(self.offset))?;
-        let mut buf = vec![0u8; self.length as usize];
+        let mut buf = vec![0u8; n];
         f.read_exact(&mut buf)?;
         Ok(buf)
     }

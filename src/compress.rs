@@ -582,10 +582,13 @@ fn pad4(buf: &mut Vec<u8>) {
     }
 }
 
+/// Trilinear + clamp. Atlases are gutter-padded with dead space filled by the
+/// mean chart colour, so mips no longer smear grey into the mesh; without
+/// mips a 1024² atlas on a far tile shimmers.
 fn push_clamp_linear_sampler(root: &mut Root) -> Index<texture::Sampler> {
     root.push(texture::Sampler {
         mag_filter: Some(Valid(texture::MagFilter::Linear)),
-        min_filter: Some(Valid(texture::MinFilter::Linear)),
+        min_filter: Some(Valid(texture::MinFilter::LinearMipmapLinear)),
         name: None,
         wrap_s: Valid(texture::WrappingMode::ClampToEdge),
         wrap_t: Valid(texture::WrappingMode::ClampToEdge),

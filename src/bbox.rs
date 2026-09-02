@@ -254,11 +254,311 @@ pub fn union_aabb(
     )
 }
 
-/// Inverse of `aabb_to_box` for unioning leaf boxes in a parent tile.
+/// Axis-aligned envelope of a (possibly oriented) `boundingVolume.box`.
 pub fn box_to_aabb(b: BoundingBox) -> ([f64; 3], [f64; 3]) {
-    let (cx, cy, cz) = (b[0], b[1], b[2]);
-    let hx = (b[3] * b[3] + b[4] * b[4] + b[5] * b[5]).sqrt();
-    let hy = (b[6] * b[6] + b[7] * b[7] + b[8] * b[8]).sqrt();
-    let hz = (b[9] * b[9] + b[10] * b[10] + b[11] * b[11]).sqrt();
-    ([cx - hx, cy - hy, cz - hz], [cx + hx, cy + hy, cz + hz])
+    let c = [b[0], b[1], b[2]];
+    let mut h = [0.0; 3];
+    for k in 0..3 {
+        for i in 0..3 {
+            h[i] += b[3 + k * 3 + i].abs();
+        }
+    }
+    (
+        [c[0] - h[0], c[1] - h[1], c[2] - h[2]],
+        [c[0] + h[0], c[1] + h[1], c[2] + h[2]],
+    )
+}
+
+/// Oriented bounding box: `center + Σ t_k · half[k] · axes[k]`, |t_k| ≤ 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Obb {
+    pub center: [f64; 3],
+    /// Orthonormal, row k is axis k.
+    pub axes: [[f64; 3]; 3],
+    pub half: [f64; 3],
+}
+
+const AXIS_ALIGNED: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+impl Obb {
+    pub fn from_aabb(min: [f64; 3], max: [f64; 3]) -> Obb {
+        Obb {
+            center: aabb_center(min, max),
+            axes: AXIS_ALIGNED,
+            half: [
+                (max[0] - min[0]) * 0.5,
+                (max[1] - min[1]) * 0.5,
+                (max[2] - min[2]) * 0.5,
+            ],
+        }
+    }
+
+    pub fn from_box(b: BoundingBox) -> Obb {
+        let mut axes = AXIS_ALIGNED;
+        let mut half = [0.0; 3];
+        for k in 0..3 {
+            let v = [b[3 + k * 3], b[4 + k * 3], b[5 + k * 3]];
+            let n = norm(v);
+            half[k] = n;
+            if n > 0.0 {
+                axes[k] = [v[0] / n, v[1] / n, v[2] / n];
+            }
+        }
+        Obb {
+            center: [b[0], b[1], b[2]],
+            axes,
+            half,
+        }
+    }
+
+    /// Tightest of the axis-aligned box and a PCA-oriented box over `points`.
+    /// The oriented fit must save ≥ 10 % volume to be worth the rotation.
+    /// Every input point lies inside the result (extents come from the points
+    /// themselves), so feeding child box corners gives spec-valid nesting.
+    pub fn fit(points: &[[f64; 3]]) -> Option<Obb> {
+        if points.is_empty() {
+            return None;
+        }
+        let aabb = Obb::extents(points, AXIS_ALIGNED);
+        let n = points.len() as f64;
+        let mut mean = [0.0; 3];
+        for p in points {
+            for i in 0..3 {
+                mean[i] += p[i] / n;
+            }
+        }
+        let mut cov = [[0.0; 3]; 3];
+        for p in points {
+            let d = [p[0] - mean[0], p[1] - mean[1], p[2] - mean[2]];
+            for i in 0..3 {
+                for j in 0..3 {
+                    cov[i][j] += d[i] * d[j] / n;
+                }
+            }
+        }
+        let axes = jacobi_eigenvectors(cov);
+        let pca = Obb::extents(points, axes);
+        Some(if pca.volume() < aabb.volume() * 0.9 {
+            pca
+        } else {
+            aabb
+        })
+    }
+
+    fn extents(points: &[[f64; 3]], axes: [[f64; 3]; 3]) -> Obb {
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        for p in points {
+            for k in 0..3 {
+                let t = dot(*p, axes[k]);
+                lo[k] = lo[k].min(t);
+                hi[k] = hi[k].max(t);
+            }
+        }
+        let mut center = [0.0; 3];
+        let mut half = [0.0; 3];
+        for k in 0..3 {
+            let mid = (lo[k] + hi[k]) * 0.5;
+            half[k] = (hi[k] - lo[k]) * 0.5;
+            for i in 0..3 {
+                center[i] += mid * axes[k][i];
+            }
+        }
+        Obb { center, axes, half }
+    }
+
+    pub fn volume(&self) -> f64 {
+        8.0 * self.half[0] * self.half[1] * self.half[2]
+    }
+
+    #[allow(clippy::needless_range_loop)]
+    pub fn corners(&self) -> [[f64; 3]; 8] {
+        let mut out = [[0.0; 3]; 8];
+        for (n, c) in out.iter_mut().enumerate() {
+            let s = [
+                if n & 1 == 0 { -1.0 } else { 1.0 },
+                if n & 2 == 0 { -1.0 } else { 1.0 },
+                if n & 4 == 0 { -1.0 } else { 1.0 },
+            ];
+            for i in 0..3 {
+                c[i] = self.center[i]
+                    + s[0] * self.half[0] * self.axes[0][i]
+                    + s[1] * self.half[1] * self.axes[1][i]
+                    + s[2] * self.half[2] * self.axes[2][i];
+            }
+        }
+        out
+    }
+
+    pub fn contains(&self, p: [f64; 3], eps: f64) -> bool {
+        let d = [
+            p[0] - self.center[0],
+            p[1] - self.center[1],
+            p[2] - self.center[2],
+        ];
+        (0..3).all(|k| dot(d, self.axes[k]).abs() <= self.half[k] + eps)
+    }
+
+    /// Cesium needs a hair of thickness on every axis.
+    pub fn padded_flat(mut self, min_half: f64) -> Obb {
+        for h in &mut self.half {
+            if *h < min_half {
+                *h = min_half;
+            }
+        }
+        self
+    }
+
+    pub fn to_box(&self) -> BoundingBox {
+        let mut b = [0.0; 12];
+        b[..3].copy_from_slice(&self.center);
+        for k in 0..3 {
+            for i in 0..3 {
+                b[3 + k * 3 + i] = self.axes[k][i] * self.half[k];
+            }
+        }
+        b
+    }
+}
+
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn norm(a: [f64; 3]) -> f64 {
+    dot(a, a).sqrt()
+}
+
+/// Eigenvectors of a symmetric 3×3 (cyclic Jacobi), rows sorted by
+/// descending eigenvalue, made right-handed.
+#[allow(clippy::needless_range_loop)]
+fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut v = AXIS_ALIGNED;
+    for _ in 0..32 {
+        let off = a[0][1].abs() + a[0][2].abs() + a[1][2].abs();
+        if off < 1e-18 {
+            break;
+        }
+        for (p, q) in [(0usize, 1usize), (0, 2), (1, 2)] {
+            if a[p][q].abs() < 1e-300 {
+                continue;
+            }
+            let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+            let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+            let t = if theta == 0.0 { 1.0 } else { t };
+            let c = 1.0 / (t * t + 1.0).sqrt();
+            let s = t * c;
+            for k in 0..3 {
+                let (akp, akq) = (a[k][p], a[k][q]);
+                a[k][p] = c * akp - s * akq;
+                a[k][q] = s * akp + c * akq;
+            }
+            for k in 0..3 {
+                let (apk, aqk) = (a[p][k], a[q][k]);
+                a[p][k] = c * apk - s * aqk;
+                a[q][k] = s * apk + c * aqk;
+            }
+            for k in 0..3 {
+                let (vkp, vkq) = (v[k][p], v[k][q]);
+                v[k][p] = c * vkp - s * vkq;
+                v[k][q] = s * vkp + c * vkq;
+            }
+        }
+    }
+    // Columns of v are eigenvectors; emit as rows, largest eigenvalue first.
+    let mut order = [0usize, 1, 2];
+    order.sort_by(|&i, &j| {
+        a[j][j]
+            .partial_cmp(&a[i][i])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut axes = [[0.0; 3]; 3];
+    for (r, &c) in order.iter().enumerate() {
+        axes[r] = [v[0][c], v[1][c], v[2][c]];
+        let n = norm(axes[r]);
+        if n > 0.0 {
+            for x in &mut axes[r] {
+                *x /= n;
+            }
+        }
+    }
+    let cross = [
+        axes[0][1] * axes[1][2] - axes[0][2] * axes[1][1],
+        axes[0][2] * axes[1][0] - axes[0][0] * axes[1][2],
+        axes[0][0] * axes[1][1] - axes[0][1] * axes[1][0],
+    ];
+    if dot(cross, axes[2]) < 0.0 {
+        for x in &mut axes[2] {
+            *x = -*x;
+        }
+    }
+    axes
+}
+
+#[cfg(test)]
+mod obb_tests {
+    use super::*;
+
+    #[test]
+    fn tilted_sheet_gets_a_much_smaller_oriented_box() {
+        // Thin sheet in the plane x = y (45° about z), 10 × 10 × 0.02.
+        let mut pts = Vec::new();
+        for i in 0..=20 {
+            for j in 0..=20 {
+                let u = i as f64 * 0.5 - 5.0;
+                let w = j as f64 * 0.5 - 5.0;
+                let n = if (i + j) % 2 == 0 { 0.01 } else { -0.01 };
+                let s = std::f64::consts::FRAC_1_SQRT_2;
+                pts.push([u * s - n * s, u * s + n * s, w]);
+            }
+        }
+        let obb = Obb::fit(&pts).unwrap();
+        let aabb = Obb::extents(&pts, AXIS_ALIGNED);
+        assert!(
+            obb.volume() < aabb.volume() * 0.05,
+            "{} vs {}",
+            obb.volume(),
+            aabb.volume()
+        );
+        for p in &pts {
+            assert!(obb.contains(*p, 1e-9));
+        }
+        let (lo, hi) = box_to_aabb(obb.to_box());
+        for p in &pts {
+            for ((x, l), h) in p.iter().zip(&lo).zip(&hi) {
+                assert!(*x >= l - 1e-9 && *x <= h + 1e-9);
+            }
+        }
+    }
+
+    #[test]
+    fn axis_aligned_cloud_keeps_axis_aligned_box() {
+        let pts: Vec<[f64; 3]> = (0..64)
+            .map(|i| {
+                [
+                    (i % 4) as f64,
+                    ((i / 4) % 4) as f64 * 2.0,
+                    (i / 16) as f64 * 3.0,
+                ]
+            })
+            .collect();
+        let obb = Obb::fit(&pts).unwrap();
+        assert_eq!(obb.axes, AXIS_ALIGNED);
+        assert_eq!(obb.half, [1.5, 3.0, 4.5]);
+    }
+
+    #[test]
+    fn children_corners_nest_inside_parent_fit() {
+        let child = Obb {
+            center: [3.0, 4.0, 5.0],
+            axes: [[0.6, 0.8, 0.0], [-0.8, 0.6, 0.0], [0.0, 0.0, 1.0]],
+            half: [2.0, 0.5, 0.1],
+        };
+        let mut pts: Vec<[f64; 3]> = child.corners().to_vec();
+        pts.push([0.0, 0.0, 0.0]);
+        let parent = Obb::fit(&pts).unwrap();
+        for c in child.corners() {
+            assert!(parent.contains(c, 1e-9));
+        }
+    }
 }

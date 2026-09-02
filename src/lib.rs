@@ -9,6 +9,7 @@ pub mod error;
 pub mod fixtures;
 pub mod georef;
 pub mod glb_write;
+pub mod grid;
 pub mod hlod;
 pub mod mesh;
 pub mod pack;
@@ -24,7 +25,8 @@ pub use error::Error;
 pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
 pub use tile::{
-    mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TRIANGLES, DEFAULT_TILE_SIZE,
+    mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TEXEL_DENSITY,
+    DEFAULT_MAX_TRIANGLES, DEFAULT_TILE_SIZE,
 };
 pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 
