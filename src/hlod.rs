@@ -15,8 +15,6 @@ use crate::error::Error;
 use crate::glb_write::TilePrimitive;
 use crate::grid::TriGrid;
 
-/// Numeric guard so a parent never gets GE 0 (Cesium would never refine it).
-pub(crate) const MIN_PARENT_GE: f64 = 0.002;
 const ERROR_SAMPLE_CAP: usize = 4_096;
 const MIN_PARENT_ATLAS: u32 = 256;
 
@@ -145,7 +143,27 @@ pub fn build_parent(
         let atlas = parent_atlas_size(children, tile_size);
         match crate::texture::bake_simplified(&simplified, children, atlas) {
             Ok((p, texel_m)) => (vec![p], texel_m),
-            Err(_) => (vec![simplified], 0.0),
+            Err(e @ Error::TextureProjection { .. }) => {
+                // Some non-manifold inputs cannot be safely reprojected after
+                // simplification. Retain the textured child surfaces rather
+                // than paint the opposite wall or discard their appearance.
+                eprintln!("mesh-to-3tz: retaining child surfaces: {e}");
+                let texel_m = children
+                    .iter()
+                    .filter_map(|p| {
+                        p.jpeg
+                            .as_ref()
+                            .and_then(|j| image_dims(j))
+                            .map(|(w, h)| crate::tile::max_texel_size(p, w, h))
+                    })
+                    .fold(0.0f64, f64::max);
+                return Ok(ParentResult {
+                    prims: children.to_vec(),
+                    error_m: 0.0,
+                    texel_m,
+                });
+            }
+            Err(e) => return Err(e),
         }
     } else {
         (vec![simplified], 0.0)
@@ -293,37 +311,28 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
     }
 }
 
-/// meshopt's `target_error` is a fraction of the mesh extent. Escalate it
-/// only while the result is still over 2× the triangle target: a parent a
-/// little over budget streams fine, one that collapsed (or, with `Prune`,
-/// dropped) a whole wall renders garbage and inflates `geometricError`.
-const SIMPLIFY_ERRORS: [f32; 4] = [0.01, 0.03, 0.1, 1.0];
-
+/// Keep tile boundaries fixed so independently refined neighbours cannot open
+/// cracks. A parent may exceed its triangle budget rather than move a wall by
+/// a large fraction of the scene extent to force an arbitrary count.
 fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
-    // Prune last: a cave wall is often several welded islands, and deleting
-    // one leaves a hole (white slivers / light leaks) until children load.
-    let attempts: [SimplifyOptions; 3] = [
-        SimplifyOptions::LockBorder | SimplifyOptions::Permissive,
-        SimplifyOptions::Permissive,
-        SimplifyOptions::LockBorder | SimplifyOptions::Prune | SimplifyOptions::Permissive,
-    ];
-    let mut best: Option<Vec<u32>> = None;
-    for &err in &SIMPLIFY_ERRORS {
-        for &opts in &attempts {
-            let out = simplify(indices, adapter, target, err, opts, None);
-            if out.len() < 3 {
-                continue;
-            }
-            let better = best.as_ref().map(|b| out.len() < b.len()).unwrap_or(true);
-            if better {
-                if out.len() <= target.saturating_mul(2) {
-                    return out;
-                }
-                best = Some(out);
-            }
+    let mut best = indices.to_vec();
+    for error in [0.005, 0.01, 0.03] {
+        let out = simplify(
+            indices,
+            adapter,
+            target,
+            error,
+            SimplifyOptions::LockBorder | SimplifyOptions::Permissive,
+            None,
+        );
+        if out.len() >= 3 && out.len() < best.len() {
+            best = out;
+        }
+        if best.len() <= target.saturating_mul(2) {
+            break;
         }
     }
-    best.unwrap_or_else(|| indices.to_vec())
+    best
 }
 
 /// Two-sided sampled surface distance in model metres: child vertices → parent
@@ -446,14 +455,35 @@ mod tests {
     }
 
     #[test]
-    fn simplify_welds_soup_and_hits_budget() {
+    fn simplify_welds_soup_and_preserves_boundary_edges() {
         let prim = soup_grid(40, 40);
         assert_eq!(prim.indices.len() / 3, 3200);
         let out = simplify_primitive(&prim, 64).unwrap();
         assert!(
-            out.indices.len() / 3 <= 128,
-            "expected weld+simplify to hit budget, got {} tris",
+            out.indices.len() / 3 <= 200,
+            "expected substantial reduction while retaining the 160 boundary edges, got {} tris",
             out.indices.len() / 3
+        );
+        let boundary = |mesh: &TilePrimitive| {
+            let mut counts = std::collections::BTreeMap::new();
+            for t in mesh.indices.chunks_exact(3) {
+                for i in 0..3 {
+                    let a = mesh.positions[t[i] as usize].map(f32::to_bits);
+                    let b = mesh.positions[t[(i + 1) % 3] as usize].map(f32::to_bits);
+                    *counts
+                        .entry(if a < b { (a, b) } else { (b, a) })
+                        .or_insert(0) += 1;
+                }
+            }
+            counts
+                .into_iter()
+                .filter_map(|(edge, n)| (n == 1).then_some(edge))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            boundary(&prim),
+            boundary(&out),
+            "simplification changed a boundary edge"
         );
     }
 

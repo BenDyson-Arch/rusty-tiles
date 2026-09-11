@@ -1,10 +1,6 @@
 //! ENU → ECEF `root.transform` matching Cesium `3d-tiles-tools` `createTilesetJson`
 //! (`Transforms.eastNorthUpToFixedFrame` / `headingPitchRollQuaternion`).
 //!
-//! This is **not** TinyOwl Go `eastNorthUpMatrix` heading (EN-plane clockwise
-//! from north with a truncated Z). `model-worker` still applies Go placement
-//! after convert; do not pass `--rotationDegrees` from the worker until that
-//! contract is dropped.
 
 /// WGS84 as Cesium `Ellipsoid.WGS84`.
 const WGS84_A: f64 = 6_378_137.0;
@@ -95,6 +91,75 @@ impl EnuFrame {
             self.north[0] * dx + self.north[1] * dy + self.north[2] * dz,
             self.up[0] * dx + self.up[1] * dy + self.up[2] * dz,
         ]
+    }
+
+    /// Transform an authored normal by the inverse transpose of the CRS
+    /// projection's local Jacobian. Difference in f64 before casting to f32;
+    /// recomputing normals from triangles would erase authored hard edges.
+    pub fn normal_to_enu_yup(&self, pos: [f32; 3], normal: [f32; 3], kind: CrsKind) -> [f32; 3] {
+        self.normal_to_enu_yup_offset(pos, normal, kind, SourceOffset::default())
+    }
+
+    pub fn normal_to_enu_yup_offset(
+        &self,
+        pos: [f32; 3],
+        normal: [f32; 3],
+        kind: CrsKind,
+        offset: SourceOffset,
+    ) -> [f32; 3] {
+        if normal == [0.0; 3] {
+            return normal;
+        }
+        let project = |p: [f64; 3]| {
+            let (lon, lat) = match kind {
+                CrsKind::Geographic => (p[0], -p[2]),
+                CrsKind::WebMercator => {
+                    mercator_to_geodetic(p[0] + offset.easting, offset.northing - p[2])
+                }
+            };
+            let [e, n, u] = self.to_enu(geodetic_to_ecef(Cartographic::new(
+                lon,
+                lat,
+                p[1] + offset.height,
+            )));
+            [e, u, -n]
+        };
+        let columns: [[f64; 3]; 3] = std::array::from_fn(|axis| {
+            let step = if matches!(kind, CrsKind::Geographic) && axis != 1 {
+                1e-5
+            } else {
+                0.1
+            };
+            let mut a = pos.map(f64::from);
+            let mut b = a;
+            a[axis] -= step;
+            b[axis] += step;
+            let a = project(a);
+            let b = project(b);
+            std::array::from_fn(|i| (b[i] - a[i]) / (2.0 * step))
+        });
+        let cross = |a: [f64; 3], b: [f64; 3]| {
+            [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ]
+        };
+        let co = [
+            cross(columns[1], columns[2]),
+            cross(columns[2], columns[0]),
+            cross(columns[0], columns[1]),
+        ];
+        let det = (0..3).map(|i| columns[0][i] * co[0][i]).sum::<f64>();
+        let n: [f64; 3] = std::array::from_fn(|i| {
+            (0..3).map(|j| co[j][i] * normal[j] as f64).sum::<f64>() * det.signum()
+        });
+        let len = n.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if len > 0.0 {
+            n.map(|v| (v / len) as f32)
+        } else {
+            normal
+        }
     }
 
     /// Metashape geographic Y-up (lon°, height m, −lat°) → ENU Y-up.
@@ -490,20 +555,20 @@ mod tests {
     }
 
     #[test]
-    fn metashape_injalak_aabb_is_geographic() {
-        let min = [133.0640, 120.0, 12.3350];
-        let max = [133.0650, 140.0, 12.3360];
+    fn metashape_synthetic_aabb_is_geographic() {
+        let min = [30.0000, 120.0, 20.0000];
+        let max = [30.0010, 140.0, 20.0010];
         assert!(looks_geographic_yup(min, max));
         assert!(!looks_web_mercator_yup(min, max));
         let o = geographic_origin_yup(min, max);
-        assert!((o.lon_deg - 133.0645).abs() < 1e-9);
-        assert!((o.lat_deg - (-12.3355)).abs() < 1e-9);
+        assert!((o.lon_deg - 30.0005).abs() < 1e-9);
+        assert!((o.lat_deg - (-20.0005)).abs() < 1e-9);
     }
 
     #[test]
     fn geog_vertex_bakes_to_enu_metres() {
-        let origin = Cartographic::new(133.0645, -12.3355, 130.0);
-        let p = geog_yup_to_enu_yup([133.0640, 120.0, 12.3360], origin);
+        let origin = Cartographic::new(30.0005, -20.0005, 130.0);
+        let p = geog_yup_to_enu_yup([30.0000, 120.0, 20.0010], origin);
         assert!(
             p[0].abs() < 200.0 && p[1].abs() < 50.0 && p[2].abs() < 200.0,
             "baked vertex still not ENU metres: {p:?}"
@@ -516,14 +581,22 @@ mod tests {
     }
 
     #[test]
-    fn injalak_web_mercator_aabb_inverts_to_wgs84() {
-        let min = [14_812_634.0, 111.77, 1_383_892.5];
-        let max = [14_812_737.0, 143.51, 1_383_996.625];
+    fn synthetic_web_mercator_aabb_inverts_to_wgs84() {
+        let min = [3_000_200.0, 110.0, 1_999_920.0];
+        let max = [3_000_300.0, 140.0, 1_999_980.0];
         assert!(looks_web_mercator_yup(min, max));
         assert!(!looks_geographic_yup(min, max));
         let o = mercator_origin_yup(min, max);
-        assert!((o.lon_deg - 133.06462).abs() < 1e-4, "lon {}", o.lon_deg);
-        assert!((o.lat_deg - (-12.33576)).abs() < 1e-4, "lat {}", o.lat_deg);
+        assert!(
+            (o.lon_deg - 26.9517043118).abs() < 1e-4,
+            "lon {}",
+            o.lon_deg
+        );
+        assert!(
+            (o.lat_deg - (-17.6784862924)).abs() < 1e-4,
+            "lat {}",
+            o.lat_deg
+        );
         let p = EnuFrame::new(o).mercator_yup_to_enu_yup([min[0] as f32, 120.0, max[2] as f32]);
         assert!(
             p[0].abs() < 200.0 && p[2].abs() < 200.0,
@@ -533,26 +606,34 @@ mod tests {
 
     #[test]
     fn parse_metashape_offset_txt() {
-        let o = parse_metashape_offset("E: 14812000\nN: -1384000\nA: 100\n").unwrap();
-        assert_eq!(o.easting, 14_812_000.0);
-        assert_eq!(o.northing, -1_384_000.0);
+        let o = parse_metashape_offset("E: 3000000\nN: -2000000\nA: 100\n").unwrap();
+        assert_eq!(o.easting, 3_000_000.0);
+        assert_eq!(o.northing, -2_000_000.0);
         assert_eq!(o.height, 100.0);
     }
 
     #[test]
     fn offset_local_aabb_matches_world_mercator_origin() {
         let off = SourceOffset {
-            easting: 14_812_000.0,
-            northing: -1_384_000.0,
+            easting: 3_000_000.0,
+            northing: -2_000_000.0,
             height: 100.0,
         };
-        let min = [634.353515625, 11.774118423461914, -107.52688598632812];
-        let max = [737.476806640625, 43.511756896972656, -3.414585828781128];
+        let min = [200.0, 10.0, -80.0];
+        let max = [300.0, 40.0, -20.0];
         assert!(!looks_web_mercator_yup(min, max));
         let o = mercator_origin_yup_offset(min, max, off);
-        assert!((o.lon_deg - 133.06462).abs() < 1e-4, "lon {}", o.lon_deg);
-        assert!((o.lat_deg - (-12.33576)).abs() < 1e-4, "lat {}", o.lat_deg);
-        assert!((o.height_m - 127.643).abs() < 0.01, "h {}", o.height_m);
+        assert!(
+            (o.lon_deg - 26.9517043118).abs() < 1e-4,
+            "lon {}",
+            o.lon_deg
+        );
+        assert!(
+            (o.lat_deg - (-17.6784862924)).abs() < 1e-4,
+            "lat {}",
+            o.lat_deg
+        );
+        assert!((o.height_m - 125.0).abs() < 0.01, "h {}", o.height_m);
         let mid = [
             ((min[0] + max[0]) * 0.5) as f32,
             ((min[1] + max[1]) * 0.5) as f32,
@@ -568,8 +649,8 @@ mod tests {
     #[test]
     fn mercator_shift_origin_pins_enu_at_e_n_a() {
         let off = SourceOffset {
-            easting: 14_812_000.0,
-            northing: -1_384_000.0,
+            easting: 3_000_000.0,
+            northing: -2_000_000.0,
             height: 100.0,
         };
         let o = mercator_shift_origin(off);
@@ -577,7 +658,15 @@ mod tests {
         assert!((o.lon_deg - lon).abs() < 1e-12);
         assert!((o.lat_deg - lat).abs() < 1e-12);
         assert!((o.height_m - 100.0).abs() < 1e-12);
-        assert!((o.lon_deg - 133.058).abs() < 0.01, "lon {}", o.lon_deg);
-        assert!((o.lat_deg - (-12.34)).abs() < 0.02, "lat {}", o.lat_deg);
+        assert!(
+            (o.lon_deg - 26.9494585236).abs() < 0.01,
+            "lon {}",
+            o.lon_deg
+        );
+        assert!(
+            (o.lat_deg - (-17.6789142383)).abs() < 0.02,
+            "lat {}",
+            o.lat_deg
+        );
     }
 }

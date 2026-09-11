@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>rusty-tiles</title>
+<link rel="stylesheet" href="/cesium/Widgets/widgets.css">
+<style>
+html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
+#panel{position:absolute;top:12px;left:12px;max-width:min(420px,85vw);max-height:70vh;overflow:auto;background:#111e;color:white;padding:10px;font:14px sans-serif;z-index:2}
+#layers label{display:inline-block;margin:6px 10px 6px 0}button{margin:2px}#status{white-space:pre-wrap}
+</style>
+<script src="/cesium/Cesium.js"></script></head>
+<body><div id="view"></div><div id="panel"><strong>rusty-tiles · Your scene</strong><div id="layers"></div><div id="views"></div><p id="status">Loading…</p></div>
+<script>
+(async () => {
+  const C = Cesium;
+  const status = document.getElementById('status');
+  window.failures = [];
+  const fail = error => {
+    window.failures.push(String(error.message || error));
+    status.textContent = window.failures.join('\n');
+  };
+  window.addEventListener('error', fail);
+  async function json(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+    return response.json();
+  }
+  const config = await json('/config.json');
+  const viewer = window.viewer = new C.Viewer('view', {
+    baseLayer: false, geocoder: false, baseLayerPicker: false, animation: false,
+    timeline: false, sceneModePicker: false, navigationHelpButton: false,
+    homeButton: false, fullscreenButton: false, selectionIndicator: false,
+    infoBox: false, requestRenderMode: false, msaaSamples: 4,
+  });
+  viewer.scene.postProcessStages.fxaa.enabled = false;
+  viewer.scene.debugShowFramesPerSecond = true;
+  viewer.scene.globe.baseColor = C.Color.fromCssColorString('#59646d');
+  viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.scene.renderError.addEventListener((scene, error) => fail(error));
+  const tilesets = [];
+  const spheres = [];
+  let imageryBounds, terrainBounds;
+  function frame(sphere) {
+    viewer.camera.viewBoundingSphere(sphere, new C.HeadingPitchRange(-.8, -.65, Math.max(sphere.radius * 3, 5)));
+    viewer.camera.lookAtTransform(C.Matrix4.IDENTITY);
+  }
+  function button(label, action) {
+    const element = document.createElement('button');
+    element.textContent = label;
+    element.onclick = action;
+    document.getElementById('views').append(element);
+  }
+  function toggle(label, layer) {
+    const element = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = true;
+    input.onchange = () => { layer.show = input.checked; };
+    element.append(input, document.createTextNode(` ${label}`));
+    document.getElementById('layers').append(element);
+  }
+  if (config.imagery) {
+    const metadata = await json(config.imagery);
+    imageryBounds = C.Rectangle.fromDegrees(...metadata.bounds);
+    const url = new URL(config.imagery, location.href);
+    const provider = new C.UrlTemplateImageryProvider({
+      url: new URL('./tiles/', url).href + '{z}/{x}/{y}.png',
+      minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom, rectangle: imageryBounds,
+    });
+    provider.errorEvent.addEventListener(fail);
+    window.orthophoto = viewer.imageryLayers.addImageryProvider(provider);
+    toggle('Imagery', window.orthophoto);
+    button('Imagery extent', () => viewer.camera.setView({destination: imageryBounds}));
+  }
+  if (config.terrain) {
+    const manifest = await json(config.terrain);
+    terrainBounds = C.Rectangle.fromDegrees(...manifest.bounds);
+    const provider = window.terrain = await C.CesiumTerrainProvider.fromUrl(new URL('./', new URL(config.terrain, location.href)).href, {requestVertexNormals: false});
+    provider.errorEvent.addEventListener(fail);
+    viewer.terrainProvider = provider;
+    button('Terrain extent', () => viewer.camera.setView({destination: terrainBounds}));
+  }
+  for (const [name, label] of [['mesh', '3D mesh'], ['annotations', 'Annotations']]) {
+    if (!config[name]) continue;
+    const tiles = await C.Cesium3DTileset.fromUrl(config[name], {maximumScreenSpaceError: 8, backFaceCulling: name === 'mesh'});
+    viewer.scene.primitives.add(tiles);
+    tiles.tileFailed.addEventListener(fail);
+    if (name === 'annotations') {
+      tiles.style = new C.Cesium3DTileStyle({color: "color('cyan', 0.65)", pointSize: 12});
+      window.annotations = tiles;
+    } else window.tiles = tiles;
+    tilesets.push(tiles);
+    spheres.push(tiles.boundingSphere);
+    toggle(label, tiles);
+    button(`${label} extent`, () => frame(tiles.boundingSphere));
+  }
+  function overview() {
+    if (spheres.length) frame(C.BoundingSphere.fromBoundingSpheres(spheres));
+    else viewer.camera.setView({destination: imageryBounds || terrainBounds});
+  }
+  button('Full scene', overview);
+  overview();
+  viewer.screenSpaceEventHandler.setInputAction(event => {
+    const feature = viewer.scene.pick(event.position);
+    if (feature?.getPropertyIds) {
+      status.textContent = JSON.stringify(Object.fromEntries(feature.getPropertyIds().map(key => [key, feature.getProperty(key)])),
+        (_, value) => typeof value === 'bigint' ? String(value) : value, 2);
+    }
+  }, C.ScreenSpaceEventType.LEFT_CLICK);
+  const removeReady = viewer.scene.postRender.addEventListener(() => {
+    if (!window.failures.length && tilesets.every(tiles => tiles.tilesLoaded) && viewer.scene.globe.tilesLoaded) {
+      window.loaded = true;
+      status.textContent = 'Scene ready. Click an annotation for properties. Hide the mesh to inspect covered annotations.'
+        + (config.terrain ? '\nTerrain uses your supplied height datum and NoData fill settings.' : '');
+      removeReady();
+    }
+  });
+})().catch(error => {
+  window.failures = window.failures || [];
+  window.failures.push(String(error));
+  document.getElementById('status').textContent = `Unable to load scene: ${error.message}`;
+});
+</script></body></html>

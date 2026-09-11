@@ -1,62 +1,37 @@
-//! Orchestrate wrap-or-split → leaf GLBs → bottom-up HLOD parents → REPLACE
-//! tileset → `.3tz`.
-//!
-//! Pipeline (memory-bounded, every stage parallel):
-//! 1. k-d split, grouped into an n-ary tree (`split::split_grouped`).
-//! 2. Leaves: clip, plan one chart-packed atlas each (geometry only).
-//! 3. Source images decoded a few at a time at the scale the charts need;
-//!    charts blitted into leaf atlases; a leaf is encoded + written the
-//!    moment its last image passes. Leaf proxies (with WebP) stay in RAM.
-//! 4. Parents bottom-up by height: children proxies → weld/simplify → bake
-//!    atlas from children atlases → write GLB. Children proxies are dropped
-//!    once their grandparent exists.
-//! 5. Tight content boxes, two-sided measured GE, JSON, pack.
-
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-
-use image::RgbImage;
+//! Spatial leaves and remeshed, retextured replacement LODs.
+//! Each original triangle belongs to exactly one leaf. Leaf charts copy source
+//! texels on the integer pixel grid; only coarse LODs reduce resolution.
+use crate::{
+    bbox::aabb_to_box,
+    error::Error,
+    georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset},
+    glb_write::TilePrimitive,
+    mesh::{self, Scene},
+    pack::{pack_named_files, PackOptions},
+    texture::{self, LeafGroup, LeafPlan},
+    tileset::{glb_to_3tz, CreateTilesetOptions},
+};
+use image::{ImageEncoder, RgbaImage};
 use rayon::prelude::*;
 use serde_json::{json, Value};
-
-use crate::bbox::{y_up_to_z_up, Obb};
-use crate::compress::write_glb_compressed;
-use crate::error::Error;
-use crate::georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
-use crate::glb_write::{write_glb, TilePrimitive};
-use crate::hlod::{build_parent, MIN_PARENT_GE};
-use crate::mesh::{self, Scene};
-use crate::pack::{pack_named_files, PackOptions};
-use crate::split::{self, ClippedTri, SplitNode, SplitOpts};
-use crate::texture::{self, Blit, LeafGroup, LeafPlan};
-use crate::tileset::{glb_to_3tz, CreateTilesetOptions};
-
+use std::{
+    collections::{BTreeMap, HashMap},
+    fs,
+    io::{Read, Write},
+    path::Path,
+    time::Instant,
+};
 pub const DEFAULT_MAX_TRIANGLES: usize = 20_000;
 pub const DEFAULT_MAX_BYTES: u64 = 204_800;
 /// Max atlas edge for leaves and parents.
-pub const DEFAULT_TILE_SIZE: u32 = 1024;
-/// GE = this × metres-per-texel. Cesium SSE is
-/// `GE * height / (distance * 2 tan(fov/2))` and refines when SSE >
-/// `maximumScreenSpaceError` (16 in stock Cesium, 4 in the hub). A factor of
-/// 16 means one parent texel ≈ one pixel at Cesium's default — factor 2 was
-/// tuned for the hub and left Cesium stuck on muddy parents until centimetres
-/// from the wall.
-const TEXEL_GE_FACTOR: f64 = 16.0;
-/// Max source images decoded at once, and the RGB bytes they may occupy
-/// together (an 8K JPEG is ~200 MB decoded).
-const DECODE_CHUNK_CAP: usize = 8;
-const DECODE_BYTES_CAP: u64 = 1 << 30;
-/// Leaf texel budget as a fraction of the atlas: chart AABB slack + gutters
-/// + packing waste leave roughly this much for real texels.
-const LEAF_TEXEL_FILL: f64 = 0.6;
-/// 0.5 mm texels — beyond what any screen resolves at arm's length.
-pub const DEFAULT_MAX_TEXEL_DENSITY: f64 = 2000.0;
+pub const DEFAULT_TILE_SIZE: u32 = 2048;
+/// Preserve every source texel by default.
+pub const DEFAULT_MAX_TEXEL_DENSITY: f64 = 0.0;
 
 #[derive(Clone, Debug)]
 pub struct MeshTo3tzOptions {
+    pub texture_format: TextureFormat,
+    pub basisu: std::path::PathBuf,
     pub cartographic: Option<Cartographic>,
     pub rotation: Option<RotationDegrees>,
     pub force: bool,
@@ -67,13 +42,15 @@ pub struct MeshTo3tzOptions {
     pub max_texel_density: f64,
     pub source_crs: SourceCrs,
     pub source_offset: Option<SourceOffset>,
-    /// Quantized EXT_meshopt_compression GLBs (default). `--noMeshopt` writes float32.
+    /// Lossless EXT_meshopt_compression; float32 attributes in either mode.
     pub meshopt: bool,
 }
 
 impl Default for MeshTo3tzOptions {
     fn default() -> Self {
         Self {
+            texture_format: TextureFormat::Lossless,
+            basisu: "basisu".into(),
             cartographic: None,
             rotation: None,
             force: false,
@@ -98,83 +75,65 @@ impl From<&MeshTo3tzOptions> for CreateTilesetOptions {
     }
 }
 
-struct StageLog {
-    t0: Instant,
-    last: Instant,
+#[derive(Clone, Copy, Debug, clap::ValueEnum, PartialEq, Eq)]
+pub enum TextureFormat {
+    Lossless,
+    Jpeg,
+    Webp,
+    Uastc,
 }
 
-impl StageLog {
-    fn new() -> Self {
-        let t = Instant::now();
-        Self { t0: t, last: t }
-    }
-
-    fn tick(&mut self, stage: &str, extra: impl std::fmt::Display) {
-        let ms = self.last.elapsed().as_secs_f64() * 1000.0;
-        eprintln!("mesh-to-3tz: {stage}  {ms:.0} ms  {extra}");
-        self.last = Instant::now();
-    }
-
-    fn done(&self, extra: impl std::fmt::Display) {
-        let ms = self.t0.elapsed().as_secs_f64() * 1000.0;
-        eprintln!("mesh-to-3tz: done  {ms:.0} ms  {extra}");
-    }
-}
-
-/// Flattened tree node (preorder ids; leaves and parents numbered separately
-/// so URIs stay `t/<depth>/<n>.glb` and `t/<depth>/p<n>.glb`).
-struct Node {
-    depth: u32,
-    height: u32,
-    children: Vec<usize>,
-    cell_min: [f64; 3],
-    cell_max: [f64; 3],
-    /// Leaf: index into the leaf table.
-    leaf: Option<usize>,
-    uri: String,
-}
-
-struct LeafWork {
-    node: usize,
+struct Planned {
+    material: usize,
     plan: LeafPlan,
-    images_left: Vec<u32>,
-    /// Finished proxies (WebP attached); GLB already written.
-    out: Option<Vec<TilePrimitive>>,
 }
-
-/// Per-node results once its GLB exists.
+struct Node {
+    children: Vec<Node>,
+    plans: Vec<Planned>,
+    min: [f64; 3],
+    max: [f64; 3],
+    id: usize,
+    error: f64,
+}
 #[derive(Clone)]
-struct Baked {
-    prims: Vec<TilePrimitive>,
-    /// Tight content box (oriented when that helps), Z-up.
-    obb: Obb,
-    error_m: f64,
-    texel_m: f64,
+struct Piece {
+    material: usize,
+    prim: TilePrimitive,
+    delivery_image: Option<Vec<u8>>,
+}
+struct Proxy {
+    pieces: Vec<Piece>,
+    error: f64,
+    geometry_error: f64,
 }
 
 pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Result<(), Error> {
-    if !input.is_file() || !crate::tileset::is_gltf(input) {
-        return Err(Error::NoContent(input.to_path_buf()));
+    if opts.max_triangles == 0
+        || !opts.tile_size.is_power_of_two()
+        || !(64..=4096).contains(&opts.tile_size)
+    {
+        return Err(Error::msg(
+            "maxTriangles must be positive; tileSize must be a power of two from 64 to 4096",
+        ));
+    }
+    if !opts.max_texel_density.is_finite() || opts.max_texel_density != 0.0 {
+        return Err(Error::msg("the fidelity-preserving pipeline requires maxTexelDensity=0; coarse LODs reduce resolution automatically"));
     }
     if output.exists() && !opts.force {
         return Err(Error::OutputExists(output.to_path_buf()));
     }
-
-    let mut log = StageLog::new();
+    if opts.texture_format == TextureFormat::Uastc {
+        crate::gpu_texture::check(&opts.basisu)?;
+    }
+    let start = Instant::now();
+    if opts.texture_format == TextureFormat::Jpeg {
+        eprintln!(
+            "mesh-to-3tz: {} (quality 95, full chroma)",
+            crate::jpeg::backend()
+        );
+    }
     let mut scene = mesh::load(input)?;
-    log.tick(
-        "load",
-        format!(
-            "tris={} images={} bytes={}",
-            scene.triangle_count(),
-            scene.images.len(),
-            scene.source_bytes
-        ),
-    );
-
-    let mut opts = opts.clone();
-    let auto_crs = opts.source_crs == SourceCrs::Auto;
-    let baked_geog = mesh::bake_to_enu(
+    let baked = mesh::bake_to_enu(
         &mut scene,
         &mesh::BakeToEnu {
             prefer: opts.cartographic,
@@ -182,749 +141,979 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             offset: opts.source_offset,
         },
     );
-    if let Some(baked) = baked_geog {
-        opts.cartographic = Some(baked.origin);
-        let stage = match baked.kind {
-            crate::georef::CrsKind::Geographic => "geog",
-            crate::georef::CrsKind::WebMercator => "mercator",
-        };
-        if auto_crs && opts.source_offset.is_none() {
-            eprintln!(
-                "mesh-to-3tz: warning  auto-detected {stage} CRS from AABB; \
-                 pass --sourceCrs geographic|epsg:3857 to pin it"
-            );
-        }
-        let extra = if let Some(off) = opts.source_offset {
-            format!(
-                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6} offset E={} N={} A={} local-frame",
-                baked.origin.lon_deg,
-                baked.origin.lat_deg,
-                baked.origin.height_m,
-                baked.bbox_wgs84[0],
-                baked.bbox_wgs84[1],
-                baked.bbox_wgs84[2],
-                baked.bbox_wgs84[3],
-                off.easting,
-                off.northing,
-                off.height
-            )
-        } else {
-            format!(
-                "lon={:.6} lat={:.6} h={:.3} wgs84={:.6},{:.6},{:.6},{:.6}",
-                baked.origin.lon_deg,
-                baked.origin.lat_deg,
-                baked.origin.height_m,
-                baked.bbox_wgs84[0],
-                baked.bbox_wgs84[1],
-                baked.bbox_wgs84[2],
-                baked.bbox_wgs84[3]
-            )
-        };
-        log.tick(stage, extra);
+    if baked.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
+        return glb_to_3tz(input, output, &CreateTilesetOptions::from(opts));
     }
-
-    // Geographic sources must not wrap the degree-space GLB. Local metre
-    // meshes still wrap when under the leaf budget.
-    if baked_geog.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        glb_to_3tz(input, output, &CreateTilesetOptions::from(&opts))?;
-        log.tick("wrap", "under budget");
-        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
-        log.done(format!("{}  bytes={out_len}", output.display()));
-        return Ok(());
+    validate_source(input)?;
+    if scene.vertices.iter().any(|v| {
+        v.uv.iter()
+            .any(|u| !u.is_finite() || !(0.0..=1.0).contains(u))
+    }) {
+        return Err(Error::msg(
+            "UV coordinates outside [0,1] require an unchanged glb-to-3tz wrap",
+        ));
     }
-
-    let image_dims: Vec<(u32, u32)> = referenced_image_dims(&scene)?;
-    let tri_texels = triangle_texels(&scene, &image_dims, opts.max_texel_density);
-    let max_texels = LEAF_TEXEL_FILL * (opts.tile_size as f64).powi(2);
-    let tree = split::split_grouped(
-        &scene,
-        &SplitOpts {
-            max_triangles: opts.max_triangles,
-            tri_texels: &tri_texels,
-            max_texels,
-        },
-    );
-    drop(tri_texels);
-    let (nodes, leaf_ids) = flatten(&tree);
-    let max_depth = nodes.iter().map(|n| n.depth).max().unwrap_or(0);
-    let max_fanout = nodes.iter().map(|n| n.children.len()).max().unwrap_or(0);
-    let leaf_tri_ids: usize = leaf_ids
+    let (materials, material_ids) = materials(&scene)?;
+    let wraps = image_wraps(input, scene.images.len())?;
+    let dims = scene
+        .images
         .iter()
-        .map(|(_, l)| match l {
-            SplitNode::Leaf { triangle_ids, .. } => triangle_ids.len(),
-            _ => 0,
-        })
-        .sum();
-    log.tick(
-        "split",
-        format!(
-            "leaves={} parents={} depth={max_depth} maxChildren={max_fanout} leafTris={leaf_tri_ids}",
-            leaf_ids.len(),
-            nodes.len() - leaf_ids.len()
-        ),
+        .map(texture::image_dimensions)
+        .collect::<Result<Vec<_>, _>>()?;
+    eprintln!(
+        "mesh-to-3tz: load {:.2}s triangles={} images={}",
+        start.elapsed().as_secs_f64(),
+        scene.triangles.len(),
+        dims.len()
     );
-
-    let tmp = output.with_extension("mesh-work");
-    if tmp.exists() {
-        fs::remove_dir_all(&tmp)?;
-    }
-    fs::create_dir_all(&tmp)?;
-    let result = (|| {
-        // --- leaves: clip + plan (geometry only) --------------------------
-        let mut works: Vec<LeafWork> = leaf_ids
+    let mut root = partition(
+        &scene,
+        &dims,
+        &material_ids,
+        (0..scene.triangles.len()).collect(),
+        opts,
+    )?;
+    fold(&mut root);
+    let mut nodes = Vec::new();
+    flatten(&mut root, &mut nodes);
+    let leaves = nodes.iter().filter(|n| n.children.is_empty()).count();
+    eprintln!(
+        "mesh-to-3tz: plan {:.2}s leaves={} nodes={}",
+        start.elapsed().as_secs_f64(),
+        leaves,
+        nodes.len()
+    );
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    fs::create_dir_all(parent)?;
+    let work = tempfile::Builder::new()
+        .prefix(".tiles-work-")
+        .tempdir_in(parent)?;
+    fs::create_dir(work.path().join("t"))?;
+    let mut pieces: Vec<Vec<Piece>> = (0..nodes.len()).map(|_| Vec::new()).collect();
+    // Decode a bounded batch in parallel, then spill each image's charts.
+    // Writes to a leaf's spill file stay ordered and cannot interleave.
+    let decode_batch = rayon::current_num_threads().clamp(1, 4);
+    for (batch, encoded) in scene.images.chunks(decode_batch).enumerate() {
+        let decoded = encoded
             .par_iter()
-            .map(|&(node_i, leaf)| -> Result<LeafWork, Error> {
-                let SplitNode::Leaf {
-                    triangle_ids,
-                    min,
-                    max,
-                } = leaf
-                else {
-                    return Err(Error::msg("leaf table holds a branch"));
-                };
-                let clipped = split::clip_to_cell(&scene, triangle_ids, *min, *max);
-                let groups = group_clipped(&clipped);
-                let plan = texture::plan_leaf_atlas(
-                    groups,
-                    &image_dims,
-                    opts.tile_size,
-                    opts.max_texel_density,
-                )?;
-                let mut imgs: Vec<u32> = plan.blits.iter().map(|b| b.image).collect();
-                imgs.sort_unstable();
-                imgs.dedup();
-                Ok(LeafWork {
-                    node: node_i,
-                    plan,
-                    images_left: imgs,
-                    out: None,
-                })
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-        let scales: Vec<f32> = works
-            .iter()
-            .filter(|w| w.plan.textured.is_some())
-            .map(|w| w.plan.scale)
-            .collect();
-        let atlas_px: Vec<u32> = works.iter().map(|w| w.plan.atlas_wh.0).collect();
-        let half_atlases = works
-            .iter()
-            .filter(|w| w.plan.atlas_wh.1 > 0 && w.plan.atlas_wh.1 < w.plan.atlas_wh.0)
-            .count();
-        let planned_tris: usize = works
-            .iter()
-            .map(|w| {
-                w.plan.textured.as_ref().map_or(0, |p| p.indices.len() / 3)
-                    + w.plan
-                        .untextured
-                        .as_ref()
-                        .map_or(0, |p| p.indices.len() / 3)
-            })
-            .sum();
-        let fills: Vec<f32> = works
-            .iter()
-            .filter(|w| w.plan.textured.is_some())
-            .map(|w| w.plan.fill)
-            .collect();
-        let overflow_atlases = works
-            .iter()
-            .filter(|w| w.plan.atlas_wh.0 > opts.tile_size || w.plan.atlas_wh.1 > opts.tile_size)
-            .count();
-        log.tick(
-            "plan-leaves",
-            format!(
-                "tris={planned_tris} charts={} tiny={} scale(min/med)={:.2}/{:.2} fill(med)={:.2} atlas(max)={} halfAtlases={half_atlases} overflowAtlases={overflow_atlases}",
-                works.iter().map(|w| w.plan.blits.len()).sum::<usize>(),
-                works.iter().map(|w| w.plan.tiny_charts).sum::<usize>(),
-                scales.iter().cloned().fold(1.0f32, f32::min),
-                median_f32(&scales),
-                median_f32(&fills),
-                atlas_px.iter().max().unwrap_or(&0)
-            ),
-        );
-
-        // Untextured leaves finish now.
-        works
-            .par_iter_mut()
-            .filter(|w| w.images_left.is_empty())
-            .try_for_each(|w| finalize_leaf(w, &nodes, &tmp, opts.meshopt))?;
-
-        // --- leaves: one chunked image pass, charts spilled to disk ------
-        // A leaf's charts come from most of the source images, so an atlas
-        // would live for the whole pass; with thousands of leaves that is
-        // tens of GB. Instead each resampled chart is appended to the leaf's
-        // scratch file and the atlas is composed once its last image is done.
-        let spill_dir = tmp.join("spill");
-        fs::create_dir_all(&spill_dir)?;
-        let mut by_image: HashMap<u32, Vec<usize>> = HashMap::new();
-        for (li, w) in works.iter().enumerate() {
-            for &img in &w.images_left {
-                by_image.entry(img).or_default().push(li);
-            }
-        }
-        let mut image_order: Vec<u32> = by_image.keys().copied().collect();
-        image_order.sort_unstable();
-        // Decode size per image (IDCT-scaled to what its blits need), then
-        // chunk by bytes so eight 8K images do not sit in RAM at once.
-        let decode_wh: HashMap<u32, (u32, u32)> = image_order
-            .iter()
-            .map(|&img| {
-                let blits: Vec<&Blit> = by_image[&img]
-                    .iter()
-                    .flat_map(|&li| works[li].plan.blits.iter().filter(move |b| b.image == img))
-                    .collect();
-                (
-                    img,
-                    texture::needed_decode_size(&blits, image_dims[img as usize]),
-                )
-            })
-            .collect();
-        let mut chunks: Vec<Vec<u32>> = Vec::new();
-        let mut cur: Vec<u32> = Vec::new();
-        let mut cur_bytes: u64 = 0;
-        let max_n = rayon::current_num_threads().clamp(1, DECODE_CHUNK_CAP);
-        for &img in &image_order {
-            let (w, h) = decode_wh[&img];
-            let bytes = 3 * w as u64 * h as u64;
-            if !cur.is_empty() && (cur_bytes + bytes > DECODE_BYTES_CAP || cur.len() >= max_n) {
-                chunks.push(std::mem::take(&mut cur));
-                cur_bytes = 0;
-            }
-            cur.push(img);
-            cur_bytes += bytes;
-        }
-        if !cur.is_empty() {
-            chunks.push(cur);
-        }
-        let mut decoded_px: u64 = 0;
-        for imgs in &chunks {
-            let decoded: Vec<(u32, RgbImage)> = imgs
-                .par_iter()
-                .map(|&img| -> Result<(u32, RgbImage), Error> {
-                    let (w, h) = decode_wh[&img];
-                    let rgb = texture::decode_rgb_max(&scene.images[img as usize], w, h)?;
-                    Ok((img, rgb))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-            decoded_px += decoded
+            .map(|image| -> Result<_, Error> { crate::jpeg::decode(&image.load()?) })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (within, source) in decoded.into_iter().enumerate() {
+            let image_id = batch * decode_batch + within;
+            let touched: Vec<_> = nodes
                 .iter()
-                .map(|(_, im)| im.width() as u64 * im.height() as u64)
-                .sum::<u64>();
-            let lookup: HashMap<u32, &RgbImage> = decoded.iter().map(|(i, im)| (*i, im)).collect();
-            let touched: HashSet<usize> = imgs
-                .iter()
-                .flat_map(|i| by_image[i].iter().copied())
-                .collect();
-            works
-                .par_iter_mut()
                 .enumerate()
-                .filter(|(li, _)| touched.contains(li))
-                .try_for_each(|(_, w)| -> Result<(), Error> {
-                    let mut buf: Vec<u8> = Vec::new();
-                    for (bi, b) in w.plan.blits.iter().enumerate() {
-                        if let Some(src) = lookup.get(&b.image) {
-                            let chart = texture::resample_chart(src, b);
-                            buf.extend_from_slice(&(bi as u32).to_le_bytes());
-                            buf.extend_from_slice(chart.as_raw());
+                .flat_map(|(ni, n)| n.plans.iter().enumerate().map(move |(pi, p)| (ni, pi, p)))
+                .filter(|(_, _, p)| p.plan.blits.iter().any(|b| b.image as usize == image_id))
+                .collect();
+            if touched.is_empty() {
+                continue;
+            }
+            touched
+                .par_iter()
+                .try_for_each(|&(ni, pi, p)| -> Result<(), Error> {
+                    let mut file = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(work.path().join(format!("{ni}-{pi}.pixels")))?;
+                    for (bi, b) in p
+                        .plan
+                        .blits
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, b)| b.image as usize == image_id)
+                    {
+                        let [_, _, w, h] = b.dst;
+                        let x0 = (b.src[0] as f64 * source.width() as f64).round() as i64;
+                        let y0 = (b.src[1] as f64 * source.height() as f64).round() as i64;
+                        let mut pixels = Vec::with_capacity(w as usize * h as usize * 4);
+                        for y in 0..h {
+                            let sy = wrap(y0 + y as i64, source.height(), wraps[image_id].1);
+                            if x0 >= 0 && x0 + w as i64 <= source.width() as i64 {
+                                let offset =
+                                    (sy as usize * source.width() as usize + x0 as usize) * 4;
+                                pixels.extend_from_slice(
+                                    &source.as_raw()[offset..offset + w as usize * 4],
+                                );
+                                continue;
+                            }
+                            for x in 0..w {
+                                // Source sampler wrap is applied to chart gutters too.
+                                let sx = wrap(x0 + x as i64, source.width(), wraps[image_id].0);
+                                let sy = wrap(y0 + y as i64, source.height(), wraps[image_id].1);
+                                pixels.extend_from_slice(&source.get_pixel(sx, sy).0);
+                            }
                         }
-                    }
-                    if !buf.is_empty() {
-                        let mut f = fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(spill_path(&spill_dir, w.node))?;
-                        f.write_all(&buf)?;
-                    }
-                    w.images_left.retain(|i| !lookup.contains_key(i));
-                    if w.images_left.is_empty() && w.out.is_none() {
-                        finalize_leaf(w, &nodes, &tmp, opts.meshopt)?;
+                        file.write_all(&(bi as u32).to_le_bytes())?;
+                        file.write_all(&pixels)?;
                     }
                     Ok(())
                 })?;
         }
-        let _ = fs::remove_dir_all(&spill_dir);
-        log.tick(
-            "bake-leaves",
-            format!(
-                "images={} decodedMpx={:.0} leafGlbs={}",
-                image_order.len(),
-                decoded_px as f64 / 1e6,
-                works.len()
-            ),
-        );
-
-        // --- assemble per-node results ------------------------------------
-        let mut baked: Vec<Option<Baked>> = (0..nodes.len()).map(|_| None).collect();
-        for w in works.iter_mut() {
-            let prims = w
-                .out
-                .take()
-                .ok_or_else(|| Error::msg("leaf never finalized"))?;
-            let obb = Obb::fit(&prims_points_zup(&prims))
-                .unwrap_or_else(|| Obb::from_aabb(nodes[w.node].cell_min, nodes[w.node].cell_max));
-            baked[w.node] = Some(Baked {
-                prims,
-                obb,
-                error_m: 0.0,
-                texel_m: 0.0,
-            });
-        }
-        drop(works);
-
-        // --- parents, bottom-up by height ---------------------------------
-        let root_height = nodes[0].height;
-        let mut parent_count = 0usize;
-        let mut max_tris = 0usize;
-        for h in 1..=root_height {
-            let level: Vec<usize> = (0..nodes.len())
-                .filter(|&i| nodes[i].leaf.is_none() && nodes[i].height == h)
-                .collect();
-            let results: Vec<(usize, Baked)> = level
-                .par_iter()
-                .map(|&ni| -> Result<(usize, Baked), Error> {
-                    let node = &nodes[ni];
-                    let mut children: Vec<TilePrimitive> = Vec::new();
-                    // Own proxy vertices + child box corners: the fit then
-                    // encloses every child box, as the spec requires.
-                    let mut pts: Vec<[f64; 3]> = Vec::new();
-                    for &c in &node.children {
-                        let b = baked[c]
-                            .as_ref()
-                            .ok_or_else(|| Error::msg("child not baked before parent"))?;
-                        children.extend(b.prims.iter().cloned());
-                        pts.extend_from_slice(&b.obb.corners());
+    }
+    eprintln!(
+        "mesh-to-3tz: chart extraction {:.2}s",
+        start.elapsed().as_secs_f64()
+    );
+    drop(scene);
+    nodes
+        .par_iter_mut()
+        .zip(pieces.par_iter_mut())
+        .try_for_each(|(node, out)| -> Result<(), Error> {
+            for (pi, p) in node.plans.drain(..).enumerate() {
+                let mut prim = p
+                    .plan
+                    .textured
+                    .or(p.plan.untextured)
+                    .ok_or_else(|| Error::msg("empty leaf plan"))?;
+                let mut delivery_image = None;
+                if !p.plan.blits.is_empty() {
+                    let mut atlas = RgbaImage::new(p.plan.atlas_wh.0, p.plan.atlas_wh.1);
+                    let path = work.path().join(format!("{}-{pi}.pixels", node.id));
+                    let mut file = fs::File::open(&path)?;
+                    let mut seen = vec![false; p.plan.blits.len()];
+                    for _ in 0..p.plan.blits.len() {
+                        let mut id = [0; 4];
+                        file.read_exact(&mut id)?;
+                        let bi = u32::from_le_bytes(id) as usize;
+                        if bi >= seen.len() || seen[bi] {
+                            return Err(Error::msg("invalid chart spill"));
+                        }
+                        seen[bi] = true;
+                        let [x, y, w, h] = p.plan.blits[bi].dst;
+                        let mut data = vec![0; w as usize * h as usize * 4];
+                        file.read_exact(&mut data)?;
+                        let chart = RgbaImage::from_raw(w, h, data).unwrap();
+                        image::imageops::replace(&mut atlas, &chart, x as i64, y as i64);
                     }
-                    let r = build_parent(&children, opts.max_triangles, opts.tile_size)?;
-                    write_tile_glb(&tmp, &node.uri, &r.prims, opts.meshopt)?;
-                    pts.extend(prims_points_zup(&r.prims));
-                    let obb = Obb::fit(&pts)
-                        .unwrap_or_else(|| Obb::from_aabb(node.cell_min, node.cell_max));
-                    Ok((
-                        ni,
-                        Baked {
-                            prims: r.prims,
-                            obb,
-                            error_m: r.error_m,
-                            texel_m: r.texel_m,
-                        },
-                    ))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-            for (ni, b) in results {
-                max_tris = max_tris.max(prim_tris(&b.prims));
-                parent_count += 1;
-                baked[ni] = Some(b);
-            }
-            // Grandchildren proxies are no longer needed.
-            if h >= 2 {
-                for &ni in &level {
-                    for &c in &nodes[ni].children {
-                        for &gc in &nodes[c].children {
-                            if let Some(b) = baked[gc].as_mut() {
-                                b.prims = Vec::new();
-                            }
+                    fill_background(
+                        &mut atlas,
+                        &p.plan.blits.iter().map(|b| b.dst).collect::<Vec<_>>(),
+                    );
+                    delivery_image = Some(encode_delivery(
+                        &atlas,
+                        work.path(),
+                        &format!("gpu-{}-{pi}", node.id),
+                        &materials[p.material],
+                        opts,
+                    )?);
+                    if materials[p.material]["alphaMode"]
+                        .as_str()
+                        .unwrap_or("OPAQUE")
+                        == "OPAQUE"
+                    {
+                        // Alpha is ignored by the material. Premultiplied
+                        // filtering must not erase otherwise-visible RGB.
+                        for pixel in atlas.pixels_mut() {
+                            pixel[3] = 255;
                         }
                     }
+                    // Parents need a filtered working image, not the entire
+                    // full-resolution leaf. Keep final delivery independent.
+                    let divisor = (atlas.width().max(atlas.height()) / 1024).max(1);
+                    let proxy_image = if divisor > 1 {
+                        resize_colour(&atlas, atlas.width() / divisor, atlas.height() / divisor)
+                    } else {
+                        atlas
+                    };
+                    prim.jpeg = Some(encode_png(&proxy_image)?);
+                    fs::remove_file(path)?;
                 }
+                out.push(Piece {
+                    material: p.material,
+                    prim,
+                    delivery_image,
+                });
             }
-        }
-        log.tick(
-            "hlod",
-            format!(
-                "parents={parent_count} maxTris={max_tris} levels={root_height} {}",
-                crate::hlod::TIMING.summary()
-            ),
-        );
-
-        // --- tileset.json ---------------------------------------------------
-        let files: Vec<(String, PathBuf)> = nodes
-            .iter()
-            .map(|n| (n.uri.clone(), tmp.join(&n.uri)))
+            if node.children.is_empty() {
+                write_node(work.path(), node.id, out, &materials, opts)?;
+                spill_images(work.path(), node.id, out)?;
+            }
+            Ok(())
+        })?;
+    eprintln!("mesh-to-3tz: leaves {:.2}s", start.elapsed().as_secs_f64());
+    let mut proxies: Vec<Option<Proxy>> = pieces
+        .into_iter()
+        .enumerate()
+        .map(|(i, pieces)| {
+            nodes[i].children.is_empty().then_some(Proxy {
+                pieces,
+                error: 0.0,
+                geometry_error: 0.0,
+            })
+        })
+        .collect();
+    let mut completed: Vec<bool> = nodes.iter().map(|n| n.children.is_empty()).collect();
+    let parent_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(rayon::current_num_threads().clamp(1, 12))
+        .build()
+        .map_err(|e| Error::msg(format!("parent worker pool: {e}")))?;
+    while proxies[0].is_none() {
+        let ready: Vec<usize> = (0..nodes.len())
+            .filter(|&i| {
+                !completed[i]
+                    && !nodes[i].children.is_empty()
+                    && nodes[i].children.iter().all(|c| proxies[c.id].is_some())
+            })
             .collect();
-        let (root, root_ge) = emit(&nodes, &baked, 0, true, &opts);
-        let tileset = json!({
-            "asset": { "version": "1.1" },
-            "geometricError": (root_ge * 2.0).max(MIN_PARENT_GE),
-            "root": root,
-        });
-        let json_path = tmp.join("tileset.json");
-        fs::write(&json_path, serde_json::to_vec_pretty(&tileset)?)?;
-        let mut all = vec![("tileset.json".to_string(), json_path)];
-        all.extend(files);
-        pack_named_files(&all, output, &PackOptions { force: true })?;
-        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
-        log.tick(
-            "write+pack",
-            format!("glbs={} rootGE={root_ge:.3} bytes={out_len}", all.len() - 1),
-        );
-        Ok(())
-    })();
-    let _ = fs::remove_dir_all(&tmp);
-    if result.is_ok() {
-        let out_len = fs::metadata(output).map(|m| m.len()).unwrap_or(0);
-        log.done(format!("{}  bytes={out_len}", output.display()));
-    }
-    result
-}
-
-/// Preorder flatten. Leaf table pairs node id with the leaf node.
-fn flatten(tree: &SplitNode) -> (Vec<Node>, Vec<(usize, &SplitNode)>) {
-    let mut nodes = Vec::new();
-    let mut leaves = Vec::new();
-    let mut leaf_n = 0usize;
-    let mut parent_n = 0usize;
-    fn walk<'a>(
-        n: &'a SplitNode,
-        depth: u32,
-        nodes: &mut Vec<Node>,
-        leaves: &mut Vec<(usize, &'a SplitNode)>,
-        leaf_n: &mut usize,
-        parent_n: &mut usize,
-    ) -> usize {
-        let (min, max) = n.aabb();
-        let id = nodes.len();
-        match n {
-            SplitNode::Leaf { .. } => {
-                let uri = format!("t/{depth}/{}.glb", *leaf_n);
-                *leaf_n += 1;
-                nodes.push(Node {
-                    depth,
-                    height: 0,
-                    children: Vec::new(),
-                    cell_min: min,
-                    cell_max: max,
-                    leaf: Some(leaves.len()),
-                    uri,
-                });
-                leaves.push((id, n));
-            }
-            SplitNode::Branch { children, .. } => {
-                let uri = format!("t/{depth}/p{}.glb", *parent_n);
-                *parent_n += 1;
-                nodes.push(Node {
-                    depth,
-                    height: 0,
-                    children: Vec::new(),
-                    cell_min: min,
-                    cell_max: max,
-                    leaf: None,
-                    uri,
-                });
-                let mut kids = Vec::with_capacity(children.len());
-                let mut height = 0;
-                for c in children {
-                    let cid = walk(c, depth + 1, nodes, leaves, leaf_n, parent_n);
-                    height = height.max(nodes[cid].height + 1);
-                    kids.push(cid);
-                }
-                nodes[id].children = kids;
-                nodes[id].height = height;
-            }
+        if ready.is_empty() {
+            return Err(Error::msg("LOD dependency cycle"));
         }
-        id
-    }
-    walk(tree, 0, &mut nodes, &mut leaves, &mut leaf_n, &mut parent_n);
-    (nodes, leaves)
-}
-
-/// Source texels each triangle covers, capped at `max_density` px/m so an
-/// over-photographed patch does not force a forest of tiny leaves.
-fn triangle_texels(scene: &Scene, image_dims: &[(u32, u32)], max_density: f64) -> Vec<f32> {
-    let cap2 = if max_density > 0.0 {
-        max_density * max_density
-    } else {
-        f64::INFINITY
-    };
-    scene
-        .triangles
-        .par_iter()
-        .map(|t| {
-            let Some(img) = t.image else { return 0.0 };
-            let (w, h) = image_dims[img as usize];
-            if w == 0 || h == 0 {
-                return 0.0;
-            }
-            let v = [
-                &scene.vertices[t.verts[0] as usize],
-                &scene.vertices[t.verts[1] as usize],
-                &scene.vertices[t.verts[2] as usize],
-            ];
-            let e1 = sub3(v[1].pos, v[0].pos);
-            let e2 = sub3(v[2].pos, v[0].pos);
-            let c = cross3(e1, e2);
-            let area = 0.5
-                * (c[0] as f64 * c[0] as f64
-                    + c[1] as f64 * c[1] as f64
-                    + c[2] as f64 * c[2] as f64)
-                    .sqrt();
-            let (u0, v0) = (v[0].uv[0] as f64 * w as f64, v[0].uv[1] as f64 * h as f64);
-            let (u1, v1) = (v[1].uv[0] as f64 * w as f64, v[1].uv[1] as f64 * h as f64);
-            let (u2, v2) = (v[2].uv[0] as f64 * w as f64, v[2].uv[1] as f64 * h as f64);
-            let texels = 0.5 * ((u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0)).abs();
-            texels.min(area * cap2) as f32
-        })
-        .collect()
-}
-
-fn sub3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn referenced_image_dims(scene: &Scene) -> Result<Vec<(u32, u32)>, Error> {
-    let mut used = vec![false; scene.images.len()];
-    for t in &scene.triangles {
-        if let Some(i) = t.image {
-            if (i as usize) < used.len() {
-                used[i as usize] = true;
+        {
+            let jobs: Vec<_> = ready
+                .iter()
+                .map(|&id| {
+                    let children = nodes[id]
+                        .children
+                        .iter()
+                        .map(|c| (c.id, proxies[c.id].take().unwrap()))
+                        .collect::<Vec<_>>();
+                    (id, children)
+                })
+                .collect();
+            let results = parent_pool.install(|| {
+                jobs.into_par_iter()
+                    .map(|(id, mut children)| -> Result<_, Error> {
+                        for (child_id, proxy) in &mut children {
+                            restore_images(work.path(), *child_id, &mut proxy.pieces)?;
+                        }
+                        let mut proxy =
+                            parent_proxy(children.into_iter().map(|(_, p)| p).collect(), opts)?;
+                        write_node(work.path(), id, &proxy.pieces, &materials, opts)?;
+                        spill_images(work.path(), id, &mut proxy.pieces)?;
+                        Ok((id, proxy))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })?;
+            for (id, proxy) in results {
+                nodes[id].error = proxy.error;
+                completed[id] = true;
+                proxies[id] = Some(proxy);
             }
         }
     }
-    (0..scene.images.len())
-        .into_par_iter()
-        .map(|i| {
-            if used[i] {
-                texture::image_dimensions(&scene.images[i])
+    eprintln!("mesh-to-3tz: {}", crate::hlod::TIMING.summary());
+    let root_proxy = proxies[0].as_ref().unwrap();
+    eprintln!(
+        "mesh-to-3tz: root triangles={} geometry_error={:.4} refinement_error={:.4}",
+        root_proxy
+            .pieces
+            .iter()
+            .map(|p| p.prim.indices.len() / 3)
+            .sum::<usize>(),
+        root_proxy.geometry_error,
+        root_proxy.error
+    );
+    let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes)});
+    if let Some(origin) = baked.map(|b| b.origin).or(opts.cartographic) {
+        ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
+    }
+    fs::write(work.path().join("tileset.json"), serde_json::to_vec(&ts)?)?;
+    let mut files = vec![("tileset.json".into(), work.path().join("tileset.json"))];
+    for node in &nodes {
+        let name = format!("t/{}.glb", node.id);
+        files.push((name.clone(), work.path().join(name)));
+    }
+    pack_named_files(&files, output, &PackOptions { force: opts.force })?;
+    eprintln!(
+        "mesh-to-3tz: done {:.2}s bytes={}",
+        start.elapsed().as_secs_f64(),
+        fs::metadata(output)?.len()
+    );
+    Ok(())
+}
+
+fn wrap(v: i64, n: u32, mode: u32) -> u32 {
+    let n = n as i64;
+    match mode {
+        33071 => v.clamp(0, n - 1) as u32,
+        33648 => {
+            let p = v.rem_euclid(n * 2);
+            if p < n {
+                p as u32
             } else {
-                Ok((0, 0))
+                (n * 2 - 1 - p) as u32
             }
-        })
-        .collect()
+        }
+        _ => v.rem_euclid(n) as u32,
+    }
+}
+fn image_wraps(input: &Path, n: usize) -> Result<Vec<(u32, u32)>, Error> {
+    let doc = source_document(input)?;
+    let mut wraps = vec![None; n];
+    for t in doc["textures"].as_array().into_iter().flatten() {
+        let Some(i) = t["source"].as_u64() else {
+            continue;
+        };
+        let sampler = t["sampler"].as_u64().map(|i| &doc["samplers"][i as usize]);
+        let pair = sampler
+            .map(|s| {
+                (
+                    s["wrapS"].as_u64().unwrap_or(10497) as u32,
+                    s["wrapT"].as_u64().unwrap_or(10497) as u32,
+                )
+            })
+            .unwrap_or((10497, 10497));
+        if let Some(slot) = wraps.get_mut(i as usize) {
+            if slot.is_some_and(|v| v != pair) {
+                return Err(Error::msg(
+                    "an image used with multiple wrap modes needs an unchanged glb-to-3tz wrap",
+                ));
+            }
+            *slot = Some(pair);
+        }
+    }
+    Ok(wraps
+        .into_iter()
+        .map(|v| v.unwrap_or((10497, 10497)))
+        .collect())
 }
 
-fn group_clipped(tris: &[ClippedTri]) -> Vec<LeafGroup> {
-    let mut groups: BTreeMap<Option<u32>, Vec<&ClippedTri>> = BTreeMap::new();
-    for t in tris {
-        groups.entry(t.image).or_default().push(t);
+fn partition(
+    scene: &Scene,
+    dims: &[(u32, u32)],
+    materials: &[usize],
+    mut ids: Vec<usize>,
+    opts: &MeshTo3tzOptions,
+) -> Result<Node, Error> {
+    let (lo, hi) = mesh::triangle_aabb_yup(scene, &ids);
+    let mut node = Node {
+        children: Vec::new(),
+        plans: Vec::new(),
+        min: lo.map(f64::from),
+        max: hi.map(f64::from),
+        id: 0,
+        error: 0.0,
+    };
+    if ids.len() <= opts.max_triangles {
+        node.plans = plan(scene, dims, materials, &ids, opts.tile_size)?;
+        if node.plans.iter().all(|p| p.plan.scale == 1.0) {
+            return Ok(node);
+        }
+        node.plans.clear();
+        if ids.len() == 1 {
+            // One triangle may span a large source chart. Keep it whole and
+            // enlarge this exceptional leaf rather than alter its surface.
+            let edge = dims
+                .iter()
+                .map(|&(w, h)| w.max(h).saturating_add(16).next_power_of_two())
+                .max()
+                .unwrap_or(opts.tile_size)
+                .max(opts.tile_size);
+            if edge > 32768 {
+                return Err(Error::msg(
+                    "a source triangle requires an atlas larger than 32768 pixels",
+                ));
+            }
+            node.plans = plan(scene, dims, materials, &ids, edge)?;
+            if node.plans.iter().any(|p| p.plan.scale != 1.0) {
+                return Err(Error::msg(
+                    "cannot retain source texels for an individual triangle",
+                ));
+            }
+            return Ok(node);
+        }
+    }
+    let axis = (0..3)
+        .max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b])))
+        .unwrap();
+    let mid = ids.len() / 2;
+    ids.select_nth_unstable_by(mid, |&a, &b| {
+        mesh::centroid(scene, &scene.triangles[a])[axis]
+            .total_cmp(&mesh::centroid(scene, &scene.triangles[b])[axis])
+            .then(a.cmp(&b))
+    });
+    let right = ids.split_off(mid);
+    let (a, b) = if ids.len() > 20000 {
+        rayon::join(
+            || partition(scene, dims, materials, ids, opts),
+            || partition(scene, dims, materials, right, opts),
+        )
+    } else {
+        (
+            partition(scene, dims, materials, ids, opts),
+            partition(scene, dims, materials, right, opts),
+        )
+    };
+    node.children = vec![a?, b?];
+    Ok(node)
+}
+fn plan(
+    scene: &Scene,
+    dims: &[(u32, u32)],
+    materials: &[usize],
+    ids: &[usize],
+    edge: u32,
+) -> Result<Vec<Planned>, Error> {
+    let mut groups: BTreeMap<(usize, bool, bool), BTreeMap<Option<u32>, Vec<usize>>> =
+        BTreeMap::new();
+    for &id in ids {
+        let t = &scene.triangles[id];
+        groups
+            .entry((
+                materials[t.material.map_or(0, |m| m as usize + 1)],
+                t.image.is_some(),
+                scene.vertices[t.verts[0] as usize].nrm != [0.0; 3],
+            ))
+            .or_default()
+            .entry(t.image)
+            .or_default()
+            .push(id);
     }
     groups
         .into_iter()
-        .map(|(image, group)| LeafGroup {
-            image,
-            prim: build_clipped(&group),
+        .map(|((material, _, _), imgs)| {
+            let mut groups = Vec::new();
+            for (image, ids) in imgs {
+                let mut prim = TilePrimitive::default();
+                let mut remap = HashMap::new();
+                for id in ids {
+                    for vi in scene.triangles[id].verts {
+                        let dst = *remap.entry(vi).or_insert_with(|| {
+                            let v = scene.vertices[vi as usize];
+                            let i = prim.positions.len() as u32;
+                            prim.positions.push(v.pos);
+                            prim.normals.push(v.nrm);
+                            prim.uvs.push(v.uv);
+                            i
+                        });
+                        prim.indices.push(dst);
+                    }
+                }
+                if prim.normals.iter().all(|n| *n == [0.0; 3]) {
+                    prim.normals.clear();
+                }
+                if image.is_none() {
+                    prim.uvs.clear();
+                }
+                groups.push(LeafGroup { image, prim });
+            }
+            Ok(Planned {
+                material,
+                plan: texture::plan_leaf_atlas_limit(groups, dims, edge, 0.0)?,
+            })
         })
         .collect()
 }
+fn fold(node: &mut Node) {
+    fn weight(node: &Node) -> usize {
+        if node.children.is_empty() {
+            1
+        } else {
+            node.children.iter().map(weight).sum()
+        }
+    }
+    // Expand the largest remaining subtree first, before folding descendants.
+    // This balances leaf counts even where source texture density varies.
+    let mut frontier = std::mem::take(&mut node.children);
+    loop {
+        let next = frontier
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| !n.children.is_empty() && frontier.len() - 1 + n.children.len() <= 8)
+            .max_by_key(|(i, n)| (weight(n), std::cmp::Reverse(*i)))
+            .map(|(i, _)| i);
+        let Some(i) = next else { break };
+        let child = frontier.remove(i);
+        frontier.splice(i..i, child.children);
+    }
+    node.children = frontier;
+    for child in &mut node.children {
+        fold(child);
+    }
+}
+fn flatten(node: &mut Node, out: &mut Vec<Node>) {
+    node.id = out.len();
+    out.push(Node {
+        children: Vec::new(),
+        plans: std::mem::take(&mut node.plans),
+        min: node.min,
+        max: node.max,
+        id: node.id,
+        error: 0.0,
+    });
+    for c in &mut node.children {
+        flatten(c, out);
+    }
+    out[node.id].children = node
+        .children
+        .iter()
+        .map(|c| Node {
+            children: Vec::new(),
+            plans: Vec::new(),
+            min: c.min,
+            max: c.max,
+            id: c.id,
+            error: 0.0,
+        })
+        .collect();
+}
+fn tile_json(id: usize, nodes: &[Node]) -> Value {
+    let n = &nodes[id];
+    let lo = [n.min[0], -n.max[2], n.min[1]];
+    let hi = [n.max[0], -n.min[2], n.max[1]];
+    let mut v = json!({"boundingVolume":{"box":aabb_to_box(lo,hi)},"geometricError":n.error,"refine":"REPLACE","content":{"uri":format!("t/{id}.glb")}});
+    if !n.children.is_empty() {
+        v["children"] = json!(n
+            .children
+            .iter()
+            .map(|c| tile_json(c.id, nodes))
+            .collect::<Vec<_>>());
+    }
+    v
+}
+fn write_node(
+    dir: &Path,
+    id: usize,
+    pieces: &[Piece],
+    materials: &[Value],
+    opts: &MeshTo3tzOptions,
+) -> Result<(), Error> {
+    let mut prims: Vec<_> = pieces.iter().map(|p| p.prim.clone()).collect();
+    for (i, prim) in prims.iter_mut().enumerate() {
+        if let Some(bytes) = &pieces[i].delivery_image {
+            prim.jpeg = Some(bytes.clone());
+        } else if let Some(bytes) = prim.jpeg.take() {
+            let image = image::load_from_memory(&bytes)
+                .map_err(|e| {
+                    if let Some(path) = std::env::var_os("RUSTY_TILES_DEBUG_IMAGES") {
+                        let path = std::path::PathBuf::from(path);
+                        let _ = fs::create_dir_all(&path);
+                        let _ = fs::write(path.join(format!("failed-{id}-{i}.png")), &bytes);
+                    }
+                    Error::msg(format!("parent {id} image {i}: {e}"))
+                })?
+                .to_rgba8();
+            prim.jpeg = Some(encode_delivery(
+                &image,
+                dir,
+                &format!("gpu-{id}-{i}"),
+                &materials[pieces[i].material],
+                opts,
+            )?);
+        }
+    }
+    let mats: Vec<_> = pieces
+        .iter()
+        .map(|p| materials[p.material].clone())
+        .collect();
+    fs::write(
+        dir.join(format!("t/{id}.glb")),
+        crate::lossless::write(&prims, &mats, opts.meshopt)?,
+    )?;
+    Ok(())
+}
+fn encode_delivery(
+    image: &RgbaImage,
+    dir: &Path,
+    name: &str,
+    material: &Value,
+    opts: &MeshTo3tzOptions,
+) -> Result<Vec<u8>, Error> {
+    match opts.texture_format {
+        TextureFormat::Lossless => encode_png(image),
+        TextureFormat::Jpeg => {
+            if material["alphaMode"].as_str().unwrap_or("OPAQUE") == "OPAQUE" {
+                crate::jpeg::encode(image)
+            } else {
+                encode_png(image)
+            }
+        }
+        TextureFormat::Webp => texture::encode_perceptual(
+            image,
+            material["alphaMode"].as_str().unwrap_or("OPAQUE") == "OPAQUE",
+        ),
+        TextureFormat::Uastc => crate::gpu_texture::encode(
+            &opts.basisu,
+            dir,
+            name,
+            &encode_png(image)?,
+            material["alphaMode"].as_str().unwrap_or("OPAQUE") == "OPAQUE",
+        ),
+    }
+}
 
-/// Weld clipped triangles by (position, uv) into one primitive.
-fn build_clipped(tris: &[&ClippedTri]) -> TilePrimitive {
-    let mut remap: HashMap<([i64; 3], [i64; 2]), u32> = HashMap::new();
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
-    for t in tris {
-        let a = t.verts[0].pos;
-        let b = t.verts[1].pos;
-        let c = t.verts[2].pos;
-        if sliver_area2(a, b, c) {
+pub(crate) fn encode_png(image: &RgbaImage) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::new();
+    image::codecs::png::PngEncoder::new_with_quality(
+        &mut bytes,
+        image::codecs::png::CompressionType::Fast,
+        image::codecs::png::FilterType::Adaptive,
+    )
+    .write_image(
+        image.as_raw(),
+        image.width(),
+        image.height(),
+        image::ExtendedColorType::Rgba8,
+    )?;
+    Ok(bytes)
+}
+
+fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, Error> {
+    let inherited = children
+        .iter()
+        .map(|c| c.geometry_error)
+        .fold(0.0f64, f64::max);
+    let previous_error = children.iter().map(|c| c.error).fold(0.0f64, f64::max);
+    // Upper levels cover many leaves: a larger atlas keeps them useful in
+    // the viewer instead of forcing an early jump to many full-detail tiles.
+    let parent_atlas = if children.iter().any(|c| c.error > 0.0) {
+        opts.tile_size
+    } else {
+        opts.tile_size.min(1024)
+    };
+    let mut groups: BTreeMap<(usize, bool, bool), Vec<TilePrimitive>> = BTreeMap::new();
+    for child in children {
+        for p in child.pieces {
+            groups
+                .entry((
+                    p.material,
+                    p.prim.jpeg.is_some(),
+                    !p.prim.normals.is_empty(),
+                ))
+                .or_default()
+                .push(p.prim);
+        }
+    }
+    let mut pieces = Vec::new();
+    let mut geometry_error = 0.0f64;
+    let mut texture_error = 0.0f64;
+    let total_triangles: usize = groups.values().flatten().map(|p| p.indices.len() / 3).sum();
+    for ((material, _, _), prims) in groups {
+        let triangles: usize = prims.iter().map(|p| p.indices.len() / 3).sum();
+        let budget = (opts.max_triangles * triangles / total_triangles.max(1)).max(1);
+        let parent = crate::hlod::build_parent(&prims, budget, parent_atlas)?;
+        geometry_error = geometry_error.max(parent.error_m);
+        texture_error = texture_error.max(parent.texel_m * 16.0);
+        pieces.extend(parent.prims.into_iter().map(|prim| Piece {
+            material,
+            prim,
+            delivery_image: None,
+        }));
+    }
+    Ok(Proxy {
+        pieces,
+        geometry_error: inherited + geometry_error,
+        error: (inherited + geometry_error)
+            .max(texture_error)
+            .max(previous_error + 0.000001),
+    })
+}
+fn materials(scene: &Scene) -> Result<(Vec<Value>, Vec<usize>), Error> {
+    let mut templates = Vec::new();
+    let mut ids = Vec::new();
+    for mut m in std::iter::once(json!({})).chain(scene.materials.iter().cloned()) {
+        if let Some(obj) = m.as_object_mut() {
+            obj.remove("name");
+        }
+        if let Some(pbr) = m["pbrMetallicRoughness"].as_object_mut() {
+            pbr.remove("baseColorTexture");
+        }
+        let id = templates.iter().position(|v| v == &m).unwrap_or_else(|| {
+            let id = templates.len();
+            templates.push(m);
+            id
+        });
+        ids.push(id);
+    }
+    Ok((templates, ids))
+}
+// Reject features the photogrammetry IR cannot retain, instead of silently
+// turning a rich glTF into a different-looking model. The wrapping command
+// remains available for general glTF assets.
+fn validate_source(path: &Path) -> Result<(), Error> {
+    let doc = source_document(path)?;
+    if doc
+        .get("animations")
+        .and_then(Value::as_array)
+        .is_some_and(|a| !a.is_empty())
+        || doc
+            .get("skins")
+            .and_then(Value::as_array)
+            .is_some_and(|a| !a.is_empty())
+    {
+        return Err(Error::msg(
+            "mesh-to-3tz supports static meshes; use glb-to-3tz to retain animation or skins",
+        ));
+    }
+    if doc
+        .get("extensionsUsed")
+        .and_then(Value::as_array)
+        .is_some_and(|a| !a.is_empty())
+    {
+        return Err(Error::msg("mesh-to-3tz cannot yet preserve source glTF extensions; use glb-to-3tz for an unchanged wrap"));
+    }
+    for mesh in doc["meshes"].as_array().into_iter().flatten() {
+        for p in mesh["primitives"].as_array().into_iter().flatten() {
+            if p.get("targets").is_some() {
+                return Err(Error::msg(
+                    "morph targets cannot be spatially tiled without losing fidelity",
+                ));
+            }
+            if p["attributes"].as_object().is_some_and(|a| {
+                a.keys()
+                    .any(|k| !matches!(k.as_str(), "POSITION" | "NORMAL" | "TEXCOORD_0"))
+            }) {
+                return Err(Error::msg("mesh-to-3tz currently supports POSITION, NORMAL and TEXCOORD_0; additional attributes require glb-to-3tz to retain fidelity"));
+            }
+        }
+    }
+    for sampler in doc["samplers"].as_array().into_iter().flatten() {
+        if sampler["magFilter"].as_u64().is_some_and(|f| f != 9729)
+            || sampler["minFilter"]
+                .as_u64()
+                .is_some_and(|f| f != 9987 && f != 9729)
+        {
+            return Err(Error::msg("mesh-to-3tz currently requires linear magnification and trilinear minification; glb-to-3tz preserves other samplers"));
+        }
+    }
+    for m in doc["materials"].as_array().into_iter().flatten() {
+        if ["normalTexture", "occlusionTexture", "emissiveTexture"]
+            .iter()
+            .any(|k| m.get(k).is_some())
+            || m["pbrMetallicRoughness"]
+                .get("metallicRoughnessTexture")
+                .is_some()
+        {
+            return Err(Error::msg("spatial tiling of additional PBR texture channels is not yet supported; glb-to-3tz preserves the source"));
+        }
+        if m["pbrMetallicRoughness"]["baseColorTexture"]["texCoord"]
+            .as_u64()
+            .unwrap_or(0)
+            != 0
+        {
+            return Err(Error::msg("base colour must use TEXCOORD_0"));
+        }
+    }
+    Ok(())
+}
+fn source_document(path: &Path) -> Result<Value, Error> {
+    let mut file = fs::File::open(path)?;
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("glb"))
+    {
+        let mut hdr = [0u8; 20];
+        file.read_exact(&mut hdr)?;
+        let len = u32::from_le_bytes(hdr[12..16].try_into().unwrap()) as usize;
+        let mut bytes = vec![0; len];
+        file.read_exact(&mut bytes)?;
+        Ok(serde_json::from_slice(&bytes)?)
+    } else {
+        Ok(serde_json::from_reader(file)?)
+    }
+}
+
+fn spill_images(dir: &Path, id: usize, pieces: &mut [Piece]) -> Result<(), Error> {
+    for (i, p) in pieces.iter_mut().enumerate() {
+        p.delivery_image = None;
+        if let Some(bytes) = p.prim.jpeg.take() {
+            fs::write(dir.join(format!("{id}-{i}.png")), bytes)?;
+        }
+    }
+    Ok(())
+}
+fn restore_images(dir: &Path, id: usize, pieces: &mut [Piece]) -> Result<(), Error> {
+    for (i, p) in pieces.iter_mut().enumerate() {
+        let path = dir.join(format!("{id}-{i}.png"));
+        if path.is_file() {
+            p.prim.jpeg = Some(fs::read(&path)?);
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
+// Unused atlas pixels must not become black in coarse mip levels. Source
+// chart rectangles, including their original gutters, are never overwritten.
+fn fill_background(atlas: &mut RgbaImage, rects: &[[u32; 4]]) {
+    let mut cover = vec![false; atlas.width() as usize * atlas.height() as usize];
+    let mut sum = [0u64; 4];
+    let mut count = 0;
+    for &[x, y, w, h] in rects {
+        for row in y..y + h {
+            let start = (row * atlas.width() + x) as usize;
+            cover[start..start + w as usize].fill(true);
+            for col in (x..x + w).step_by(16) {
+                let px = atlas.get_pixel(col, row);
+                for i in 0..4 {
+                    sum[i] += px[i] as u64;
+                }
+                count += 1;
+            }
+        }
+    }
+    if count == 0 {
+        return;
+    }
+    let mean = image::Rgba(sum.map(|v| (v / count) as u8));
+    for (i, p) in atlas.pixels_mut().enumerate() {
+        if !cover[i] {
+            *p = mean;
+        }
+    }
+}
+// Filter colour in linear light with premultiplied alpha. Repeated sRGB-byte
+// averaging darkens painted details and produces fringes on transparent edges.
+pub(crate) fn colour_tables() -> (&'static [f32; 256], &'static [u8]) {
+    use std::sync::OnceLock;
+    static TO_LINEAR: OnceLock<[f32; 256]> = OnceLock::new();
+    static TO_SRGB: OnceLock<Vec<u8>> = OnceLock::new();
+    let linear = TO_LINEAR.get_or_init(|| {
+        std::array::from_fn(|i| {
+            let v = i as f32 / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        })
+    });
+    let srgb = TO_SRGB.get_or_init(|| {
+        (0..65536)
+            .map(|i| {
+                let v = i as f32 / 65535.0;
+                let c = if v <= 0.0031308 {
+                    12.92 * v
+                } else {
+                    1.055 * v.powf(1.0 / 2.4) - 0.055
+                };
+                (c * 255.0).round() as u8
+            })
+            .collect()
+    });
+    (linear, srgb)
+}
+pub(crate) fn resize_colour(source: &RgbaImage, w: u32, h: u32) -> RgbaImage {
+    let (linear, srgb) = colour_tables();
+    if source.width() % w == 0 && source.height() % h == 0 {
+        let (sx, sy) = (source.width() / w, source.height() / h);
+        return RgbaImage::from_fn(w, h, |x, y| {
+            let mut sum = [0.0f32; 4];
+            for yy in y * sy..(y + 1) * sy {
+                for xx in x * sx..(x + 1) * sx {
+                    let p = source.get_pixel(xx, yy);
+                    let a = p[3] as f32 / 255.;
+                    for c in 0..3 {
+                        sum[c] += linear[p[c] as usize] * a;
+                    }
+                    sum[3] += a;
+                }
+            }
+            let mut out = [0u8; 4];
+            if sum[3] > 0. {
+                for c in 0..3 {
+                    out[c] = srgb[((sum[c] / sum[3]).clamp(0., 1.) * 65535.).round() as usize];
+                }
+            }
+            out[3] = (sum[3] * 255. / (sx * sy) as f32).round() as u8;
+            image::Rgba(out)
+        });
+    }
+    let float = image::Rgba32FImage::from_fn(source.width(), source.height(), |x, y| {
+        let p = source.get_pixel(x, y);
+        let a = p[3] as f32 / 255.0;
+        image::Rgba([
+            linear[p[0] as usize] * a,
+            linear[p[1] as usize] * a,
+            linear[p[2] as usize] * a,
+            a,
+        ])
+    });
+    let resized = image::imageops::resize(&float, w, h, image::imageops::FilterType::Triangle);
+    RgbaImage::from_fn(w, h, |x, y| {
+        let p = resized.get_pixel(x, y);
+        let a = p[3].clamp(0.0, 1.0);
+        let mut out = [0u8; 4];
+        if a > 0.0 {
+            for i in 0..3 {
+                out[i] = srgb[((p[i] / a).clamp(0.0, 1.0) * 65535.0).round() as usize];
+            }
+        }
+        out[3] = (a * 255.0).round() as u8;
+        image::Rgba(out)
+    })
+}
+pub(crate) fn max_texel_size(p: &TilePrimitive, w: u32, h: u32) -> f64 {
+    let mut worst = 0.0f64;
+    for tri in p.indices.chunks_exact(3) {
+        let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
+        let du1 = (p.uvs[b][0] - p.uvs[a][0]) as f64 * w as f64;
+        let dv1 = (p.uvs[b][1] - p.uvs[a][1]) as f64 * h as f64;
+        let du2 = (p.uvs[c][0] - p.uvs[a][0]) as f64 * w as f64;
+        let dv2 = (p.uvs[c][1] - p.uvs[a][1]) as f64 * h as f64;
+        let det = du1 * dv2 - du2 * dv1;
+        if det.abs() < 1e-12 {
             continue;
         }
-        for v in &t.verts {
-            let k = (pos_key(v.pos), uv_key(v.uv));
-            let n = *remap.entry(k).or_insert_with(|| {
-                let i = positions.len() as u32;
-                positions.push(v.pos);
-                normals.push(v.nrm);
-                uvs.push(v.uv);
-                i
-            });
-            indices.push(n);
+        let mut norm = 0.0;
+        for k in 0..3 {
+            let e1 = (p.positions[b][k] - p.positions[a][k]) as f64;
+            let e2 = (p.positions[c][k] - p.positions[a][k]) as f64;
+            norm += ((e1 * dv2 - e2 * dv1) / det).powi(2) + ((e2 * du1 - e1 * du2) / det).powi(2);
         }
+        // The differential footprint assumes an infinite plane. On tiny
+        // charts it can extend far beyond the entire face; texture error on
+        // that finite face is bounded by its diameter.
+        let diameter = [(a, b), (b, c), (c, a)]
+            .into_iter()
+            .map(|(i, j)| {
+                (0..3)
+                    .map(|k| (p.positions[i][k] as f64 - p.positions[j][k] as f64).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+            })
+            .fold(0.0f64, f64::max);
+        worst = worst.max(norm.sqrt().min(diameter));
     }
-    TilePrimitive {
-        positions,
-        normals,
-        uvs,
-        indices,
-        jpeg: None,
-    }
+    worst
 }
 
-fn spill_path(spill_dir: &Path, node: usize) -> PathBuf {
-    spill_dir.join(format!("{node}.rgb"))
-}
-
-/// Compose the atlas from the leaf's spilled charts, encode, write the GLB.
-fn finalize_leaf(w: &mut LeafWork, nodes: &[Node], tmp: &Path, meshopt: bool) -> Result<(), Error> {
-    let mut prims = Vec::new();
-    if let Some(mut t) = w.plan.textured.take() {
-        let (aw, ah) = w.plan.atlas_wh;
-        let mut atlas = RgbImage::from_pixel(aw.max(1), ah.max(1), image::Rgb([128, 128, 128]));
-        let path = spill_path(&tmp.join("spill"), w.node);
-        if let Ok(bytes) = fs::read(&path) {
-            let mut off = 0usize;
-            while off + 4 <= bytes.len() {
-                let bi = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap()) as usize;
-                off += 4;
-                let Some(b) = w.plan.blits.get(bi) else { break };
-                let [_, _, bw, bh] = b.dst;
-                let n = (bw.max(1) * bh.max(1) * 3) as usize;
-                if off + n > bytes.len() {
-                    break;
-                }
-                if let Some(chart) =
-                    RgbImage::from_raw(bw.max(1), bh.max(1), bytes[off..off + n].to_vec())
-                {
-                    texture::paste_chart(&mut atlas, &chart, b);
-                }
-                off += n;
+#[cfg(test)]
+mod hierarchy_tests {
+    use super::*;
+    #[test]
+    fn balanced_binary_input_becomes_shallow_without_losing_leaves() {
+        fn make(depth: usize, id: &mut usize) -> Node {
+            let current = *id;
+            *id += 1;
+            Node {
+                id: current,
+                min: [0.; 3],
+                max: [1.; 3],
+                error: 0.,
+                plans: vec![],
+                children: if depth == 0 {
+                    vec![]
+                } else {
+                    vec![make(depth - 1, id), make(depth - 1, id)]
+                },
             }
-            let _ = fs::remove_file(&path);
         }
-        t.jpeg = Some(texture::finish_leaf_atlas(atlas, &w.plan.blits)?);
-        if t.indices.len() >= 3 {
-            prims.push(t);
+        fn inspect(
+            n: &Node,
+            depth: usize,
+            leaves: &mut std::collections::BTreeSet<usize>,
+        ) -> usize {
+            assert!(n.children.len() <= 8);
+            if n.children.is_empty() {
+                assert!(leaves.insert(n.id));
+                return depth;
+            }
+            n.children
+                .iter()
+                .map(|c| inspect(c, depth + 1, leaves))
+                .max()
+                .unwrap()
         }
+        let mut tree = make(12, &mut 0);
+        let mut expected = std::collections::BTreeSet::new();
+        inspect(&tree, 0, &mut expected);
+        fold(&mut tree);
+        let mut actual = std::collections::BTreeSet::new();
+        assert_eq!(inspect(&tree, 0, &mut actual), 4);
+        assert_eq!(actual, expected);
     }
-    if let Some(u) = w.plan.untextured.take() {
-        if u.indices.len() >= 3 {
-            prims.push(u);
-        }
-    }
-    write_tile_glb(tmp, &nodes[w.node].uri, &prims, meshopt)?;
-    w.out = Some(prims);
-    Ok(())
-}
-
-fn prim_tris(prims: &[TilePrimitive]) -> usize {
-    prims.iter().map(|p| p.indices.len() / 3).sum()
-}
-
-fn prims_points_zup(prims: &[TilePrimitive]) -> Vec<[f64; 3]> {
-    prims
-        .iter()
-        .flat_map(|p| p.positions.iter())
-        .map(|&pos| {
-            let z = y_up_to_z_up(pos);
-            [z[0] as f64, z[1] as f64, z[2] as f64]
-        })
-        .collect()
-}
-
-fn median_f32(xs: &[f32]) -> f32 {
-    if xs.is_empty() {
-        return 1.0;
-    }
-    let mut v = xs.to_vec();
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    v[v.len() / 2]
-}
-
-/// Tile JSON + this node's GE. Parent GE = max(measured two-sided error,
-/// texel term, child GE + ε) so REPLACE always has a reason to refine and the
-/// pyramid never inverts. Boxes are the k-d cells (expanded to cover content),
-/// not skin-tight OBBs: Cesium's distance-to-volume is 0 inside the cell, so
-/// a camera in a cave actually refines.
-fn emit(
-    nodes: &[Node],
-    baked: &[Option<Baked>],
-    ni: usize,
-    is_root: bool,
-    opts: &MeshTo3tzOptions,
-) -> (Value, f64) {
-    let node = &nodes[ni];
-    let b = baked[ni].as_ref();
-    let content = b
-        .map(|b| b.obb)
-        .filter(|o| o.center[0].is_finite())
-        .unwrap_or_else(|| Obb::from_aabb(node.cell_min, node.cell_max));
-    let obb = Obb::for_tile(node.cell_min, node.cell_max, content);
-    let mut tile = json!({
-        "boundingVolume": { "box": obb.to_box() },
-    });
-    let ge = if node.leaf.is_some() {
-        tile["geometricError"] = json!(0.0);
-        0.0
-    } else {
-        let mut kids = Vec::with_capacity(node.children.len());
-        let mut child_ge = 0.0f64;
-        for &c in &node.children {
-            let (kid, g) = emit(nodes, baked, c, false, opts);
-            child_ge = child_ge.max(g);
-            kids.push(kid);
-        }
-        let (measured, texel) = b.map(|b| (b.error_m, b.texel_m)).unwrap_or((0.0, 0.0));
-        // Average texel size can be optimistic (dense packed charts); also
-        // take the atlas stretched across the content's longest edge.
-        let span = if texel > 0.0 {
-            let longest = 2.0 * content.half.iter().fold(0.0f64, |a, &h| a.max(h));
-            let atlas = opts.tile_size.max(1) as f64;
-            texel.max(longest / atlas)
-        } else {
-            texel
-        };
-        let local = measured.max(span * TEXEL_GE_FACTOR).max(MIN_PARENT_GE);
-        let ge = local.max(child_ge * 1.05 + MIN_PARENT_GE);
-        tile["geometricError"] = json!(ge);
-        tile["children"] = json!(kids);
-        ge
-    };
-    tile["content"] = json!({ "uri": node.uri });
-    if is_root {
-        if let Some(xf) = root_ecef(opts) {
-            tile["transform"] = json!(xf.to_vec());
-        }
-        tile["refine"] = json!("REPLACE");
-    }
-    (tile, ge)
-}
-
-fn write_tile_glb(
-    tmp: &Path,
-    uri: &str,
-    prims: &[TilePrimitive],
-    meshopt: bool,
-) -> Result<(), Error> {
-    let path = tmp.join(uri);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let bytes = if meshopt {
-        write_glb_compressed(prims)?
-    } else {
-        write_glb(prims)?
-    };
-    fs::write(&path, bytes)?;
-    Ok(())
-}
-
-fn root_ecef(opts: &MeshTo3tzOptions) -> Option<[f64; 16]> {
-    opts.cartographic
-        .map(|pos| root_transform(pos, opts.rotation))
-}
-
-fn pos_key(p: [f32; 3]) -> [i64; 3] {
-    [
-        (p[0] as f64 * 1e7).round() as i64,
-        (p[1] as f64 * 1e7).round() as i64,
-        (p[2] as f64 * 1e7).round() as i64,
-    ]
-}
-
-fn uv_key(uv: [f32; 2]) -> [i64; 2] {
-    [
-        (uv[0] as f64 * 1e7).round() as i64,
-        (uv[1] as f64 * 1e7).round() as i64,
-    ]
-}
-
-/// Squared area of the cross product. Drop clip slivers that survive
-/// AREA2_EPS then bloom into white shards after i16 quantization.
-fn sliver_area2(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> bool {
-    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let cr = [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ];
-    cr[0] * cr[0] + cr[1] * cr[1] + cr[2] * cr[2] < 1e-16
 }

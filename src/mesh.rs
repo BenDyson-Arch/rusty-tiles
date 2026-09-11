@@ -37,10 +37,11 @@ pub struct Vertex {
 pub struct Triangle {
     pub verts: [u32; 3],
     pub image: Option<u32>,
+    pub material: Option<u32>,
 }
 
 /// JPEG/PNG/WebP bytes live on disk; decode one image at a time (8K atlases
-/// in `mgal_detail.glb` are ~256 MiB RGBA each).
+/// can expand to ~256 MiB RGBA each).
 #[derive(Clone, Debug)]
 pub struct EncodedImage {
     path: PathBuf,
@@ -50,6 +51,10 @@ pub struct EncodedImage {
 }
 
 impl EncodedImage {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.owned
             .as_ref()
@@ -80,6 +85,7 @@ pub struct Scene {
     pub triangles: Vec<Triangle>,
     pub images: Vec<EncodedImage>,
     pub source_bytes: u64,
+    pub materials: Vec<serde_json::Value>,
 }
 
 impl Scene {
@@ -110,9 +116,9 @@ fn load_bytes(path: &Path, bytes: &[u8], source_bytes: u64) -> Result<Scene, Err
         .to_ascii_lowercase();
 
     if ext == "glb" {
+        let glb = gltf::Glb::from_slice(bytes)?;
         let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as u64;
         let bin_start = 20 + json_len + 8;
-        let glb = gltf::Glb::from_slice(bytes)?;
         let g = gltf::Gltf::from_slice(&glb.json)?;
         let bin = glb.bin.as_ref().map(|c| c.as_ref()).unwrap_or(&[]);
         extract(&g.document, path, &[bin], Some(bin_start), source_bytes)
@@ -145,7 +151,11 @@ fn extract(
             &mut triangles,
         )?;
     } else {
-        for scene in document.scenes() {
+        for scene in document.default_scene().into_iter().chain(
+            document
+                .scenes()
+                .take(usize::from(document.default_scene().is_none())),
+        ) {
             collect_nodes(
                 scene.nodes(),
                 buffers,
@@ -166,6 +176,12 @@ fn extract(
         triangles,
         images,
         source_bytes,
+        materials: document
+            .materials()
+            .map(|m| {
+                serde_json::to_value(&document.as_json().materials[m.index().unwrap()]).unwrap()
+            })
+            .collect(),
     })
 }
 
@@ -264,24 +280,28 @@ pub fn bake_to_enu(scene: &mut Scene, opts: &BakeToEnu) -> Option<GeographicBake
         }
     }
     match (kind, offset) {
-        (CrsKind::WebMercator, Some(_)) => {
-            // Local metres already (east, up, −north). Shift is only the ENU pin.
+        (CrsKind::WebMercator, Some(off)) => {
+            // The shift improves storage precision; it does not remove the
+            // source projection's scale or turn grid axes into a tangent frame.
+            let frame = EnuFrame::new(origin);
+            scene.vertices.par_iter_mut().for_each(|v| {
+                v.nrm = frame.normal_to_enu_yup_offset(v.pos, v.nrm, kind, off);
+                v.pos = frame.mercator_yup_offset_to_enu_yup(v.pos, off);
+            });
         }
         (CrsKind::Geographic, _) => {
             let frame = EnuFrame::new(origin);
-            scene
-                .vertices
-                .par_iter_mut()
-                .for_each(|v| v.pos = frame.geog_yup_to_enu_yup(v.pos));
-            recompute_normals(scene);
+            scene.vertices.par_iter_mut().for_each(|v| {
+                v.nrm = frame.normal_to_enu_yup(v.pos, v.nrm, CrsKind::Geographic);
+                v.pos = frame.geog_yup_to_enu_yup(v.pos);
+            });
         }
         (CrsKind::WebMercator, None) => {
             let frame = EnuFrame::new(origin);
-            scene
-                .vertices
-                .par_iter_mut()
-                .for_each(|v| v.pos = frame.mercator_yup_to_enu_yup(v.pos));
-            recompute_normals(scene);
+            scene.vertices.par_iter_mut().for_each(|v| {
+                v.nrm = frame.normal_to_enu_yup(v.pos, v.nrm, CrsKind::WebMercator);
+                v.pos = frame.mercator_yup_to_enu_yup(v.pos);
+            });
         }
     }
     Some(GeographicBake {
@@ -300,15 +320,6 @@ pub fn bake_geographic(scene: &mut Scene, prefer: Option<Cartographic>) -> Optio
             ..BakeToEnu::default()
         },
     )
-}
-
-fn recompute_normals(scene: &mut Scene) {
-    let positions: Vec<[f32; 3]> = scene.vertices.iter().map(|v| v.pos).collect();
-    let indices: Vec<u32> = scene.triangles.iter().flat_map(|t| t.verts).collect();
-    let nrms = vertex_normals(&positions, &indices);
-    for (v, n) in scene.vertices.iter_mut().zip(nrms) {
-        v.nrm = n;
-    }
 }
 
 fn load_images(
@@ -403,23 +414,57 @@ fn ingest_primitive(
         return Ok(());
     }
 
-    let index_list: Vec<u32> = if let Some(inds) = reader.read_indices() {
+    let mut index_list: Vec<u32> = if let Some(inds) = reader.read_indices() {
         inds.into_u32().collect()
     } else {
         (0..positions.len() as u32).collect()
     };
+    if prim.mode() != gltf::mesh::Mode::Triangles {
+        return Err(Error::msg("mesh-to-3tz requires triangle primitives"));
+    }
+    if index_list.len() % 3 != 0 || index_list.iter().any(|&i| i as usize >= positions.len()) {
+        return Err(Error::msg("invalid triangle indices"));
+    }
+    if positions.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(Error::msg("non-finite POSITION"));
+    }
     if index_list.len() < 3 {
         return Ok(());
     }
 
+    let a = [world[0][0], world[0][1], world[0][2]];
+    let b = [world[1][0], world[1][1], world[1][2]];
+    let c = [world[2][0], world[2][1], world[2][2]];
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let co = [cross(b, c), cross(c, a), cross(a, b)];
+    let det = (0..3).map(|i| a[i] * co[0][i]).sum::<f32>();
+    if det < 0.0 {
+        for tri in index_list.chunks_exact_mut(3) {
+            tri.swap(1, 2);
+        }
+    }
     let mut normals: Vec<[f32; 3]> = if let Some(iter) = reader.read_normals() {
-        iter.map(|n| normalize(transform_vector(world, n)))
+        if world == IDENTITY {
+            iter.collect()
+        } else {
+            iter.map(|n| {
+                normalize(std::array::from_fn(|i| {
+                    (co[0][i] * n[0] + co[1][i] * n[1] + co[2][i] * n[2]) * det.signum()
+                }))
+            })
             .collect()
+        }
     } else {
         Vec::new()
     };
     if normals.len() != positions.len() {
-        normals = vertex_normals(&positions, &index_list);
+        normals = vec![[0.0; 3]; positions.len()];
     }
 
     let mut uvs: Vec<[f32; 2]> = if let Some(iter) = reader.read_tex_coords(0) {
@@ -450,47 +495,10 @@ fn ingest_primitive(
         triangles.push(Triangle {
             verts: [base + tri[0], base + tri[1], base + tri[2]],
             image,
+            material: prim.material().index().map(|i| i as u32),
         });
     }
     Ok(())
-}
-
-fn transform_vector(m: [[f32; 4]; 4], n: [f32; 3]) -> [f32; 3] {
-    [
-        m[0][0] * n[0] + m[1][0] * n[1] + m[2][0] * n[2],
-        m[0][1] * n[0] + m[1][1] * n[1] + m[2][1] * n[2],
-        m[0][2] * n[0] + m[1][2] * n[1] + m[2][2] * n[2],
-    ]
-}
-
-fn vertex_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
-    let mut nrms = vec![[0.0f32; 3]; positions.len()];
-    for tri in indices.chunks_exact(3) {
-        let a = positions[tri[0] as usize];
-        let b = positions[tri[1] as usize];
-        let c = positions[tri[2] as usize];
-        let f = face_normal(a, b, c);
-        for &i in tri {
-            let n = &mut nrms[i as usize];
-            n[0] += f[0];
-            n[1] += f[1];
-            n[2] += f[2];
-        }
-    }
-    for n in &mut nrms {
-        *n = normalize(*n);
-    }
-    nrms
-}
-
-fn face_normal(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
-    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ]
 }
 
 fn normalize(n: [f32; 3]) -> [f32; 3] {

@@ -165,8 +165,7 @@ impl TriGrid {
 
     /// Visit candidate triangles in the cube of radius `r` cells around `c`,
     /// skipping the inner cube of radius `r - 1` (already visited).
-    fn visit_ring(&self, c: [i64; 3], r: i64, f: &mut impl FnMut(u32)) -> bool {
-        let mut any = false;
+    fn visit_ring(&self, c: [i64; 3], r: i64, f: &mut impl FnMut(u32)) {
         for dz in -r..=r {
             let z = c[2] + dz;
             if z < 0 || z >= self.dims[2] as i64 {
@@ -189,19 +188,17 @@ impl TriGrid {
                     let ci = Self::idx_static(self.dims, x as usize, y as usize, z as usize);
                     let (a, b) = (self.offsets[ci] as usize, self.offsets[ci + 1] as usize);
                     for &ti in &self.items[a..b] {
-                        any = true;
                         f(ti);
                     }
                 }
             }
         }
-        any
     }
 
     /// Nearest triangle by `score` (lower is better; `None` rejects; a score
     /// must never be below the squared distance, which lets the search stop
     /// as soon as the best score is within the distance to the searched
-    /// cube's boundary). Otherwise expands rings until a hit, then one more.
+    /// cube's boundary), or until the caller's ring limit is reached.
     pub fn nearest_by(
         &self,
         p: [f32; 3],
@@ -230,7 +227,6 @@ impl TriGrid {
                 best = Some((s, Hit { tri: ti, d2, bary }));
             }
         }
-        let mut hit_ring: Option<i64> = None;
         // Ring radius that reaches every cell from `c`, even if `p` is outside.
         let far = (0..3)
             .map(|i| c[i].abs().max((self.dims[i] as i64 - 1 - c[i]).abs()))
@@ -238,14 +234,7 @@ impl TriGrid {
             .unwrap_or(1);
         let limit = max_ring.min(far);
         for r in 0..=limit {
-            if let Some(hr) = hit_ring {
-                if r > hr + 1 {
-                    break;
-                }
-            }
-            let mut any = false;
             self.visit_ring(c, r, &mut |ti| {
-                any = true;
                 if let Some((bs, _)) = best {
                     // Score ≥ d² ≥ (|p − centre| − radius)²: cannot win.
                     let s = &self.spheres[ti as usize];
@@ -262,9 +251,6 @@ impl TriGrid {
                     }
                 }
             });
-            if any && hit_ring.is_none() {
-                hit_ring = Some(r);
-            }
             if let Some((bs, _)) = best {
                 // Every unvisited triangle is at least this far away.
                 let wall = self.cube_boundary_dist(p, c, r);

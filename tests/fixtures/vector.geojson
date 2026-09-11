@@ -1,0 +1,160 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "marker",
+      "properties": {
+        "name": "marker",
+        "height": 140.0,
+        "visible": true
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.9997701,
+          -20.0,
+          147
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "crossing line",
+      "properties": {
+        "name": "crossing line",
+        "height": 140.0,
+        "visible": true
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            29.9997241,
+            -20.0001357,
+            142
+          ],
+          [
+            30.0,
+            -20.0000452,
+            142
+          ],
+          [
+            30.0002759,
+            -19.9999096,
+            148
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "polygon with hole",
+      "properties": {
+        "name": "polygon with hole",
+        "height": 140.0,
+        "visible": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              29.9998161,
+              -19.9998643,
+              140
+            ],
+            [
+              30.0,
+              -19.9998643,
+              140
+            ],
+            [
+              30.0,
+              -19.9996835,
+              140
+            ],
+            [
+              29.9998161,
+              -19.9996835,
+              140
+            ],
+            [
+              29.9998161,
+              -19.9998643,
+              140
+            ]
+          ],
+          [
+            [
+              29.9998621,
+              -19.9998191,
+              140
+            ],
+            [
+              29.9998621,
+              -19.9997287,
+              140
+            ],
+            [
+              29.999954,
+              -19.9997287,
+              140
+            ],
+            [
+              29.999954,
+              -19.9998191,
+              140
+            ],
+            [
+              29.9998621,
+              -19.9998191,
+              140
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "vertical polygon",
+      "properties": {
+        "name": "vertical polygon",
+        "height": 140.0,
+        "visible": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              30.0001839,
+              -20.0000904,
+              140
+            ],
+            [
+              30.0001839,
+              -19.9999096,
+              140
+            ],
+            [
+              30.0001839,
+              -19.9999096,
+              160
+            ],
+            [
+              30.0001839,
+              -20.0000904,
+              160
+            ],
+            [
+              30.0001839,
+              -20.0000904,
+              140
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-//! tinyowl-tiles: transform geospatial sources into 3D Tiles packages.
+//! rusty-tiles: transform geospatial sources into 3D Tiles packages.
 //!
 //! v0 matches a subset of Cesium `3d-tiles-tools` (createTilesetJson + convert).
-//! Vector (3D Tiles 2.0) and terrain are CLI-shaped stubs until those specs/pipelines land.
+//! Raster, quantized-mesh terrain and draft glTF vector paths are GDAL-backed lab tools.
 
 pub mod bbox;
 pub mod compress;
@@ -9,8 +9,11 @@ pub mod error;
 pub mod fixtures;
 pub mod georef;
 pub mod glb_write;
+mod gpu_texture;
 pub mod grid;
 pub mod hlod;
+mod jpeg;
+mod lossless;
 pub mod mesh;
 pub mod pack;
 pub mod split;
@@ -32,3 +35,5 @@ pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 
 /// npm package pin used as the v0 oracle. Golden tests call this via `npx`.
 pub const ORACLE_NPM: &str = "3d-tiles-tools@0.5.4";
+
+pub mod raster;

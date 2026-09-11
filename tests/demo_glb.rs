@@ -1,25 +1,22 @@
-//! `mgal_detail.glb` (~1.5 GiB, mostly textures) lives in `tinyowl-demodata`.
-//! Tests skip if the file is missing. Override the path with `TINYOWL_DEMO_GLB`.
+//! Opt-in checks on a user-supplied GLB. Set RUSTY_TILES_DEMO_GLB explicitly.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use tinyowl_tiles::tileset::{create_tileset_json, CreateTilesetOptions};
-use tinyowl_tiles::{Cartographic, ORACLE_NPM};
+use rusty_tiles::tileset::{create_tileset_json, CreateTilesetOptions};
+use rusty_tiles::{Cartographic, ORACLE_NPM};
 
 fn demo_glb() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("TINYOWL_DEMO_GLB") {
+    if let Ok(p) = std::env::var("RUSTY_TILES_DEMO_GLB") {
         let p = PathBuf::from(p);
         if p.is_file() {
             return Some(p);
         }
-        eprintln!("TINYOWL_DEMO_GLB is not a file: {}", p.display());
+        eprintln!("RUSTY_TILES_DEMO_GLB is not a file: {}", p.display());
         return None;
     }
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest.join("../tinyowl-demodata/glb/mgal_detail.glb");
-    p.is_file().then_some(p)
+    None
 }
 
 fn npx_ok(input: &Path, output: &Path, extra: &[&str]) -> bool {
@@ -105,9 +102,10 @@ fn assert_semantic(oracle: &serde_json::Value, ours: &serde_json::Value) {
 }
 
 #[test]
-fn mgal_detail_create_tileset_json_when_present() {
+#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
+fn user_model_create_tileset_json_when_present() {
     let Some(glb) = demo_glb() else {
-        eprintln!("skip: mgal_detail.glb not found (set TINYOWL_DEMO_GLB)");
+        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB (set RUSTY_TILES_DEMO_GLB)");
         return;
     };
     let tmp = tempfile::tempdir().unwrap();
@@ -115,23 +113,25 @@ fn mgal_detail_create_tileset_json_when_present() {
     create_tileset_json(&glb, &our_json, &CreateTilesetOptions::default()).unwrap();
     let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
     assert_eq!(ours["asset"]["version"], "1.1");
-    assert_eq!(ours["root"]["content"]["uri"], "mgal_detail.glb");
+    assert_eq!(
+        ours["root"]["content"]["uri"],
+        glb.file_name().unwrap().to_str().unwrap()
+    );
     let b = ours["root"]["boundingVolume"]["box"].as_array().unwrap();
-    // POSITION min/max in the GLB JSON, Y-up → Z-up: center x≈133.06, z≈127
-    assert!((b[0].as_f64().unwrap() - 133.06).abs() < 0.1);
-    assert!(b[2].as_f64().unwrap() > 100.0);
-    assert!(b[2].as_f64().unwrap() < 150.0);
+    assert_eq!(b.len(), 12);
+    assert!(b.iter().all(|v| v.as_f64().is_some_and(f64::is_finite)));
 }
 
 #[test]
-fn mgal_detail_create_tileset_json_matches_3d_tiles_tools() {
+#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
+fn user_model_create_tileset_json_matches_3d_tiles_tools() {
     let Some(glb) = demo_glb() else {
-        eprintln!("skip: mgal_detail.glb not found (set TINYOWL_DEMO_GLB)");
+        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB (set RUSTY_TILES_DEMO_GLB)");
         return;
     };
     let tmp = tempfile::tempdir().unwrap();
     let our_json = tmp.path().join("ours.json");
-    eprintln!("tinyowl-tiles createTilesetJson on {}", glb.display());
+    eprintln!("rusty-tiles createTilesetJson on {}", glb.display());
     create_tileset_json(&glb, &our_json, &CreateTilesetOptions::default()).unwrap();
     let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
 
@@ -142,19 +142,23 @@ fn mgal_detail_create_tileset_json_matches_3d_tiles_tools() {
     }
     let oracle: serde_json::Value =
         serde_json::from_slice(&fs::read(&oracle_json).unwrap()).unwrap();
-    assert_eq!(oracle["root"]["content"]["uri"], "mgal_detail.glb");
+    assert_eq!(
+        oracle["root"]["content"]["uri"],
+        glb.file_name().unwrap().to_str().unwrap()
+    );
     assert_semantic(&oracle, &ours);
 }
 
 #[test]
-fn mgal_detail_cartographic_transform_matches_3d_tiles_tools() {
+#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
+fn user_model_cartographic_transform_matches_3d_tiles_tools() {
     let Some(glb) = demo_glb() else {
-        eprintln!("skip: mgal_detail.glb not found");
+        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB");
         return;
     };
     let tmp = tempfile::tempdir().unwrap();
     let opts = CreateTilesetOptions {
-        cartographic: Some(Cartographic::new(132.87, -12.27, 0.0)),
+        cartographic: Some(Cartographic::new(30.0, -20.0, 0.0)),
         rotation: None,
         force: true,
     };
@@ -166,7 +170,7 @@ fn mgal_detail_cartographic_transform_matches_3d_tiles_tools() {
     if !npx_ok(
         &glb,
         &oracle_json,
-        &["--cartographicPositionDegrees", "132.87", "-12.27", "0"],
+        &["--cartographicPositionDegrees", "30.0", "-20.0", "0"],
     ) {
         return;
     }

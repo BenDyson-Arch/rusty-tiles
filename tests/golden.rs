@@ -1,17 +1,17 @@
 use std::fs;
 use std::process::Command;
 
-use tinyowl_tiles::bbox::bounding_box_from_gltf_path;
-use tinyowl_tiles::fixtures::triangle_glb;
-use tinyowl_tiles::georef::Cartographic;
-use tinyowl_tiles::pack::{convert_to_3tz, list_zip_names, PackOptions};
-use tinyowl_tiles::tileset::{
+use rusty_tiles::bbox::bounding_box_from_gltf_path;
+use rusty_tiles::fixtures::triangle_glb;
+use rusty_tiles::georef::Cartographic;
+use rusty_tiles::pack::{convert_to_3tz, list_zip_names, PackOptions};
+use rusty_tiles::tileset::{
     create_tileset_json, glb_to_3tz, CreateTilesetOptions, LEAF_GEOMETRIC_ERROR,
     TILESET_GEOMETRIC_ERROR,
 };
-use tinyowl_tiles::vector;
-use tinyowl_tiles::TZ_INDEX_NAME;
-use tinyowl_tiles::{terrain, ORACLE_NPM};
+use rusty_tiles::vector;
+use rusty_tiles::TZ_INDEX_NAME;
+use rusty_tiles::{terrain, ORACLE_NPM};
 
 fn write_triangle(dir: &std::path::Path) -> std::path::PathBuf {
     let p = dir.join("triangle.glb");
@@ -103,7 +103,7 @@ fn convert_and_glb_to_3tz_zip_layout() {
     let v: serde_json::Value = serde_json::from_str(&s).unwrap();
     assert_eq!(v["asset"]["version"], "1.1");
     assert_eq!(v["root"]["content"]["uri"], "triangle.glb");
-    tinyowl_tiles::validate_3tz(&tz).unwrap();
+    rusty_tiles::validate_3tz(&tz).unwrap();
 }
 
 #[test]
@@ -115,27 +115,33 @@ fn convert_refuses_without_tileset_json() {
         &PackOptions { force: true },
     )
     .unwrap_err();
-    assert!(matches!(err, tinyowl_tiles::Error::MissingTilesetJson));
+    assert!(matches!(err, rusty_tiles::Error::MissingTilesetJson));
 }
 
 #[test]
-fn vector_and_terrain_are_not_implemented() {
-    let err = vector::vector_to_3tz("in.geojson".as_ref(), "out.3tz".as_ref()).unwrap_err();
-    match err {
-        tinyowl_tiles::Error::NotImplemented { feature, hint } => {
-            assert_eq!(feature, "vector");
-            assert!(hint.contains("838"));
-        }
-        e => panic!("{e}"),
-    }
-    let err = terrain::dem_to_terrain("dem.tif".as_ref(), "out.3tz".as_ref()).unwrap_err();
-    match err {
-        tinyowl_tiles::Error::NotImplemented { feature, .. } => assert_eq!(feature, "terrain"),
-        e => panic!("{e}"),
-    }
+fn derivative_missing_inputs_do_not_publish_output() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = tmp.path().join("out");
+    let input = tmp.path().join("missing");
+    let err = vector::vector_to_3tz(&input, &output, 64, false, false).unwrap_err();
+    assert!(matches!(err, rusty_tiles::Error::InputNotFound(_)));
+    let err = terrain::dem_to_terrain(
+        &input,
+        &output,
+        &terrain::TerrainOptions {
+            max_zoom: 1,
+            grid: 17,
+            height_offset: 0.0,
+            fill_height: 0.0,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, rusty_tiles::Error::InputNotFound(_)));
+    assert!(!output.exists());
 }
 
 #[test]
+#[ignore = "requires external pinned 3d-tiles-tools oracle via npx"]
 fn golden_vs_3d_tiles_tools_when_npx_present() {
     let tmp = tempfile::tempdir().unwrap();
     let glb = write_triangle(tmp.path());
@@ -194,7 +200,7 @@ fn golden_vs_3d_tiles_tools_when_npx_present() {
     assert_eq!(ob.len(), 12);
     assert_eq!(ub.len(), 12);
     // Oracle uses a tight OBB; we use a Z-up AABB. Both must be finite and
-    // not the dummy 50 m cube from tinyowl-server modeltiles.
+    // rather than a fixed placeholder box.
     for (i, (a, b)) in ob.iter().zip(ub.iter()).enumerate() {
         let a = a.as_f64().unwrap();
         let b = b.as_f64().unwrap();
@@ -245,12 +251,13 @@ fn f64_arr(v: &serde_json::Value) -> Vec<f64> {
 }
 
 #[test]
+#[ignore = "requires external pinned 3d-tiles-tools oracle via npx"]
 fn golden_cartographic_and_rotation_match_3d_tiles_tools() {
     let tmp = tempfile::tempdir().unwrap();
     let glb = write_triangle(tmp.path());
     let opts = CreateTilesetOptions {
         cartographic: Some(Cartographic::new(151.2, -33.9, 10.0)),
-        rotation: Some(tinyowl_tiles::RotationDegrees {
+        rotation: Some(rusty_tiles::RotationDegrees {
             heading: 90.0,
             pitch: 0.0,
             roll: 0.0,
@@ -303,7 +310,7 @@ fn cli_create_tileset_json_camel_case_matches_tools_argv() {
     let tmp = tempfile::tempdir().unwrap();
     let glb = write_triangle(tmp.path());
     let out = tmp.path().join("tileset.json");
-    let bin = env!("CARGO_BIN_EXE_tinyowl-tiles");
+    let bin = env!("CARGO_BIN_EXE_rusty-tiles");
     let st = Command::new(bin)
         .args([
             "createTilesetJson",
@@ -332,7 +339,7 @@ fn convert_via_cli_accepts_tileset_json_path() {
     let json = tmp.path().join("tileset.json");
     create_tileset_json(&glb, &json, &CreateTilesetOptions::default()).unwrap();
     let tz = tmp.path().join("out.3tz");
-    let bin = env!("CARGO_BIN_EXE_tinyowl-tiles");
+    let bin = env!("CARGO_BIN_EXE_rusty-tiles");
     let st = Command::new(bin)
         .args([
             "convert",

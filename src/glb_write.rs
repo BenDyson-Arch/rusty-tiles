@@ -24,7 +24,7 @@ pub fn write_glb(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
 
     let mut bin: Vec<u8> = Vec::new();
     let mut root = Root::default();
-    root.asset.generator = Some("tinyowl-tiles".into());
+    root.asset.generator = Some("rusty-tiles".into());
 
     let mut primitives = Vec::new();
     for prim in prims {
@@ -116,12 +116,11 @@ fn build_primitive(
 
     pad4(bin);
     let nrm_off = bin.len();
-    let normals = if prim.normals.len() == prim.positions.len() {
-        prim.normals.clone()
-    } else {
-        vec![[0.0, 1.0, 0.0]; prim.positions.len()]
-    };
-    for n in &normals {
+    if !prim.normals.is_empty() && prim.normals.len() != prim.positions.len() {
+        return Err(Error::msg("normal count must match position count"));
+    }
+    let normals = &prim.normals;
+    for n in normals {
         bin.extend_from_slice(bytemuck::bytes_of(n));
     }
 
@@ -173,15 +172,17 @@ fn build_primitive(
         name: None,
         target: Some(Valid(buffer::Target::ArrayBuffer)),
     });
-    let nrm_view = root.push(buffer::View {
-        buffer: dummy_buffer,
-        byte_length: USize64::from(normals.len() * 12),
-        byte_offset: Some(USize64::from(nrm_off)),
-        byte_stride: None,
-        extensions: Default::default(),
-        extras: Default::default(),
-        name: None,
-        target: Some(Valid(buffer::Target::ArrayBuffer)),
+    let nrm_view = (!normals.is_empty()).then(|| {
+        root.push(buffer::View {
+            buffer: dummy_buffer,
+            byte_length: USize64::from(normals.len() * 12),
+            byte_offset: Some(USize64::from(nrm_off)),
+            byte_stride: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: None,
+            target: Some(Valid(buffer::Target::ArrayBuffer)),
+        })
     });
     let acc_pos = root.push(accessor::Accessor {
         buffer_view: Some(pos_view),
@@ -205,19 +206,21 @@ fn build_primitive(
         sparse: None,
         type_: Valid(accessor::Type::Vec3),
     });
-    let acc_nrm = root.push(accessor::Accessor {
-        buffer_view: Some(nrm_view),
-        byte_offset: None,
-        count: USize64::from(normals.len()),
-        component_type: Valid(accessor::GenericComponentType(accessor::ComponentType::F32)),
-        extensions: Default::default(),
-        extras: Default::default(),
-        max: None,
-        min: None,
-        name: None,
-        normalized: false,
-        sparse: None,
-        type_: Valid(accessor::Type::Vec3),
+    let acc_nrm = nrm_view.map(|nrm_view| {
+        root.push(accessor::Accessor {
+            buffer_view: Some(nrm_view),
+            byte_offset: None,
+            count: USize64::from(normals.len()),
+            component_type: Valid(accessor::GenericComponentType(accessor::ComponentType::F32)),
+            extensions: Default::default(),
+            extras: Default::default(),
+            max: None,
+            min: None,
+            name: None,
+            normalized: false,
+            sparse: None,
+            type_: Valid(accessor::Type::Vec3),
+        })
     });
 
     let mut attributes: BTreeMap<
@@ -225,7 +228,9 @@ fn build_primitive(
         Index<accessor::Accessor>,
     > = BTreeMap::new();
     attributes.insert(Valid(mesh::Semantic::Positions), acc_pos);
-    attributes.insert(Valid(mesh::Semantic::Normals), acc_nrm);
+    if let Some(acc_nrm) = acc_nrm {
+        attributes.insert(Valid(mesh::Semantic::Normals), acc_nrm);
+    }
 
     if let Some(off) = uv_off {
         let uv_view = root.push(buffer::View {
@@ -385,6 +390,10 @@ pub(crate) fn photo_material(pbr: material::PbrMetallicRoughness) -> material::M
 pub fn image_mime(bytes: &[u8]) -> &'static str {
     if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         "image/webp"
+    } else if bytes.starts_with(b"\xabKTX 20\xbb\r\n\x1a\n") {
+        "image/ktx2"
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
     } else {
         "image/jpeg"
     }

@@ -634,10 +634,12 @@ mod tests {
                 triangles.push(Triangle {
                     verts: [i, i + 1, i + w + 1],
                     image: None,
+                    material: None,
                 });
                 triangles.push(Triangle {
                     verts: [i, i + w + 1, i + w],
                     image: None,
+                    material: None,
                 });
             }
         }
@@ -646,6 +648,7 @@ mod tests {
             triangles,
             images: Vec::new(),
             source_bytes: 0,
+            materials: Vec::new(),
         }
     }
 
@@ -788,6 +791,7 @@ mod tests {
         scene.triangles.push(Triangle {
             verts: [base, base + 1, base + 2],
             image: None,
+            material: None,
         });
         let opts = SplitOpts {
             max_triangles: 40,

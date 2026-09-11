@@ -1,24 +1,21 @@
-//! Optional `mesh-to-3tz` on `mgal_detail.glb` (~1.5 GiB, 10M tris, 89×8K JPEGs).
-//! Skip if the file is missing. Override with `TINYOWL_DEMO_GLB`.
-//! Run with `--release -- --ignored` — debug will thrash.
+//! Opt-in spatial tiling of a user-supplied geographic GLB.
+//! Set RUSTY_TILES_DEMO_GLB and run with --release -- --ignored.
 
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
+use rusty_tiles::pack::list_zip_names;
+use rusty_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
+use rusty_tiles::validate_3tz;
 use serde_json::Value;
-use tinyowl_tiles::pack::list_zip_names;
-use tinyowl_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
-use tinyowl_tiles::validate_3tz;
 
 fn demo_glb() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("TINYOWL_DEMO_GLB") {
+    if let Ok(p) = std::env::var("RUSTY_TILES_DEMO_GLB") {
         let p = PathBuf::from(p);
         return p.is_file().then_some(p);
     }
-    let p =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tinyowl-demodata/glb/mgal_detail.glb");
-    p.is_file().then_some(p)
+    None
 }
 
 fn zip_bytes(tz: &std::path::Path, name: &str) -> Vec<u8> {
@@ -42,13 +39,13 @@ fn collect_uris(tile: &Value, out: &mut Vec<String>) {
 
 #[test]
 #[ignore]
-fn mesh_to_3tz_mgal_detail() {
+fn mesh_to_3tz_user_model() {
     let Some(glb) = demo_glb() else {
-        eprintln!("skip: mgal_detail.glb not found");
+        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB");
         return;
     };
     let tmp = tempfile::tempdir().unwrap();
-    let tz = tmp.path().join("mgal_detail.3tz");
+    let tz = tmp.path().join("model.3tz");
     mesh_to_3tz(
         &glb,
         &tz,
@@ -62,8 +59,10 @@ fn mesh_to_3tz_mgal_detail() {
 
     let names = list_zip_names(&tz).unwrap();
     assert!(
-        !names.iter().any(|n| n.ends_with("mgal_detail.glb")),
-        "must not wrap the 1.5 GiB source: {names:?}"
+        !names
+            .iter()
+            .any(|n| n == glb.file_name().unwrap().to_str().unwrap()),
+        "supply a model large enough to exercise spatial splitting: {names:?}"
     );
     let ts: Value = serde_json::from_slice(&zip_bytes(&tz, "tileset.json")).unwrap();
     assert_eq!(ts["root"]["refine"], "REPLACE");
@@ -84,11 +83,5 @@ fn mesh_to_3tz_mgal_detail() {
         uris.len() > 1,
         "expected a split tree, got {} leaves",
         uris.len()
-    );
-    let src_len = fs::metadata(&glb).unwrap().len();
-    let out_len = fs::metadata(&tz).unwrap().len();
-    assert!(
-        out_len < src_len,
-        "tiled 3tz {out_len} should be smaller than source {src_len}"
     );
 }

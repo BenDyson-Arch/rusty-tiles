@@ -2,3 +2,7 @@
 /oracle/node_modules
 **/*.rs.bk
 .DS_Store
+
+__pycache__/
+
+/output/

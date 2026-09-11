@@ -67,7 +67,10 @@ pub fn bounding_box_from_gltf(
             &mut any,
         )?;
     } else {
-        for scene in gltf.scenes() {
+        for scene in gltf.default_scene().into_iter().chain(
+            gltf.scenes()
+                .take(usize::from(gltf.default_scene().is_none())),
+        ) {
             collect_nodes(
                 scene.nodes(),
                 buffers,

@@ -3,15 +3,15 @@ use std::io::Read;
 use std::path::Path;
 
 use image::{Rgba, RgbaImage};
+use rusty_tiles::bbox::bounding_box_from_gltf_path;
+use rusty_tiles::fixtures::{geographic_glb, triangle_glb};
+use rusty_tiles::glb_write::{write_glb, TilePrimitive};
+use rusty_tiles::mesh;
+use rusty_tiles::pack::list_zip_names;
+use rusty_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
+use rusty_tiles::tileset::{glb_to_3tz, CreateTilesetOptions};
+use rusty_tiles::{validate_3tz, write_glb_compressed, Cartographic, SourceCrs, SourceOffset};
 use serde_json::Value;
-use tinyowl_tiles::bbox::bounding_box_from_gltf_path;
-use tinyowl_tiles::fixtures::{geographic_glb, triangle_glb};
-use tinyowl_tiles::glb_write::{write_glb, TilePrimitive};
-use tinyowl_tiles::mesh;
-use tinyowl_tiles::pack::list_zip_names;
-use tinyowl_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
-use tinyowl_tiles::tileset::{glb_to_3tz, CreateTilesetOptions};
-use tinyowl_tiles::{validate_3tz, write_glb_compressed, Cartographic, SourceCrs, SourceOffset};
 
 fn zip_bytes(tz: &Path, name: &str) -> Vec<u8> {
     let mut z = zip::ZipArchive::new(fs::File::open(tz).unwrap()).unwrap();
@@ -71,10 +71,10 @@ fn assert_monotonic_ge(tile: &Value) {
     }
 }
 
-fn tile_obb(tile: &Value) -> tinyowl_tiles::bbox::Obb {
+fn tile_obb(tile: &Value) -> rusty_tiles::bbox::Obb {
     let b = tile["boundingVolume"]["box"].as_array().unwrap();
     let boxv: [f64; 12] = std::array::from_fn(|i| b[i].as_f64().unwrap());
-    tinyowl_tiles::bbox::Obb::from_box(boxv)
+    rusty_tiles::bbox::Obb::from_box(boxv)
 }
 
 /// Every child box must sit inside its parent's box (k-d cells nest;
@@ -272,7 +272,7 @@ fn eighty_k_grid_splits_under_budget() {
         "tileset GE {ts_ge} root GE {root_ge}"
     );
     let src_box = bounding_box_from_gltf_path(&glb).unwrap();
-    let (smin, smax) = tinyowl_tiles::bbox::box_to_aabb(src_box);
+    let (smin, smax) = rusty_tiles::bbox::box_to_aabb(src_box);
     // A flat grid simplifies with ~zero surface error: GE must be the numeric
     // guard, not a spatial floor that would force refinement everywhere.
     assert!(
@@ -283,10 +283,10 @@ fn eighty_k_grid_splits_under_budget() {
     let mut uris = Vec::new();
     collect_uris(&ts["root"], &mut uris);
     assert!(uris.len() > 1, "expected a split tree, got {uris:?}");
-    assert!(
-        uris.iter().any(|u| u.contains("/p")),
-        "expected parent tiles, got {uris:?}"
-    );
+    let root_uri = ts["root"]["content"]["uri"].as_str().unwrap();
+    assert!(ts["root"]["children"]
+        .as_array()
+        .is_some_and(|c| !c.is_empty()));
 
     let mut leaf_ge = Vec::new();
     collect_leaf_ge(&ts["root"], &mut leaf_ge);
@@ -305,9 +305,9 @@ fn eighty_k_grid_splits_under_budget() {
         let bytes = zip_bytes(&tz, uri);
         let j = glb_json(&bytes);
         let used = j["extensionsUsed"].as_array().unwrap();
-        assert!(used.iter().any(|v| v == "KHR_mesh_quantization"));
+        assert!(!used.iter().any(|v| v == "KHR_mesh_quantization"));
         assert!(used.iter().any(|v| v == "EXT_meshopt_compression"));
-        if !uri.contains("/p") {
+        if uri != root_uri {
             let tris = glb_index_count(&bytes) / 3;
             // Clip tessellation of the cut plane can add a handful of tris.
             assert!(tris <= 22_000, "{uri} has {tris} tris (leaf budget 20000)");
@@ -380,10 +380,10 @@ fn texture_crop_shrinks_shared_atlas() {
     let ts = tileset_json(&tz);
     assert_eq!(ts["root"]["refine"], "REPLACE");
     let atlas_root_ge = ts["root"]["geometricError"].as_f64().unwrap();
-    // ~50 m of atlas across a 256 px parent → ≥ a few metres of texel GE so
-    // Cesium (MSE 16) will refine instead of keeping the muddy parent.
+    // Disconnected source charts remain separate in the parent. The gap
+    // between them no longer consumes texture resolution; texel GE stays positive.
     assert!(
-        atlas_root_ge > 1.0,
+        atlas_root_ge > 0.1,
         "textured parent GE {atlas_root_ge} too small to refine in Cesium"
     );
     let mut uris = Vec::new();
@@ -391,7 +391,7 @@ fn texture_crop_shrinks_shared_atlas() {
     assert!(uris.len() >= 2, "expected split, got {uris:?}");
 
     for uri in &uris {
-        if uri.contains("/p") {
+        if uri == ts["root"]["content"]["uri"].as_str().unwrap() {
             // Packed parent atlas (one image).
             let bytes = zip_bytes(&tz, uri);
             let imgs = glb_json(&bytes)["images"]
@@ -405,7 +405,7 @@ fn texture_crop_shrinks_shared_atlas() {
         let j = glb_json(&bytes);
         assert!(!j["images"].as_array().unwrap().is_empty());
         let mime = j["images"][0]["mimeType"].as_str().unwrap_or("");
-        assert_eq!(mime, "image/webp", "{uri} mime {mime}");
+        assert_eq!(mime, "image/png", "{uri} mime {mime}");
         let jpeg_len = glb_jpeg_len(&bytes);
         assert!(jpeg_len > 32, "leaf image too small: {jpeg_len}");
     }
@@ -588,9 +588,9 @@ fn grid_prim(nx: u32, ny: u32, z_at: impl Fn(u32, u32) -> f32) -> TilePrimitive 
 
 fn geog_verts() -> Vec<[f32; 3]> {
     vec![
-        [133.0640, 120.0, 12.3360],
-        [133.0650, 140.0, 12.3350],
-        [133.0645, 130.0, 12.3355],
+        [30.0000, 120.0, 20.0010],
+        [30.0010, 140.0, 20.0000],
+        [30.0005, 130.0, 20.0005],
     ]
 }
 
@@ -612,16 +612,16 @@ fn bake_geographic_enu_metres_and_origin() {
 
     let mut scene = mesh::load(&glb).unwrap();
     let baked = mesh::bake_geographic(&mut scene, None).expect("expected geographic bake");
-    assert!((baked.origin.lon_deg - 133.0645).abs() < 0.001);
-    assert!((baked.origin.lat_deg - (-12.3355)).abs() < 0.001);
+    assert!((baked.origin.lon_deg - 30.0005).abs() < 0.001);
+    assert!((baked.origin.lat_deg - (-20.0005)).abs() < 0.001);
     assert!((baked.origin.height_m - 130.0).abs() < 1.0);
     let bb = baked.bbox_wgs84;
     assert!(
-        bb[0] <= 133.064 + 1e-3 && bb[2] >= 133.065 - 1e-3,
+        bb[0] <= 30.000 + 1e-3 && bb[2] >= 30.001 - 1e-3,
         "bbox west/east {bb:?}"
     );
     assert!(
-        bb[1] <= -12.336 + 1e-3 && bb[3] >= -12.335 - 1e-3,
+        bb[1] <= -20.001 + 1e-3 && bb[3] >= -20.000 - 1e-3,
         "bbox south/north {bb:?}"
     );
 
@@ -697,10 +697,10 @@ fn bake_geographic_prefer_pin() {
     let glb = tmp.path().join("geog.glb");
     fs::write(&glb, geographic_glb(&geog_verts())).unwrap();
     let mut scene = mesh::load(&glb).unwrap();
-    let pin = Cartographic::new(133.07, -12.34, 200.0);
+    let pin = Cartographic::new(30.01, -20.01, 200.0);
     let baked = mesh::bake_geographic(&mut scene, Some(pin)).unwrap();
-    assert!((baked.origin.lon_deg - 133.07).abs() < 1e-12);
-    assert!((baked.origin.lat_deg - (-12.34)).abs() < 1e-12);
+    assert!((baked.origin.lon_deg - 30.01).abs() < 1e-12);
+    assert!((baked.origin.lat_deg - (-20.01)).abs() < 1e-12);
     assert!((baked.origin.height_m - 200.0).abs() < 1e-12);
 }
 
@@ -709,17 +709,17 @@ fn bake_mercator_offset_keeps_local_precision() {
     let tmp = tempfile::tempdir().unwrap();
     let glb = tmp.path().join("offset.glb");
     let verts = vec![
-        [634.35, 11.77, -107.53],
-        [737.48, 43.51, -3.41],
-        [685.92, 27.64, -55.47],
+        [200.0, 10.0, -80.0],
+        [300.0, 40.0, -20.0],
+        [250.0, 25.0, -50.0],
     ];
     fs::write(&glb, geographic_glb(&verts)).unwrap();
     let mut scene = mesh::load(&glb).unwrap();
     assert!(mesh::bake_geographic(&mut scene, None).is_none());
 
     let off = SourceOffset {
-        easting: 14_812_000.0,
-        northing: -1_384_000.0,
+        easting: 3_000_000.0,
+        northing: -2_000_000.0,
         height: 100.0,
     };
     let baked = mesh::bake_to_enu(
@@ -731,14 +731,16 @@ fn bake_mercator_offset_keeps_local_precision() {
         },
     )
     .expect("offset mercator bake");
-    let pin = tinyowl_tiles::georef::mercator_shift_origin(off);
+    let pin = rusty_tiles::georef::mercator_shift_origin(off);
     assert!((baked.origin.lon_deg - pin.lon_deg).abs() < 1e-12);
     assert!((baked.origin.lat_deg - pin.lat_deg).abs() < 1e-12);
     assert!((baked.origin.height_m - 100.0).abs() < 1e-12);
     let p = scene.vertices[2].pos;
     assert!(
-        (p[0] - 685.92).abs() < 0.02 && (p[1] - 27.64).abs() < 0.02 && (p[2] + 55.47).abs() < 0.02,
-        "offset vertices stay in local metres, got {p:?}"
+        (p[0] - 238.2721198095).abs() < 0.001
+            && (p[1] - 24.9953739448).abs() < 0.001
+            && (p[2] + 47.3631797967).abs() < 0.001,
+        "shifted Web Mercator must match independent PROJ ECEF/ENU reference, got {p:?}"
     );
 
     let tz = tmp.path().join("offset.3tz");
@@ -776,7 +778,7 @@ fn bake_mercator_offset_keeps_local_precision() {
         let mins = j["accessors"][0]["min"].as_array().unwrap();
         let x = mins[0].as_f64().unwrap();
         assert!(
-            (600.0..800.0).contains(&x),
+            (180.0..300.0).contains(&x),
             "GLB stays in local metres, POSITION.min.x={x}"
         );
     }

@@ -1,5 +1,5 @@
 {
-  "name": "tinyowl-tiles-oracle",
+  "name": "rusty-tiles-oracle",
   "private": true,
   "description": "Pinned Cesium 3d-tiles-tools used as the golden oracle for v0.",
   "devDependencies": {

@@ -1,14 +1,14 @@
 [package]
-name = "tinyowl-tiles"
+name = "rusty-tiles"
 version = "0.1.0"
 edition = "2021"
-description = "Geospatial tiling: GLB/glTF → 3D Tiles (.3tz). Horizon: vector 2.0 and terrain."
+description = "Standalone geospatial tiling: textured meshes, imagery, terrain and glTF vectors."
 license = "MIT"
-repository = "https://github.com/tinyowl-labs/tinyowl-tiles"
 readme = "README.md"
+include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/build.rs", "/src/**", "/scripts/*.py", "/scripts/*.sh", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
 
 [[bin]]
-name = "tinyowl-tiles"
+name = "rusty-tiles"
 path = "src/main.rs"
 
 [dependencies]
@@ -30,7 +30,8 @@ meshopt = "0.6"
 rayon = "1.10"
 zenwebp = "0.4"
 
-[dev-dependencies]
 tempfile = "3"
+
+[dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }

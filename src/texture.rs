@@ -167,6 +167,22 @@ pub fn plan_leaf_atlas(
     tile_size: u32,
     max_density: f64,
 ) -> Result<LeafPlan, Error> {
+    plan_leaf_atlas_limit(
+        groups,
+        image_dims,
+        tile_size.max(MAX_LEAF_ATLAS),
+        max_density,
+    )
+}
+
+/// Strict atlas edge for the lossless pipeline; a scale below one asks the
+/// partitioner to split again rather than accepting reduced leaf fidelity.
+pub fn plan_leaf_atlas_limit(
+    groups: Vec<LeafGroup>,
+    image_dims: &[(u32, u32)],
+    tile_size: u32,
+    max_density: f64,
+) -> Result<LeafPlan, Error> {
     let mut untextured: Vec<TilePrimitive> = Vec::new();
     let mut textured: Vec<(u32, TilePrimitive)> = Vec::new();
     for g in groups {
@@ -207,7 +223,7 @@ pub fn plan_leaf_atlas(
     // mostly *other* photos' pixels on an 8K atlas — and packing that AABB
     // with the rest of the leaf crushes the texels the triangles actually
     // sample. Adjacent cells whose rects overlap still merge below.
-    const UV_CELL: i64 = 128;
+    const UV_CELL: i64 = 64;
     let mut charts: Vec<Chart> = Vec::new();
     let mut tri_chart: Vec<Vec<u32>> = Vec::with_capacity(textured.len());
     for (img, prim) in &textured {
@@ -270,7 +286,7 @@ pub fn plan_leaf_atlas(
     // Merge overlapping rects on the same image when the union wastes little.
     // Cap the union so a C-shaped island cannot become an 8K AABB that then
     // forces the whole leaf to downscale.
-    let max_chart = tile_size.max(MAX_LEAF_ATLAS) as i64;
+    let max_chart = tile_size as i64;
     let remap = merge_overlapping(&mut charts, max_chart);
     for pv in &mut tri_chart {
         for c in pv.iter_mut() {
@@ -307,7 +323,7 @@ pub fn plan_leaf_atlas(
     // square… A 2:1 atlas halves the dead space for leaves that need just
     // over half a square. Prefer `--tileSize`, then grow toward
     // MAX_LEAF_ATLAS before backing scale off.
-    let max_edge = tile_size.max(MIN_ATLAS).max(MAX_LEAF_ATLAS);
+    let max_edge = tile_size.max(MIN_ATLAS);
     let mut sizes: Vec<(u32, u32)> = Vec::new();
     let mut e = MIN_ATLAS;
     loop {
@@ -816,9 +832,17 @@ pub fn bake_simplified(
     children: &[TilePrimitive],
     atlas_size: u32,
 ) -> Result<(TilePrimitive, f64), Error> {
-    let size = atlas_size.max(MIN_ATLAS);
+    let mut size = atlas_size.max(MIN_ATLAS);
     let t0 = Instant::now();
-    let (unwrapped, (aw, ah)) = chart_unwrap(simplified, size)?;
+    let (unwrapped, (aw, ah)) = loop {
+        match chart_unwrap(simplified, size) {
+            Ok(layout) => break layout,
+            Err(e) if e.to_string() == "chart packing failed" && size < 4096 => {
+                size *= 2;
+            }
+            Err(e) => return Err(e),
+        }
+    };
     let density = texel_density(&unwrapped, aw, ah).unwrap_or(1.0);
     Timing::add(&TIMING.unwrap, t0);
     let t0 = Instant::now();
@@ -826,9 +850,8 @@ pub fn bake_simplified(
     Timing::add(&TIMING.sampler, t0);
     let t0 = Instant::now();
     let mut atlas = RgbaImage::from_pixel(aw, ah, image::Rgba([128, 128, 128, 255]));
-    let denom_w = (aw - 1) as f32;
-    let denom_h = (ah - 1).max(1) as f32;
-    let has_n = unwrapped.normals.len() == unwrapped.positions.len();
+    let denom_w = aw as f32;
+    let denom_h = ah as f32;
 
     for tri in unwrapped.indices.chunks_exact(3) {
         let ia = tri[0] as usize;
@@ -840,9 +863,10 @@ pub fn bake_simplified(
         let ua = unwrapped.uvs[ia];
         let ub = unwrapped.uvs[ib];
         let uc = unwrapped.uvs[ic];
-        let (face_n, _) = grid::face_normal_area(pa, pb, pc);
-        let n_at = |i: usize| if has_n { unwrapped.normals[i] } else { face_n };
-        let (na, nb, nc) = (n_at(ia), n_at(ib), n_at(ic));
+        let (face_n, area) = grid::face_normal_area(pa, pb, pc);
+        if area <= 1e-15 {
+            continue;
+        }
         let mut seed: Option<u32> = None;
 
         let px = |t: [f32; 2]| -> (i32, i32) {
@@ -863,7 +887,7 @@ pub fn bake_simplified(
         }
         for py in min_y..=max_y {
             for px in min_x..=max_x {
-                let q = [px as f32 / denom_w, py as f32 / denom_h];
+                let q = [(px as f32 + 0.5) / denom_w, (py as f32 + 0.5) / denom_h];
                 let (b0, b1, b2) = bary_uv(ua, ub, uc, q);
                 // Slightly generous so texel centres on shared edges get colour.
                 if b0 < -2e-3 || b1 < -2e-3 || b2 < -2e-3 {
@@ -874,17 +898,10 @@ pub fn bake_simplified(
                     pa[1] * b0 + pb[1] * b1 + pc[1] * b2,
                     pa[2] * b0 + pb[2] * b1 + pc[2] * b2,
                 ];
-                let nrm = [
-                    na[0] * b0 + nb[0] * b1 + nc[0] * b2,
-                    na[1] * b0 + nb[1] * b1 + nc[1] * b2,
-                    na[2] * b0 + nb[2] * b1 + nc[2] * b2,
-                ];
-                let rgb = sampler.sample_seeded(pos, nrm, &mut seed);
-                atlas.put_pixel(
-                    px as u32,
-                    py as u32,
-                    image::Rgba([rgb[0], rgb[1], rgb[2], 255]),
-                );
+                // Match geometric orientation; authored shading normals may
+                // intentionally point away from the triangle's winding.
+                let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
+                atlas.put_pixel(px as u32, py as u32, image::Rgba(rgb));
             }
         }
     }
@@ -897,12 +914,8 @@ pub fn bake_simplified(
         &unwrapped.indices,
         PARENT_DILATE_PX,
     );
-    let texel_m = if density > 0.0 {
-        1.0 / density as f64
-    } else {
-        0.0
-    };
-    let jpeg = Some(encode_texture(&atlas)?);
+    let texel_m = crate::tile::max_texel_size(&unwrapped, aw, ah);
+    let jpeg = Some(crate::tile::encode_png(&atlas)?);
     Timing::add(&TIMING.encode, t0);
     Ok((
         TilePrimitive {
@@ -1003,6 +1016,7 @@ fn chart_unwrap(
         let mut lo = [f32::INFINITY; 2];
         let mut hi = [f32::NEG_INFINITY; 2];
         let mut parea = 0.0f32;
+        let mut projected = Vec::new();
         let extend = |lo: &mut [f32; 2], hi: &mut [f32; 2], pts: [[f32; 2]; 3]| {
             for p in pts {
                 lo[0] = lo[0].min(p[0]);
@@ -1019,6 +1033,7 @@ fn chart_unwrap(
                 project2(mesh.positions[t[2] as usize], origin, tangent, bitangent),
             ];
             extend(&mut lo, &mut hi, pts);
+            projected.push((pts, lo, hi));
             parea += tri_area2(pts);
         }
         while let Some(fi) = q.pop_front() {
@@ -1036,6 +1051,20 @@ fn chart_unwrap(
                 if (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < 0.0 {
                     continue;
                 }
+                let mut tri_lo = [f32::INFINITY; 2];
+                let mut tri_hi = [f32::NEG_INFINITY; 2];
+                extend(&mut tri_lo, &mut tri_hi, [a, b, c]);
+                if faces.len() >= 256
+                    || projected.iter().any(|(other, olo, ohi)| {
+                        tri_hi[0] > olo[0]
+                            && ohi[0] > tri_lo[0]
+                            && tri_hi[1] > olo[1]
+                            && ohi[1] > tri_lo[1]
+                            && triangles_overlap([a, b, c], *other)
+                    })
+                {
+                    continue;
+                }
                 let (mut nlo, mut nhi) = (lo, hi);
                 extend(&mut nlo, &mut nhi, [a, b, c]);
                 let narea = parea + tri_area2([a, b, c]);
@@ -1047,6 +1076,7 @@ fn chart_unwrap(
                 lo = nlo;
                 hi = nhi;
                 parea = narea;
+                projected.push(([a, b, c], tri_lo, tri_hi));
                 chart_of[nb] = id;
                 faces.push(nb);
                 q.push_back(nb);
@@ -1057,38 +1087,6 @@ fn chart_unwrap(
             normal: n0,
             origin,
         });
-    }
-
-    // Fold tiny charts into the adjacent chart they share most edges with
-    // (front-facing relative to it). Hundreds of 8 px micro-charts otherwise
-    // eat a 256² atlas in gutters.
-    let total_area: f32 = face_area.iter().sum();
-    let tiny_area = total_area * 0.002;
-    for ci in 0..charts.len() {
-        let area: f32 = charts[ci].faces.iter().map(|&f| face_area[f]).sum();
-        if charts[ci].faces.len() > 3 && area > tiny_area {
-            continue;
-        }
-        let mut votes: HashMap<usize, usize> = HashMap::new();
-        for &f in &charts[ci].faces {
-            for &nb in &adj[f] {
-                let other = chart_of[nb];
-                if other != ci && grid::dot(charts[other].normal, charts[ci].normal) > 0.0 {
-                    *votes.entry(other).or_default() += 1;
-                }
-            }
-        }
-        let Some((&target, _)) = votes
-            .iter()
-            .max_by_key(|(k, v)| (**v, std::cmp::Reverse(**k)))
-        else {
-            continue;
-        };
-        let faces = std::mem::take(&mut charts[ci].faces);
-        for &f in &faces {
-            chart_of[f] = target;
-        }
-        charts[target].faces.extend(faces);
     }
 
     struct Layout {
@@ -1225,8 +1223,8 @@ fn chart_unwrap(
     while atlas_h < used_h && atlas_h < atlas_size {
         atlas_h *= 2;
     }
-    let denom_w = (atlas_size - 1) as f32;
-    let denom_h = (atlas_h - 1).max(1) as f32;
+    let denom_w = atlas_size as f32;
+    let denom_h = atlas_h as f32;
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
@@ -1250,8 +1248,8 @@ fn chart_unwrap(
                 [0.0, 1.0, 0.0]
             });
             uvs.push([
-                (ox as f32 + (pxy[0] / layout.wm) * (iw - 1) as f32) / denom_w,
-                (oy as f32 + (pxy[1] / layout.hm) * (ih - 1) as f32) / denom_h,
+                (ox as f32 + 0.5 + (pxy[0] / layout.wm) * (iw - 1) as f32) / denom_w,
+                (oy as f32 + 0.5 + (pxy[1] / layout.hm) * (ih - 1) as f32) / denom_h,
             ]);
         }
         for &fi in &layout.faces {
@@ -1285,6 +1283,31 @@ fn plane_basis(n: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     (t, b)
 }
 
+// Separating-axis test excludes touching edges: adjacent faces may share an
+// edge, but no two interiors may occupy the same texels in a chart.
+fn triangles_overlap(a: [[f32; 2]; 3], b: [[f32; 2]; 3]) -> bool {
+    for tri in [a, b] {
+        for i in 0..3 {
+            let d = [
+                tri[(i + 1) % 3][0] - tri[i][0],
+                tri[(i + 1) % 3][1] - tri[i][1],
+            ];
+            let project = |p: [f32; 2]| -d[1] * p[0] + d[0] * p[1];
+            let aa = a.map(project);
+            let bb = b.map(project);
+            let lo_a = aa.into_iter().fold(f32::INFINITY, f32::min);
+            let hi_a = aa.into_iter().fold(f32::NEG_INFINITY, f32::max);
+            let lo_b = bb.into_iter().fold(f32::INFINITY, f32::min);
+            let hi_b = bb.into_iter().fold(f32::NEG_INFINITY, f32::max);
+            let eps = (hi_a - lo_a).max(hi_b - lo_b) * 1e-6;
+            if hi_a <= lo_b + eps || hi_b <= lo_a + eps {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 fn tri_area2(p: [[f32; 2]; 3]) -> f32 {
     0.5 * ((p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]))
         .abs()
@@ -1315,8 +1338,8 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
         let t2 = uvs[tri[2] as usize];
         let px = |t: [f32; 2]| -> (i32, i32) {
             (
-                (t[0] * (w - 1) as f32).round() as i32,
-                (t[1] * (h - 1) as f32).round() as i32,
+                (t[0] * w as f32 - 0.5).floor() as i32,
+                (t[1] * h as f32 - 0.5).floor() as i32,
             )
         };
         let (x0, y0) = px(t0);
@@ -1335,7 +1358,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
                     t0,
                     t1,
                     t2,
-                    [x as f32 / (w - 1) as f32, y as f32 / (h - 1) as f32],
+                    [(x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32],
                 );
                 if b0 >= -1e-4 && b1 >= -1e-4 && b2 >= -1e-4 {
                     cover[(y as u32 * w + x as u32) as usize] = true;
@@ -1344,7 +1367,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
         }
     }
 
-    let mut sum = [0u64; 3];
+    let mut sum = [0u64; 4];
     let mut n = 0u64;
     let mut dist = vec![u32::MAX; (w * h) as usize];
     let mut q = VecDeque::new();
@@ -1356,6 +1379,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
                 sum[0] += p[0] as u64;
                 sum[1] += p[1] as u64;
                 sum[2] += p[2] as u64;
+                sum[3] += p[3] as u64;
                 n += 1;
                 dist[i] = 0;
                 q.push_back((x, y));
@@ -1393,7 +1417,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
             (sum[0] / n) as u8,
             (sum[1] / n) as u8,
             (sum[2] / n) as u8,
-            255,
+            (sum[3] / n) as u8,
         ]);
         for y in 0..h {
             for x in 0..w {
@@ -1410,6 +1434,35 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
 pub fn encode_texture(img: &RgbaImage) -> Result<Vec<u8>, Error> {
     let rgb = DynamicImage::ImageRgba8(img.clone()).to_rgb8();
     encode_texture_rgb(&rgb)
+}
+
+/// High-quality web delivery. Lossless intermediates prevent cumulative
+/// recompression through the LOD hierarchy; alpha stays lossless in WebP.
+pub fn encode_perceptual(img: &RgbaImage, opaque: bool) -> Result<Vec<u8>, Error> {
+    let cfg = zenwebp::LossyConfig::new()
+        .with_quality(95.0)
+        .with_method(1);
+    if opaque {
+        let rgb = DynamicImage::ImageRgba8(img.clone()).to_rgb8();
+        return zenwebp::EncodeRequest::lossy(
+            &cfg,
+            rgb.as_raw(),
+            zenwebp::PixelLayout::Rgb8,
+            img.width(),
+            img.height(),
+        )
+        .encode()
+        .map_err(|e| Error::msg(format!("webp: {e}")));
+    }
+    zenwebp::EncodeRequest::lossy(
+        &cfg,
+        img.as_raw(),
+        zenwebp::PixelLayout::Rgba8,
+        img.width(),
+        img.height(),
+    )
+    .encode()
+    .map_err(|e| Error::msg(format!("webp: {e}")))
 }
 
 pub fn encode_texture_rgb(rgb: &RgbImage) -> Result<Vec<u8>, Error> {
@@ -1481,10 +1534,10 @@ impl SceneSampler {
                 if let Some(d) = texel_density(p, rgba.width(), rgba.height()) {
                     let f = d / target.max(1e-6);
                     if f >= 2.0 {
-                        let f = f.floor().min(64.0);
+                        let f = (1u32 << (f.floor().min(64.0) as u32).ilog2()) as f32;
                         let nw = ((rgba.width() as f32 / f).round() as u32).max(1);
                         let nh = ((rgba.height() as f32 / f).round() as u32).max(1);
-                        rgba = imageops::resize(&rgba, nw, nh, FilterType::Triangle);
+                        rgba = crate::tile::resize_colour(&rgba, nw, nh);
                     }
                 }
             }
@@ -1513,35 +1566,47 @@ impl SceneSampler {
 
     /// Colour at the child surface nearest `p`, preferring triangles that face
     /// the same way (so the far cave wall does not bleed through).
-    pub fn sample(&self, p: [f32; 3], nrm: [f32; 3]) -> [u8; 3] {
+    pub fn sample(&self, p: [f32; 3], nrm: [f32; 3]) -> Result<[u8; 4], Error> {
         let mut seed = None;
         self.sample_seeded(p, nrm, &mut seed)
     }
 
     /// `sample` carrying the last hit between calls (texels of one triangle).
-    pub fn sample_seeded(&self, p: [f32; 3], nrm: [f32; 3], seed: &mut Option<u32>) -> [u8; 3] {
+    pub fn sample_seeded(
+        &self,
+        p: [f32; 3],
+        nrm: [f32; 3],
+        seed: &mut Option<u32>,
+    ) -> Result<[u8; 4], Error> {
         let n = grid::normalize(nrm);
-        let cell2 = self.grid.cell_size() * self.grid.cell_size();
-        let hit = self.grid.nearest_by_seeded(p, 6, *seed, |ti, d2, _| {
-            let facing = grid::dot(n, self.tri_n[ti as usize]) > 0.15;
-            Some(if facing { d2 } else { d2 * 8.0 + cell2 })
-        });
+        let score = |ti: u32, d2, _| (grid::dot(n, self.tri_n[ti as usize]) > 0.15).then_some(d2);
+        let hit = self
+            .grid
+            .nearest_by_seeded(p, 6, *seed, score)
+            .or_else(|| self.grid.nearest_by(p, i64::MAX, score));
         let Some(h) = hit else {
-            return [128, 128, 128];
+            return Err(Error::TextureProjection {
+                position: p,
+                normal: n,
+            });
         };
         *seed = Some(h.tri);
         let uv = self.tri_uv[h.tri as usize];
         let u = uv[0][0] * h.bary[0] + uv[1][0] * h.bary[1] + uv[2][0] * h.bary[2];
         let v = uv[0][1] * h.bary[0] + uv[1][1] * h.bary[1] + uv[2][1] * h.bary[2];
-        sample_rgba(&self.images[self.tri_img[h.tri as usize] as usize], u, v)
+        Ok(sample_rgba(
+            &self.images[self.tri_img[h.tri as usize] as usize],
+            u,
+            v,
+        ))
     }
 }
 
-fn sample_rgba(img: &RgbaImage, u: f32, v: f32) -> [u8; 3] {
+fn sample_rgba(img: &RgbaImage, u: f32, v: f32) -> [u8; 4] {
     let w = img.width().max(1);
     let h = img.height().max(1);
-    let xf = u.clamp(0.0, 1.0) * (w - 1) as f32;
-    let yf = v.clamp(0.0, 1.0) * (h - 1) as f32;
+    let xf = (u * w as f32 - 0.5).clamp(0.0, (w - 1) as f32);
+    let yf = (v * h as f32 - 0.5).clamp(0.0, (h - 1) as f32);
     let x0 = xf.floor() as u32;
     let y0 = yf.floor() as u32;
     let x1 = (x0 + 1).min(w - 1);
@@ -1552,12 +1617,27 @@ fn sample_rgba(img: &RgbaImage, u: f32, v: f32) -> [u8; 3] {
     let p10 = img.get_pixel(x1, y0).0;
     let p01 = img.get_pixel(x0, y1).0;
     let p11 = img.get_pixel(x1, y1).0;
-    let mut out = [0u8; 3];
-    for i in 0..3 {
-        let a = p00[i] as f32 * (1.0 - tx) + p10[i] as f32 * tx;
-        let b = p01[i] as f32 * (1.0 - tx) + p11[i] as f32 * tx;
-        out[i] = (a * (1.0 - ty) + b * ty).round().clamp(0.0, 255.0) as u8;
+    let (linear, srgb) = crate::tile::colour_tables();
+    let mut sum = [0.0f32; 4];
+    for (p, weight) in [
+        (p00, (1. - tx) * (1. - ty)),
+        (p10, tx * (1. - ty)),
+        (p01, (1. - tx) * ty),
+        (p11, tx * ty),
+    ] {
+        let alpha = p[3] as f32 / 255.;
+        for i in 0..3 {
+            sum[i] += linear[p[i] as usize] * alpha * weight;
+        }
+        sum[3] += alpha * weight;
     }
+    let mut out = [0u8; 4];
+    if sum[3] > 0. {
+        for i in 0..3 {
+            out[i] = srgb[((sum[i] / sum[3]).clamp(0., 1.) * 65535.).round() as usize];
+        }
+    }
+    out[3] = (sum[3] * 255.).round() as u8;
     out
 }
 
@@ -1586,6 +1666,80 @@ mod tests {
             uvs: Vec::new(),
             indices,
             jpeg: None,
+        }
+    }
+
+    #[test]
+    fn chart_projection_rejects_overlapping_interiors_but_allows_shared_edges() {
+        let a = [[0., 0.], [1., 0.], [0., 1.]];
+        assert!(triangles_overlap(a, [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9]]));
+        assert!(!triangles_overlap(a, [[1., 0.], [1., 1.], [0., 1.]]));
+    }
+
+    #[test]
+    fn sampler_preserves_alpha_and_uses_geometric_facing() {
+        let quad = |z: f32, rgba: [u8; 4], reverse: bool| TilePrimitive {
+            positions: vec![[0., 0., z], [1., 0., z], [0., 1., z]],
+            normals: Vec::new(),
+            uvs: vec![[0.5, 0.5]; 3],
+            indices: if reverse {
+                vec![0, 2, 1]
+            } else {
+                vec![0, 1, 2]
+            },
+            jpeg: Some(
+                crate::tile::encode_png(&RgbaImage::from_pixel(4, 4, image::Rgba(rgba))).unwrap(),
+            ),
+        };
+        let sampler = SceneSampler::from_prims(
+            &[
+                quad(0., [240, 20, 30, 64], false),
+                quad(0.01, [20, 240, 30, 192], true),
+            ],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            sampler.sample([0.25, 0.25, 0.009], [0., 0., 1.]).unwrap(),
+            [240, 20, 30, 64]
+        );
+        assert_eq!(
+            sampler.sample([0.25, 0.25, 0.001], [0., 0., -1.]).unwrap(),
+            [20, 240, 30, 192]
+        );
+        let image = RgbaImage::from_fn(2, 1, |x, _| {
+            image::Rgba(if x == 0 {
+                [20, 40, 60, 80]
+            } else {
+                [100, 120, 140, 160]
+            })
+        });
+        assert_eq!(sample_rgba(&image, 0.25, 0.5), [20, 40, 60, 80]);
+        assert_eq!(sample_rgba(&image, 0.75, 0.5), [100, 120, 140, 160]);
+    }
+
+    #[test]
+    fn parent_bake_preserves_transparency() {
+        let mut mesh = grid_plane(4, 4);
+        mesh.uvs = mesh
+            .positions
+            .iter()
+            .map(|p| [p[0] / 4., p[2] / 4.])
+            .collect();
+        mesh.jpeg = Some(
+            crate::tile::encode_png(&RgbaImage::from_pixel(
+                32,
+                32,
+                image::Rgba([100, 150, 200, 80]),
+            ))
+            .unwrap(),
+        );
+        let (parent, _) = bake_simplified(&mesh, std::slice::from_ref(&mesh), 64).unwrap();
+        let atlas = image::load_from_memory(parent.jpeg.as_ref().unwrap())
+            .unwrap()
+            .to_rgba8();
+        for uv in &parent.uvs {
+            assert_eq!(sample_rgba(&atlas, uv[0], uv[1]), [100, 150, 200, 80]);
         }
     }
 
@@ -1685,7 +1839,7 @@ mod tests {
         assert_eq!(
             plan.blits.len(),
             1,
-            "touching 128 px UV cells must merge, got {}",
+            "touching UV cells must merge, got {}",
             plan.blits.len()
         );
     }

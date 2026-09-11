@@ -8,6 +8,12 @@ pub enum Error {
     #[error("{0}")]
     Message(String),
 
+    #[error("parent texture projection has no compatible source surface at {position:?}, normal {normal:?}")]
+    TextureProjection {
+        position: [f32; 3],
+        normal: [f32; 3],
+    },
+
     #[error("input not found: {0}")]
     InputNotFound(PathBuf),
 

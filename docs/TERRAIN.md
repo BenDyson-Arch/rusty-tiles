@@ -1,15 +1,8 @@
-# Terrain / raster (later)
+# Terrain and raster lab paths
 
-CLI stub:
+Implemented as GDAL-backed standalone commands; see [README](../README.md#raster-terrain-and-gltf-vector-lab-commands) for invocation and verification.
 
-```bash
-tinyowl-tiles terrain -i dem.tif -o terrain.3tz
-```
+- `raster`: source-preserving COG plus PNG XYZ display pyramid. No bundled PMTiles writer.
+- `terrain`: DEM to quantized-mesh directory and `layer.json`, with explicit height offset and NoData fill height. Regular shared grids; no adaptive simplification or certified maximum error bound yet.
 
-Exit code 2. Not scheduled in v0.
-
-- DEM → quantized-mesh or 3D Tiles terrain
-- COG / PMTiles stay in `tinyowl-server` + GDAL until this crate is clearly better
-- COLMAP is out of scope (hub `CONTEXT.md`)
-
-See `src/terrain.rs`.
+These are lab paths. They do not replace the server raster worker or introduce product integration. Terrain height datum must be supplied; a constant offset cannot replace a spatial geoid transformation.

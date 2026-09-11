@@ -83,7 +83,7 @@ fn write_glb_compressed_localized(prims: &[TilePrimitive]) -> Result<Vec<u8>, Er
     // must reject via extensionsRequired rather than read missing bytes.
     let mut bin: Vec<u8> = Vec::new();
     let mut root = Root::default();
-    root.asset.generator = Some("tinyowl-tiles".into());
+    root.asset.generator = Some("rusty-tiles".into());
     root.extensions_used = vec![
         "KHR_mesh_quantization".into(),
         "EXT_meshopt_compression".into(),
