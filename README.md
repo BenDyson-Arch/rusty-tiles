@@ -173,3 +173,7 @@ Every data flag is optional; select at least one. Add `--terrain output/terrain`
 
 To serve on your own network, explicitly pass `--host YOUR_INTERFACE_IP --port 9227`. Only use data you intend to share there. Nothing is uploaded or automatically published. Restarting the same command reuses your output directories; no files under `/tmp` are required. Generated files under `output/` and `target/` are ignored by git.
 # rusty-tiles
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, local checks, the `develop` → `main` release workflow, review requirements and data-sharing rules. Contributions normally target `develop`; `main` is protected for releases.
