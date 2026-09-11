@@ -172,3 +172,4 @@ python3 scripts/preview.py \
 Every data flag is optional; select at least one. Add `--terrain output/terrain` only for a DEM covering the same area and with the correct height reference. Layer toggles, extent buttons, annotation picking and an FPS display are included. Covered annotations retain their actual positions; hide the mesh to inspect them.
 
 To serve on your own network, explicitly pass `--host YOUR_INTERFACE_IP --port 9227`. Only use data you intend to share there. Nothing is uploaded or automatically published. Restarting the same command reuses your output directories; no files under `/tmp` are required. Generated files under `output/` and `target/` are ignored by git.
+# rusty-tiles
