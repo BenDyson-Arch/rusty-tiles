@@ -136,6 +136,9 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Maximum encoding worker processes (defaults to available cores)
+    #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, usize::from))]
+    jobs: usize,
     /// OGR attribute filter applied to every selected layer
     #[arg(long = "where")]
     where_clause: Option<String>,
@@ -427,6 +430,7 @@ fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                jobs: a.jobs,
                 quantize: a.quantize,
                 meshopt: a.meshopt,
                 meshopt_encoder: if a.meshopt {

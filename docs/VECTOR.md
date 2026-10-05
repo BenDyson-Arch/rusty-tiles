@@ -372,3 +372,22 @@ Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
 identities and reasons remain in the diagnostics and geometry reports; actual
 GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
 native warnings as well as Python tracebacks for debugging.
+
+### Parallel encoding
+
+`vector --jobs N` limits the number of encoding processes; the CLI defaults to
+available cores. Use `--jobs 1` for a small-memory machine or embedding without
+worker processes. Workers read bounded candidates and shared-vertex masks from
+the SQLite spool through independent read-only connections. Leaf candidates and
+LOD candidates can run concurrently; source reading, partition decisions and
+manifest assembly remain ordered in the coordinator. Unchanged reusable
+subtrees launch no encoding jobs. Worker errors prevent archive publication.
+
+Each worker can hold a tile candidate up to the configured vertex/feature budgets,
+so choose `N` with available memory in mind. Hash-named payloads, hierarchy order,
+geometry reports and build-state signatures do not depend on completion order or
+worker count. `conversion.json.performance` records requested jobs, the number of
+workers that produced consumed candidates, and wall times for ingestion,
+partitioning, encoding and publication. Partitioning includes spool preparation;
+encoding includes coordinator overhead and process startup, and publication stops
+before Rust archive packing. Timings are diagnostic, not part of content identity.

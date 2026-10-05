@@ -565,8 +565,9 @@ def run(args):
     import vector_pipeline
     import vector_reuse
     import vector_source
+    import vector_parallel
     sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
-    for module in (vector_source,vector_reuse,vector_pipeline):
+    for module in (vector_source,vector_reuse,vector_pipeline,vector_parallel):
         sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
     helper=getattr(args,'meshopt_helper',None)
     if helper:
@@ -575,7 +576,7 @@ def run(args):
             for chunk in iter(lambda:executable.read(65536),b''):digest.update(chunk)
         sources.append(digest.hexdigest())
     encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
-    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder))
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder,sources=dict(zip(('vector','vector_source','vector_reuse','vector_pipeline','vector_parallel'),sources[:5]))))
 
 
 if __name__ == '__main__':
@@ -584,6 +585,7 @@ if __name__ == '__main__':
     p.add_argument('output')
     p.add_argument('--lod-tolerance', type=float, default=.1)
     p.add_argument('--lod-levels', type=int, default=3)
+    p.add_argument('--jobs',type=int,default=len(__import__('os').sched_getaffinity(0)) if hasattr(__import__('os'),'sched_getaffinity') else __import__('os').cpu_count() or 1)
     p.add_argument('--max-features', type=int, default=64)
     p.add_argument('--max-parent-features', type=int, default=4096)
     p.add_argument('--layer', dest='layers', action='append', default=[])
