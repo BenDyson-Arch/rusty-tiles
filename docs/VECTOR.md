@@ -98,13 +98,89 @@ bytes, geometry error, position rounding and requested tolerance.
 
 ## Compatibility and validation
 
-Polygon encoding follows `EXT_mesh_polygon` proposal revision
-`c1a035499b70aeb5d8281470101423e5e285dfe3` from
-[Khronos glTF PR 2570](https://github.com/KhronosGroup/glTF/pull/2570).
+**Use CesiumJS 1.142.0 or a checked newer release for native vector content.**
+1.142.0 is the oldest release tested with the native vector decoder; it introduced
+experimental support for these extensions in
+[Cesium PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
+The repository preview baseline is 1.143.0. Pin your application runtime and repeat
+the probe when upgrading: draft support can change without a stable compatibility
+promise.
+
+The encoder follows these draft revisions:
+
+| Extension | Encoding reference |
+| --- | --- |
+| `EXT_mesh_polygon` | [glTF proposal revision `c1a0354`](https://github.com/KhronosGroup/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), from [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570): polygon count, triangle offsets and ring-loop indices/offsets. |
+| `3DTILES_content_gltf_vector` | [3D Tiles proposal revision `c48ebdc`](https://github.com/CesiumGS/3d-tiles/blob/c48ebdc8db43dc00917b4f200eff5e2131d7e493/extensions/3DTILES_content_gltf_vector/README.md), from [PR 838](https://github.com/CesiumGS/3d-tiles/pull/838): optional tileset extension with `content.extensions.3DTILES_content_gltf_vector.vector = true`. |
+
 Feature metadata uses `EXT_mesh_features` and `EXT_structural_metadata`.
-The [3D Tiles extension](https://github.com/CesiumGS/3d-tiles/pull/838) remains a
-draft. It is not a finalized 3D Tiles 2.0 format. Rendering, LOD selection and
-property picking were checked with the Cesium 1.143.0 IIFE runtime.
+Output declares 3D Tiles 1.1; this prototype does not claim a finalized 3D Tiles
+2.0 format. Fragmented surface fills use standard `b3dm`-wrapped glTF triangles,
+while their original boundaries use separate vector line content.
+
+The following matrix was checked on 2026-10-05 using the repository IIFE preview,
+headless Chromium with SwiftShader, GDAL 3.13.3 and NumPy 2.5.3. Each row used the
+same invented fixtures: a detailed 3D line, a polygon with a hole, a fragmented
+polygon with separate boundaries, an outline-only repaired polygon, and a point.
+
+| CesiumJS | Load | Lines / outlines | Polygon and fragmented fills | Line / polygon LOD | Property picking | Native vector decoder |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.139.1 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
+| 1.140.0 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
+| 1.141.0 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
+| **1.142.0** | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
+| 1.143.0 | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
+| 1.146.0 | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
+
+LOD checks observed 2 → 201 line vertices and 24 → 140 polygon vertices while
+moving from coarse to full detail. Fragmented fills and semantic points are not
+simplified; their hierarchy routes to the full-detail contents. Picking checks
+`_source_id`, `_source_layer` and `name` from rendered features, including fill
+and outline fallback. Styled line checks pick five pixels off the centerline;
+fragmented boundary checks pick outside the filled polygon. These distinguish
+native vector rendering from an ordinary thin glTF line. Polygon ring topology
+does not itself promise visible styled outlines in every runtime; the fragmented
+boundary test uses the separately emitted line content.
+
+The three older releases did not report tile-loading errors in these fixtures.
+They ignored the optional draft extensions and displayed generic glTF geometry;
+that partial display is **not supported native vector behavior**. Earlier releases
+and other engines have not been tested. A runtime that accepts ordinary 3D Tiles
+or `b3dm` may still ignore polygon topology, vector styling or feature metadata.
+Successful triangle rendering alone is insufficient to establish compatibility.
+
+### Repeat the browser check
+
+This check is optional and separate from the default test suite. It uses invented
+geometry and downloads no datasets. Install the normal vector Python dependencies,
+Node.js, a Chromium executable, Playwright and one explicitly pinned Cesium release:
+
+```sh
+python3 tests/fixtures/vector_compat.py /tmp/rusty-tiles-vector-compat
+npm install --prefix target/vector-browser --no-save --package-lock=false playwright
+npm install --prefix target/vector-runtime --no-save --package-lock=false cesium@1.142.0
+python3 scripts/preview.py \
+  --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
+  --annotations /tmp/rusty-tiles-vector-compat --port 9250
+```
+
+The fixture output directory must be new. In a second terminal, from the same
+repository checkout:
+
+```sh
+NODE_PATH="$PWD/target/vector-browser/node_modules" CHROMIUM=/usr/bin/chromium \
+  node tests/fixtures/vector_compat.cjs http://127.0.0.1:9250 --require-native
+```
+
+The probe prints JSON containing the runtime version, selected vertex counts,
+rendered picks/properties, native collection types and browser/tile errors. It
+exits unsuccessfully if a native rendering, LOD or picking check fails. To inspect
+an older release's fallback behavior, change the pinned Cesium installation and
+omit `--require-native`. Private traversal fields are used only in this diagnostic;
+applications should use public CesiumJS APIs. These checks establish fixture
+compatibility, not a GPU/performance guarantee or support for every source geometry.
+
+### Public dataset validation
 
 On 2026-10-05, the public-domain Natural Earth roads collection, converted to a
 GeoPackage, completed in 84.0 seconds with 124.4 MiB peak subprocess RSS on the
