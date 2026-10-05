@@ -1,6 +1,7 @@
 """GeoJSON → glTF vector content prototype, pinned to the 2026 draft.
 
-Whole features are partitioned spatially without clipping or simplification.
+Full-detail features are partitioned spatially; parents contain conservative
+3D line and planar polygon simplifications with metre-based error bounds.
 The glTF extensions preserve polygon rings, holes, feature IDs and scalar
 properties. GDAL/GEOS triangulates in a best-fit plane while retaining source
 3D positions. Optional repairs and original-outline fallbacks are reported.
@@ -49,7 +50,7 @@ class Glb:
 
     def view(self, data):
         data = data or b"\0"
-        self.data.extend(b'\0' * (-len(self.data) % 4))
+        self.data.extend(b'\0' * (-len(self.data) % 8))
         i = len(self.doc['bufferViews'])
         self.doc['bufferViews'].append(dict(buffer=0, byteOffset=len(self.data), byteLength=len(data)))
         self.data.extend(data)
@@ -182,7 +183,7 @@ def polygon(rings, repair=False, report=None):
     return positions, indices, loops, triangle_offsets, loop_offsets
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False):
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -273,12 +274,153 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
     glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]
+    rounding = float(np.linalg.norm(p-p.astype('<f4'),axis=1).max())
+    if encoding_report is not None:
+        encoding_report['rounding'] = rounding
     low, high = p.min(axis=0), p.max(axis=0)
-    center, half = (low+high)/2, np.maximum((high-low)/2, .001)
+    center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
     return dict(box=[*center.tolist(), half[0], 0, 0, 0, half[1], 0, 0, 0, half[2]])
 
 
+def paths(geometry):
+    """Yield coordinate paths without their duplicate closing polygon vertex."""
+    kind, c = geometry['type'], geometry['coordinates']
+    if kind == 'Point':
+        return [[c]]
+    if kind == 'MultiPoint':
+        return [[p] for p in c]
+    if kind == 'LineString':
+        return [c]
+    if kind == 'MultiLineString':
+        return c
+    if kind == 'Polygon':
+        return [r[:-1] if r[0] == r[-1] else r for r in c]
+    if kind == 'MultiPolygon':
+        return [r[:-1] if r[0] == r[-1] else r for poly in c for r in poly]
+    raise ValueError(f'unsupported geometry {kind}')
+
+
+def simplify_path(source, tolerance, locked, closed=False):
+    """Iterative 3D RDP; retained source vertices, fixed junctions/boundaries.
+
+    Every replaced source segment chain lies within tolerance of its chord.
+    Endpoint projection and continuity also bound chord-to-chain distance.
+    """
+    points = np.asarray(source, dtype=float)
+    if closed and np.array_equal(points[0], points[-1]):
+        points = points[:-1]
+    if len(points) < (4 if closed else 3) or tolerance <= 0:
+        return points.tolist(), 0.0
+    if closed:
+        split = int(np.argmax(np.linalg.norm(points - points[0], axis=1)))
+        if split == 0:
+            return points.tolist(), 0.0
+        points = np.vstack([points, points[0]])
+        anchors = {0, split, len(points)-1}
+    else:
+        anchors = {0, len(points)-1}
+    anchors.update(i for i,p in enumerate(points) if tuple(p) in locked)
+    keep = set(anchors)
+    anchors = sorted(anchors)
+    pending = list(zip(anchors[:-1], anchors[1:]))
+    error = 0.0
+    while pending:
+        a, b = pending.pop()
+        if b <= a + 1:
+            continue
+        segment = points[b] - points[a]
+        interior = points[a+1:b]
+        t = np.clip((interior - points[a]) @ segment / max(float(segment @ segment), 1e-30), 0, 1)
+        distances = np.linalg.norm(interior - points[a] - t[:, None] * segment, axis=1)
+        i = int(np.argmax(distances))
+        if distances[i] > tolerance:
+            index = a + 1 + i
+            keep.add(index)
+            pending.extend(((a,index),(index,b)))
+        else:
+            error = max(error, float(distances[i]))
+    result = points[sorted(keep)]
+    if closed:
+        result = result[:-1]
+        if len(result) < 3:
+            return points[:-1].tolist(), 0.0
+    return result.tolist(), error
+
+
+def simplify_polygon(rings, tolerance, locked):
+    rings = [np.asarray(r, dtype=float) for r in rings]
+    opened = [r[:-1] if np.array_equal(r[0],r[-1]) else r for r in rings]
+    origin = opened[0].mean(axis=0)
+    _, _, basis = np.linalg.svd(opened[0]-origin, full_matrices=False)
+    deviation = max(float(np.abs((r-origin) @ basis[2]).max()) for r in opened)
+    if deviation > 1e-6:
+        return [r.tolist() for r in rings], 0.0, 'nonplanar polygon retained'
+    def shape(values):
+        poly = ogr.Geometry(ogr.wkbPolygon)
+        for r in values:
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            for p in (np.asarray(r)-origin) @ basis[:2].T:
+                ring.AddPoint_2D(*p)
+            ring.CloseRings()
+            poly.AddGeometry(ring)
+        return poly
+    original = shape(opened)
+    if not original.IsValid():
+        return [r.tolist() for r in rings], 0.0, 'invalid source topology retained for existing repair policy'
+    candidates, errors = [], []
+    for ring in opened:
+        simplified, error = simplify_path(ring, tolerance, locked, closed=True)
+        candidates.append(simplified)
+        errors.append(error)
+    candidate = shape(candidates)
+    if not candidate.IsValid() or candidate.GetArea() <= 0:
+        return [r.tolist() for r in rings], 0.0, 'simplification would change polygon topology'
+    if sum(map(len,candidates)) == sum(map(len,opened)):
+        return [r.tolist() for r in rings], 0.0, None
+    # All rings and holes retained; locks keep shared source boundaries fixed.
+    return [r+[r[0]] for r in candidates], max(errors) + 2*deviation, None
+
+
+def simplify_feature(feature, tolerance, locked, reports):
+    import copy
+    result = copy.deepcopy(feature)
+    geometry = result['geometry']
+    kind, c = geometry['type'], geometry['coordinates']
+    error = 0.0
+    if kind in ('Point','MultiPoint'):
+        return result, error  # semantic point features are never silently thinned
+    if kind == 'LineString':
+        geometry['coordinates'], error = simplify_path(c, tolerance, locked)
+    elif kind == 'MultiLineString':
+        parts = [simplify_path(p, tolerance, locked) for p in c]
+        geometry['coordinates'] = [p for p,e in parts]
+        error = max(e for p,e in parts)
+    else:
+        parts = [c] if kind == 'Polygon' else c
+        values = []
+        for rings in parts:
+            value, part_error, reason = simplify_polygon(rings, tolerance, locked)
+            values.append(value)
+            error = max(error, part_error)
+            if reason:
+                reports.append(dict(sourceId=feature['properties']['_source_id'], reason=reason))
+        geometry['coordinates'] = values[0] if kind == 'Polygon' else values
+    return result, error
+
+
+def union_bounds(boxes):
+    lows = [np.asarray(v[:3])-np.asarray([v[3],v[7],v[11]]) for v in boxes]
+    highs = [np.asarray(v[:3])+np.asarray([v[3],v[7],v[11]]) for v in boxes]
+    lo, hi = np.min(lows,axis=0), np.max(highs,axis=0)
+    m, h = (lo+hi)/2, (hi-lo)/2
+    return dict(box=[*m, h[0],0,0,0,h[1],0,0,0,h[2]])
+
+
 def run(args):
+    tolerance = getattr(args,'lod_tolerance',.1)
+    levels = getattr(args,'lod_levels',3)
+    if args.max_features < 1 or tolerance <= 0 or not math.isfinite(tolerance) or not 1 <= levels <= 16:
+        raise ValueError('maxFeatures must be positive; lodTolerance must be finite and positive; lodLevels must be 1..16')
     doc = json.loads(pathlib.Path(args.input).read_text())
     crs = (doc.get('crs') or {}).get('properties',{}).get('name','')
     if doc.get('type') != 'FeatureCollection' or crs not in ('','urn:ogc:def:crs:OGC:1.3:CRS84','urn:ogc:def:crs:EPSG::4979','urn:ogc:def:crs:EPSG::4326'):
@@ -307,45 +449,113 @@ def run(args):
     def project(c):
         c = [list(p) if len(p) == 3 else [*p, 0] for p in c]
         return ((ecef(c)-anchor) @ basis.T)[:, [0, 2, 1]] * [1, 1, -1]
-    # Partition in metre coordinates, never mix angular degrees with height.
+    # Project once in float64 before simplification; all error is measured in metres.
+    def project_geometry(g):
+        kind,c = g['type'],g['coordinates']
+        if kind == 'Point':
+            return dict(type=kind,coordinates=project([c])[0].tolist())
+        if kind in ('MultiPoint','LineString'):
+            values = project(c).tolist()
+        elif kind in ('MultiLineString','Polygon'):
+            values = [project(p).tolist() for p in c]
+        elif kind == 'MultiPolygon':
+            values = [[project(r).tolist() for r in poly] for poly in c]
+        else:
+            raise ValueError(f'unsupported geometry {kind}')
+        return dict(type=kind,coordinates=values)
     for feature in features:
         feature['_center'] = project([feature['_center']])[0]
+        feature['geometry'] = project_geometry(feature['geometry'])
+    # Lock every source coordinate shared by different features. Closings don't count.
+    owners = {}
+    for i,feature in enumerate(features):
+        for path in paths(feature['geometry']):
+            for p in path:
+                owners.setdefault(tuple(p),set()).add(i)
+    locked = {p for p,ids in owners.items() if len(ids)>1}
+    del owners
     output = pathlib.Path(args.output)
     output.mkdir(exist_ok=True)
     (output/'t').mkdir()
     counter = 0
-    reports = []
-    def build(items):
+    leaf_count = 0
+    reports, lod_reports = [], []
+    def content(items, level):
         nonlocal counter
+        coarse, error = [], 0.0
+        for feature in items:
+            if level:
+                f,e = simplify_feature(feature,tolerance*2**(level-1),locked,lod_reports)
+            else:
+                f,e = feature,0.0
+            coarse.append(f)
+            error = max(error,e)
+        uri = f't/{counter}.glb'
+        counter += 1
+        encoding = {}
+        box = emit(coarse,output/uri,lambda p:np.asarray(p,dtype=float),
+                   getattr(args,'repair',False),reports if not level else None,
+                   getattr(args,'ambiguous_outlines',False),encoding_report=encoding)
+        rounding = encoding['rounding']
+        source_count = sum(len(path) for f in items for path in paths(f['geometry']))
+        output_count = sum(len(path) for f in coarse for path in paths(f['geometry']))
+        return dict(boundingVolume=box,geometricError=error+rounding if level else 0,
+            extras=dict(sourceVertices=source_count,vertices=output_count,geometryErrorMetres=error,
+                        positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
+            content=dict(uri=uri,extensions={'3DTILES_content_gltf_vector':dict(vector=True)}),refine='REPLACE')
+    def build(items):
+        nonlocal leaf_count
         if len(items) <= args.max_features:
-            uri = f't/{counter}.glb'
-            counter += 1
-            bounds = emit(items, output/uri, project, getattr(args, 'repair', False), reports, getattr(args, 'ambiguous_outlines', False))
-            return dict(boundingVolume=bounds, geometricError=0, content=dict(uri=uri,
-                extensions={'3DTILES_content_gltf_vector':dict(vector=True)}))
+            node = content(items,0)
+            leaf_count += 1
+            # A single detailed feature also gets actual coarse LOD levels.
+            for level in range(1,levels+1):
+                parent = content(items,level)
+                if parent['extras']['vertices'] >= node['extras']['vertices']:
+                    (output/parent['content']['uri']).unlink()
+                    continue
+                parent['children'] = [node]
+                parent['boundingVolume'] = union_bounds([parent['boundingVolume']['box'],node['boundingVolume']['box']])
+                parent['geometricError'] = max(parent['geometricError'],node['geometricError'])
+                node = parent
+            return node
         centers = np.asarray([f['_center'] for f in items])
-        axis = np.ptp(centers, axis=0).argmax()
-        items = sorted(items, key=lambda f:f['_center'][axis])
-        children = [build(items[:len(items)//2]), build(items[len(items)//2:])]
-        b = [c['boundingVolume']['box'] for c in children]
-        lows = [np.asarray(v[:3])-np.asarray([v[3], v[7], v[11]]) for v in b]
-        highs = [np.asarray(v[:3])+np.asarray([v[3], v[7], v[11]]) for v in b]
-        lo, hi = np.min(lows, axis=0), np.max(highs, axis=0)
-        m, h = (lo+hi)/2, (hi-lo)/2
-        return dict(boundingVolume=dict(box=[*m, h[0], 0, 0, 0, h[1], 0, 0, 0, h[2]]), geometricError=float(np.linalg.norm(hi-lo)), refine='REPLACE', children=children)
+        axis = np.ptp(centers,axis=0).argmax()
+        items = sorted(items,key=lambda f:f['_center'][axis])
+        children = [build(items[:len(items)//2]),build(items[len(items)//2:])]
+        # Upper parents use a larger tolerance while measuring against original data.
+        level = levels + int(math.ceil(math.log2(len(items)/args.max_features)))
+        node = content(items,level)
+        node['children'] = children
+        node['boundingVolume'] = union_bounds([node['boundingVolume']['box'],*[c['boundingVolume']['box'] for c in children]])
+        node['geometricError'] = max(node['geometricError'],*(c['geometricError'] for c in children))
+        return node
     root = build(features)
-    root['transform'] = [*east, 0, *north, 0, *up, 0, *anchor, 1]
-    result = dict(asset=dict(version='1.1'), extensionsUsed=['3DTILES_content_gltf_vector'],
-        geometricError=root['geometricError'], root=root)
-    (output/'tileset.json').write_text(json.dumps(result, indent=2, allow_nan=False))
-    (output/'conversion.json').write_text(json.dumps(dict(features=len(features),leafTiles=counter,repairEnabled=getattr(args,'repair',False),polygons=reports),indent=2))
-    print(f'vector: {len(features)} features, {counter} leaf tiles, {sum(r["topologyRepaired"] for r in reports)} topology repairs')
+    root['transform'] = [*east,0,*north,0,*up,0,*anchor,1]
+    b = root['boundingVolume']['box']
+    tileset_error = max(1.0,root['geometricError'],2*float(np.linalg.norm([b[3],b[7],b[11]])))
+    result = dict(asset=dict(version='1.1'),extensionsUsed=['3DTILES_content_gltf_vector'],
+        geometricError=tileset_error,root=root)
+    (output/'tileset.json').write_text(json.dumps(result,indent=2,allow_nan=False))
+    # Repeated coarse-level fallbacks are one source/reason entry in the report.
+    unique = {(r['sourceId'],r['reason']):r for r in lod_reports}
+    def node_count(node):
+        return 1+sum(node_count(c) for c in node.get('children',[]))
+    total_tiles = node_count(root)
+    (output/'conversion.json').write_text(json.dumps(dict(features=len(features),leafTiles=leaf_count,
+        tiles=total_tiles,repairEnabled=getattr(args,'repair',False),polygons=reports,
+        lodToleranceMetres=tolerance,lodLevels=levels,lodFallbacks=list(unique.values()),
+        lockedSharedVertices=len(locked),pointPolicy='retain every semantic point feature',
+        errorPolicy='direct source-to-parent 3D path distance; planar polygon tolerance plus twice planarity deviation; float32 rounding'),indent=2))
+    print(f'vector: {len(features)} features, {leaf_count} full-detail leaves, {total_tiles} total tiles, {len(unique)} LOD fallbacks')
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('input')
     p.add_argument('output')
+    p.add_argument('--lod-tolerance', type=float, default=.1)
+    p.add_argument('--lod-levels', type=int, default=3)
     p.add_argument('--max-features', type=int, default=64)
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
