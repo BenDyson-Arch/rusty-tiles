@@ -3,6 +3,7 @@ use crate::Error;
 use std::{path::Path, process::Command};
 
 pub struct TerrainOptions {
+    pub force: bool,
     pub max_zoom: u8,
     pub grid: u16,
     pub height_offset: f64,
@@ -13,7 +14,7 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     let parent = output
@@ -41,9 +42,6 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
         .arg("--fill-height")
         .arg(options.fill_height.to_string());
     crate::python::run(&mut command, "terrain")?;
-    if output.exists() {
-        return Err(Error::OutputExists(output.into()));
-    }
-    std::fs::rename(work.path(), output)?;
+    crate::output::publish_directory(work.path(), output, options.force)?;
     Ok(())
 }

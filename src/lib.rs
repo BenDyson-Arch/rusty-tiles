@@ -15,6 +15,7 @@ pub mod hlod;
 mod jpeg;
 mod lossless;
 pub mod mesh;
+mod output;
 pub mod pack;
 pub mod point_cloud;
 mod python;

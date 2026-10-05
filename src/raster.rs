@@ -3,6 +3,7 @@ use crate::Error;
 use std::{path::Path, process::Command};
 
 pub struct RasterOptions {
+    pub force: bool,
     pub min_zoom: u8,
     pub max_zoom: u8,
     pub display: String,
@@ -22,6 +23,7 @@ pub fn raster_to_directory(
         input,
         output,
         &RasterOptions {
+            force: false,
             min_zoom,
             max_zoom,
             display: "image".into(),
@@ -41,7 +43,7 @@ pub fn raster_with_options(
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     let parent = output
@@ -76,9 +78,6 @@ pub fn raster_with_options(
         cmd.arg("--display-max").arg(v.to_string());
     }
     crate::python::run(&mut cmd, "raster")?;
-    if output.exists() {
-        return Err(Error::OutputExists(output.into()));
-    }
-    std::fs::rename(work.path(), output)?;
+    crate::output::publish_directory(work.path(), output, options.force)?;
     Ok(())
 }
