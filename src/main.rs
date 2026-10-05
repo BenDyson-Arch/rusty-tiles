@@ -77,6 +77,30 @@ struct RasterArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Select a spatial layer; repeat to include several layers
+    #[arg(long = "layer")]
+    layers: Vec<String>,
+    /// Include every spatial layer (otherwise multi-layer inputs require selection)
+    #[arg(long = "allLayers", conflicts_with = "layers")]
+    all_layers: bool,
+    /// Override input CRS, or use local for metre XYZ
+    #[arg(long = "sourceCrs")]
+    source_crs: Option<String>,
+    /// Explicit additive offset from source heights to ellipsoidal metres
+    #[arg(long = "heightOffset", allow_hyphen_values = true)]
+    height_offset: Option<f64>,
+    /// Maximum encoded POSITION vertices per content tile
+    #[arg(long = "maxVertices", default_value_t = 65536)]
+    max_vertices: usize,
+    /// Maximum encoded GLB bytes per content tile
+    #[arg(long = "maxBytes", default_value_t = 4194304)]
+    max_bytes: usize,
+    #[arg(long = "maxTiles", default_value_t = 100000)]
+    max_tiles: usize,
+    /// Maximum coordinates in one source feature, bounding reader memory
+    #[arg(long = "maxSourceVertices", default_value_t = 1000000)]
+    max_source_vertices: usize,
+
     /// Base simplification tolerance in metres; doubles for each coarse level
     #[arg(long = "lodTolerance", default_value_t = 0.1)]
     lod_tolerance: f64,
@@ -165,15 +189,25 @@ fn run() -> Result<(), Error> {
             let opts = mesh_opts(&a)?;
             mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
         }
-        Command::Vector(a) => vector::vector_to_3tz_with_lod(
+        Command::Vector(a) => vector::vector_to_3tz_with_options(
             &a.input,
             &a.output,
             a.max_features,
             a.repair,
             a.ambiguous_outlines,
-            &vector::VectorLodOptions {
-                tolerance_metres: a.lod_tolerance,
-                levels: a.lod_levels,
+            &vector::VectorOptions {
+                lod: vector::VectorLodOptions {
+                    tolerance_metres: a.lod_tolerance,
+                    levels: a.lod_levels,
+                },
+                layers: a.layers,
+                all_layers: a.all_layers,
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_vertices: a.max_vertices,
+                max_bytes: a.max_bytes,
+                max_tiles: a.max_tiles,
+                max_source_vertices: a.max_source_vertices,
             },
         )?,
         Command::Terrain(a) => terrain::dem_to_terrain(

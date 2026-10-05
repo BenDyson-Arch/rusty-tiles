@@ -52,3 +52,34 @@ Both shared branches require a PR, the `Rust` and `Python` CI checks, an up-to-d
 The separate `main` review rule requires one code-owner approval and dismisses stale approvals when code changes. CODEOWNERS requests review from `@BenDyson-Arch`. While the project has one maintainer, repository administrators may bypass **only this approval rule, and only through a PR**, for their own changes. The PR and CI requirements remain enforced. Other contributors cannot merge without repository write permission. Review the exception when adding more maintainers.
 
 Maintainers create versioned releases from verified commits on `main`. A passing contribution does not automatically publish a release or grant repository permissions. Contributions are licensed under the project's MIT license.
+
+
+## Opt-in public point-cloud validation
+
+The public Autzen source has 10,653,336 classified points. The download helper
+records its CC BY 4.0 license and attribution. Its horizontal coordinates are
+international feet and its NAVD88 heights are US survey feet; the helper converts
+both to local metre XYZ and removes CRS declarations. This validates local point
+conversion and metadata fidelity, without claiming an ellipsoidal datum transform.
+Use the point-cloud command from its feature PR until it is merged.
+
+```sh
+python3 scripts/public_data.py autzen /path/to/cache
+rusty-tiles point-cloud -i /path/to/cache/autzen-local-metres.las \
+  -o /path/to/cache/autzen-local-metres.3tz --sourceCrs local \
+  --maxPoints 50000 --chunkPoints 100000
+python3 scripts/audit_point_cloud.py /path/to/cache/autzen-local-metres.las \
+  /path/to/cache/autzen-local-metres.3tz
+```
+
+On 2026-10-05 the debug-build conversion took 31.9 seconds and 181.8 MiB peak
+subprocess RSS, producing 613 tiles (307 leaves). A full leaf audit matched every
+numeric LAS field and found every source record exactly once. The maximum
+reported local float32 position rounding was 0.0000337 m. These measurements
+apply to one machine/run, not a performance guarantee. Downloads and generated
+archives stay outside the source tree and are not run in CI. NumPy,
+`laspy[lazrs]` and pyproj are required for preparation; the audit uses an
+uncompressed LAS file for memory-mapped source access.
+
+Source and attribution: [PDAL Autzen data](https://github.com/PDAL/data/tree/main/autzen),
+[CC BY 4.0 license](https://github.com/PDAL/data/blob/main/LICENSE).

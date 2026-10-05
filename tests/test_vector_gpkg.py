@@ -1,0 +1,163 @@
+"""OGR placement, identity, budget and fragment surface checks."""
+import json
+import os
+import subprocess
+import pathlib
+import struct
+import sys
+import tempfile
+import types
+import unittest
+
+import numpy as np
+from osgeo import ogr, osr
+from test_vector_lod import vector, read
+
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
+from vector_source import Reader
+
+
+def nodes(node):
+    yield node
+    for child in node.get('children',[]):
+        yield from nodes(child)
+
+
+def gpkg(path, layers):
+    ds=ogr.GetDriverByName('GPKG').CreateDataSource(str(path))
+    for name,epsg,features in layers:
+        srs=osr.SpatialReference();srs.ImportFromEPSG(epsg)
+        layer=ds.CreateLayer(name,srs,ogr.wkbUnknown)
+        for key,kind in [('name',ogr.OFTString),('large',ogr.OFTInteger64)]:
+            layer.CreateField(ogr.FieldDefn(key,kind))
+        for fid,g,large in features:
+            f=ogr.Feature(layer.GetLayerDefn());f.SetFID(fid);f.SetField('name',name)
+            if large is not None:f.SetField('large',large)
+            f.SetGeometry(ogr.CreateGeometryFromJson(json.dumps(g)))
+            layer.CreateFeature(f)
+    ds=None
+
+
+class GeoPackageTests(unittest.TestCase):
+    def test_projected_layers_selection_and_exact_nullable_int64(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'source.gpkg'
+            g=lambda x:dict(type='Point',coordinates=[x,5000000])
+            gpkg(p,[('roads',3857,[(7,g(1000000),2**60+3),(8,g(1000010),None)]),('sites',3857,[(7,g(1000020),11)])])
+            with self.assertRaisesRegex(ValueError,'select --layer'):
+                Reader(types.SimpleNamespace(input=str(p)))
+            args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=64,layers=['roads'])
+            reader=Reader(args);features=list(reader)
+            self.assertEqual([f['properties']['_source_id'] for f in features],['7','8'])
+            self.assertEqual(reader.layer_reports[0]['heightMode'],'2D ellipsoid zero')
+            target=osr.SpatialReference();target.ImportFromEPSG(4978)
+            source=osr.SpatialReference();source.ImportFromEPSG(3857);source.PromoteTo3D()
+            expected=osr.CoordinateTransformation(source,target).TransformPoint(1000000,5000000,0)
+            np.testing.assert_allclose(reader.anchor,expected,atol=1e-7)
+            vector.run(args)
+            out=pathlib.Path(args.output);manifest=json.loads((out/'tileset.json').read_text())
+            file=out/manifest['root']['content']['uri'];data=file.read_bytes();n=struct.unpack_from('<I',data,12)[0]
+            doc=json.loads(data[20:20+n]);binary=data[28+n:]
+            meta=doc['extensions']['EXT_structural_metadata'];schema=meta['schema']['classes']['feature']['properties']['large']
+            self.assertEqual(schema['componentType'],'INT64')
+            col=meta['propertyTables'][0]['properties']['large'];view=doc['bufferViews'][col['values']]
+            actual=np.frombuffer(binary,'<i8',2,view.get('byteOffset',0))
+            self.assertEqual(actual[0],2**60+3);self.assertEqual(actual[1],schema['noData'])
+            args.output=str(pathlib.Path(tmp)/'all');args.layers=[];args.all_layers=True
+            vector.run(args);r=json.loads((pathlib.Path(args.output)/'conversion.json').read_text())
+            self.assertEqual(r['features'],3);self.assertEqual(len(r['layers']),2)
+
+    def test_3d_horizontal_crs_requires_explicit_height_offset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'z.gpkg'
+            gpkg(p,[('sites',3857,[(1,dict(type='Point',coordinates=[1000000,5000000,20]),None)])])
+            args=types.SimpleNamespace(input=str(p))
+            with self.assertRaisesRegex(ValueError,'height-offset'):
+                list(Reader(args))
+            args.height_offset=5
+            r=Reader(args);list(r)
+            target=osr.SpatialReference();target.ImportFromEPSG(4979);target.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+            source=osr.SpatialReference();source.ImportFromEPSG(4978)
+            self.assertAlmostEqual(osr.CoordinateTransformation(source,target).TransformPoint(*r.anchor)[2],25,places=6)
+
+    def test_fragmented_line_covers_every_source_segment_and_caps_every_glb(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'line.gpkg'
+            coords=[[float(i),float(np.sin(i)),0.] for i in range(513)]
+            gpkg(p,[('roads',3857,[(23,dict(type='LineString',coordinates=coords),2**60+3)])])
+            args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=64,
+                source_crs='local',max_vertices=40,max_bytes=4096)
+            vector.run(args)
+            out=pathlib.Path(args.output);root=json.loads((out/'tileset.json').read_text())['root']
+            segments=[]
+            def walk(node,translation):
+                translation=translation+np.array(node.get('transform',np.eye(4).T.flatten().tolist())[12:15])
+                if 'content' in node:
+                    file=out/node['content']['uri'];_,positions,ids=read(file)
+                    self.assertLessEqual(file.stat().st_size,4096)
+                    self.assertLessEqual(sum(map(len,positions)),40)
+                    self.assertTrue(all(i=='23' for i in ids))
+                    if not node.get('children'):
+                        for line in positions:
+                            xyz=line[:,[0,2,1]]*[1,-1,1]+translation
+                            segments.extend(zip(xyz[:-1],xyz[1:]))
+                for child in node.get('children',[]):walk(child,translation)
+            walk(root,np.zeros(3))
+            self.assertEqual(len(segments),len(coords)-1)
+            pairs={round(float(a[0])):(a,b) for a,b in segments}
+            self.assertEqual(set(pairs),set(range(512)))
+            for i,(a,b) in pairs.items():
+                np.testing.assert_allclose(a,coords[i],atol=2e-6);np.testing.assert_allclose(b,coords[i+1],atol=2e-6)
+
+    def test_oversized_polygon_fragments_preserve_hole_area(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'poly.gpkg'
+            rings=[[[0,0,0],[10,0,0],[10,10,0],[0,10,0],[0,0,0]],
+                   [[3,3,0],[3,7,0],[7,7,0],[7,3,0],[3,3,0]]]
+            gpkg(p,[('land',3857,[(9,dict(type='Polygon',coordinates=rings),None)])])
+            args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=1,
+                source_crs='local',max_vertices=4,max_bytes=4096)
+            vector.run(args);out=pathlib.Path(args.output);root=json.loads((out/'tileset.json').read_text())['root']
+            area=0.
+            for node in nodes(root):
+                if node.get('children'):continue
+                file=out/node['content']['uri'];doc,positions,ids=read(file)
+                self.assertEqual(ids,['9']);self.assertLessEqual(sum(map(len,positions)),4)
+                for tri in positions:
+                    area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
+            self.assertAlmostEqual(area,84,places=5)
+            r=json.loads((out/'conversion.json').read_text());self.assertEqual(r['fragmentedPolygons'],1)
+            self.assertIn('triangle edges',r['polygonFragmentPolicy'])
+
+    def test_irreducible_metadata_fails_instead_of_violating_budget(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'huge.geojson'
+            p.write_text(json.dumps(dict(type='FeatureCollection',features=[dict(type='Feature',properties=dict(text='x'*8000),
+                geometry=dict(type='Point',coordinates=[0,0]))])))
+            with self.assertRaisesRegex(ValueError,'indivisible'):
+                vector.run(types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=1,max_bytes=4096))
+
+
+class CliGeoPackageTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN to exercise embedded Python and archive publication')
+    def test_cli_embedded_reader_and_atomic_failure(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'source.gpkg'
+            gpkg(p,[('sites',3857,[(7,dict(type='Point',coordinates=[1,2]),2**60+3)])])
+            binary=os.environ['RUSTY_TILES_BIN'];output=pathlib.Path(tmp)/'out.3tz'
+            result=subprocess.run([binary,'vector','-i',str(p),'-o',str(output),'--layer','sites'],capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr.decode())
+            with zipfile.ZipFile(output) as z:
+                self.assertIn('@3dtilesIndex1@',z.namelist())
+                report=json.loads(z.read('conversion.json'));self.assertEqual(report['inputDriver'],'GPKG')
+            original=output.read_bytes()
+            result=subprocess.run([binary,'vector','-i',str(p),'-o',str(output)],capture_output=True)
+            self.assertNotEqual(result.returncode,0);self.assertEqual(output.read_bytes(),original)
+            output.unlink()
+            result=subprocess.run([binary,'vector','-i',str(p),'-o',str(output),'--layer','missing'],capture_output=True)
+            self.assertNotEqual(result.returncode,0);self.assertFalse(output.exists())
+            self.assertFalse(any(f.name.startswith('.tmp') for f in pathlib.Path(tmp).iterdir()))
+
+
+if __name__=='__main__':unittest.main()
