@@ -359,6 +359,8 @@ def run(args, writer):
         for child in node.get('children',[]):collect(child)
     collect(root)
     encoding_summary=dict(quantize=getattr(args,'quantize',False),meshopt=bool(getattr(args,'meshopt_helper',None)),
+        primitiveReferences=sum(n.get('extras',{}).get('primitives',0) for n in nodes),
+        maximumTilePrimitives=max(n.get('extras',{}).get('primitives',0) for n in nodes),
         maximumQuantizationErrorMetres=max(n.get('extras',{}).get('quantizationErrorMetres',0.) for n in nodes),
         uncompressedTileBytes=sum(n.get('extras',{}).get('uncompressedBytes',0) for n in nodes),
         encodedTileBytes=sum(n.get('extras',{}).get('encodedBytes',0) for n in nodes))

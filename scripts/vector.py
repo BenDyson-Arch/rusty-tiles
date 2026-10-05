@@ -327,10 +327,12 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
     all_positions = []
     if len(items)>16777217:raise ValueError('too many exact feature IDs in one tile')
     feature_id_dtype='<u2' if len(items)<=65536 else '<f4'
+    batches = {}
+    restart = 0xffffffff
+    line_restart = False
     for fid, feature in enumerate(items):
         parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
-            ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
             if kind == 'Polygon':
                 report = dict(sourceId=feature['properties']['_source_id'])
                 try:
@@ -347,12 +349,6 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                     raise ValueError(f"feature {feature['properties']['_source_id']}: {e}") from e
                 if reports is not None:
                     reports.append(report)
-                ext['EXT_mesh_polygon'] = dict(count=len(triangle_offsets), indicesOffsets=glb.accessor(triangle_offsets, '<u4', 'SCALAR'),
-                    loopIndices=glb.accessor(loops, '<u4', 'SCALAR'), loopIndicesOffsets=glb.accessor(loop_offsets, '<u4', 'SCALAR'))
-                if 'EXT_mesh_polygon' not in glb.doc['extensionsUsed']:
-                    glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
-                if fill_only:
-                    ext.pop('EXT_mesh_polygon')
                 mode = 4
             else:
                 points = project(c)
@@ -360,10 +356,37 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 mode = 0 if kind == 'Point' else 3
                 if len(points) < (1 if mode == 0 else 2):
                     raise ValueError('empty/degenerate feature')
-            primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(points, '<f4', 'VEC3'),
-                _FEATURE_ID_0=glb.accessor([fid]*len(points), feature_id_dtype, 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
-            glb.doc['meshes'][0]['primitives'].append(primitive)
+            batch = batches.setdefault(mode, dict(points=[], ids=[], indices=[], loops=[], triangle_offsets=[], loop_offsets=[]))
+            vertex_base = len(batch['points'])
+            if mode == 3 and batch['indices']:
+                batch['indices'].append(restart)
+                line_restart = True
+            if mode == 4 and not fill_only:
+                if batch['loops']:
+                    batch['loops'].append(restart)
+                batch['triangle_offsets'].extend(len(batch['indices']) + offset for offset in triangle_offsets)
+                batch['loop_offsets'].extend(len(batch['loops']) + offset for offset in loop_offsets)
+                batch['loops'].extend(restart if index == restart else vertex_base + index for index in loops)
+            batch['indices'].extend(vertex_base + index for index in indices)
+            batch['points'].extend(points)
+            batch['ids'].extend([fid] * len(points))
             all_positions.extend(points)
+    if line_restart:
+        # The draft requires root declarations, with no primitive extension object.
+        glb.doc['extensionsUsed'].append('KHR_mesh_primitive_restart')
+        glb.doc.setdefault('extensionsRequired', []).append('KHR_mesh_primitive_restart')
+    for mode, batch in batches.items():
+        ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
+        if mode == 4 and not fill_only:
+            ext['EXT_mesh_polygon'] = dict(count=len(batch['triangle_offsets']),
+                indicesOffsets=glb.accessor(batch['triangle_offsets'], '<u4', 'SCALAR'),
+                loopIndices=glb.accessor(batch['loops'], '<u4', 'SCALAR'),
+                loopIndicesOffsets=glb.accessor(batch['loop_offsets'], '<u4', 'SCALAR'))
+            glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
+        primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(batch['points'], '<f4', 'VEC3'),
+            _FEATURE_ID_0=glb.accessor(batch['ids'], feature_id_dtype, 'SCALAR')),
+            indices=glb.accessor(batch['indices'], '<u4', 'SCALAR'), extensions=ext)
+        glb.doc['meshes'][0]['primitives'].append(primitive)
     if fill_only:
         glb.doc['extensionsUsed'] = [e for e in glb.doc['extensionsUsed'] if e != 'EXT_mesh_polygon']
         glb.doc['extensionsUsed'].append('KHR_materials_unlit')
@@ -385,6 +408,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         encoding_report['quantizationError'] = quantization_error
         encoding_report['beforeBytes'] = before_bytes
         encoding_report['vertices'] = len(all_positions)
+        encoding_report['primitives'] = len(batches)
     low, high = p.min(axis=0), p.max(axis=0)
     center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
     return dict(box=[*center.tolist(), half[0], 0, 0, 0, half[1], 0, 0, 0, half[2]])

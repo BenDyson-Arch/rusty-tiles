@@ -51,7 +51,7 @@ const { chromium } = require('playwright');
         return pickScreen(windowPosition);
       }
       async function inspect(tiles, entry) {
-        let vertices = 0;
+        let vertices = 0, gltfPrimitives = 0;
         const decoders = [];
         // Private traversal/collection fields are diagnostics confined to this probe.
         for (const tile of tiles._selectedTiles || []) {
@@ -75,13 +75,16 @@ const { chromium } = require('playwright');
             const jsonLength = new DataView(bytes.buffer, bytes.byteOffset,
               bytes.byteLength).getUint32(12, true);
             const document = JSON.parse(new TextDecoder().decode(bytes.slice(20, 20 + jsonLength)));
+            gltfPrimitives += document.meshes[0].primitives.length;
             vertices += document.meshes[0].primitives.reduce((sum, primitive) =>
               sum + document.accessors[primitive.attributes.POSITION].count, 0);
           }
         }
         return {
-          selectedTiles: tiles._selectedTiles?.length || 0, vertices, decoders,
+          selectedTiles: tiles._selectedTiles?.length || 0, vertices, gltfPrimitives, decoders,
           pick: pick(entry.sample),
+          samples: (entry.samples || []).map(sample => ({ expectedId: sample.id, ...pick(sample.position) })),
+          gap: entry.gap ? pick(entry.gap) : null,
           wideLine: ['line', 'outline'].includes(entry.name) ?
             { negative: pick(entry.sample, -5), positive: pick(entry.sample, 5) } : null,
           boundary: outsideBoundary(entry),
@@ -139,6 +142,12 @@ const { chromium } = require('playwright');
           const fine = entry.fine;
           return !entry.error && fine && !entry.coarse.failures.length &&
             !fine.failures.length && picked(fine.pick) &&
+            fine.samples.every(sample => picked(sample) && sample.properties._source_id === sample.expectedId) &&
+            (!fine.gap || !fine.gap.rendered) &&
+            (!fine.samples.length || entry.case === 'fragmented' ||
+              (fine.gltfPrimitives === 1 && fine.decoders.length === 1 &&
+                fine.decoders[0].collections.length === 1 &&
+                fine.decoders[0].collections[0].primitives === 2)) &&
             fine.decoders.some(decoder => decoder.nativeVector) &&
             (!fine.hole || !fine.hole.rendered) &&
             (!fine.wideLine || picked(fine.wideLine.negative) || picked(fine.wideLine.positive)) &&

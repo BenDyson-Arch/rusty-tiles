@@ -71,12 +71,13 @@ def _encode(features,locked,center,level,args,schemas,output,reports,tolerance,m
             vectors.append(dict(properties=feature['properties'],geometry=dict(type='MultiLineString',coordinates=boundary)))
     if fills:groups.append(('fill',fills,True))
     if vectors:groups.append(('vector',vectors,False))
-    contents=[];files=[];vertex_count=0;byte_count=0;rounding=0.;quantization=0.;before_bytes=0;polygon_reports=[]
+    contents=[];files=[];primitive_count=0;vertex_count=0;byte_count=0;rounding=0.;quantization=0.;before_bytes=0;polygon_reports=[]
     for role,features,fill_only in groups:
         uri=f't/{serial}-{role}.glb';file=output/uri;encoding={}
         writer.emit(features,file,lambda p:np.asarray(p,dtype=float)-center,
             getattr(args,'repair',False),polygon_reports if not level else None,
             getattr(args,'ambiguous_outlines',False),encoding,schemas,fill_only=fill_only,quantize=getattr(args,'quantize',False))
+        primitive_count+=encoding['primitives']
         before_bytes+=encoding['beforeBytes']
         quantization=max(quantization,encoding['quantizationError'])
         helper=getattr(args,'meshopt_helper',None)
@@ -107,7 +108,7 @@ def _encode(features,locked,center,level,args,schemas,output,reports,tolerance,m
         return None,reports,last_budget_reason  # unused immutable candidates are pruned at publication
     if not level:
         reports.extend(polygon_reports)
-    node=dict(extras=dict(featureFragments=len(items),vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
+    node=dict(extras=dict(featureFragments=len(items),vertices=vertex_count,primitives=primitive_count,encodedBytes=byte_count,geometryErrorMetres=error,
             positionRoundingMetres=rounding,quantizationErrorMetres=quantization,uncompressedBytes=before_bytes,toleranceMetres=tolerance*2**(level-1) if level else 0),
             geometricError=error+rounding+quantization if level or getattr(args,'quantize',False) else 0)
     if len(contents)==1:node['content']=contents[0]

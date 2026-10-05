@@ -11,7 +11,7 @@ import unittest
 
 import numpy as np
 from osgeo import ogr, osr
-from test_vector_lod import vector, read
+from test_vector_lod import vector, read, parts
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
 from vector_source import Reader
@@ -98,7 +98,7 @@ class GeoPackageTests(unittest.TestCase):
                     self.assertLessEqual(sum(map(len,positions)),40)
                     self.assertTrue(all(i=='23' for i in ids))
                     if not node.get('children'):
-                        for line in positions:
+                        for _,_,line in parts(file):
                             xyz=line[:,[0,2,1]]*[1,-1,1]+translation
                             segments.extend(zip(xyz[:-1],xyz[1:]))
                 for child in node.get('children',[]):walk(child,translation)
@@ -126,7 +126,7 @@ class GeoPackageTests(unittest.TestCase):
                     file=out/content['uri'];doc,positions,ids=read(file)
                     self.assertTrue(all(i=='9' for i in ids));vertex_count+=sum(map(len,positions));byte_count+=file.stat().st_size
                     if 'extensions' not in content:
-                        for tri in positions:
+                        for _,_,tri in parts(file):
                             area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
                     else:
                         # Every outline edge belongs to an original outer/hole edge.
@@ -141,7 +141,7 @@ class GeoPackageTests(unittest.TestCase):
                                 result=locate(c,delta)
                                 if result is not None:return result
                         translation=locate(root,np.zeros(3))
-                        for line in positions:
+                        for _,_,line in parts(file):
                             xyz=line[:,[0,2,1]]*[1,-1,1]+translation
                             def on_edge(a,b):
                                 ab=b-a;t=(xyz-a)@ab/max(np.dot(ab,ab),1e-30)
