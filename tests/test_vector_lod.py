@@ -86,10 +86,49 @@ class VectorLodTests(unittest.TestCase):
         out,_=vector.simplify_path(source,1,{tuple(source[1])})
         self.assertIn(source[1],out)
         nonplanar=[[[0,0,0],[1,0,0],[1,1,1],[0,1,0],[0,0,0]]]
-        out,error,reason=vector.simplify_polygon(nonplanar,10,set())
+        out,error,reason=vector.simplify_polygon(nonplanar,.01,set())
         self.assertEqual(out,nonplanar)
         self.assertEqual(error,0)
         self.assertIn('nonplanar',reason)
+
+    def test_wavy_polygon_with_hole_simplifies_within_3d_error_budget(self):
+        def ring(radius):
+            a=np.linspace(0,2*np.pi,200,endpoint=False)
+            p=np.column_stack([radius*np.cos(a),radius*np.sin(a),.005*np.sin(5*a)]).tolist()
+            return p+[p[0]]
+        source=[ring(.15),ring(.05)]
+        out,error,reason=vector.simplify_polygon(source,.03,set())
+        self.assertIsNone(reason);self.assertEqual(len(out),2)
+        self.assertLess(sum(map(len,out)),sum(map(len,source))//4)
+        self.assertLessEqual(error,.03+1e-12)
+        vector.polygon(out)  # filled topology and hole remain valid
+        for before,after in zip(source,out):
+            self.assertLessEqual(distance(before,after).max(),error+1e-12)
+            dense=np.concatenate([a+(b-a)*np.linspace(0,1,100)[:,None] for a,b in zip(np.asarray(after[:-1]),np.asarray(after[1:]))])
+            self.assertLessEqual(distance(dense,before).max(),error+1e-12)
+
+    def test_nonplanar_layers_have_real_parent_content_and_exact_leaf_vertices(self):
+        from test_vector_gpkg import gpkg,nodes
+        from test_vector_reuse import details
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);p=root/'wavy.gpkg';features=[]
+            a=np.linspace(0,2*np.pi,200,endpoint=False)
+            for i in range(32):
+                ring=np.column_stack([i*2+.15*np.cos(a),.15*np.sin(a),.005*np.sin(5*a)]).tolist()
+                features.append((i+1,dict(type='Polygon',coordinates=[ring+[ring[0]]]),1))
+            gpkg(p,[('wavy',3857,features)])
+            out=root/'out';vector.run(types.SimpleNamespace(input=str(p),output=str(out),source_crs='local',max_features=4,lod_tolerance=.03,lod_levels=3))
+            manifest=json.loads((out/'tileset.json').read_text())
+            parents=[n for n in nodes(manifest['root']) if n.get('children') and 'content' in n]
+            self.assertGreater(len(parents),0)
+            for node in parents:
+                self.assertLess(node['extras']['vertices'],4*200)
+                self.assertLessEqual(node['extras']['geometryErrorMetres'],node['extras']['toleranceMetres']+1e-12)
+            decoded=details(out);self.assertEqual(len(decoded),32)
+            for fid,g,_ in features:
+                xyz=decoded[('wavy',str(fid),4)][0][1]
+                self.assertEqual(len(xyz),200)
+                np.testing.assert_allclose(xyz,g['coordinates'][0][:-1],atol=2e-5,rtol=0)
 
     def test_parent_content_reduces_vertices_preserves_identity_and_source_leaf(self):
         with tempfile.TemporaryDirectory() as tmp:
