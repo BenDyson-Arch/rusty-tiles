@@ -14,6 +14,7 @@ import struct
 import laspy
 import numpy as np
 from pyproj import CRS, Transformer, network
+from pyproj.exceptions import ProjError
 
 
 class Glb:
@@ -32,7 +33,12 @@ class Glb:
         return index
 
     def accessor(self, values, component, kind, normalized=False):
-        item = dict(bufferView=self.view(values), componentType=component, count=len(values), type=kind)
+        count=len(values)
+        if component==5123 and kind=='SCALAR':
+            padded=np.zeros((count,2),dtype='<u2');padded[:,0]=values
+            view=self.view(padded);self.doc['bufferViews'][view]['byteStride']=4
+        else:view=self.view(values)
+        item = dict(bufferView=view, componentType=component, count=count, type=kind)
         if normalized:
             item['normalized'] = True
         if kind == 'VEC3' and component == 5126:
@@ -93,12 +99,13 @@ def sample(path, dtype, budget, lo, hi):
 
 
 def emit(rows, center, properties, path):
+    if len(rows)>16777217:raise ValueError('too many exact feature IDs in one tile')
     glb = Glb()
     positions = (rows['position'] - center)[:, [0, 2, 1]] * [1, 1, -1]
     encoded = positions.astype('<f4')
     rounding = float(np.linalg.norm(positions - encoded, axis=1).max())
     attrs = dict(POSITION=glb.accessor(encoded, 5126, 'VEC3'),
-                 _FEATURE_ID_0=glb.accessor(np.arange(len(rows), dtype='<u4'), 5125, 'SCALAR'))
+                 _FEATURE_ID_0=glb.accessor(np.arange(len(rows), dtype='<u2' if len(rows)<=65536 else '<f4'), 5123 if len(rows)<=65536 else 5126, 'SCALAR'))
     if all(name in rows.dtype.names for name in ('red', 'green', 'blue')):
         rgb = np.column_stack([*[rows[name] for name in ('red', 'green', 'blue')],
                                np.full(len(rows), 65535, dtype='<u2')]).astype('<u2')
@@ -112,7 +119,7 @@ def emit(rows, center, properties, path):
         columns[name] = dict(values=glb.view(rows[name]))
     glb.doc['extensionsUsed'] = ['EXT_mesh_features', 'EXT_structural_metadata', 'KHR_materials_unlit']
     glb.doc['extensions'] = dict(EXT_structural_metadata=dict(
-        schema=dict(id='rusty-tiles-point-cloud', classes=dict(point=dict(properties=schema))),
+        schema=dict(id='rusty_tiles_point_cloud', classes=dict(point=dict(properties=schema))),
         propertyTables=[dict(name='points', **{'class': 'point'}, count=len(rows), properties=columns)]))
     glb.doc['materials'] = [dict(extensions=dict(KHR_materials_unlit={}),
                                   pbrMetallicRoughness=dict(metallicFactor=0, roughnessFactor=1))]
@@ -135,8 +142,13 @@ def transform_for(header, args):
     if crs.is_compound or crs.is_geocentric or len(crs.axis_info) != 2 or not (crs.is_projected or crs.is_geographic):
         raise ValueError('use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported')
     network.set_network_enabled(False)
-    transformer = Transformer.from_crs(crs.to_3d(), CRS.from_epsg(4978), always_xy=True,
-                                       allow_ballpark=False, only_best=True)
+    try:
+        transformer = Transformer.from_crs(crs.to_3d(), CRS.from_epsg(4978), always_xy=True,
+                                           allow_ballpark=False, only_best=True)
+    except ProjError as error:
+        error.environment_error = True
+        raise
+
     return transformer, crs.to_string()
 
 
@@ -260,6 +272,10 @@ def convert(args, output):
                 raise ValueError('spatial split made no progress')
             path.unlink()
             node['children'] = [build(p, center, depth + 1) for p in paths]
+            for child in node['children']:
+                box=child['boundingVolume']['box']
+                half=np.maximum(half,np.abs(child['transform'][12:15])+np.array([box[3],box[7],box[11]]))
+            node['boundingVolume']['box']=[0,0,0,half[0],0,0,0,half[1],0,0,0,half[2]]
             node['geometricError'] = max(node['geometricError'], *(c['geometricError'] for c in node['children']))
         else:
             path.unlink()
