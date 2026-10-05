@@ -2,6 +2,8 @@
 
 An MIT-licensed, standalone tool for textured GLB/glTF → 3D Tiles 1.1 → `.3tz`, raster imagery pyramids, DEM terrain tiles, LAS/LAZ point-cloud tiles and experimental glTF vector tiles. Bring your own data; no survey datasets, access tokens or hosted services are bundled.
 
+Version 0.2.0 adds point-cloud LOD, GeoPackage vector input and reusable vector content. See [CHANGELOG.md](CHANGELOG.md) for release notes and compatibility limits.
+
 ## Build and run
 
 Rust and a C++ compiler are required. If `pkg-config` finds `libturbojpeg` at build time, JPEG encoding uses its SIMD implementation. Otherwise the portable Rust encoder is used. Native builds require the corresponding shared library at runtime. `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` forces the portable build; cross-compilation uses it automatically.
@@ -178,8 +180,6 @@ python3 scripts/preview.py \
 Every data flag is optional; select at least one. Add `--terrain output/terrain` only for a DEM covering the same area and with the correct height reference. Layer toggles, extent buttons, annotation picking and an FPS display are included. Covered annotations retain their actual positions; hide the mesh to inspect them.
 
 To serve on your own network, explicitly pass `--host YOUR_INTERFACE_IP --port 9227`. Only use data you intend to share there. Nothing is uploaded or automatically published. Restarting the same command reuses your output directories; no files under `/tmp` are required. Generated files under `output/` and `target/` are ignored by git.
-# rusty-tiles
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, local checks, the `develop` → `main` release workflow, review requirements and data-sharing rules. Contributions normally target `develop`; `main` is protected for releases.
@@ -234,7 +234,8 @@ are not copied; this is a display derivative, not a LAS archive.
 
 RAM scales with configured batch/sample budgets and dimension count, rather
 than the complete point count. Scratch disk and repeated passes trade I/O for
-bounded memory; no large-dataset performance claim is made yet. Existing output
+bounded memory. See [CONTRIBUTING.md](CONTRIBUTING.md) for an opt-in public-data
+audit and measured results from one machine. Existing output
 paths are rejected and Rust publishes the archive only after successful encoding.
 
 Extract the archive and add `--point-cloud extracted-directory` to the existing

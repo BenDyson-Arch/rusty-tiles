@@ -61,7 +61,6 @@ records its CC BY 4.0 license and attribution. Its horizontal coordinates are
 international feet and its NAVD88 heights are US survey feet; the helper converts
 both to local metre XYZ and removes CRS declarations. This validates local point
 conversion and metadata fidelity, without claiming an ellipsoidal datum transform.
-Use the point-cloud command from its feature PR until it is merged.
 
 ```sh
 python3 scripts/public_data.py autzen /path/to/cache
