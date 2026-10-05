@@ -107,6 +107,15 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Encode list-valued properties as JSON strings, or reject them
+    #[arg(long = "listFields", default_value = "error", value_parser = ["error", "json"])]
+    list_fields: String,
+    /// Include only these source fields (comma-separated)
+    #[arg(long, value_delimiter = ',', conflicts_with = "drop_fields")]
+    fields: Vec<String>,
+    /// Exclude these source fields (comma-separated)
+    #[arg(long = "dropFields", value_delimiter = ',', conflicts_with = "fields")]
+    drop_fields: Vec<String>,
     /// Skip unconvertible features and report every omitted source identity
     #[arg(long = "skipInvalid")]
     skip_invalid: bool,
@@ -242,6 +251,9 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                list_fields: a.list_fields,
+                fields: a.fields,
+                drop_fields: a.drop_fields,
                 skip_invalid: a.skip_invalid,
                 reuse_tileset: a.reuse_tileset,
                 lod: vector::VectorLodOptions {

@@ -342,6 +342,7 @@ def run(args, writer):
         db.close()
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
+        metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
         skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',

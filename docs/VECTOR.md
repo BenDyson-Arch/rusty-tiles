@@ -198,3 +198,16 @@ and publish the convertible remainder. `conversion.json` records the setting,
 layer schemas and configuration errors still fail the job. At least one
 convertible feature is required for an initial tileset. Tile/hierarchy limits and
 errors encountered during encoding remain fatal; they are not silently bypassed.
+
+## Field selection and lists
+
+Use `--fields name,category` to include source fields, or `--dropFields tags,notes`
+to exclude them before schema validation. These modes are mutually exclusive;
+unknown names fail explicitly. Source identity/layer metadata remains present.
+List-valued fields are rejected by default. `--listFields json` stores arrays as
+JSON text in string properties, retaining element order, nulls and exact JSON
+integers rather than flattening or joining values. Empty arrays become `[]`;
+missing values remain metadata NoData. Per-layer `jsonFields` and the top-level
+`metadata` section in `conversion.json` record the representation and selection.
+Other complex property values still fail unless excluded. Field/list settings
+participate in prior-tileset compatibility checks.
