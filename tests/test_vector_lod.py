@@ -27,6 +27,9 @@ def distance(points, path):
 
 def read(path):
     data = path.read_bytes()
+    if data[:4]==b'b3dm':
+        header=struct.unpack_from('<4s6I',data)
+        data=data[28+sum(header[3:]):]
     n = struct.unpack_from('<I',data,12)[0]
     doc = json.loads(data[20:20+n])
     binary = data[28+n:]

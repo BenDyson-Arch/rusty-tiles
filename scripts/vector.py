@@ -183,7 +183,7 @@ def polygon(rings, repair=False, report=None):
     return positions, indices, loops, triangle_offsets, loop_offsets
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None):
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -272,6 +272,8 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                     loopIndices=glb.accessor(loops, '<u4', 'SCALAR'), loopIndicesOffsets=glb.accessor(loop_offsets, '<u4', 'SCALAR'))
                 if 'EXT_mesh_polygon' not in glb.doc['extensionsUsed']:
                     glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
+                if fill_only:
+                    ext.pop('EXT_mesh_polygon')
                 mode = 4
             else:
                 points = project(c)
@@ -283,6 +285,13 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 _FEATURE_ID_0=glb.accessor([fid]*len(points), '<u4', 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
             glb.doc['meshes'][0]['primitives'].append(primitive)
             all_positions.extend(points)
+    if fill_only:
+        glb.doc['extensionsUsed'] = [e for e in glb.doc['extensionsUsed'] if e != 'EXT_mesh_polygon']
+        glb.doc['extensionsUsed'].append('KHR_materials_unlit')
+        glb.doc['materials'] = [dict(doubleSided=True,extensions={'KHR_materials_unlit':{}},
+            pbrMetallicRoughness=dict(baseColorFactor=[1,1,1,1],metallicFactor=0,roughnessFactor=1))]
+        for primitive in glb.doc['meshes'][0]['primitives']:
+            primitive['material']=0
     glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]

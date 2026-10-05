@@ -43,18 +43,27 @@ cache is 32 MiB. Leave enough scratch disk space for transformed coordinates and
 indexes. Staging files are removed on success and failure; Rust publishes an
 archive only after conversion and packing succeed.
 
-Every published GLB is checked against **actual encoded** vertices and bytes.
-Defaults are 64 feature fragments, 65,536 POSITION vertices and 4 MiB per GLB.
+Every content tile is checked against **actual encoded** vertices and bytes,
+summed across all contents including any `b3dm` wrapper.
+Defaults are 64 feature fragments, 65,536 POSITION vertices and 4 MiB across a tile’s contents.
 `--maxTiles` caps hierarchy nodes at 100,000. Indivisible geometry or metadata
 that exceeds a budget fails; it does not silently publish an oversized tile.
 
 Oversized lines split with a shared endpoint, retaining every original segment.
 Multi-geometries split into smaller parts. Oversized polygons partition their
-triangulated filled surface, preserving original Z and holes. **Their fragment
-outlines include triangle edges**; this is unsuitable when a seamless original
-polygon outline is required. Geometry reports explicitly record this policy.
+triangulated filled surface, preserving original Z and holes. Filled fragments use
+standard unlit, double-sided glTF triangles in a `b3dm` compatibility wrapper;
+source boundaries use separate draft
+vector line content. A tile can contain both through the 3D Tiles 1.1 `contents`
+array. Cesium 1.143 chooses its vector GLB decoder at tileset scope; the standard
+`b3dm` container selects its model decoder for fills. This is a legacy container
+workaround, with modern glTF feature metadata inside, rather than a private
+extension. Original exterior and hole boundary segments occur exactly once; internal
+triangle edges are not emitted as outlines. Feature metadata is present in both
+contents, so filled surfaces and outlines remain pickable. Geometry reports
+explicitly record this policy.
 Shared vertices, including fragment seams, are locked during simplification;
-triangle surface fragments are not simplified. Buffered clipping, coverage-wide
+triangle surface fragments are not simplified. Buffered spatial clipping, coverage-wide
 edge reconciliation, implicit tiling and primitive-restart line batching remain
 unimplemented.
 

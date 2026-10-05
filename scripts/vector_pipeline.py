@@ -4,6 +4,7 @@ import json
 import math
 import pathlib
 import sqlite3
+import struct
 import tempfile
 
 import numpy as np
@@ -59,24 +60,40 @@ def run(args, writer):
                 middle = len(c)//2
                 parts = [dict(type=kind,coordinates=c[:middle]),dict(type=kind,coordinates=c[middle:])]
             elif kind in ('MultiLineString','MultiPolygon'):
+                if feature.get('_surface_fragment'):
+                    raise ValueError('indivisible polygon fill/boundary or metadata exceeds tile budget')
                 return split(dict(feature,geometry=dict(type=kind[5:],coordinates=c[0])))
             elif kind == 'Polygon':
-                # Preserve the exact triangulated filled surface, including holes and
-                # original Z. Triangle outlines are explicit fragment boundaries.
+                # Preserve source triangulated surfaces, separating their real
+                # boundaries from fill geometry to avoid artificial fragment edges.
                 details = {}
                 p, indices, *_ = writer.polygon(c,getattr(args,'repair',False),details)
-                triangles = [[np.asarray(p[i]).tolist() for i in t]+[np.asarray(p[t[0]]).tolist()] for t in np.asarray(indices).reshape(-1,3)]
-                if len(triangles)<=1:
+                tri_indices=np.asarray(indices).reshape(-1,3).tolist()
+                if len(tri_indices)<=1:
                     raise ValueError('one triangle or its metadata exceeds tile budget')
+                edges={}
+                for triangle in tri_indices:
+                    for a,b in zip(triangle,triangle[1:]+triangle[:1]):
+                        key=tuple(sorted((a,b)))
+                        edges[key]=edges.get(key,0)+1
+                triangles=[]; boundaries=[]
+                for triangle in tri_indices:
+                    triangles.append([np.asarray(p[i]).tolist() for i in triangle]+[np.asarray(p[triangle[0]]).tolist()])
+                    boundaries.append([[np.asarray(p[a]).tolist(),np.asarray(p[b]).tolist()]
+                        for a,b in zip(triangle,triangle[1:]+triangle[:1]) if edges[tuple(sorted((a,b)))]==1])
                 counters['fragmentedPolygons'] += 1
                 report(dict(sourceId=feature['properties']['_source_id'],sourceLayer=feature['properties']['_source_layer'],
-                    reason='oversized polygon partitioned as triangle surfaces; fragment outlines include triangle edges',**details))
-                middle = len(triangles)//2
-                parts = [dict(type='MultiPolygon',coordinates=[[t] for t in triangles[:middle]]),
-                         dict(type='MultiPolygon',coordinates=[[t] for t in triangles[middle:]])]
-                feature = dict(feature,_surface_fragment=True)
+                    reason='oversized polygon surfaces partitioned; original boundary rendered separately without internal edges',**details))
+                middle=len(triangles)//2
+                return [dict(feature,geometry=dict(type='MultiPolygon',coordinates=[[t] for t in triangles[a:b]]),
+                             _surface_fragment=True,_triangle_boundaries=boundaries[a:b])
+                        for a,b in ((0,middle),(middle,len(triangles)))]
             else:
                 raise ValueError('indivisible geometry or its metadata exceeds tile budget; raise maxVertices/maxBytes')
+            if feature.get('_surface_fragment') and kind=='MultiPolygon':
+                middle=len(c)//2
+                return [dict(feature,geometry=part,_triangle_boundaries=feature['_triangle_boundaries'][a:b])
+                        for part,(a,b) in zip(parts,((0,middle),(middle,len(c))))]
             return [dict(feature,geometry=part) for part in parts]
         def insert(feature,path='', enforce_hint=True):
             if enforce_hint and (size(feature)>max_vertices or estimate(feature)>max_bytes):
@@ -133,22 +150,45 @@ def run(args, writer):
                     return None
                 items.append(feature)
             serial+=1
-            uri=f't/{serial}.glb'; file=output/uri
-            encoding={}; polygon_reports=[]
-            writer.emit(items,file,lambda p:np.asarray(p,dtype=float)-center,
-                        getattr(args,'repair',False),polygon_reports if not level else None,
-                        getattr(args,'ambiguous_outlines',False),encoding,reader.schemas)
-            byte_count=file.stat().st_size
-            if encoding['vertices']>max_vertices or byte_count>max_bytes:
-                file.unlink()
+            groups=[]
+            fills=[f for f in items if f.get('_surface_fragment')]
+            vectors=[f for f in items if not f.get('_surface_fragment')]
+            for feature in fills:
+                boundary=[edge for triangle in feature['_triangle_boundaries'] for edge in triangle]
+                if boundary:
+                    vectors.append(dict(properties=feature['properties'],geometry=dict(type='MultiLineString',coordinates=boundary)))
+            if fills:groups.append(('fill',fills,True))
+            if vectors:groups.append(('vector',vectors,False))
+            contents=[];files=[];vertex_count=0;byte_count=0;rounding=0.;polygon_reports=[]
+            for role,features,fill_only in groups:
+                uri=f't/{serial}-{role}.glb';file=output/uri;encoding={}
+                writer.emit(features,file,lambda p:np.asarray(p,dtype=float)-center,
+                    getattr(args,'repair',False),polygon_reports if not level else None,
+                    getattr(args,'ambiguous_outlines',False),encoding,reader.schemas,fill_only=fill_only)
+                if fill_only:
+                    # Cesium 1.143 selects the draft vector GLB decoder at tileset
+                    # scope. A standard b3dm wrapper routes only fills to its model
+                    # decoder; the embedded GLB still uses modern feature metadata.
+                    glb=file.read_bytes();table=b'{"BATCH_LENGTH":0}'
+                    table+=b' '*(-(28+len(table))%8)
+                    wrapped=struct.pack('<4s6I',b'b3dm',1,28+len(table)+len(glb),len(table),0,0,0)+table+glb
+                    file.unlink();uri=f't/{serial}-{role}.b3dm';file=output/uri;file.write_bytes(wrapped)
+                files.append(file);byte_count+=file.stat().st_size;vertex_count+=encoding['vertices']
+                rounding=max(rounding,encoding['rounding'])
+                content=dict(uri=uri)
+                if not fill_only:content['extensions']={'3DTILES_content_gltf_vector':dict(vector=True)}
+                contents.append(content)
+            if vertex_count>max_vertices or byte_count>max_bytes:
+                for file in files:file.unlink()
                 return None
             if not level:
-                for value in polygon_reports:
-                    report(value)
-            return dict(content=dict(uri=uri,extensions={'3DTILES_content_gltf_vector':dict(vector=True)}),
-                extras=dict(vertices=encoding['vertices'],encodedBytes=byte_count,geometryErrorMetres=error,
-                            positionRoundingMetres=encoding['rounding'],toleranceMetres=tolerance*2**(level-1) if level else 0),
-                geometricError=error+encoding['rounding'] if level else 0)
+                for value in polygon_reports:report(value)
+            node=dict(extras=dict(vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
+                    positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
+                    geometricError=error+rounding if level else 0)
+            if len(contents)==1:node['content']=contents[0]
+            else:node['contents']=contents
+            return node
         def attach(node,lo,hi,center,children=()):
             # Node and GLB have the same local origin; children translate relative to it.
             zcenter=center[[0,2,1]]*[1,-1,1]
@@ -167,7 +207,7 @@ def run(args, writer):
             counters['tiles']+=1
             if counters['tiles']>max_tiles:
                 raise ValueError('hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly')
-            if 'content' in node:
+            if 'content' in node or 'contents' in node:
                 counters['maximumTileVertices']=max(counters['maximumTileVertices'],node['extras']['vertices'])
                 counters['maximumTileBytes']=max(counters['maximumTileBytes'],node['extras']['encodedBytes'])
             return node
@@ -187,7 +227,8 @@ def run(args, writer):
                     if not coarse:
                         continue
                     if coarse['extras']['vertices']>=node['extras']['vertices']:
-                        (output/coarse['content']['uri']).unlink()
+                        for value in coarse.get('contents',[coarse.get('content')]):
+                            (output/value['uri']).unlink()
                         continue
                     node=attach(coarse,lo,hi,center,[node])
                 return node
@@ -232,6 +273,6 @@ def run(args, writer):
         repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
-        polygonFragmentPolicy='triangle surfaces retain filled geometry; fragment outlines include triangle edges',
+        polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',
         errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained'),indent=2))
     print(f"vector: {counters['features']} source features, {counters['fragments']} fragments, {counters['leafTiles']} leaves, {counters['tiles']} tiles")

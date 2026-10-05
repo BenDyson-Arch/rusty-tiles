@@ -116,18 +116,55 @@ class GeoPackageTests(unittest.TestCase):
                    [[3,3,0],[3,7,0],[7,7,0],[7,3,0],[3,3,0]]]
             gpkg(p,[('land',3857,[(9,dict(type='Polygon',coordinates=rings),None)])])
             args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=1,
-                source_crs='local',max_vertices=4,max_bytes=4096)
+                source_crs='local',max_vertices=8,max_bytes=8192)
             vector.run(args);out=pathlib.Path(args.output);root=json.loads((out/'tileset.json').read_text())['root']
-            area=0.
+            area=0.;outline_length=0.
             for node in nodes(root):
                 if node.get('children'):continue
-                file=out/node['content']['uri'];doc,positions,ids=read(file)
-                self.assertEqual(ids,['9']);self.assertLessEqual(sum(map(len,positions)),4)
-                for tri in positions:
-                    area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
+                vertex_count=0;byte_count=0
+                for content in node.get('contents',[node.get('content')]):
+                    file=out/content['uri'];doc,positions,ids=read(file)
+                    self.assertTrue(all(i=='9' for i in ids));vertex_count+=sum(map(len,positions));byte_count+=file.stat().st_size
+                    if 'extensions' not in content:
+                        for tri in positions:
+                            area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
+                    else:
+                        # Every outline edge belongs to an original outer/hole edge.
+                        source_edges=[(np.array(a),np.array(b)) for ring in rings for a,b in zip(ring[:-1],ring[1:])]
+                        translation=np.zeros(3)
+                        # This small fixture has root origin (0,0,0); recover each
+                        # leaf's absolute translation through the hierarchy below.
+                        def locate(current,delta):
+                            delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
+                            if current is node:return delta
+                            for c in current.get('children',[]):
+                                result=locate(c,delta)
+                                if result is not None:return result
+                        translation=locate(root,np.zeros(3))
+                        for line in positions:
+                            xyz=line[:,[0,2,1]]*[1,-1,1]+translation
+                            def on_edge(a,b):
+                                ab=b-a;t=(xyz-a)@ab/max(np.dot(ab,ab),1e-30)
+                                return ((t>=-1e-7)&(t<=1+1e-7)).all() and np.linalg.norm(xyz-a-t[:,None]*ab,axis=1).max()<1e-6
+                            self.assertTrue(any(on_edge(a,b) for a,b in source_edges))
+                            outline_length+=np.linalg.norm(np.diff(xyz,axis=0),axis=1).sum()
+                self.assertLessEqual(vertex_count,8);self.assertLessEqual(byte_count,8192)
             self.assertAlmostEqual(area,84,places=5)
+            self.assertAlmostEqual(outline_length,56,places=5)
             r=json.loads((out/'conversion.json').read_text());self.assertEqual(r['fragmentedPolygons'],1)
-            self.assertIn('triangle edges',r['polygonFragmentPolicy'])
+            self.assertIn('no internal',r['polygonFragmentPolicy'])
+
+    def test_nonplanar_fragment_fills_retain_source_surface(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ring=[[0,0,0],[10,0,0],[10,10,3],[0,10,0],[0,0,0]]
+            # Independently exercise filled encoding for the nonplanar fragment path.
+            output=pathlib.Path(tmp)/'fill.glb'
+            vector.emit([dict(properties=dict(_source_id='12'),geometry=dict(type='Polygon',coordinates=[ring]))],
+                        output,lambda p:np.asarray(p),fill_only=True)
+            doc,positions,_=read(output)
+            self.assertNotIn('EXT_mesh_polygon',doc['extensionsUsed'])
+            self.assertTrue(doc['materials'][0]['doubleSided'])
+            self.assertEqual({tuple(p) for p in positions[0]},{tuple(p) for p in ring[:-1]})
 
     def test_irreducible_metadata_fails_instead_of_violating_budget(self):
         with tempfile.TemporaryDirectory() as tmp:
