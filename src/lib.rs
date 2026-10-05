@@ -16,6 +16,7 @@ mod jpeg;
 mod lossless;
 pub mod mesh;
 pub mod pack;
+pub mod point_cloud;
 pub mod split;
 pub mod terrain;
 pub mod texture;
