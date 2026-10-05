@@ -444,7 +444,40 @@ def simplify_polygon(rings, tolerance, locked):
     return [r+[r[0]] for r in candidates], max(errors) + 2*deviation, None
 
 
-def simplify_feature(feature, tolerance, locked, reports):
+
+def parent_outline(feature, tolerance, locked, reports):
+    """Replace an unsimplifiable fill only within a conservative surface bound.
+
+    Every point on the source/repaired triangulated surface and on the selected
+    source chords is inside the same source AABB. Its diagonal bounds their
+    bidirectional distance, including removal of fill and holes. Preserve shared
+    source vertices. This is a display substitution, never a full-detail repair.
+    """
+    geometry=feature['geometry']
+    parts=[geometry['coordinates']] if geometry['type']=='Polygon' else geometry['coordinates']
+    bounds=[np.asarray([p for ring in rings for p in ring],dtype=float) for rings in parts]
+    error=max(float(np.linalg.norm(p.max(axis=0)-p.min(axis=0))) for p in bounds)
+    if error>tolerance:
+        return None
+    outlines=[]
+    for rings in parts:
+        for ring in rings:
+            points=np.asarray(ring,dtype=float)
+            if np.array_equal(points[0],points[-1]):points=points[:-1]
+            farthest=int(np.argmax(np.linalg.norm(points-points[0],axis=1)))
+            kept={0,farthest}|{i for i,p in enumerate(points) if tuple(p) in locked}
+            values=points[sorted(kept)].tolist()
+            if len(values)<2:return None
+            outlines.append(values+[values[0]])
+    result=dict(feature,geometry=dict(type='MultiLineString',coordinates=outlines))
+    reports.append(dict(sourceId=feature['properties']['_source_id'],
+        sourceLayer=feature['properties']['_source_layer'],reason='parent polygon replaced by bounded source outline',
+        substitution='parentOutline',sourceGeometry=geometry['type'],
+        geometryErrorMetres=error,toleranceMetres=tolerance,retainedSharedVertices=len(locked)))
+    return result,error
+
+
+def simplify_feature(feature, tolerance, locked, reports, parent_repair=False):
     import copy
     result = copy.deepcopy(feature)
     geometry = result['geometry']
@@ -468,6 +501,11 @@ def simplify_feature(feature, tolerance, locked, reports):
             if reason:
                 reports.append(dict(sourceId=feature['properties']['_source_id'], reason=reason))
         geometry['coordinates'] = values[0] if kind == 'Polygon' else values
+        if parent_repair and not feature.get('_surface_fragment') and (geometry==feature['geometry'] or
+                any(r.get('reason') in ('invalid source topology retained for existing repair policy',
+                'simplification would change polygon topology') for r in reports)):
+            substituted=parent_outline(feature,tolerance,locked,reports)
+            if substituted is not None:return substituted
     return result, error
 
 
@@ -517,6 +555,7 @@ if __name__ == '__main__':
     p.add_argument('--field', dest='fields', action='append', default=[])
     p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])
     p.add_argument('--skip-invalid', action='store_true')
+    p.add_argument('--parent-repair', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
     a = p.parse_args()

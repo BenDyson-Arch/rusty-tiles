@@ -94,6 +94,16 @@ unsimplified. `--repair` explicitly permits invalid-outline repairs;
 Oversized polygons requiring triangle fragmentation still need unambiguous filled
 geometry; outline fallback does not resolve their fragmentation.
 
+`--parentRepair` optionally substitutes source-chord outlines when invalid topology
+or topology/minimum-ring constraints would otherwise retain a polygon at full cost.
+This affects parent display only; filled full-detail leaves keep their existing
+repair policy. The source 3D AABB diagonal bounds the entire filled-surface/outline
+substitution, including removed fill and holes. A stand-in is emitted only when
+that conservative bound fits the requested tolerance; shared vertices remain
+locked. Reports record `substitution: parentOutline`, source identity, error and
+tolerance. This can reduce distant display fidelity; it never silently drops a
+feature or changes a leaf. If the bound does not fit, the original fallback remains.
+
 `conversion.json` records layers, CRS/height semantics, budgets, observed tile
 maxima, fragmentation and a bounded sample of geometry reports. The complete
 report stream is `geometry-reports.jsonl`. Tile `extras` records encoded vertices,

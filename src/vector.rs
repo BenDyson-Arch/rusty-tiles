@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub parent_repair: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
     pub force: bool,
@@ -62,6 +63,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            parent_repair: false,
             max_parent_features: 4096,
             where_clause: None,
             force: false,
@@ -252,6 +254,9 @@ pub fn vector_to_3tz_with_options(
     }
     if options.skip_invalid {
         command.arg("--skip-invalid");
+    }
+    if options.parent_repair {
+        command.arg("--parent-repair");
     }
     if repair {
         command.arg("--repair");

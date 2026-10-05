@@ -191,7 +191,8 @@ def run(args, writer):
                     return None
                 if level:
                     fallback=[]
-                    feature,e=writer.simplify_feature(feature,tolerance*2**(level-1),locks(feature),fallback)
+                    feature,e=writer.simplify_feature(feature,tolerance*2**(level-1),locks(feature),fallback,
+                        parent_repair=getattr(args,'parent_repair',False))
                     for value in fallback:
                         report(value)
                     error=max(error,e)
@@ -354,7 +355,7 @@ def run(args, writer):
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,parentFeatures=max_parent_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
         attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
-        skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
+        parentRepairEnabled=getattr(args,'parent_repair',False),skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',
