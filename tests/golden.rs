@@ -129,6 +129,7 @@ fn derivative_missing_inputs_do_not_publish_output() {
         &input,
         &output,
         &terrain::TerrainOptions {
+            force: false,
             max_zoom: 1,
             grid: 17,
             height_offset: 0.0,

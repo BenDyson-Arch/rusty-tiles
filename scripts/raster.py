@@ -80,7 +80,7 @@ def run(a):
         vrt = gdal.Translate('', source, format='VRT', bandList=bands, outputType=gdal.GDT_Byte,
                              scaleParams=[[0, 255, 0, 255]], noData='none', maskBand='mask,1')
         for i, name in enumerate(interpretations, 1):
-            vrt.GetRasterBand(i).SetColorInterpretation(getattr(gdal, 'GCI_'+name.capitalize()+'Band'))
+            vrt.GetRasterBand(i).SetColorInterpretation(gdal.GCI_GrayIndex if name == 'gray' else getattr(gdal, 'GCI_'+name.capitalize()+'Band'))
         gdal.Warp(str(display), vrt, format='GTiff', dstSRS='EPSG:3857', dstAlpha=not bool(a.alpha_band),
                   creationOptions=['TILED=YES', 'COMPRESS=DEFLATE'])
     # gdal2tiles is available in the supported Debian GDAL runtime as well as newer GDAL.

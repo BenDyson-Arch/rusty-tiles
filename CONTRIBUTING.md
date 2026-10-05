@@ -113,3 +113,13 @@ appears only when an actual Python import fails. Set
 `RUSTY_TILES_PYTHON_TRACEBACK=1` to include a traceback for debugging. Embedded
 modules use named synthetic filenames so tracebacks never inline the helper
 source. Failed conversions still publish nothing.
+
+## Replacing outputs
+
+All conversion commands accept `-f`/`--force`. Without it, existing outputs are
+rejected with the correct option hint. Archive replacement uses the existing
+atomic file publication. Raster/terrain stage the complete directory first, then
+swap it with a private backup of the old output; publication failure restores the
+backup. This directory swap has a brief rename gap. If restoration itself fails,
+the diagnostic names the retained backup rather than deleting it. A conversion
+failure before publication leaves the original file/directory untouched.

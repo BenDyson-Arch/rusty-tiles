@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub force: bool,
     pub list_fields: String,
     pub fields: Vec<String>,
     pub drop_fields: Vec<String>,
@@ -59,6 +60,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            force: false,
             list_fields: "error".into(),
             fields: Vec::new(),
             drop_fields: Vec::new(),
@@ -158,7 +160,7 @@ pub fn vector_to_3tz_with_options(
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     let parent = output
@@ -241,7 +243,13 @@ pub fn vector_to_3tz_with_options(
         command.arg("--ambiguous-outlines");
     }
     crate::python::run(&mut command, "vector")?;
-    crate::pack::convert_to_3tz(work.path(), output, &crate::pack::PackOptions::default())
+    crate::pack::convert_to_3tz(
+        work.path(),
+        output,
+        &crate::pack::PackOptions {
+            force: options.force,
+        },
+    )
 }
 
 #[cfg(test)]

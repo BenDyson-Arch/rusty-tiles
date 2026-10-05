@@ -4,6 +4,7 @@ use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
+    pub force: bool,
     /// `local` for XYZ metres, `header` for LAS CRS, or an explicit horizontal CRS.
     pub source_crs: String,
     /// Explicit metre offset from source Z to ellipsoidal height, for geospatial input.
@@ -20,7 +21,7 @@ pub fn point_cloud_to_3tz(
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     if options.max_points == 0 || options.chunk_points == 0 {
@@ -53,7 +54,13 @@ pub fn point_cloud_to_3tz(
         command.arg("--height-offset").arg(height.to_string());
     }
     crate::python::run(&mut command, "point-cloud")?;
-    crate::pack::convert_to_3tz(&staging, output, &crate::pack::PackOptions::default())
+    crate::pack::convert_to_3tz(
+        &staging,
+        output,
+        &crate::pack::PackOptions {
+            force: options.force,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -67,6 +74,7 @@ mod tests {
         let output = work.path().join("cloud.3tz");
         std::fs::write(&input, b"invalid input").unwrap();
         let options = PointCloudOptions {
+            force: false,
             source_crs: "local".into(),
             height_offset: None,
             max_points: 0,
