@@ -20,12 +20,32 @@ use rusty_tiles::{terrain, vector};
     arg_required_else_help = true
 )]
 struct Cli {
+    /// Emit one machine-readable result on stdout (diagnostics stay on stderr)
+    #[arg(long, global = true)]
+    json: bool,
+    /// Emit newline-delimited phase events on stderr
+    #[arg(long, global = true, value_parser = ["json"])]
+    progress: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// Check a self-contained, explicit 3TZ archive before publishing
+    Validate {
+        input: PathBuf,
+        /// Run a locally installed official 3d-tiles-validator executable
+        #[arg(long)]
+        external_validator: Option<PathBuf>,
+    },
+    /// Check installed Python modules, native capabilities and local PROJ grids
+    Doctor(DoctorArgs),
+    #[command(hide = true)]
+    EncodeVectorContent {
+        #[arg(short, long)]
+        input: PathBuf,
+    },
     /// GLB/glTF file or directory → tileset.json (3d-tiles-tools createTilesetJson)
     #[command(name = "createTilesetJson", alias = "create-tileset-json")]
     CreateTilesetJson(IoArgs),
@@ -39,6 +59,8 @@ enum Command {
     MeshTo3tz(MeshArgs),
     /// GeoJSON → glTF vector .3tz prototype (requires Python GDAL/GEOS and NumPy)
     Vector(VectorArgs),
+    /// LAS/LAZ → point-cloud 3D Tiles with spatial LOD (Python laspy and pyproj)
+    PointCloud(PointCloudArgs),
     /// DEM → quantized-mesh directory (requires Python GDAL and NumPy)
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
@@ -46,7 +68,17 @@ enum Command {
 }
 
 #[derive(Args)]
+struct DoctorArgs {
+    /// Check only these converters; repeat to select several
+    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert"])]
+    commands: Vec<String>,
+}
+
+#[derive(Args)]
 struct TerrainArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(short = 'i', long)]
     input: PathBuf,
     #[arg(short = 'o', long)]
@@ -65,6 +97,9 @@ struct TerrainArgs {
 
 #[derive(Args)]
 struct RasterArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(short = 'i', long)]
     input: PathBuf,
     #[arg(short = 'o', long)]
@@ -73,16 +108,116 @@ struct RasterArgs {
     min_zoom: u8,
     #[arg(long = "maxZoom")]
     max_zoom: u8,
+    #[arg(long, default_value = "image")]
+    display: String,
+    #[arg(long, default_value_t = 1)]
+    band: u16,
+    #[arg(long = "alphaBand", default_value_t = 0)]
+    alpha_band: u16,
+    #[arg(long = "displayMin", allow_hyphen_values = true)]
+    display_min: Option<f64>,
+    #[arg(long = "displayMax", allow_hyphen_values = true)]
+    display_max: Option<f64>,
+}
+
+#[derive(Args)]
+struct PointCloudArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    #[arg(short = 'o', long)]
+    output: PathBuf,
+    /// local XYZ metres, header CRS, or explicit 2D horizontal CRS (e.g. EPSG:32632)
+    #[arg(long = "sourceCrs")]
+    source_crs: String,
+    /// Metre offset to ellipsoidal height; required for geospatial input
+    #[arg(long = "heightOffset", allow_hyphen_values = true)]
+    height_offset: Option<f64>,
+    #[arg(long = "maxPoints", default_value_t = 50000)]
+    max_points: usize,
+    #[arg(long = "chunkPoints", default_value_t = 100000)]
+    chunk_points: usize,
 }
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Omit volatile performance diagnostics for byte-identical archives
+    #[arg(long)]
+    reproducible: bool,
+    /// Maximum encoding worker processes (defaults to available cores)
+    #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, usize::from))]
+    jobs: usize,
+    /// OGR attribute filter applied to every selected layer
+    #[arg(long = "where")]
+    where_clause: Option<String>,
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
+    /// Encode list-valued properties as JSON strings, or reject them
+    #[arg(long = "listFields", default_value = "error", value_parser = ["error", "json"])]
+    list_fields: String,
+    /// Include only these source fields (comma-separated)
+    #[arg(long, value_delimiter = ',', conflicts_with = "drop_fields")]
+    fields: Vec<String>,
+    /// Exclude these source fields (comma-separated)
+    #[arg(long = "dropFields", value_delimiter = ',', conflicts_with = "fields")]
+    drop_fields: Vec<String>,
+    /// Skip unconvertible features and report every omitted source identity
+    #[arg(long = "skipInvalid")]
+    skip_invalid: bool,
+    /// Reuse unchanged subtrees from a compatible prior vector archive
+    #[arg(long = "reuseTileset")]
+    reuse_tileset: Option<PathBuf>,
+    /// Select a spatial layer; repeat to include several layers
+    #[arg(long = "layer")]
+    layers: Vec<String>,
+    /// Include every spatial layer (otherwise multi-layer inputs require selection)
+    #[arg(long = "allLayers", conflicts_with = "layers")]
+    all_layers: bool,
+    /// Override input CRS, or use local for metre XYZ
+    #[arg(long = "sourceCrs")]
+    source_crs: Option<String>,
+    /// Explicit additive offset from source heights to ellipsoidal metres
+    #[arg(long = "heightOffset", allow_hyphen_values = true)]
+    height_offset: Option<f64>,
+    /// Maximum encoded POSITION vertices per content tile
+    #[arg(long = "maxVertices", default_value_t = 65536)]
+    max_vertices: usize,
+    /// Maximum encoded GLB bytes per content tile
+    #[arg(long = "maxBytes", default_value_t = 4194304)]
+    max_bytes: usize,
+    #[arg(long = "maxTiles", default_value_t = 100000)]
+    max_tiles: usize,
+    /// Maximum coordinates in one source feature, bounding reader memory
+    #[arg(long = "maxSourceVertices", default_value_t = 1000000)]
+    max_source_vertices: usize,
+
+    /// Base simplification tolerance in metres; doubles for each coarse level
+    #[arg(long = "lodTolerance", default_value_t = 0.1)]
+    lod_tolerance: f64,
+    /// Coarse levels above each full-detail leaf (1..16)
+    #[arg(long = "lodLevels", default_value_t = 3)]
+    lod_levels: u8,
     /// Repair invalid polygon outlines with an explicit per-feature conversion report
     #[arg(long)]
     repair: bool,
     /// Preserve geometrically ambiguous filled polygons as their source 3D outlines
     #[arg(long = "ambiguousOutlines")]
     ambiguous_outlines: bool,
+    /// Quantize vector positions to normalized 16-bit integers (lossy, reported)
+    #[arg(long)]
+    quantize: bool,
+    /// Losslessly compress vector accessor buffers with EXT_meshopt_compression
+    #[arg(long)]
+    meshopt: bool,
+    /// Allow explicitly reported outline stand-ins for unsimplifiable parent polygons
+    #[arg(long = "parentRepair")]
+    parent_repair: bool,
+    /// Maximum feature fragments in parent content; leaves use maxFeatures
+    #[arg(long = "maxParentFeatures", default_value_t = 4096)]
+    max_parent_features: usize,
     #[arg(long = "maxFeatures", default_value_t = 64)]
     max_features: usize,
     #[arg(short = 'i', long = "input")]
@@ -127,27 +262,181 @@ struct IoArgs {
     force: bool,
 }
 
+fn progress(enabled: bool, phase: &str, done: usize, total: usize) {
+    if enabled {
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"progress","phase":phase,"done":done,"total":total})
+        );
+    }
+}
+
 fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{e}");
-            if matches!(e, Error::NotImplemented { .. }) {
-                ExitCode::from(2)
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let code = error.exit_code();
+            if code != 0 && std::env::args().any(|arg| arg == "--json") {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok":false,"error":{"code":"usage","message":error.to_string()},"exitCode":code})
+                );
             } else {
-                ExitCode::from(1)
+                let _ = error.print();
             }
+            return ExitCode::from(code as u8);
+        }
+    };
+    // The internal compression worker has a separate JSON protocol.
+    let internal = matches!(cli.command, Command::EncodeVectorContent { .. });
+    let json = cli.json && !internal;
+    let events = cli.progress.is_some() && !internal;
+    let output = match &cli.command {
+        Command::CreateTilesetJson(a) | Command::GlbTo3tz(a) => Some(a.output.clone()),
+        Command::Convert(a) => Some(a.output.clone()),
+        Command::MeshTo3tz(a) => Some(a.io.output.clone()),
+        Command::Vector(a) => Some(a.output.clone()),
+        Command::PointCloud(a) => Some(a.output.clone()),
+        Command::Terrain(a) => Some(a.output.clone()),
+        Command::Raster(a) => Some(a.output.clone()),
+        _ => None,
+    };
+    if events {
+        std::env::set_var("RUSTY_TILES_PROGRESS_JSON", "1");
+    }
+    if json {
+        std::env::set_var("RUSTY_TILES_JSON_STDOUT", "1");
+    }
+    progress(events, "conversion", 0, 1);
+    match run(cli) {
+        Ok(report) => {
+            if report.as_ref().is_some_and(|report| report["ok"] == false) {
+                if let Some(report) = report {
+                    println!("{report}");
+                }
+                return ExitCode::from(4);
+            }
+            progress(events, "conversion", 1, 1);
+            if json {
+                if let Some(report) = report {
+                    println!("{report}");
+                } else {
+                    println!("{}", output_summary(output.as_deref()));
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            let (category, code) = error.category();
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code})
+                );
+            } else {
+                eprintln!("{error}");
+            }
+            if events {
+                eprintln!(
+                    "{}",
+                    serde_json::json!({"event":"failed","phase":"conversion","code":category})
+                );
+            }
+            ExitCode::from(code)
         }
     }
 }
 
-fn run() -> Result<(), Error> {
-    let cli = Cli::parse();
+fn output_summary(output: Option<&std::path::Path>) -> serde_json::Value {
+    use serde_json::json;
+    let mut report = serde_json::Value::Null;
+    let mut location = serde_json::Value::Null;
+    if let Some(path) = output {
+        if path.is_dir() {
+            let file = path.join("conversion.json");
+            if let Ok(data) = std::fs::read(&file) {
+                report = serde_json::from_slice(&data).unwrap_or_default();
+                location = json!({"path":file});
+            }
+        } else if let Ok(file) = std::fs::File::open(path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                if let Ok(mut entry) = archive.by_name("conversion.json") {
+                    use std::io::Read;
+                    let mut data = Vec::new();
+                    if entry.read_to_end(&mut data).is_ok() {
+                        report = serde_json::from_slice(&data).unwrap_or_default();
+                        location = json!({"archive":path,"entry":"conversion.json"});
+                    }
+                }
+            }
+        }
+    }
+    let mut counts = serde_json::Map::new();
+    if let Some(object) = report.as_object() {
+        for (key, value) in object {
+            if value.is_number() {
+                counts.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    json!({"ok":true,"output":output,"counts":counts,"skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location})
+}
+
+fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
+    let json = cli.json;
     match cli.command {
+        Command::Validate {
+            input,
+            external_validator,
+        } => {
+            let report = rusty_tiles::validate::archive(&input, external_validator.as_deref())?;
+            if !json {
+                println!(
+                    "Validated {}: {} tiles, {} content references",
+                    input.display(),
+                    report["tiles"],
+                    report["contentReferences"]
+                );
+            }
+            return Ok(Some(report));
+        }
+        Command::Doctor(a) => {
+            let report = rusty_tiles::doctor::report(&a.commands)?;
+            if json {
+                let mut report = report;
+                report["ok"] = report["ready"].clone();
+                if report["ready"] != true {
+                    // Include the inventory in the single error result.
+                    report["error"] = serde_json::json!({"code":"environment","message":"selected converters have missing dependencies"});
+                    report["exitCode"] = 4.into();
+                }
+                return Ok(Some(report));
+            }
+            rusty_tiles::doctor::display(&report, false);
+            if report["ready"] != true {
+                return Err(Error::Environment(
+                    "selected converters have missing dependencies; see doctor report".into(),
+                ));
+            }
+        }
+        Command::EncodeVectorContent { input } => {
+            println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
+        }
         Command::CreateTilesetJson(a) => {
             let opts = tileset_opts(&a)?;
             create_tileset_json(&a.input, &a.output, &opts)?;
         }
+        Command::PointCloud(a) => rusty_tiles::point_cloud::point_cloud_to_3tz(
+            &a.input,
+            &a.output,
+            &rusty_tiles::point_cloud::PointCloudOptions {
+                force: a.force,
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_points: a.max_points,
+                chunk_points: a.chunk_points,
+            },
+        )?,
         Command::Convert(a) => {
             convert_to_3tz(&a.input, &a.output, &PackOptions { force: a.force })?;
         }
@@ -159,28 +448,72 @@ fn run() -> Result<(), Error> {
             let opts = mesh_opts(&a)?;
             mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
         }
-        Command::Vector(a) => vector::vector_to_3tz(
+        Command::Vector(a) => vector::vector_to_3tz_with_options(
             &a.input,
             &a.output,
             a.max_features,
             a.repair,
             a.ambiguous_outlines,
+            &vector::VectorOptions {
+                reproducible: a.reproducible,
+                jobs: a.jobs,
+                quantize: a.quantize,
+                meshopt: a.meshopt,
+                meshopt_encoder: if a.meshopt {
+                    Some(std::env::current_exe()?)
+                } else {
+                    None
+                },
+                parent_repair: a.parent_repair,
+                max_parent_features: a.max_parent_features,
+                where_clause: a.where_clause,
+                force: a.force,
+                list_fields: a.list_fields,
+                fields: a.fields,
+                drop_fields: a.drop_fields,
+                skip_invalid: a.skip_invalid,
+                reuse_tileset: a.reuse_tileset,
+                lod: vector::VectorLodOptions {
+                    tolerance_metres: a.lod_tolerance,
+                    levels: a.lod_levels,
+                },
+                layers: a.layers,
+                all_layers: a.all_layers,
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_vertices: a.max_vertices,
+                max_bytes: a.max_bytes,
+                max_tiles: a.max_tiles,
+                max_source_vertices: a.max_source_vertices,
+            },
         )?,
         Command::Terrain(a) => terrain::dem_to_terrain(
             &a.input,
             &a.output,
             &terrain::TerrainOptions {
+                force: a.force,
                 max_zoom: a.max_zoom,
                 grid: a.grid,
                 height_offset: a.height_offset,
                 fill_height: a.fill_height,
             },
         )?,
-        Command::Raster(a) => {
-            rusty_tiles::raster::raster_to_directory(&a.input, &a.output, a.min_zoom, a.max_zoom)?
-        }
+        Command::Raster(a) => rusty_tiles::raster::raster_with_options(
+            &a.input,
+            &a.output,
+            &rusty_tiles::raster::RasterOptions {
+                force: a.force,
+                min_zoom: a.min_zoom,
+                max_zoom: a.max_zoom,
+                display: a.display,
+                band: a.band,
+                alpha_band: a.alpha_band,
+                display_min: a.display_min,
+                display_max: a.display_max,
+            },
+        )?,
     }
-    Ok(())
+    Ok(None)
 }
 
 fn tileset_opts(a: &IoArgs) -> Result<CreateTilesetOptions, Error> {

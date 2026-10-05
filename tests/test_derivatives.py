@@ -97,7 +97,13 @@ class VectorTests(unittest.TestCase):
             manifest=json.loads((pathlib.Path(tmp)/'tileset.json').read_text())
             self.assertEqual(manifest['extensionsUsed'],['3DTILES_content_gltf_vector'])
             primitives=[]
-            for file in pathlib.Path(tmp).glob('t/*.glb'):
+            def leaves(node):
+                if 'children' in node:
+                    for child in node['children']:
+                        yield from leaves(child)
+                else:
+                    yield pathlib.Path(tmp)/node['content']['uri']
+            for file in leaves(manifest['root']):
                 data=file.read_bytes()
                 self.assertEqual(struct.unpack_from('<I',data,8)[0],len(data))
                 size=struct.unpack_from('<I',data,12)[0]

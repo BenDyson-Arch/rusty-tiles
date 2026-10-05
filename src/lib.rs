@@ -15,7 +15,10 @@ pub mod hlod;
 mod jpeg;
 mod lossless;
 pub mod mesh;
+mod output;
 pub mod pack;
+pub mod point_cloud;
+mod python;
 pub mod split;
 pub mod terrain;
 pub mod texture;
@@ -37,3 +40,9 @@ pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 pub const ORACLE_NPM: &str = "3d-tiles-tools@0.5.4";
 
 pub mod raster;
+
+pub mod vector_encoding;
+
+pub mod doctor;
+
+pub mod validate;

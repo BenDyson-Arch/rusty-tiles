@@ -1,6 +1,17 @@
-//! GDAL-backed raster derivatives. GDAL owns CRS, masks, resampling and codecs.
+//! GDAL-backed source COG and explicitly styled imagery derivatives.
 use crate::Error;
 use std::{path::Path, process::Command};
+
+pub struct RasterOptions {
+    pub force: bool,
+    pub min_zoom: u8,
+    pub max_zoom: u8,
+    pub display: String,
+    pub band: u16,
+    pub alpha_band: u16,
+    pub display_min: Option<f64>,
+    pub display_max: Option<f64>,
+}
 
 pub fn raster_to_directory(
     input: &Path,
@@ -8,14 +19,32 @@ pub fn raster_to_directory(
     min_zoom: u8,
     max_zoom: u8,
 ) -> Result<(), Error> {
+    raster_with_options(
+        input,
+        output,
+        &RasterOptions {
+            force: false,
+            min_zoom,
+            max_zoom,
+            display: "image".into(),
+            band: 1,
+            alpha_band: 0,
+            display_min: None,
+            display_max: None,
+        },
+    )
+}
+
+pub fn raster_with_options(
+    input: &Path,
+    output: &Path,
+    options: &RasterOptions,
+) -> Result<(), Error> {
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
-    }
-    if min_zoom > max_zoom || max_zoom > 24 {
-        return Err(Error::msg("require 0 <= minZoom <= maxZoom <= 24"));
     }
     let parent = output
         .parent()
@@ -23,76 +52,32 @@ pub fn raster_to_directory(
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent)?;
     let work = tempfile::tempdir_in(parent)?;
-    let cog = work.path().join("source.cog.tif");
-    let status = Command::new("gdal_translate")
-        .args([
-            "-of",
-            "COG",
-            "-co",
-            "COMPRESS=ZSTD",
-            "-co",
-            "NUM_THREADS=ALL_CPUS",
-        ])
-        .arg(input)
-        .arg(&cog)
-        .status()?;
-    if !status.success() {
-        return Err(Error::msg("GDAL COG generation failed"));
-    }
-    let info = Command::new("gdalinfo").arg("-json").arg(&cog).output()?;
-    if !info.status.success() {
-        return Err(Error::msg("GDAL could not inspect the generated COG"));
-    }
-    let info: serde_json::Value = serde_json::from_slice(&info.stdout)?;
-    let ring = info["wgs84Extent"]["coordinates"][0]
-        .as_array()
-        .ok_or_else(|| Error::msg("raster needs a valid georeferenced WGS84 extent"))?;
-    let mut bounds = [
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    ];
-    for point in ring {
-        let x = point[0]
-            .as_f64()
-            .ok_or_else(|| Error::msg("invalid raster longitude"))?;
-        let y = point[1]
-            .as_f64()
-            .ok_or_else(|| Error::msg("invalid raster latitude"))?;
-        bounds[0] = bounds[0].min(x);
-        bounds[1] = bounds[1].min(y);
-        bounds[2] = bounds[2].max(x);
-        bounds[3] = bounds[3].max(y);
-    }
-    let status = Command::new("gdal")
-        .args([
+    let mut cmd = Command::new("python3");
+    cmd.arg("-c")
+        .arg(crate::python::script(
+            include_str!("../scripts/raster.py"),
             "raster",
-            "tile",
-            "--webviewer=none",
-            "--tiling-scheme=WebMercatorQuad",
-            "--convention=xyz",
-            "--output-format=PNG",
-        ])
-        .arg(format!("--min-zoom={min_zoom}"))
-        .arg(format!("--max-zoom={max_zoom}"))
-        .arg(&cog)
-        .arg(work.path().join("tiles"))
-        .status()?;
-    if !status.success() {
-        return Err(Error::msg("GDAL imagery tiling failed; display tiles require byte imagery. Numeric rasters should retain their COG and use an explicitly styled derivative."));
+            "Python GDAL and NumPy",
+        )?)
+        .arg(input)
+        .arg(work.path())
+        .arg("--min-zoom")
+        .arg(options.min_zoom.to_string())
+        .arg("--max-zoom")
+        .arg(options.max_zoom.to_string())
+        .arg("--display")
+        .arg(&options.display)
+        .arg("--band")
+        .arg(options.band.to_string())
+        .arg("--alpha-band")
+        .arg(options.alpha_band.to_string());
+    if let Some(v) = options.display_min {
+        cmd.arg("--display-min").arg(v.to_string());
     }
-    std::fs::write(
-        work.path().join("tilejson.json"),
-        serde_json::to_vec_pretty(&serde_json::json!({
-            "tilejson":"3.0.0", "scheme":"xyz", "tiles":["tiles/{z}/{x}/{y}.png"],
-            "minzoom":min_zoom,"maxzoom":max_zoom,"bounds":bounds
-        }))?,
-    )?;
-    // Publish only a complete directory; never replace an existing output.
-    if output.exists() {
-        return Err(Error::OutputExists(output.into()));
+    if let Some(v) = options.display_max {
+        cmd.arg("--display-max").arg(v.to_string());
     }
-    std::fs::rename(work.path(), output)?;
+    crate::python::run(&mut cmd, "raster")?;
+    crate::output::publish_directory(work.path(), output, options.force)?;
     Ok(())
 }

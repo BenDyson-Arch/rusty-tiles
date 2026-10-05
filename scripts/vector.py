@@ -1,6 +1,7 @@
 """GeoJSON → glTF vector content prototype, pinned to the 2026 draft.
 
-Whole features are partitioned spatially without clipping or simplification.
+Full-detail features are partitioned spatially; parents contain conservative
+3D line and planar polygon simplifications with metre-based error bounds.
 The glTF extensions preserve polygon rings, holes, feature IDs and scalar
 properties. GDAL/GEOS triangulates in a best-fit plane while retaining source
 3D positions. Optional repairs and original-outline fallbacks are reported.
@@ -8,13 +9,26 @@ properties. GDAL/GEOS triangulates in a best-fit plane while retaining source
 import argparse
 import json
 import math
+import os
 import pathlib
 import struct
 
 import numpy as np
-from osgeo import ogr
+from osgeo import gdal, ogr
 
 ogr.UseExceptions()
+
+
+
+def geometry_operation(operation):
+    """Quiet native validity/repair warnings; retain exceptions and debug output."""
+    if os.environ.get('RUSTY_TILES_PYTHON_TRACEBACK') == '1':
+        return operation()
+    gdal.PushErrorHandler('CPLQuietErrorHandler')
+    try:
+        return operation()
+    finally:
+        gdal.PopErrorHandler()
 
 
 def coordinates(geometry):
@@ -49,7 +63,7 @@ class Glb:
 
     def view(self, data):
         data = data or b"\0"
-        self.data.extend(b'\0' * (-len(self.data) % 4))
+        self.data.extend(b'\0' * (-len(self.data) % 8))
         i = len(self.doc['bufferViews'])
         self.doc['bufferViews'].append(dict(buffer=0, byteOffset=len(self.data), byteLength=len(data)))
         self.data.extend(data)
@@ -57,13 +71,49 @@ class Glb:
 
     def accessor(self, values, dtype, kind):
         values = np.asarray(values, dtype=dtype)
-        view = self.view(values.tobytes())
-        a = dict(bufferView=view, componentType=5126 if dtype == '<f4' else 5125, count=len(values), type=kind)
+        if dtype == '<u2' and kind == 'SCALAR':
+            padded=np.zeros((len(values),2),dtype='<u2');padded[:,0]=values
+            view=self.view(padded.tobytes())
+            self.doc['bufferViews'][view]['byteStride']=4
+        else:view = self.view(values.tobytes())
+        a = dict(bufferView=view, componentType={'<f4':5126,'<u4':5125,'<u2':5123}[dtype], count=len(values), type=kind)
         if kind == 'VEC3':
             a.update(min=values.min(axis=0).tolist(), max=values.max(axis=0).tolist())
         i = len(self.doc['accessors'])
         self.doc['accessors'].append(a)
         return i
+
+    def quantize_positions(self):
+        indices={p['attributes']['POSITION'] for m in self.doc['meshes'] for p in m['primitives']}
+        positions={}
+        for index in indices:
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            positions[index]=np.frombuffer(self.data,dtype='<f4',count=accessor['count']*3,
+                offset=view['byteOffset']).reshape(-1,3).astype(float)
+        points=np.concatenate(list(positions.values()));lo=points.min(axis=0);extent=points.max(axis=0)-lo
+        scale=np.where(extent>0,extent,1.)
+        error=0.
+        for index,p in positions.items():
+            quantized=np.rint((p-lo)/scale*65535).clip(0,65535).astype('<u2')
+            decoded=quantized.astype(float)/65535*scale+lo
+            error=max(error,float(np.linalg.norm(decoded-p,axis=1).max()))
+            packed=np.zeros((len(p),4),dtype='<u2');packed[:,:3]=quantized
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            view.update(byteOffset=len(self.data),byteLength=packed.nbytes,byteStride=8)
+            self.data.extend(packed.tobytes())
+            accessor.update(componentType=5123,normalized=True,min=quantized.min(axis=0).tolist(),max=quantized.max(axis=0).tolist())
+        rebuilt=bytearray()
+        for view in self.doc['bufferViews']:
+            rebuilt.extend(b'\0'*(-len(rebuilt)%8))
+            value=self.data[view['byteOffset']:view['byteOffset']+view['byteLength']]
+            view['byteOffset']=len(rebuilt);rebuilt.extend(value)
+        self.data=rebuilt
+        self.doc['nodes'][0].update(translation=lo.tolist(),scale=scale.tolist())
+        self.doc['extensionsUsed'].append('KHR_mesh_quantization')
+        self.doc.setdefault('extensionsRequired',[]).append('KHR_mesh_quantization')
+        error=max(error,float(np.linalg.norm(extent/131070)))
+        error+=float(np.linalg.norm(lo-lo.astype('<f4'))+np.linalg.norm(scale-scale.astype('<f4'))+np.linalg.norm(scale)*2**-24)
+        return error
 
     def finish(self, path):
         self.doc['buffers'][0]['byteLength'] = len(self.data)
@@ -71,6 +121,10 @@ class Glb:
         j += b' ' * (-len(j) % 4)
         self.data.extend(b'\0' * (-len(self.data) % 4))
         path.write_bytes(struct.pack('<5I', 0x46546c67, 2, 28+len(j)+len(self.data), len(j), 0x4e4f534a) + j + struct.pack('<2I', len(self.data), 0x004e4942) + self.data)
+
+
+class OutlineFallback(ValueError):
+    """Source rings can be retained without inventing a filled surface."""
 
 
 def polygon(rings, repair=False, report=None):
@@ -102,10 +156,10 @@ def polygon(rings, repair=False, report=None):
             segments.append((q, xy[(i+1)%len(xy)], p, ring[(i+1)%len(ring)]))
         ogr_ring.CloseRings()
         shape.AddGeometry(ogr_ring)
-    valid = shape.IsValid()
+    valid = geometry_operation(shape.IsValid)
     if not valid and not repair:
         raise ValueError('invalid polygon topology; inspect source or explicitly use --repair')
-    repaired = shape.MakeValid() if not valid else shape
+    repaired = geometry_operation(shape.MakeValid) if not valid else shape
     shapes = []
     def collect(g):
         kind = ogr.GT_Flatten(g.GetGeometryType())
@@ -115,10 +169,10 @@ def polygon(rings, repair=False, report=None):
             for child in g:
                 collect(child)
         elif not g.IsEmpty():
-            raise ValueError('repair produced collapsed non-polygon geometry; source needs review')
+            raise OutlineFallback('repair produced collapsed non-polygon geometry; source needs review')
     collect(repaired)
     if not shapes:
-        raise ValueError('polygon has no filled area')
+        raise OutlineFallback('polygon has no filled area')
     added = 0
     max_spread = 0.0
     def position(q):
@@ -142,7 +196,7 @@ def polygon(rings, repair=False, report=None):
         max_spread = max(max_spread,float(spread))
         # A crossing of unrelated 3D surfaces cannot be repaired as one vertex.
         if spread > .02:
-            raise ValueError('projected intersection differs by more than 2 cm in 3D; source needs review')
+            raise OutlineFallback('projected intersection differs by more than 2 cm in 3D; source needs review')
         lookup[key] = len(positions)
         positions.append(point)
         added += 1
@@ -182,7 +236,42 @@ def polygon(rings, repair=False, report=None):
     return positions, indices, loops, triangle_offsets, loop_offsets
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False):
+def geometry_parts(g):
+    kind, c = g['type'], g['coordinates']
+    if kind == 'Point':
+        parts = [('Point', [c])]
+    elif kind == 'MultiPoint':
+        parts = [('Point', c)]
+    elif kind in ('LineString', 'Polygon'):
+        parts = [(kind, c)]
+    elif kind in ('MultiLineString', 'MultiPolygon'):
+        parts = [(kind.removeprefix('Multi'), p) for p in c]
+    else:
+        raise ValueError(f'unsupported geometry {kind}')
+    return parts
+
+
+def validate_feature(feature, repair=False, ambiguous_outlines=False):
+    reports=[]
+    parts=geometry_parts(feature['geometry'])
+    for kind, points in parts:
+        if kind == 'Polygon':
+            try:
+                polygon(points, repair)
+            except OutlineFallback as error:
+                if not ambiguous_outlines:raise
+                reports.append(dict(sourceId=feature['properties']['_source_id'],sourceLayer=feature['properties']['_source_layer'],
+                    topologyRepaired=False,outputGeometry='outline',reason=str(error)))
+        elif len(points) < (1 if kind == 'Point' else 2):
+            raise ValueError('empty/degenerate feature')
+    if reports:
+        # Normalize before budgeting, so a large collapsed outline can be split
+        # with the ordinary line fragmenter while retaining every source segment.
+        feature['geometry']=dict(type='MultiLineString',coordinates=[ring for kind,rings in parts for ring in rings])
+    return reports
+
+
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False, quantize=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -191,15 +280,27 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         values = [f['properties'].get(key) for f in items]
         present = [v for v in values if v is not None]
         missing = len(present) != len(values)
+        expected = (schema_types or {}).get(key)
+        if expected == 'real' or (not expected and present and all(type(v) in (int,float) for v in present) and any(type(v) is float for v in present)):
+            if any(type(v) is int and abs(v)>2**53 for v in present):
+                raise ValueError(f'property {key!r} cannot represent large integers as float64 without loss')
+            values = [float(v) if v is not None else None for v in values]
+            present = [v for v in values if v is not None]
         if missing:
-            if all(isinstance(v, str) for v in present):
-                sentinel = '__RUSTY_TILES_MISSING__'
+            if expected == 'integer' or (not expected and present and all(type(v) is int for v in present)):
+                sentinel = -(2**53)  # exactly representable in JSON/JavaScript too
                 while sentinel in present:
-                    sentinel += '_'
-            elif present and all(type(v) in (int,float) for v in present):
+                    sentinel += 1
+            elif expected == 'real' or (present and all(type(v) in (int,float) for v in present)):
                 sentinel = -1.7976931348623157e308
                 if sentinel in present:
                     raise ValueError('reserved missing-value sentinel occurs in source')
+            elif expected == 'boolean':
+                raise ValueError(f'nullable boolean property {key!r} requires an explicit schema')
+            elif expected == 'string' or all(isinstance(v,str) for v in present):
+                sentinel = '__RUSTY_TILES_MISSING__'
+                while sentinel in present:
+                    sentinel += '_'
             else:
                 raise ValueError(f'nullable boolean/complex property {key!r} requires an explicit schema')
             values = [sentinel if v is None else v for v in values]
@@ -221,30 +322,23 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
             raise ValueError(f'unsupported/null/mixed property {key!r}; retain source and normalize explicitly')
         if missing:
             schema[key]['noData'] = sentinel
-    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty-tiles-vector', classes={'feature':dict(properties=schema)}),
+    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty_tiles_vector', classes={'feature':dict(properties=schema)}),
         propertyTables=[dict(name='features', **{'class':'feature'}, count=len(items), properties=columns)])}
     all_positions = []
+    if len(items)>16777217:raise ValueError('too many exact feature IDs in one tile')
+    feature_id_dtype='<u2' if len(items)<=65536 else '<f4'
+    batches = {}
+    restart = 0xffffffff
+    line_restart = False
     for fid, feature in enumerate(items):
-        g = feature['geometry']
-        kind, c = g['type'], g['coordinates']
-        if kind == 'Point':
-            parts = [('Point', [c])]
-        elif kind == 'MultiPoint':
-            parts = [('Point', c)]
-        elif kind in ('LineString', 'Polygon'):
-            parts = [(kind, c)]
-        elif kind in ('MultiLineString', 'MultiPolygon'):
-            parts = [(kind.removeprefix('Multi'), p) for p in c]
-        else:
-            raise ValueError(f'unsupported geometry {kind}')
+        parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
-            ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
             if kind == 'Polygon':
                 report = dict(sourceId=feature['properties']['_source_id'])
                 try:
                     points, indices, loops, triangle_offsets, loop_offsets = polygon([project(r) for r in c], repair, report)
                 except ValueError as e:
-                    if ambiguous_outlines and 'projected intersection differs by more than 2 cm in 3D' in str(e):
+                    if ambiguous_outlines and isinstance(e,OutlineFallback):
                         if reports is not None:
                             reports.append(dict(sourceId=feature['properties']['_source_id'], topologyRepaired=False,
                                                 outputGeometry='outline', reason=str(e)))
@@ -255,10 +349,6 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                     raise ValueError(f"feature {feature['properties']['_source_id']}: {e}") from e
                 if reports is not None:
                     reports.append(report)
-                ext['EXT_mesh_polygon'] = dict(count=len(triangle_offsets), indicesOffsets=glb.accessor(triangle_offsets, '<u4', 'SCALAR'),
-                    loopIndices=glb.accessor(loops, '<u4', 'SCALAR'), loopIndicesOffsets=glb.accessor(loop_offsets, '<u4', 'SCALAR'))
-                if 'EXT_mesh_polygon' not in glb.doc['extensionsUsed']:
-                    glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
                 mode = 4
             else:
                 points = project(c)
@@ -266,87 +356,286 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 mode = 0 if kind == 'Point' else 3
                 if len(points) < (1 if mode == 0 else 2):
                     raise ValueError('empty/degenerate feature')
-            primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(points, '<f4', 'VEC3'),
-                _FEATURE_ID_0=glb.accessor([fid]*len(points), '<u4', 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
-            glb.doc['meshes'][0]['primitives'].append(primitive)
+            batch = batches.setdefault(mode, dict(points=[], ids=[], indices=[], loops=[], triangle_offsets=[], loop_offsets=[]))
+            vertex_base = len(batch['points'])
+            if mode == 3 and batch['indices']:
+                batch['indices'].append(restart)
+                line_restart = True
+            if mode == 4 and not fill_only:
+                if batch['loops']:
+                    batch['loops'].append(restart)
+                batch['triangle_offsets'].extend(len(batch['indices']) + offset for offset in triangle_offsets)
+                batch['loop_offsets'].extend(len(batch['loops']) + offset for offset in loop_offsets)
+                batch['loops'].extend(restart if index == restart else vertex_base + index for index in loops)
+            batch['indices'].extend(vertex_base + index for index in indices)
+            batch['points'].extend(points)
+            batch['ids'].extend([fid] * len(points))
             all_positions.extend(points)
+    if line_restart:
+        # The draft requires root declarations, with no primitive extension object.
+        glb.doc['extensionsUsed'].append('KHR_mesh_primitive_restart')
+        glb.doc.setdefault('extensionsRequired', []).append('KHR_mesh_primitive_restart')
+    for mode, batch in batches.items():
+        ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
+        if mode == 4 and not fill_only:
+            ext['EXT_mesh_polygon'] = dict(count=len(batch['triangle_offsets']),
+                indicesOffsets=glb.accessor(batch['triangle_offsets'], '<u4', 'SCALAR'),
+                loopIndices=glb.accessor(batch['loops'], '<u4', 'SCALAR'),
+                loopIndicesOffsets=glb.accessor(batch['loop_offsets'], '<u4', 'SCALAR'))
+            glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
+        primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(batch['points'], '<f4', 'VEC3'),
+            _FEATURE_ID_0=glb.accessor(batch['ids'], feature_id_dtype, 'SCALAR')),
+            indices=glb.accessor(batch['indices'], '<u4', 'SCALAR'), extensions=ext)
+        glb.doc['meshes'][0]['primitives'].append(primitive)
+    if fill_only:
+        glb.doc['extensionsUsed'] = [e for e in glb.doc['extensionsUsed'] if e != 'EXT_mesh_polygon']
+        glb.doc['extensionsUsed'].append('KHR_materials_unlit')
+        glb.doc['materials'] = [dict(doubleSided=True,extensions={'KHR_materials_unlit':{}},
+            pbrMetallicRoughness=dict(baseColorFactor=[1,1,1,1],metallicFactor=0,roughnessFactor=1))]
+        for primitive in glb.doc['meshes'][0]['primitives']:
+            primitive['material']=0
     glb.finish(path)
+    before_bytes=path.stat().st_size
+    quantization_error=0.
+    if quantize:
+        quantization_error=glb.quantize_positions()
+        glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]
+    rounding = float(np.linalg.norm(p-p.astype('<f4'),axis=1).max())
+    if encoding_report is not None:
+        encoding_report['rounding'] = rounding
+        encoding_report['quantizationError'] = quantization_error
+        encoding_report['beforeBytes'] = before_bytes
+        encoding_report['vertices'] = len(all_positions)
+        encoding_report['primitives'] = len(batches)
     low, high = p.min(axis=0), p.max(axis=0)
-    center, half = (low+high)/2, np.maximum((high-low)/2, .001)
+    center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
     return dict(box=[*center.tolist(), half[0], 0, 0, 0, half[1], 0, 0, 0, half[2]])
 
 
+def paths(geometry):
+    """Yield coordinate paths without their duplicate closing polygon vertex."""
+    kind, c = geometry['type'], geometry['coordinates']
+    if kind == 'Point':
+        return [[c]]
+    if kind == 'MultiPoint':
+        return [[p] for p in c]
+    if kind == 'LineString':
+        return [c]
+    if kind == 'MultiLineString':
+        return c
+    if kind == 'Polygon':
+        return [r[:-1] if r[0] == r[-1] else r for r in c]
+    if kind == 'MultiPolygon':
+        return [r[:-1] if r[0] == r[-1] else r for poly in c for r in poly]
+    raise ValueError(f'unsupported geometry {kind}')
+
+
+def simplify_path(source, tolerance, locked, closed=False):
+    """Iterative 3D RDP; retained source vertices, fixed junctions/boundaries.
+
+    Every replaced source segment chain lies within tolerance of its chord.
+    Endpoint projection and continuity also bound chord-to-chain distance.
+    """
+    points = np.asarray(source, dtype=float)
+    if closed and np.array_equal(points[0], points[-1]):
+        points = points[:-1]
+    if len(points) < (4 if closed else 3) or tolerance <= 0:
+        return points.tolist(), 0.0
+    if closed:
+        split = int(np.argmax(np.linalg.norm(points - points[0], axis=1)))
+        if split == 0:
+            return points.tolist(), 0.0
+        points = np.vstack([points, points[0]])
+        anchors = {0, split, len(points)-1}
+    else:
+        anchors = {0, len(points)-1}
+    anchors.update(i for i,p in enumerate(points) if tuple(p) in locked)
+    keep = set(anchors)
+    anchors = sorted(anchors)
+    pending = list(zip(anchors[:-1], anchors[1:]))
+    error = 0.0
+    while pending:
+        a, b = pending.pop()
+        if b <= a + 1:
+            continue
+        segment = points[b] - points[a]
+        interior = points[a+1:b]
+        t = np.clip((interior - points[a]) @ segment / max(float(segment @ segment), 1e-30), 0, 1)
+        distances = np.linalg.norm(interior - points[a] - t[:, None] * segment, axis=1)
+        i = int(np.argmax(distances))
+        if distances[i] > tolerance:
+            index = a + 1 + i
+            keep.add(index)
+            pending.extend(((a,index),(index,b)))
+        else:
+            error = max(error, float(distances[i]))
+    result = points[sorted(keep)]
+    if closed:
+        result = result[:-1]
+        if len(result) < 3:
+            return points[:-1].tolist(), 0.0
+    return result.tolist(), error
+
+
+def simplify_polygon(rings, tolerance, locked):
+    rings = [np.asarray(r, dtype=float) for r in rings]
+    opened = [r[:-1] if np.array_equal(r[0],r[-1]) else r for r in rings]
+    origin = opened[0].mean(axis=0)
+    _, _, basis = np.linalg.svd(opened[0]-origin, full_matrices=False)
+    deviation = max(float(np.abs((r-origin) @ basis[2]).max()) for r in opened)
+    if 2*deviation >= tolerance:
+        return [r.tolist() for r in rings], 0.0, 'nonplanar polygon retained'
+    def shape(values):
+        poly = ogr.Geometry(ogr.wkbPolygon)
+        for r in values:
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            for p in (np.asarray(r)-origin) @ basis[:2].T:
+                ring.AddPoint_2D(*p)
+            ring.CloseRings()
+            poly.AddGeometry(ring)
+        return poly
+    original = shape(opened)
+    if not geometry_operation(original.IsValid):
+        return [r.tolist() for r in rings], 0.0, 'invalid source topology retained for existing repair policy'
+    candidates, errors = [], []
+    for ring in opened:
+        simplified, error = simplify_path(ring, tolerance-2*deviation, locked, closed=True)
+        candidates.append(simplified)
+        errors.append(error)
+    candidate = shape(candidates)
+    if not geometry_operation(candidate.IsValid) or candidate.GetArea() <= 0:
+        return [r.tolist() for r in rings], 0.0, 'simplification would change polygon topology'
+    if sum(map(len,candidates)) == sum(map(len,opened)):
+        return [r.tolist() for r in rings], 0.0, None
+    # All rings and holes retained; locks keep shared source boundaries fixed.
+    return [r+[r[0]] for r in candidates], max(errors) + 2*deviation, None
+
+
+
+def parent_outline(feature, tolerance, locked, reports):
+    """Replace an unsimplifiable fill only within a conservative surface bound.
+
+    Every point on the source/repaired triangulated surface and on the selected
+    source chords is inside the same source AABB. Its diagonal bounds their
+    bidirectional distance, including removal of fill and holes. Preserve shared
+    source vertices. This is a display substitution, never a full-detail repair.
+    """
+    geometry=feature['geometry']
+    parts=[geometry['coordinates']] if geometry['type']=='Polygon' else geometry['coordinates']
+    bounds=[np.asarray([p for ring in rings for p in ring],dtype=float) for rings in parts]
+    error=max(float(np.linalg.norm(p.max(axis=0)-p.min(axis=0))) for p in bounds)
+    if error>tolerance:
+        return None
+    outlines=[]
+    for rings in parts:
+        for ring in rings:
+            points=np.asarray(ring,dtype=float)
+            if np.array_equal(points[0],points[-1]):points=points[:-1]
+            farthest=int(np.argmax(np.linalg.norm(points-points[0],axis=1)))
+            kept={0,farthest}|{i for i,p in enumerate(points) if tuple(p) in locked}
+            values=points[sorted(kept)].tolist()
+            if len(values)<2:return None
+            outlines.append(values+[values[0]])
+    result=dict(feature,geometry=dict(type='MultiLineString',coordinates=outlines))
+    reports.append(dict(sourceId=feature['properties']['_source_id'],
+        sourceLayer=feature['properties']['_source_layer'],reason='parent polygon replaced by bounded source outline',
+        substitution='parentOutline',sourceGeometry=geometry['type'],
+        geometryErrorMetres=error,toleranceMetres=tolerance,retainedSharedVertices=len(locked)))
+    return result,error
+
+
+def simplify_feature(feature, tolerance, locked, reports, parent_repair=False):
+    import copy
+    result = copy.deepcopy(feature)
+    geometry = result['geometry']
+    kind, c = geometry['type'], geometry['coordinates']
+    error = 0.0
+    if kind in ('Point','MultiPoint'):
+        return result, error  # semantic point features are never silently thinned
+    if kind == 'LineString':
+        geometry['coordinates'], error = simplify_path(c, tolerance, locked)
+    elif kind == 'MultiLineString':
+        parts = [simplify_path(p, tolerance, locked) for p in c]
+        geometry['coordinates'] = [p for p,e in parts]
+        error = max(e for p,e in parts)
+    else:
+        parts = [c] if kind == 'Polygon' else c
+        values = []
+        for rings in parts:
+            value, part_error, reason = simplify_polygon(rings, tolerance, locked)
+            values.append(value)
+            error = max(error, part_error)
+            if reason:
+                reports.append(dict(sourceId=feature['properties']['_source_id'], reason=reason))
+        geometry['coordinates'] = values[0] if kind == 'Polygon' else values
+        if parent_repair and not feature.get('_surface_fragment') and (geometry==feature['geometry'] or
+                any(r.get('reason') in ('invalid source topology retained for existing repair policy',
+                'simplification would change polygon topology') for r in reports)):
+            substituted=parent_outline(feature,tolerance,locked,reports)
+            if substituted is not None:return substituted
+    return result, error
+
+
+def union_bounds(boxes):
+    lows = [np.asarray(v[:3])-np.asarray([v[3],v[7],v[11]]) for v in boxes]
+    highs = [np.asarray(v[:3])+np.asarray([v[3],v[7],v[11]]) for v in boxes]
+    lo, hi = np.min(lows,axis=0), np.max(highs,axis=0)
+    m, h = (lo+hi)/2, (hi-lo)/2
+    return dict(box=[*m, h[0],0,0,0,h[1],0,0,0,h[2]])
+
+
 def run(args):
-    doc = json.loads(pathlib.Path(args.input).read_text())
-    crs = (doc.get('crs') or {}).get('properties',{}).get('name','')
-    if doc.get('type') != 'FeatureCollection' or crs not in ('','urn:ogc:def:crs:OGC:1.3:CRS84','urn:ogc:def:crs:EPSG::4979','urn:ogc:def:crs:EPSG::4326'):
-        raise ValueError('input must be a WGS84 longitude/latitude[/height] FeatureCollection')
-    features = doc['features']
-    if not features:
-        raise ValueError('empty feature collection')
-    points = []
-    for i, f in enumerate(features):
-        p = coordinates(f['geometry'])
-        if not p:
-            raise ValueError('empty geometry')
-        points.extend(p)
-        f['properties'] = dict(f.get('properties') or {})
-        if '_source_id' in f['properties']:
-            raise ValueError('_source_id is reserved for stable feature identity')
-        f['properties']['_source_id'] = json.dumps(f.get('id', i), separators=(',', ':'))
-        f['_center'] = np.mean(p, axis=0)
-    origin = np.mean(points, axis=0)
-    lon, lat = np.radians(origin[:2])
-    east = [-math.sin(lon), math.cos(lon), 0]
-    north = [-math.sin(lat)*math.cos(lon), -math.sin(lat)*math.sin(lon), math.cos(lat)]
-    up = [math.cos(lat)*math.cos(lon), math.cos(lat)*math.sin(lon), math.sin(lat)]
-    basis = np.array([east, north, up])
-    anchor = ecef([origin])[0]
-    def project(c):
-        c = [list(p) if len(p) == 3 else [*p, 0] for p in c]
-        return ((ecef(c)-anchor) @ basis.T)[:, [0, 2, 1]] * [1, 1, -1]
-    # Partition in metre coordinates, never mix angular degrees with height.
-    for feature in features:
-        feature['_center'] = project([feature['_center']])[0]
-    output = pathlib.Path(args.output)
-    output.mkdir(exist_ok=True)
-    (output/'t').mkdir()
-    counter = 0
-    reports = []
-    def build(items):
-        nonlocal counter
-        if len(items) <= args.max_features:
-            uri = f't/{counter}.glb'
-            counter += 1
-            bounds = emit(items, output/uri, project, getattr(args, 'repair', False), reports, getattr(args, 'ambiguous_outlines', False))
-            return dict(boundingVolume=bounds, geometricError=0, content=dict(uri=uri,
-                extensions={'3DTILES_content_gltf_vector':dict(vector=True)}))
-        centers = np.asarray([f['_center'] for f in items])
-        axis = np.ptp(centers, axis=0).argmax()
-        items = sorted(items, key=lambda f:f['_center'][axis])
-        children = [build(items[:len(items)//2]), build(items[len(items)//2:])]
-        b = [c['boundingVolume']['box'] for c in children]
-        lows = [np.asarray(v[:3])-np.asarray([v[3], v[7], v[11]]) for v in b]
-        highs = [np.asarray(v[:3])+np.asarray([v[3], v[7], v[11]]) for v in b]
-        lo, hi = np.min(lows, axis=0), np.max(highs, axis=0)
-        m, h = (lo+hi)/2, (hi-lo)/2
-        return dict(boundingVolume=dict(box=[*m, h[0], 0, 0, 0, h[1], 0, 0, 0, h[2]]), geometricError=float(np.linalg.norm(hi-lo)), refine='REPLACE', children=children)
-    root = build(features)
-    root['transform'] = [*east, 0, *north, 0, *up, 0, *anchor, 1]
-    result = dict(asset=dict(version='1.1'), extensionsUsed=['3DTILES_content_gltf_vector'],
-        geometricError=root['geometricError'], root=root)
-    (output/'tileset.json').write_text(json.dumps(result, indent=2, allow_nan=False))
-    (output/'conversion.json').write_text(json.dumps(dict(features=len(features),leafTiles=counter,repairEnabled=getattr(args,'repair',False),polygons=reports),indent=2))
-    print(f'vector: {len(features)} features, {counter} leaf tiles, {sum(r["topologyRepaired"] for r in reports)} topology repairs')
+    import sys
+    import types
+    if '__file__' in globals():
+        sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+    import hashlib
+    import vector_pipeline
+    import vector_reuse
+    import vector_source
+    import vector_parallel
+    sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
+    for module in (vector_source,vector_reuse,vector_pipeline,vector_parallel):
+        sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
+    helper=getattr(args,'meshopt_helper',None)
+    if helper:
+        digest=hashlib.sha256()
+        with open(helper,'rb') as executable:
+            for chunk in iter(lambda:executable.read(65536),b''):digest.update(chunk)
+        sources.append(digest.hexdigest())
+    encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder,sources=dict(zip(('vector','vector_source','vector_reuse','vector_pipeline','vector_parallel'),sources[:5]))))
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('input')
     p.add_argument('output')
+    p.add_argument('--lod-tolerance', type=float, default=.1)
+    p.add_argument('--lod-levels', type=int, default=3)
+    p.add_argument('--reproducible',action='store_true')
+    p.add_argument('--jobs',type=int,default=len(__import__('os').sched_getaffinity(0)) if hasattr(__import__('os'),'sched_getaffinity') else __import__('os').cpu_count() or 1)
     p.add_argument('--max-features', type=int, default=64)
+    p.add_argument('--max-parent-features', type=int, default=4096)
+    p.add_argument('--layer', dest='layers', action='append', default=[])
+    p.add_argument('--all-layers', action='store_true')
+    p.add_argument('--reuse-tileset')
+    p.add_argument('--source-crs')
+    p.add_argument('--height-offset', type=float)
+    p.add_argument('--max-vertices', type=int, default=65536)
+    p.add_argument('--max-bytes', type=int, default=4194304)
+    p.add_argument('--max-tiles', type=int, default=100000)
+    p.add_argument('--max-source-vertices', type=int, default=1000000)
+    p.add_argument('--where')
+    p.add_argument('--list-fields', choices=['error','json'], default='error')
+    p.add_argument('--field', dest='fields', action='append', default=[])
+    p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])
+    p.add_argument('--skip-invalid', action='store_true')
+    p.add_argument('--quantize', action='store_true')
+    p.add_argument('--meshopt-helper')
+    p.add_argument('--parent-repair', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
     a = p.parse_args()
