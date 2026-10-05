@@ -65,7 +65,8 @@ class Reuse:
             maxBytes=getattr(args,'max_bytes',4194304),lodTolerance=getattr(args,'lod_tolerance',.1),
             lodLevels=getattr(args,'lod_levels',3),skipInvalid=getattr(args,'skip_invalid',False),repair=getattr(args,'repair',False),
             ambiguousOutlines=getattr(args,'ambiguous_outlines',False),sourceCrs=getattr(args,'source_crs',None),
-            heightOffset=getattr(args,'height_offset',None))
+            heightOffset=getattr(args,'height_offset',None),listFields=getattr(args,'list_fields','error'),
+            fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or [])
         if self.previous and self.old.get('config')!=self.config:
             raise ValueError('previous encoder, schema, CRS or conversion settings differ; run a fresh conversion without reuseTileset')
         self.configuration_hash=digest(self.config)

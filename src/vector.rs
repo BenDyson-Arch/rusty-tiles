@@ -40,6 +40,9 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub list_fields: String,
+    pub fields: Vec<String>,
+    pub drop_fields: Vec<String>,
     pub skip_invalid: bool,
     pub lod: VectorLodOptions,
     pub reuse_tileset: Option<std::path::PathBuf>,
@@ -56,6 +59,9 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            list_fields: "error".into(),
+            fields: Vec::new(),
+            drop_fields: Vec::new(),
             skip_invalid: false,
             lod: VectorLodOptions::default(),
             reuse_tileset: None,
@@ -119,6 +125,13 @@ pub fn vector_to_3tz_with_options(
     options: &VectorOptions,
 ) -> Result<(), Error> {
     let lod = &options.lod;
+    if !matches!(options.list_fields.as_str(), "error" | "json")
+        || (!options.fields.is_empty() && !options.drop_fields.is_empty())
+    {
+        return Err(Error::msg(
+            "invalid vector field selection or listFields setting",
+        ));
+    }
     if options.max_vertices < 4
         || options.max_bytes < 4096
         || options.max_tiles == 0
@@ -206,6 +219,13 @@ pub fn vector_to_3tz_with_options(
     }
     if let Some(offset) = options.height_offset {
         command.arg("--height-offset").arg(offset.to_string());
+    }
+    command.arg("--list-fields").arg(&options.list_fields);
+    for field in &options.fields {
+        command.arg("--field").arg(field);
+    }
+    for field in &options.drop_fields {
+        command.arg("--drop-field").arg(field);
     }
     if options.skip_invalid {
         command.arg("--skip-invalid");
