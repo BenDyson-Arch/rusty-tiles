@@ -106,6 +106,40 @@ index functions fail this regression instead of being skipped.
 No upstream source or database fixtures are bundled; CI's core replacement tests
 run without external diff binaries.
 
+## Check and reproduce the Python environment
+
+Run `rusty-tiles doctor` before starting a job, or select converters explicitly:
+
+```sh
+rusty-tiles doctor --command vector --command terrain
+rusty-tiles doctor --command point-cloud --json
+```
+
+The check inventories the actual Python interpreter, module versions/locations,
+GEOS triangulation, PROJ database availability/data directories/local grids, and
+readiness for each converter. It exits unsuccessfully if a selected converter is
+missing a required capability. Native mesh/packing commands can be checked without
+Python. It does not install dependencies or fetch grids; an inventory is not proof
+that every requested CRS/height operation is supported.
+
+Known-good, exact Python profiles tested on 2026-10-05 are in
+`scripts/gdal-requirements.txt` (vector/raster/terrain) and
+`scripts/point-cloud-requirements.txt` (LAS/LAZ). Both require Python 3.12 or newer.
+The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
+build supporting constrained triangulation; a pip binding cannot replace those
+system libraries. Install a profile into a suitable environment explicitly:
+
+```sh
+python3 -m pip install -r scripts/gdal-requirements.txt
+python3 -m pip install -r scripts/point-cloud-requirements.txt
+rusty-tiles doctor --json
+```
+
+These are reproducible reference profiles, not the only supported environments.
+CI also checks the conda-forge GDAL 3.12 stack. PROJ grids and their licences remain
+separate from Python requirements; use the grid inventory and conversion's precise
+operation check when selecting a height reference.
+
 ## Python conversion diagnostics
 
 Data/conversion errors print concise messages; dependency installation guidance
@@ -123,3 +157,92 @@ swap it with a private backup of the old output; publication failure restores th
 backup. This directory swap has a brief rename gap. If restoration itself fails,
 the diagnostic names the retained backup rather than deleting it. A conversion
 failure before publication leaves the original file/directory untouched.
+
+### Calling the CLI from another program
+
+Pass the global `--json` flag before or after the command to receive exactly one
+JSON result on stdout. Human diagnostics remain on stderr. Successful conversion
+results include `ok`, `output`, numeric `counts`, `skippedFeatures`, `reuse`, and
+`conversionReport` (a directory path or an archive/entry pair). Converters without
+a conversion report return empty counts and null report fields. `doctor --json`
+returns the dependency inventory with `ok`; failures retain that inventory.
+
+Failures include `error.code`, `error.message` and `exitCode`. Stable exit codes
+are 0 (success), 1 (I/O or subprocess failure), 2 (usage), 3 (input/data), 4
+(environment: Python, dependencies or unavailable strict CRS operation), and 5
+(existing output without `--force`). Help and version requests exit successfully
+with their ordinary text. Programs should inspect the code rather than parse the
+message. An unexpected subprocess termination is a data failure unless the
+subprocess supplied a more specific category.
+
+`--progress json` writes newline-delimited JSON events to stderr: `event`, `phase`,
+`done`, `total`. Unknown totals are null. Every converter emits conversion start
+and completion; vector ingestion and encoding also emit intermediate phase events.
+Other stderr lines remain human diagnostics: consume only JSON lines with
+`event: "progress"` or `event: "failed"`. Completion is emitted only after output
+publication succeeds. This reports work units, not an estimated time remaining.
+
+### Validating a published archive
+
+Run `rusty-tiles validate out.3tz` (or add `--json` for CI). Validation is read-only:
+ZIP CRCs and the complete 3TZ index are checked, then the bundled upstream tileset
+schema, child bounds, non-increasing geometric error, local content/resource
+references, hash-named payload checksums, build-state checksum, unused entries,
+and recorded encoded-byte/vertex/point/tile budgets. Equal geometric errors are
+allowed for routing nodes and parents whose child error is the larger bound.
+
+The built-in path covers explicit, self-contained archives containing GLB, glTF,
+b3dm and external tileset JSON. Boxes and spheres use relative tile transforms;
+region-to-region containment handles antimeridian crossing. Mixed region/Cartesian
+bounds, implicit tiling, remote/percent-encoded URIs and other content formats are
+reported as unsupported rather than silently certified. Sphere containment under
+nonuniform transforms uses a conservative scale bound. This is a publication
+check, not a replacement for content-extension validation in the official tool.
+
+To additionally run a locally installed
+[official validator](https://github.com/CesiumGS/3d-tiles-validator), use
+`--external-validator /path/to/node_modules/.bin/3d-tiles-validator`.
+The command passes `--tilesetFile` and a temporary `--reportFile`, preserves tool
+logs on stderr, and rejects reported errors even if the tool exits successfully.
+It never downloads or installs a validator, extracts archive entries, or modifies
+input. The external check runs after the built-in checks pass; unsupported built-in
+cases must be checked directly with the official tool.
+
+The schema bundle comes from Cesium GS's 3D Tiles specification at commit
+`4d781014b52294759834018a931223b98ac1ce47`. Relative schema references were rewritten
+to local `$defs`; source descriptions and requirements are retained. Attribution
+and the upstream CC BY 4.0 notice are in `docs/schema/LICENSE.adoc`; schema loading
+performs no network or filesystem reference resolution.
+
+Validation also exposed two producer fixes: parent boxes now contain child minimum
+thickness/rounding, and vector/point-cloud feature attributes use padded uint16
+(or exact float32 for larger tables), with valid metadata schema identifiers.
+The official 0.6.1 validator passes the standard mesh and uncompressed vector
+fixtures with zero errors; it still warns about the draft vector extension it
+does not implement. Runtime verification remains necessary for those extensions.
+
+### Reproducible builds
+
+For byte-identical vector archives, add `vector --reproducible`. This omits the
+entire diagnostic `conversion.json.performance` section (timings and worker
+utilization). With the same input, conversion options, encoder binary and
+GDAL/GEOS/NumPy/codec dependencies, repeated conversions produce the same archive
+bytes. Worker count can change without changing those bytes. Point-cloud and
+plain archive packing have no timing section and are reproducible by default.
+Source filesystem timestamps and the caller's archive-member order do not affect
+packing: `tileset.json` is first, remaining names are sorted, the index is last,
+and all members have fixed 1980-01-01 timestamps and 0644 permissions.
+
+Without `--reproducible`, vector payloads, manifests, build state, geometry reports
+and the conversion report excluding `performance` remain identical. Only that
+section is volatile; its length/CRC also changes the ZIP container's offsets,
+central-directory records and 3TZ index. Excluding those container records is
+necessary when comparing ordinary diagnostic archives. Do not compare their raw
+archive hashes for reproducibility.
+
+The guarantee does not equate a fresh build with a reuse build: ingestion history,
+reuse statistics and which geometry reports were produced differ. Different source
+paths/layer identities, dependency versions, options or externally generated input
+bytes can also change output. Mesh texture conversion depends on the selected
+external codec/build; byte equality here is exercised for vector, point-cloud and
+plain packing rather than promised across all external texture encoders.

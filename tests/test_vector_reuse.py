@@ -68,7 +68,7 @@ class ReuseTests(unittest.TestCase):
         gpkg(p,[('roads',3857,features)],spatial_index=spatial_index);return p
 
     def args(self,p,out,previous=None,**kwargs):
-        return types.SimpleNamespace(input=str(p),output=str(out),source_crs='local',max_features=1,
+        return types.SimpleNamespace(input=str(p),output=str(out),source_crs='local',max_features=1,max_parent_features=1,
             max_vertices=128,max_bytes=16384,lod_tolerance=.2,lod_levels=3,reuse_tileset=str(previous) if previous else None,**kwargs)
 
     def assert_same_details(self,a,b):

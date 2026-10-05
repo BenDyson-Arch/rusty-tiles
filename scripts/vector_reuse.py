@@ -67,9 +67,9 @@ class Reuse:
     def configure(self,args,reader):
         self.config=dict(encoder=self.encoder,gdal=gdal.VersionInfo(),numpy=np.__version__,driver=reader.driver,
             schemas=reader.schemas,layers=[{k:v for k,v in layer.items() if k not in ('features','invalidFeatures','featuresWithoutGeometry')} for layer in reader.layer_reports],
-            maxFeatures=args.max_features,maxVertices=getattr(args,'max_vertices',65536),
+            quantize=getattr(args,'quantize',False),meshopt=bool(getattr(args,'meshopt_helper',None)),maxFeatures=args.max_features,maxParentFeatures=getattr(args,'max_parent_features',4096),maxVertices=getattr(args,'max_vertices',65536),
             maxBytes=getattr(args,'max_bytes',4194304),lodTolerance=getattr(args,'lod_tolerance',.1),
-            lodLevels=getattr(args,'lod_levels',3),skipInvalid=getattr(args,'skip_invalid',False),repair=getattr(args,'repair',False),
+            lodLevels=getattr(args,'lod_levels',3),parentRepair=getattr(args,'parent_repair',False),skipInvalid=getattr(args,'skip_invalid',False),repair=getattr(args,'repair',False),
             ambiguousOutlines=getattr(args,'ambiguous_outlines',False),sourceCrs=getattr(args,'source_crs',None),
             where=getattr(args,'where',None),heightOffset=getattr(args,'height_offset',None),listFields=getattr(args,'list_fields','error'),
             fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or [])
