@@ -60,7 +60,7 @@ class Reuse:
 
     def configure(self,args,reader):
         self.config=dict(encoder=self.encoder,gdal=gdal.VersionInfo(),numpy=np.__version__,driver=reader.driver,
-            schemas=reader.schemas,layers=[{k:v for k,v in layer.items() if k not in ('features','invalidFeatures')} for layer in reader.layer_reports],
+            schemas=reader.schemas,layers=[{k:v for k,v in layer.items() if k not in ('features','invalidFeatures','featuresWithoutGeometry')} for layer in reader.layer_reports],
             maxFeatures=args.max_features,maxVertices=getattr(args,'max_vertices',65536),
             maxBytes=getattr(args,'max_bytes',4194304),lodTolerance=getattr(args,'lod_tolerance',.1),
             lodLevels=getattr(args,'lod_levels',3),skipInvalid=getattr(args,'skip_invalid',False),repair=getattr(args,'repair',False),

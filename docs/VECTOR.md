@@ -211,3 +211,13 @@ missing values remain metadata NoData. Per-layer `jsonFields` and the top-level
 `metadata` section in `conversion.json` record the representation and selection.
 Other complex property values still fail unless excluded. Field/list settings
 participate in prior-tileset compatibility checks.
+
+## Records without geometry
+
+NULL and empty geometries are omitted automatically: they have nothing to draw.
+They are distinct from invalid drawable geometry and do not need `--skipInvalid`.
+`featuresWithoutGeometry` counts them globally and per layer, and the full report
+stream records each source identity with outcome `no-geometry`. Drawable feature
+counts and tile metadata exclude these records. A selection consisting entirely
+of geometry-free records publishes a valid empty tileset with its counts and
+reports. Reuse can remove formerly drawable features that become geometry-free.
