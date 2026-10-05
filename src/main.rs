@@ -116,6 +116,9 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// OGR attribute filter applied to every selected layer
+    #[arg(long = "where")]
+    where_clause: Option<String>,
     /// Replace an existing output after successful conversion
     #[arg(short = 'f', long)]
     force: bool,
@@ -264,6 +267,7 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                where_clause: a.where_clause,
                 force: a.force,
                 list_fields: a.list_fields,
                 fields: a.fields,

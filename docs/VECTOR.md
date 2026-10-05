@@ -233,3 +233,15 @@ no fill is fabricated. Ambiguous 3D intersections use the same explicit fallback
 Normalization happens before budgeting, so large outlines use line fragmentation
 without dropping source segments. A MultiPolygon requiring this fallback retains
 all its rings as outlines. Without the flag, collapse remains a reported failure.
+
+## Attribute filtering
+
+`--where "category = 'public'"` applies an OGR attribute filter to every selected
+layer, before feature reading/validation. The expression must be valid in each
+selected layer; invalid filters fail before publication. Filtered-out features
+are absent from geometry, metadata and feature counts. Filters may use source
+fields excluded from tile metadata. `attributeFilter` records the expression in
+conversion and layer reports, and the build configuration includes it. Reusing
+with the same filter retains unchanged content; a changed filter triggers a
+fresh rebuild with `reuse.incompatibleReason: attribute filter changed` and no
+reused contents. A filter matching no records publishes an empty tileset.

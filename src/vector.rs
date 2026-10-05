@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub where_clause: Option<String>,
     pub force: bool,
     pub list_fields: String,
     pub fields: Vec<String>,
@@ -60,6 +61,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            where_clause: None,
             force: false,
             list_fields: "error".into(),
             fields: Vec::new(),
@@ -127,6 +129,13 @@ pub fn vector_to_3tz_with_options(
     options: &VectorOptions,
 ) -> Result<(), Error> {
     let lod = &options.lod;
+    if options
+        .where_clause
+        .as_ref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(Error::msg("where filter must not be empty"));
+    }
     if !matches!(options.list_fields.as_str(), "error" | "json")
         || (!options.fields.is_empty() && !options.drop_fields.is_empty())
     {
@@ -225,6 +234,9 @@ pub fn vector_to_3tz_with_options(
     }
     if let Some(offset) = options.height_offset {
         command.arg("--height-offset").arg(offset.to_string());
+    }
+    if let Some(expression) = &options.where_clause {
+        command.arg("--where").arg(expression);
     }
     command.arg("--list-fields").arg(&options.list_fields);
     for field in &options.fields {

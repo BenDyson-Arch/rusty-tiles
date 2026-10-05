@@ -154,7 +154,7 @@ def run(args, writer):
         db.commit()
         counters['featuresWithoutGeometry']=reader.features_without_geometry
         if not counters['features'] and not reuse.previous:
-            if not reader.features_without_geometry:raise ValueError('empty selected layers')
+            if not reader.features_without_geometry and getattr(args,'where',None) is None:raise ValueError('empty selected layers')
             reader.anchor=np.zeros(3);reader.frame=np.eye(3)
         reuse.configure(args,reader)
         counters['fragments']=db.execute('SELECT COUNT(*) FROM features').fetchone()[0]
@@ -346,7 +346,7 @@ def run(args, writer):
         db.close()
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
-        metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
+        attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
         skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',

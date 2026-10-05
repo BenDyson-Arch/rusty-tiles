@@ -90,6 +90,15 @@ class Reader:
         self.layers = [layer for layer in spatial if not requested or layer.GetName() in requested]
         if not self.layers:
             raise ValueError('input has no selected spatial layers')
+        self.where=getattr(args,'where',None)
+        if self.where is not None:
+            if not self.where.strip():raise ValueError('where filter must not be empty')
+            for layer in self.layers:
+                try:
+                    layer.SetAttributeFilter(self.where)
+                    layer.GetFeatureCount()  # force lazy drivers to validate the expression
+                except RuntimeError as error:
+                    raise ValueError(f'invalid attribute filter for layer {layer.GetName()!r}: {error}') from error
         self.fields=set(getattr(args,'fields',[]) or [])
         self.drop_fields=set(getattr(args,'drop_fields',[]) or [])
         self.list_fields=getattr(args,'list_fields','error')
@@ -255,7 +264,7 @@ class Reader:
                     if self.on_feature_error is None:
                         raise ValueError(prefix+str(error)) from error
                     self.on_feature_error(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),reason=str(error)))
-            self.layer_reports.append(dict(name=name,features=count,featuresWithoutGeometry=without_geometry,jsonFields=sorted(json_fields),sourceCrs=None if self.local else source.ExportToWkt(),
+            self.layer_reports.append(dict(name=name,features=count,attributeFilter=self.where,featuresWithoutGeometry=without_geometry,jsonFields=sorted(json_fields),sourceCrs=None if self.local else source.ExportToWkt(),
                 heightMode='local metres' if self.local else 'declared CRS' if native_height else 'explicit offset' if getattr(self.args,'height_offset',None) is not None else '2D ellipsoid zero' if self.driver != 'GeoJSON' else 'GeoJSON ellipsoidal metres',
                 heightOffset=getattr(self.args,'height_offset',None)))
         self.schemas.update(_source_id='string',_source_layer='string')
