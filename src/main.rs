@@ -174,6 +174,16 @@ fn run() -> Result<(), Error> {
             let opts = tileset_opts(&a)?;
             create_tileset_json(&a.input, &a.output, &opts)?;
         }
+        Command::PointCloud(a) => rusty_tiles::point_cloud::point_cloud_to_3tz(
+            &a.input,
+            &a.output,
+            &rusty_tiles::point_cloud::PointCloudOptions {
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_points: a.max_points,
+                chunk_points: a.chunk_points,
+            },
+        )?,
         Command::Convert(a) => {
             convert_to_3tz(&a.input, &a.output, &PackOptions { force: a.force })?;
         }
@@ -185,16 +195,6 @@ fn run() -> Result<(), Error> {
             let opts = mesh_opts(&a)?;
             mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
         }
-        Command::PointCloud(a) => rusty_tiles::point_cloud::point_cloud_to_3tz(
-            &a.input,
-            &a.output,
-            &rusty_tiles::point_cloud::PointCloudOptions {
-                source_crs: a.source_crs,
-                height_offset: a.height_offset,
-                max_points: a.max_points,
-                chunk_points: a.chunk_points,
-            },
-        )?,
         Command::Vector(a) => vector::vector_to_3tz_with_lod(
             &a.input,
             &a.output,
