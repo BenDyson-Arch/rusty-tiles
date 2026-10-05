@@ -44,3 +44,5 @@ pub mod raster;
 pub mod vector_encoding;
 
 pub mod doctor;
+
+pub mod validate;

@@ -71,8 +71,12 @@ class Glb:
 
     def accessor(self, values, dtype, kind):
         values = np.asarray(values, dtype=dtype)
-        view = self.view(values.tobytes())
-        a = dict(bufferView=view, componentType=5126 if dtype == '<f4' else 5125, count=len(values), type=kind)
+        if dtype == '<u2' and kind == 'SCALAR':
+            padded=np.zeros((len(values),2),dtype='<u2');padded[:,0]=values
+            view=self.view(padded.tobytes())
+            self.doc['bufferViews'][view]['byteStride']=4
+        else:view = self.view(values.tobytes())
+        a = dict(bufferView=view, componentType={'<f4':5126,'<u4':5125,'<u2':5123}[dtype], count=len(values), type=kind)
         if kind == 'VEC3':
             a.update(min=values.min(axis=0).tolist(), max=values.max(axis=0).tolist())
         i = len(self.doc['accessors'])
@@ -318,9 +322,11 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
             raise ValueError(f'unsupported/null/mixed property {key!r}; retain source and normalize explicitly')
         if missing:
             schema[key]['noData'] = sentinel
-    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty-tiles-vector', classes={'feature':dict(properties=schema)}),
+    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty_tiles_vector', classes={'feature':dict(properties=schema)}),
         propertyTables=[dict(name='features', **{'class':'feature'}, count=len(items), properties=columns)])}
     all_positions = []
+    if len(items)>16777217:raise ValueError('too many exact feature IDs in one tile')
+    feature_id_dtype='<u2' if len(items)<=65536 else '<f4'
     for fid, feature in enumerate(items):
         parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
@@ -355,7 +361,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 if len(points) < (1 if mode == 0 else 2):
                     raise ValueError('empty/degenerate feature')
             primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(points, '<f4', 'VEC3'),
-                _FEATURE_ID_0=glb.accessor([fid]*len(points), '<u4', 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
+                _FEATURE_ID_0=glb.accessor([fid]*len(points), feature_id_dtype, 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
             glb.doc['meshes'][0]['primitives'].append(primitive)
             all_positions.extend(points)
     if fill_only:

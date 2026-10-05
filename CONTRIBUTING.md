@@ -181,3 +181,42 @@ and completion; vector ingestion and encoding also emit intermediate phase event
 Other stderr lines remain human diagnostics: consume only JSON lines with
 `event: "progress"` or `event: "failed"`. Completion is emitted only after output
 publication succeeds. This reports work units, not an estimated time remaining.
+
+### Validating a published archive
+
+Run `rusty-tiles validate out.3tz` (or add `--json` for CI). Validation is read-only:
+ZIP CRCs and the complete 3TZ index are checked, then the bundled upstream tileset
+schema, child bounds, non-increasing geometric error, local content/resource
+references, hash-named payload checksums, build-state checksum, unused entries,
+and recorded encoded-byte/vertex/point/tile budgets. Equal geometric errors are
+allowed for routing nodes and parents whose child error is the larger bound.
+
+The built-in path covers explicit, self-contained archives containing GLB, glTF,
+b3dm and external tileset JSON. Boxes and spheres use relative tile transforms;
+region-to-region containment handles antimeridian crossing. Mixed region/Cartesian
+bounds, implicit tiling, remote/percent-encoded URIs and other content formats are
+reported as unsupported rather than silently certified. Sphere containment under
+nonuniform transforms uses a conservative scale bound. This is a publication
+check, not a replacement for content-extension validation in the official tool.
+
+To additionally run a locally installed
+[official validator](https://github.com/CesiumGS/3d-tiles-validator), use
+`--external-validator /path/to/node_modules/.bin/3d-tiles-validator`.
+The command passes `--tilesetFile` and a temporary `--reportFile`, preserves tool
+logs on stderr, and rejects reported errors even if the tool exits successfully.
+It never downloads or installs a validator, extracts archive entries, or modifies
+input. The external check runs after the built-in checks pass; unsupported built-in
+cases must be checked directly with the official tool.
+
+The schema bundle comes from Cesium GS's 3D Tiles specification at commit
+`4d781014b52294759834018a931223b98ac1ce47`. Relative schema references were rewritten
+to local `$defs`; source descriptions and requirements are retained. Attribution
+and the upstream CC BY 4.0 notice are in `docs/schema/LICENSE.adoc`; schema loading
+performs no network or filesystem reference resolution.
+
+Validation also exposed two producer fixes: parent boxes now contain child minimum
+thickness/rounding, and vector/point-cloud feature attributes use padded uint16
+(or exact float32 for larger tables), with valid metadata schema identifiers.
+The official 0.6.1 validator passes the standard mesh and uncompressed vector
+fixtures with zero errors; it still warns about the draft vector extension it
+does not implement. Runtime verification remains necessary for those extensions.

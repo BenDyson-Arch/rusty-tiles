@@ -236,6 +236,11 @@ def run(args, writer):
                 delta=child['_center']-zcenter
                 child['transform']=[1,0,0,0,0,1,0,0,0,0,1,0,*delta.tolist(),1]
             half+=rounding
+            # Minimum thickness and child rounding can extend beyond source bounds.
+            for child in children:
+                box=child['boundingVolume']['box']
+                child_half=np.array([box[3],box[7],box[11]])
+                half=np.maximum(half,np.abs(child['_center']-zcenter)+child_half)
             node.update(boundingVolume=dict(box=[0,0,0,half[0],0,0,0,half[1],0,0,0,half[2]]),refine='REPLACE',
                         _center=zcenter,_padding=rounding)
             if children:

@@ -32,6 +32,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Check a self-contained, explicit 3TZ archive before publishing
+    Validate {
+        input: PathBuf,
+        /// Run a locally installed official 3d-tiles-validator executable
+        #[arg(long)]
+        external_validator: Option<PathBuf>,
+    },
     /// Check installed Python modules, native capabilities and local PROJ grids
     Doctor(DoctorArgs),
     #[command(hide = true)]
@@ -375,6 +382,21 @@ fn output_summary(output: Option<&std::path::Path>) -> serde_json::Value {
 fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
     let json = cli.json;
     match cli.command {
+        Command::Validate {
+            input,
+            external_validator,
+        } => {
+            let report = rusty_tiles::validate::archive(&input, external_validator.as_deref())?;
+            if !json {
+                println!(
+                    "Validated {}: {} tiles, {} content references",
+                    input.display(),
+                    report["tiles"],
+                    report["contentReferences"]
+                );
+            }
+            return Ok(Some(report));
+        }
         Command::Doctor(a) => {
             let report = rusty_tiles::doctor::report(&a.commands)?;
             if json {
