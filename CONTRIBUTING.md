@@ -105,3 +105,11 @@ are compared with the fresh GDAL source. Older Go versions that lack the spatial
 index functions fail this regression instead of being skipped.
 No upstream source or database fixtures are bundled; CI's core replacement tests
 run without external diff binaries.
+
+## Python conversion diagnostics
+
+Data/conversion errors print concise messages; dependency installation guidance
+appears only when an actual Python import fails. Set
+`RUSTY_TILES_PYTHON_TRACEBACK=1` to include a traceback for debugging. Embedded
+modules use named synthetic filenames so tracebacks never inline the helper
+source. Failed conversions still publish nothing.

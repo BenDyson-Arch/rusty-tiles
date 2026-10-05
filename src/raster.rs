@@ -52,7 +52,11 @@ pub fn raster_with_options(
     let work = tempfile::tempdir_in(parent)?;
     let mut cmd = Command::new("python3");
     cmd.arg("-c")
-        .arg(include_str!("../scripts/raster.py"))
+        .arg(crate::python::script(
+            include_str!("../scripts/raster.py"),
+            "raster",
+            "Python GDAL and NumPy",
+        )?)
         .arg(input)
         .arg(work.path())
         .arg("--min-zoom")
@@ -71,9 +75,7 @@ pub fn raster_with_options(
     if let Some(v) = options.display_max {
         cmd.arg("--display-max").arg(v.to_string());
     }
-    if !cmd.status()?.success() {
-        return Err(Error::msg("Raster conversion failed; Python GDAL and an explicit display recipe are required. No output published."));
-    }
+    crate::python::run(&mut cmd, "raster")?;
     if output.exists() {
         return Err(Error::OutputExists(output.into()));
     }

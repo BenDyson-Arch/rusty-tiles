@@ -177,18 +177,22 @@ pub fn vector_to_3tz_with_options(
         ),
     ] {
         script.push_str(&format!(
-            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={};exec(m.__source__,m.__dict__)\n",
+            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={}\nexec(compile(m.__source__, '<rusty-tiles/{name}.py>', 'exec'),m.__dict__)\n",
             serde_json::to_string(source)?
         ));
     }
     script.push_str(&format!(
-        "__source__={};exec(__source__,globals())",
+        "__source__={}\nexec(compile(__source__, '<rusty-tiles/vector.py>', 'exec'),globals())",
         serde_json::to_string(include_str!("../scripts/vector.py"))?
     ));
     let mut command = std::process::Command::new("python3");
     command
         .arg("-c")
-        .arg(script)
+        .arg(crate::python::script(
+            &script,
+            "vector",
+            "Python GDAL/GEOS and NumPy",
+        )?)
         .arg(input)
         .arg(work.path())
         .arg("--max-features")
@@ -236,10 +240,7 @@ pub fn vector_to_3tz_with_options(
     if ambiguous_outlines {
         command.arg("--ambiguous-outlines");
     }
-    let status = command.status()?;
-    if !status.success() {
-        return Err(Error::msg("glTF vector prototype failed; Python GDAL/GEOS and NumPy are required. No archive published."));
-    }
+    crate::python::run(&mut command, "vector")?;
     crate::pack::convert_to_3tz(work.path(), output, &crate::pack::PackOptions::default())
 }
 

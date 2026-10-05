@@ -36,7 +36,11 @@ pub fn point_cloud_to_3tz(
     let mut command = std::process::Command::new("python3");
     command
         .arg("-c")
-        .arg(include_str!("../scripts/point_cloud.py"))
+        .arg(crate::python::script(
+            include_str!("../scripts/point_cloud.py"),
+            "point-cloud",
+            "NumPy, laspy[lazrs] and pyproj",
+        )?)
         .arg(input)
         .arg(&staging)
         .arg("--source-crs")
@@ -48,9 +52,7 @@ pub fn point_cloud_to_3tz(
     if let Some(height) = options.height_offset {
         command.arg("--height-offset").arg(height.to_string());
     }
-    if !command.status()?.success() {
-        return Err(Error::msg("point-cloud conversion failed; Python NumPy, laspy[lazrs] and pyproj are required. No archive published."));
-    }
+    crate::python::run(&mut command, "point-cloud")?;
     crate::pack::convert_to_3tz(&staging, output, &crate::pack::PackOptions::default())
 }
 
