@@ -14,7 +14,7 @@ from unittest import mock
 import numpy as np
 from osgeo import ogr
 from test_vector_gpkg import gpkg
-from test_vector_lod import vector, read
+from test_vector_lod import vector, read, parts
 
 
 def archive(directory,path):
@@ -37,7 +37,7 @@ def details(path):
         m=np.array(node.get('transform',np.eye(4).T.flatten())).reshape(4,4).T;world=parent@m
         if not node.get('children'):
             for content in node.get('contents',[node['content']] if 'content' in node else []):
-                file=pathlib.Path(path)/content['uri'];doc,positions,ids=read(file)
+                file=pathlib.Path(path)/content['uri'];doc,_,ids=read(file)
                 data=file.read_bytes()
                 if data[:4]==b'b3dm':data=data[28+sum(struct.unpack_from('<4s6I',data)[3:]):]
                 n=struct.unpack_from('<I',data,12)[0];binary=data[28+n:]
@@ -52,10 +52,10 @@ def details(path):
                     elif sc['type']=='BOOLEAN':values=np.unpackbits(view(col['values'],'u1'),bitorder='little')[:len(ids)].astype(bool).tolist()
                     else:values=view(col['values'],{'INT64':'<i8','FLOAT64':'<f8'}[sc['componentType']]).tolist()
                     for p,value in zip(props,values):p[name]=None if value==sc.get('noData','not a numeric sentinel') else value
-                for prim,pos in zip(doc['meshes'][0]['primitives'],positions):
-                    ac=doc['accessors'][prim['attributes']['_FEATURE_ID_0']];fid=int(view(ac['bufferView'],'<u4')[0]);prop=props[fid]
+                for mode,fid,pos in parts(file):
+                    prop=props[fid]
                     xyz=pos[:,[0,2,1]]*[1,-1,1];xyz=(np.c_[xyz,np.ones(len(xyz))]@world.T)[:,:3]
-                    key=(prop['_source_layer'],prop['_source_id'],prim['mode'])
+                    key=(prop['_source_layer'],prop['_source_id'],mode)
                     result.setdefault(key,[]).append((prop,xyz))
         for child in node.get('children',[]):walk(child,world)
     walk(root,np.eye(4));return result
@@ -85,6 +85,8 @@ class ReuseTests(unittest.TestCase):
             with mock.patch.object(vector,'emit',side_effect=AssertionError('unchanged content was re-encoded')):
                 vector.run(self.args(p,b,previous))
             self.assertEqual(payloads(a),payloads(b));self.assert_same_details(a,b)
+            for key in ('primitiveReferences','maximumTilePrimitives'):
+                self.assertEqual(report(a)['encoding'][key],report(b)['encoding'][key])
             r=report(b)['reuse'];self.assertEqual(r['rebuiltContents'],0);self.assertGreater(r['reusedContents'],0)
             for name,data in payloads(b).items():
                 import hashlib
