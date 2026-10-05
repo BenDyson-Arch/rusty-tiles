@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 import zipfile
 
 import numpy as np
@@ -15,7 +16,7 @@ from osgeo import ogr, osr
 from test_vector_lod import vector, read
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
-from vector_source import Reader
+from vector_source import Reader, transformation
 
 
 def nodes(node):
@@ -40,6 +41,27 @@ def gpkg(path, layers, spatial_index=True):
 
 
 class GeoPackageTests(unittest.TestCase):
+    def test_missing_coordinate_epoch_does_not_become_year_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'epoch.gpkg'
+            gpkg(p,[('sites',4979,[(1,dict(type='Point',coordinates=[0,0,120]),None)])])
+            # Force a time-dependent operation independently of which datum
+            # paths this installation's PROJ database happens to select.
+            def operation(source,target):
+                if source.GetAuthorityCode(None)=='4979' and target.GetAuthorityCode(None)=='4978':
+                    options=osr.CoordinateTransformationOptions()
+                    options.SetOperation('+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad '
+                        '+step +proj=cart +ellps=WGS84 +step +proj=helmert +x=0 +y=0 +z=0 '
+                        '+dx=1 +dy=0 +dz=0 +t_epoch=2020 +convention=position_vector')
+                    return osr.CreateCoordinateTransformation(source,target,options)
+                return transformation(source,target)
+            with mock.patch('vector_source.transformation',side_effect=operation):
+                for epoch,shift in [(None,0),(2021.,1)]:
+                    reader=Reader(types.SimpleNamespace(input=str(p)))
+                    if epoch is not None:reader.layers[0].GetSpatialRef().SetCoordinateEpoch(epoch)
+                    list(reader)
+                    np.testing.assert_allclose(reader.anchor,[6378137+120+shift,0,0],atol=1e-7,rtol=0)
+
     def test_declared_three_axis_crs_preserves_ellipsoidal_height(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)

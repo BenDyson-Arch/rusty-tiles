@@ -28,6 +28,7 @@ only a horizontal CRS needs an explicit `--heightOffset`, in metres, to establis
 ellipsoidal heights. Native compound/3D CRS operations use their declared height
 reference instead, including three-axis geographic CRSs such as EPSG:7843
 (GDA2020). GeoJSON follows its conventional ellipsoidal metre heights.
+Declared coordinate epochs are retained; a missing epoch stays unspecified.
 PROJ networking and ballpark operations are disabled; missing required operations
 or grids fail. An additive height offset is not a spatial geoid transformation.
 Each tile has its own local origin to reduce float32 position rounding; the
