@@ -77,6 +77,12 @@ struct RasterArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Base simplification tolerance in metres; doubles for each coarse level
+    #[arg(long = "lodTolerance", default_value_t = 0.1)]
+    lod_tolerance: f64,
+    /// Coarse levels above each full-detail leaf (1..16)
+    #[arg(long = "lodLevels", default_value_t = 3)]
+    lod_levels: u8,
     /// Repair invalid polygon outlines with an explicit per-feature conversion report
     #[arg(long)]
     repair: bool,
@@ -159,12 +165,16 @@ fn run() -> Result<(), Error> {
             let opts = mesh_opts(&a)?;
             mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
         }
-        Command::Vector(a) => vector::vector_to_3tz(
+        Command::Vector(a) => vector::vector_to_3tz_with_lod(
             &a.input,
             &a.output,
             a.max_features,
             a.repair,
             a.ambiguous_outlines,
+            &vector::VectorLodOptions {
+                tolerance_metres: a.lod_tolerance,
+                levels: a.lod_levels,
+            },
         )?,
         Command::Terrain(a) => terrain::dem_to_terrain(
             &a.input,
