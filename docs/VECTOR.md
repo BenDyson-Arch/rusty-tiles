@@ -79,11 +79,13 @@ silently sampled away. Dense point-only collections therefore provide routing,
 not geometry reduction.
 
 Lines use iterative 3D Ramer–Douglas–Peucker with a conservative continuous path
-error bound. Polygon rings simplify only when planar within one micrometre and
-when the candidate retains validity and holes. Error includes twice the planarity
-deviation and float32 rounding. Parent errors are monotonic. Full-detail leaves
+error bound. Polygon rings can simplify when twice their best-fit-plane deviation fits inside
+the requested tolerance and the candidate retains validity and holes. The
+remaining tolerance is used for 3D path simplification; reported geometry error
+includes twice the planarity deviation and stays within the requested tolerance.
+Float32 rounding is added separately. Parent errors are monotonic. Full-detail leaves
 retain source vertices/segments subject to separately reported float32 rounding;
-leaf geometricError is zero. Nonplanar polygons and invalid candidates remain
+leaf geometricError is zero. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
 unsimplified. `--repair` explicitly permits invalid-outline repairs;
 `--ambiguousOutlines` retains irreconcilable crossings as source 3D outlines.
 Oversized polygons requiring triangle fragmentation still need unambiguous filled

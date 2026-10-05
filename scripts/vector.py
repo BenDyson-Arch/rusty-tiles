@@ -391,7 +391,7 @@ def simplify_polygon(rings, tolerance, locked):
     origin = opened[0].mean(axis=0)
     _, _, basis = np.linalg.svd(opened[0]-origin, full_matrices=False)
     deviation = max(float(np.abs((r-origin) @ basis[2]).max()) for r in opened)
-    if deviation > 1e-6:
+    if 2*deviation >= tolerance:
         return [r.tolist() for r in rings], 0.0, 'nonplanar polygon retained'
     def shape(values):
         poly = ogr.Geometry(ogr.wkbPolygon)
@@ -407,7 +407,7 @@ def simplify_polygon(rings, tolerance, locked):
         return [r.tolist() for r in rings], 0.0, 'invalid source topology retained for existing repair policy'
     candidates, errors = [], []
     for ring in opened:
-        simplified, error = simplify_path(ring, tolerance, locked, closed=True)
+        simplified, error = simplify_path(ring, tolerance-2*deviation, locked, closed=True)
         candidates.append(simplified)
         errors.append(error)
     candidate = shape(candidates)
