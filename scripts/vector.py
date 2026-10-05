@@ -498,6 +498,7 @@ if __name__ == '__main__':
     p.add_argument('--max-bytes', type=int, default=4194304)
     p.add_argument('--max-tiles', type=int, default=100000)
     p.add_argument('--max-source-vertices', type=int, default=1000000)
+    p.add_argument('--where')
     p.add_argument('--list-fields', choices=['error','json'], default='error')
     p.add_argument('--field', dest='fields', action='append', default=[])
     p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])

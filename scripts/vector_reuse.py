@@ -28,6 +28,8 @@ class Reuse:
         self.output=output
         self.previous=getattr(args,'reuse_tileset',None)
         self.encoder=encoder
+        self.requested_previous=bool(self.previous)
+        self.incompatible_reason=None
         self.old={};self.nodes={};self.records={};self.cuts={}
         self.reused_contents=0;self.reused_tiles=0;self.reused_subtrees=0;self.reused_uris=set()
         if self.previous:
@@ -44,6 +46,10 @@ class Reuse:
             if not manifest.get('asset',{}).get('extras'):manifest['asset'].pop('extras',None)
             if expected!=hashlib.sha256(raw).hexdigest() or state.get('manifestSha256')!=digest(manifest):
                 raise ValueError('previous manifest/build state integrity check failed')
+            if state.get('config',{}).get('where')!=getattr(args,'where',None):
+                self.incompatible_reason='attribute filter changed'
+                self.previous=None;self.old={}
+                return
             anchor=np.asarray(state['anchor'],dtype=float);frame=np.asarray(state['frame'],dtype=float)
             if anchor.shape!=(3,) or frame.shape!=(3,3) or not np.isfinite(anchor).all() or not np.isfinite(frame).all() or not np.allclose(frame@frame.T,np.eye(3),atol=1e-12):
                 raise ValueError('invalid previous local frame')
@@ -65,7 +71,7 @@ class Reuse:
             maxBytes=getattr(args,'max_bytes',4194304),lodTolerance=getattr(args,'lod_tolerance',.1),
             lodLevels=getattr(args,'lod_levels',3),skipInvalid=getattr(args,'skip_invalid',False),repair=getattr(args,'repair',False),
             ambiguousOutlines=getattr(args,'ambiguous_outlines',False),sourceCrs=getattr(args,'source_crs',None),
-            heightOffset=getattr(args,'height_offset',None),listFields=getattr(args,'list_fields','error'),
+            where=getattr(args,'where',None),heightOffset=getattr(args,'height_offset',None),listFields=getattr(args,'list_fields','error'),
             fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or [])
         if self.previous and self.old.get('config')!=self.config:
             raise ValueError('previous encoder, schema, CRS or conversion settings differ; run a fresh conversion without reuseTileset')
@@ -130,6 +136,6 @@ class Reuse:
         raw=canonical(state)
         (self.output/'vector-build.json').write_bytes(raw)
         manifest['asset']['extras']=dict(vectorBuildStateSha256=hashlib.sha256(raw).hexdigest())
-        return dict(previousTileset=bool(self.previous),reusedSubtrees=self.reused_subtrees,
+        return dict(previousTileset=bool(self.previous),requestedPreviousTileset=self.requested_previous,incompatibleReason=self.incompatible_reason,reusedSubtrees=self.reused_subtrees,
                     reusedTiles=self.reused_tiles,reusedContents=len(self.reused_uris),reusedContentReferences=self.reused_contents,
                     publishedContents=len(used),rebuiltContents=len(used-self.reused_uris))
