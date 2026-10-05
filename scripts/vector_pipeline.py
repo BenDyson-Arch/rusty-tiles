@@ -132,12 +132,13 @@ def run(args, writer):
         for feature in reader:
             db.execute('SAVEPOINT feature')
             try:
-                writer.validate_feature(feature,getattr(args,'repair',False),getattr(args,'ambiguous_outlines',False))
+                feature_reports=writer.validate_feature(feature,getattr(args,'repair',False),getattr(args,'ambiguous_outlines',False))
                 insert(feature)
             except (ValueError,RuntimeError,TypeError) as error:
                 db.execute('ROLLBACK TO feature')
                 failure(dict(sourceLayer=feature['properties']['_source_layer'],sourceId=feature['properties']['_source_id'],reason=str(error)))
             else:
+                for value in feature_reports:report(value)
                 counters['features'] += 1
                 name=feature['properties']['_source_layer'];accepted[name]=accepted.get(name,0)+1
             finally:

@@ -223,3 +223,13 @@ stream records each source identity with outcome `no-geometry`. Drawable feature
 counts and tile metadata exclude these records. A selection consisting entirely
 of geometry-free records publishes a valid empty tileset with its counts and
 reports. Reuse can remove formerly drawable features that become geometry-free.
+
+## Collapsed repairs
+
+With `--repair --ambiguousOutlines`, a polygon whose repair collapses to lines,
+points or no filled area retains its original closed 3D rings as line content.
+The report records `outputGeometry: outline`, identity and the collapse reason;
+no fill is fabricated. Ambiguous 3D intersections use the same explicit fallback.
+Normalization happens before budgeting, so large outlines use line fragmentation
+without dropping source segments. A MultiPolygon requiring this fallback retains
+all its rings as outlines. Without the flag, collapse remains a reported failure.
