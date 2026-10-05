@@ -591,6 +591,7 @@ if __name__ == '__main__':
     p.add_argument('output')
     p.add_argument('--lod-tolerance', type=float, default=.1)
     p.add_argument('--lod-levels', type=int, default=3)
+    p.add_argument('--reproducible',action='store_true')
     p.add_argument('--jobs',type=int,default=len(__import__('os').sched_getaffinity(0)) if hasattr(__import__('os'),'sched_getaffinity') else __import__('os').cpu_count() or 1)
     p.add_argument('--max-features', type=int, default=64)
     p.add_argument('--max-parent-features', type=int, default=4096)

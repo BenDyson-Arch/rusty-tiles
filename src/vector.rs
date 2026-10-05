@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub reproducible: bool,
     pub jobs: usize,
     pub quantize: bool,
     pub meshopt: bool,
@@ -68,6 +69,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            reproducible: false,
             jobs: std::thread::available_parallelism().map_or(1, usize::from),
             quantize: false,
             meshopt: false,
@@ -270,6 +272,9 @@ pub fn vector_to_3tz_with_options(
     }
     if options.skip_invalid {
         command.arg("--skip-invalid");
+    }
+    if options.reproducible {
+        command.arg("--reproducible");
     }
     if options.quantize {
         command.arg("--quantize");

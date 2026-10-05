@@ -143,6 +143,9 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Omit volatile performance diagnostics for byte-identical archives
+    #[arg(long)]
+    reproducible: bool,
     /// Maximum encoding worker processes (defaults to available cores)
     #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, usize::from))]
     jobs: usize,
@@ -452,6 +455,7 @@ fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,
                 meshopt: a.meshopt,

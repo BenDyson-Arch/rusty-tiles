@@ -391,3 +391,8 @@ workers that produced consumed candidates, and wall times for ingestion,
 partitioning, encoding and publication. Partitioning includes spool preparation;
 encoding includes coordinator overhead and process startup, and publication stops
 before Rust archive packing. Timings are diagnostic, not part of content identity.
+
+For a cacheable, byte-identical archive, add `--reproducible`; performance diagnostics
+are omitted from `conversion.json`, while content and reuse behavior are retained.
+See [reproducible builds](../CONTRIBUTING.md#reproducible-builds) for the precise
+comparison rules and tested scope.
