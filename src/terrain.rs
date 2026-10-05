@@ -22,9 +22,14 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent)?;
     let work = tempfile::tempdir_in(parent)?;
-    let status = Command::new("python3")
+    let mut command = Command::new("python3");
+    command
         .arg("-c")
-        .arg(include_str!("../scripts/terrain.py"))
+        .arg(crate::python::script(
+            include_str!("../scripts/terrain.py"),
+            "terrain",
+            "Python GDAL and NumPy",
+        )?)
         .arg(input)
         .arg(work.path())
         .arg("--max-zoom")
@@ -34,13 +39,8 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
         .arg("--height-offset")
         .arg(options.height_offset.to_string())
         .arg("--fill-height")
-        .arg(options.fill_height.to_string())
-        .status()?;
-    if !status.success() {
-        return Err(Error::msg(
-            "DEM conversion failed; Python GDAL and NumPy are required. No output published.",
-        ));
-    }
+        .arg(options.fill_height.to_string());
+    crate::python::run(&mut command, "terrain")?;
     if output.exists() {
         return Err(Error::OutputExists(output.into()));
     }

@@ -195,7 +195,7 @@ class Reader:
                     has_z = bool(ogr.GT_HasZ(g.GetGeometryType()))
                     height = getattr(self.args,'height_offset',None)
                     if has_z and not self.local and not native_height and height is None and self.driver != 'GeoJSON':
-                        raise ValueError('3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres')
+                        raise ValueError('3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres, or --sourceCrs with the correct compound CRS (for example EPSG:7853+5711 when its geoid grid is installed)')
                     properties = {}
                     source_id = fid
                     native = row.GetNativeData() if self.driver == 'GeoJSON' else None
