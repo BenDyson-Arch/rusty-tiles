@@ -443,8 +443,15 @@ def run(args):
     import types
     if '__file__' in globals():
         sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-    from vector_pipeline import run as pipeline
-    return pipeline(args,types.SimpleNamespace(emit=emit,polygon=polygon,simplify_feature=simplify_feature))
+    import hashlib
+    import vector_pipeline
+    import vector_reuse
+    import vector_source
+    sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
+    for module in (vector_source,vector_reuse,vector_pipeline):
+        sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
+    encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,simplify_feature=simplify_feature,encoder_digest=encoder))
 
 
 if __name__ == '__main__':
@@ -456,6 +463,7 @@ if __name__ == '__main__':
     p.add_argument('--max-features', type=int, default=64)
     p.add_argument('--layer', dest='layers', action='append', default=[])
     p.add_argument('--all-layers', action='store_true')
+    p.add_argument('--reuse-tileset')
     p.add_argument('--source-crs')
     p.add_argument('--height-offset', type=float)
     p.add_argument('--max-vertices', type=int, default=65536)

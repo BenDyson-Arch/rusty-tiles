@@ -72,6 +72,11 @@ Cesium consumes `tileset.json` and tile resources through a server capable of se
 
 ```sh
 cargo test --offline
+# After external GeoPackage diff application, reuse unaffected vector subtrees.
+target/release/rusty-tiles vector \
+  -i /path/to/your/updated.gpkg -o output/updated.3tz --layer roads \
+  --reuseTileset output/mapping.3tz
+
 python3 -m unittest discover -s tests -p 'test_*.py'
 # Optional external wrapper comparisons (requires npx and network/cache):
 cargo test --test golden -- --ignored

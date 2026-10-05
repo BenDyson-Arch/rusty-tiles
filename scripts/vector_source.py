@@ -91,8 +91,8 @@ class Reader:
         if not self.layers:
             raise ValueError('input has no selected spatial layers')
         self.local = getattr(args,'source_crs',None) == 'local'
-        self.frame = None
-        self.anchor = None
+        self.frame = getattr(args,'_reuse_frame',None)
+        self.anchor = getattr(args,'_reuse_anchor',None)
         self.schemas = {}
         self.layer_reports = []
         self.target = spatial_ref('EPSG:4978')

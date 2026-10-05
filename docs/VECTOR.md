@@ -128,3 +128,60 @@ provenance beside the downloaded files. See the
 [Natural Earth roads source](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/roads/)
 and [public-domain terms](https://www.naturalearthdata.com/about/terms-of-use/).
 No public datasets are committed to this repository.
+
+## Replace affected content after edits
+
+Changesets stay outside the tiler. Apply a GeoPackage diff with `geodiff` or a
+compatible tool, then supply the resulting GeoPackage and the previous archive:
+
+```sh
+geodiff apply updated.gpkg changes.diff
+rusty-tiles vector -i updated.gpkg -o updated.3tz --layer roads \
+  --reuseTileset previous.3tz
+```
+
+Use the same selection, height policy, budgets and LOD options as the baseline.
+The baseline must have been created by the same encoder revision and GDAL/NumPy
+versions. Incompatible settings/schema/CRS or missing build state fail explicitly;
+run a fresh conversion without `--reuseTileset` in that case. Initial archives
+include `vector-build.json`; it stores partition decisions, signatures and the
+original local frame. Deleting the original anchor feature therefore does not
+move unchanged content into a new coordinate frame.
+
+Partition cuts and feature/fragment tie keys remain stable across revisions.
+Changed geometry/properties, inserts, deletes and shared-coordinate locks affect
+subtree signatures. The encoder reuses matching subtrees and rebuilds changed
+branches and their bounds/errors. A shared-vertex edit also invalidates the
+neighbour whose simplification constraints changed. Repeated edits can unbalance
+retained partitions; a fresh conversion resets them. There is no incremental
+update to an existing archive in place: publish a new archive or manifest after
+validation, retaining the previous one for rollback.
+
+Content filenames contain their SHA-256 hash. Unchanged payloads retain identical
+URLs and bytes; changed payloads get new URLs. The manifest references only the
+current contents. Reuse validates previous state/manifest checksums and every
+reused content checksum. `conversion.json.reuse` reports reused subtrees, tiles
+and unique contents, and newly encoded published contents.
+
+This saves geometry encoding, not every step of ingestion. The updated source is
+still scanned/projected, shared vertices are indexed, and initial oversized
+geometry fragmentation can still run. The `.3tz` archive is repacked, including
+unchanged payloads. Existing source files and archives are opened read-only.
+Geometry reports cover current ingestion/new encoding; historical reports remain
+in the previous archive. Diff parsing, conflict resolution and sync belong to
+`go-geodiff`/`geodiff`, not this command.
+
+Compatibility tests created byte-identical diffs using upstream geodiff 2.3.0
+(`e71dfe1`) and go-geodiff (`bbdf585`), cross-applied them, and compared incremental
+world geometry/properties with a fresh conversion. For a 32-feature fixture with
+attribute, geometry, insert and delete changes, both paths reused 54 of 62
+published contents and encoded 8. Unchanged-input tests prohibit any encoder call.
+
+**Known external compatibility gap:** go-geodiff at `bbdf585` cannot apply geometry
+changes to the GDAL-generated indexed GeoPackage fixture: R-tree triggers call
+`ST_IsEmpty`, which its SQLite connection does not provide
+([go-geodiff issue #3](https://github.com/tinyowl-labs/go-geodiff/issues/3)). Upstream geodiff
+applies the same diff successfully. The test records this known skip and verifies
+that the failed Go apply is atomic; the successful cross-apply case uses a
+GeoPackage created without a spatial index. The tiler does not drop triggers or
+alter source databases to hide this gap.

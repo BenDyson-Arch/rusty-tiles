@@ -77,6 +77,9 @@ struct RasterArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Reuse unchanged subtrees from a compatible prior vector archive
+    #[arg(long = "reuseTileset")]
+    reuse_tileset: Option<PathBuf>,
     /// Select a spatial layer; repeat to include several layers
     #[arg(long = "layer")]
     layers: Vec<String>,
@@ -196,6 +199,7 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                reuse_tileset: a.reuse_tileset,
                 lod: vector::VectorLodOptions {
                     tolerance_metres: a.lod_tolerance,
                     levels: a.lod_levels,

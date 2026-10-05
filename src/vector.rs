@@ -41,6 +41,7 @@ impl Default for VectorLodOptions {
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
     pub lod: VectorLodOptions,
+    pub reuse_tileset: Option<std::path::PathBuf>,
     pub layers: Vec<String>,
     pub all_layers: bool,
     pub source_crs: Option<String>,
@@ -55,6 +56,7 @@ impl Default for VectorOptions {
     fn default() -> Self {
         Self {
             lod: VectorLodOptions::default(),
+            reuse_tileset: None,
             layers: Vec::new(),
             all_layers: false,
             source_crs: None,
@@ -133,6 +135,11 @@ pub fn vector_to_3tz_with_options(
     {
         return Err(Error::msg("invalid vector LOD budgets: positive finite tolerance, positive feature budget and 1..16 levels required"));
     }
+    if let Some(previous) = &options.reuse_tileset {
+        if !previous.is_file() {
+            return Err(Error::InputNotFound(previous.clone()));
+        }
+    }
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
@@ -148,17 +155,21 @@ pub fn vector_to_3tz_with_options(
     let mut script = String::from("import sys,types\n");
     for (name, source) in [
         ("vector_source", include_str!("../scripts/vector_source.py")),
+        ("vector_reuse", include_str!("../scripts/vector_reuse.py")),
         (
             "vector_pipeline",
             include_str!("../scripts/vector_pipeline.py"),
         ),
     ] {
         script.push_str(&format!(
-            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;exec({},m.__dict__)\n",
+            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={};exec(m.__source__,m.__dict__)\n",
             serde_json::to_string(source)?
         ));
     }
-    script.push_str(include_str!("../scripts/vector.py"));
+    script.push_str(&format!(
+        "__source__={};exec(__source__,globals())",
+        serde_json::to_string(include_str!("../scripts/vector.py"))?
+    ));
     let mut command = std::process::Command::new("python3");
     command
         .arg("-c")
@@ -179,6 +190,9 @@ pub fn vector_to_3tz_with_options(
         .arg(options.max_tiles.to_string())
         .arg("--max-source-vertices")
         .arg(options.max_source_vertices.to_string());
+    if let Some(previous) = &options.reuse_tileset {
+        command.arg("--reuse-tileset").arg(previous);
+    }
     for layer in &options.layers {
         command.arg("--layer").arg(layer);
     }

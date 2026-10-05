@@ -23,11 +23,11 @@ def nodes(node):
         yield from nodes(child)
 
 
-def gpkg(path, layers):
+def gpkg(path, layers, spatial_index=True):
     ds=ogr.GetDriverByName('GPKG').CreateDataSource(str(path))
     for name,epsg,features in layers:
         srs=osr.SpatialReference();srs.ImportFromEPSG(epsg)
-        layer=ds.CreateLayer(name,srs,ogr.wkbUnknown)
+        layer=ds.CreateLayer(name,srs,ogr.wkbUnknown,options=[] if spatial_index else ['SPATIAL_INDEX=NO'])
         for key,kind in [('name',ogr.OFTString),('large',ogr.OFTInteger64)]:
             layer.CreateField(ogr.FieldDefn(key,kind))
         for fid,g,large in features:

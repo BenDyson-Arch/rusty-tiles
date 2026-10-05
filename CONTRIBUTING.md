@@ -83,3 +83,24 @@ uncompressed LAS file for memory-mapped source access.
 
 Source and attribution: [PDAL Autzen data](https://github.com/PDAL/data/tree/main/autzen),
 [CC BY 4.0 license](https://github.com/PDAL/data/blob/main/LICENSE).
+
+## GeoPackage diff compatibility
+
+Replacement belongs to the tiler; diff creation/application stays in external
+libraries. The optional test uses upstream C++ geodiff and the local Go port:
+
+```sh
+# Run from the go-geodiff checkout to resolve its existing Go module.
+go build -o /tmp/go-geodiff-driver /path/to/rusty-tiles/tests/geodiff_driver.go
+# Run from rusty-tiles with the actual upstream binary (2.3.0 tested).
+GEODIFF_CPP_BIN=/path/to/geodiff GO_GEODIFF_DRIVER=/tmp/go-geodiff-driver \
+  python3 -m unittest discover -s tests -p 'test_geodiff_compat.py'
+```
+
+The suite generates invented GeoPackage fixtures, checks byte-identical
+changesets, cross-applies them, and compares replacement output with fresh
+world geometry and scalar properties. It separately exercises GDAL spatial-index
+triggers. The Go `ST_IsEmpty` apply gap is reported explicitly as a known skip;
+upstream indexed apply and failed Go transaction rollback are still checked.
+No upstream source or database fixtures are bundled; CI's core replacement tests
+run without external diff binaries.

@@ -1,5 +1,6 @@
 """Disk-backed, budgeted OGR vector hierarchy; original identities survive fragments."""
 import contextlib
+import hashlib
 import json
 import math
 import pathlib
@@ -9,6 +10,7 @@ import tempfile
 
 import numpy as np
 from vector_source import Reader, coordinate_list
+from vector_reuse import Reuse, canonical, contents
 
 
 def run(args, writer):
@@ -24,6 +26,7 @@ def run(args, writer):
     output = pathlib.Path(args.output)
     output.mkdir(exist_ok=True)
     (output/'t').mkdir(exist_ok=True)
+    reuse=Reuse(args,output,writer.encoder_digest)
     reader = Reader(args)
     counters = dict(features=0, fragments=0, leafTiles=0, tiles=0, routingTiles=0,
                     maximumTileVertices=0, maximumTileBytes=0, fragmentedPolygons=0)
@@ -36,6 +39,8 @@ def run(args, writer):
         PRAGMA cache_size=-32768;
         CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,
           x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL);
+        ALTER TABLE features ADD COLUMN fingerprint TEXT;
+        ALTER TABLE features ADD COLUMN sortkey TEXT;
         CREATE INDEX paths ON features(path);
         CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,PRIMARY KEY(x,y,z)) WITHOUT ROWID;
         ''')
@@ -97,14 +102,16 @@ def run(args, writer):
             return [dict(feature,geometry=part) for part in parts]
         def insert(feature,path='', enforce_hint=True):
             if enforce_hint and (size(feature)>max_vertices or estimate(feature)>max_bytes):
-                for part in split(feature):
-                    insert(part,path)
+                for index,part in enumerate(split(feature)):
+                    insert(dict(part,_fragment_path=feature.get('_fragment_path','')+str(index)),path)
                 return
             p = np.asarray(coordinate_list(feature['geometry']))
             lo,hi=p.min(axis=0),p.max(axis=0); center=(lo+hi)/2
             cursor=db.execute('INSERT INTO features(path,data,n,estimate,x,y,z,lx,ly,lz,hx,hy,hz) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                (path,json.dumps(feature,allow_nan=False),len(p),estimate(feature),*center.tolist(),*lo.tolist(),*hi.tolist()))
+                (path,canonical(feature).decode(),len(p),estimate(feature),*center.tolist(),*lo.tolist(),*hi.tolist()))
             owner=cursor.lastrowid
+            db.execute('UPDATE features SET sortkey=? WHERE id=?',
+                (feature['properties']['_source_layer']+'\0'+feature['properties']['_source_id']+'\0'+feature.get('_fragment_path',''),owner))
             db.executemany('INSERT INTO vertices(x,y,z,owner) VALUES(?,?,?,?) ON CONFLICT(x,y,z) DO UPDATE SET shared=shared OR owner!=excluded.owner',
                            ((*point,owner) for point in p.tolist()))
         for feature in reader:
@@ -113,8 +120,9 @@ def run(args, writer):
             if counters['features']%1000==0:
                 db.commit()
         db.commit()
-        if not counters['features']:
+        if not counters['features'] and not reuse.previous:
             raise ValueError('empty selected layers')
+        reuse.configure(args,reader)
         counters['fragments']=db.execute('SELECT COUNT(*) FROM features').fetchone()[0]
         def where(prefix):
             return (prefix,prefix+'~')
@@ -129,6 +137,13 @@ def run(args, writer):
                 return {tuple(p) for p in coordinate_list(feature['geometry'])}
             return {tuple(p) for p in coordinate_list(feature['geometry']) if db.execute(
                 'SELECT shared FROM vertices WHERE x=? AND y=? AND z=?',p).fetchone()[0]}
+        def fingerprint(fid,value):
+            feature=json.loads(value)
+            locked=locks(feature)
+            mask=np.packbits([tuple(p) in locked for p in coordinate_list(feature['geometry'])]).tobytes()
+            db.execute('UPDATE features SET fingerprint=? WHERE id=?',(hashlib.sha256(value.encode()+mask).hexdigest(),fid))
+        for fid,value in db.execute('SELECT id,data FROM features'):
+            fingerprint(fid,value)
         serial=0
         def encoded(prefix,center,level):
             nonlocal serial
@@ -173,14 +188,18 @@ def run(args, writer):
                     table+=b' '*(-(28+len(table))%8)
                     wrapped=struct.pack('<4s6I',b'b3dm',1,28+len(table)+len(glb),len(table),0,0,0)+table+glb
                     file.unlink();uri=f't/{serial}-{role}.b3dm';file=output/uri;file.write_bytes(wrapped)
+                uri='t/'+hashlib.sha256(file.read_bytes()).hexdigest()+file.suffix
+                target=output/uri
+                if target.exists():file.unlink()
+                else:file.rename(target)
+                file=target
                 files.append(file);byte_count+=file.stat().st_size;vertex_count+=encoding['vertices']
                 rounding=max(rounding,encoding['rounding'])
                 content=dict(uri=uri)
                 if not fill_only:content['extensions']={'3DTILES_content_gltf_vector':dict(vector=True)}
                 contents.append(content)
             if vertex_count>max_vertices or byte_count>max_bytes:
-                for file in files:file.unlink()
-                return None
+                return None  # unused immutable candidates are pruned at publication
             if not level:
                 for value in polygon_reports:report(value)
             node=dict(extras=dict(vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
@@ -212,6 +231,14 @@ def run(args, writer):
                 counters['maximumTileBytes']=max(counters['maximumTileBytes'],node['extras']['encodedBytes'])
             return node
         def build(prefix,depth=0):
+            signature=reuse.signature(db,prefix)
+            n=stats(prefix)[0]
+            restored=reuse.restore(prefix,signature,counters,n,max_tiles)
+            if restored is not None:return restored
+            node=build_uncached(prefix,depth)
+            reuse.remember(prefix,signature,node,stats(prefix)[0],reuse.cuts.get(prefix))
+            return node
+        def build_uncached(prefix,depth=0):
             if depth>64:
                 raise ValueError('partition depth exceeds 64')
             n,vertices,est,*bounds=stats(prefix)
@@ -227,8 +254,7 @@ def run(args, writer):
                     if not coarse:
                         continue
                     if coarse['extras']['vertices']>=node['extras']['vertices']:
-                        for value in coarse.get('contents',[coarse.get('content')]):
-                            (output/value['uri']).unlink()
+                        # Immutable candidates are pruned after the manifest is complete.
                         continue
                     node=attach(coarse,lo,hi,center,[node])
                 return node
@@ -236,42 +262,58 @@ def run(args, writer):
                 fid,value=db.execute('SELECT id,data FROM features WHERE path>=? AND path<?',where(prefix)).fetchone()
                 parts=split(json.loads(value))
                 db.execute('DELETE FROM features WHERE id=?',(fid,))
-                for part in parts:
-                    insert(part,prefix,enforce_hint=False)
+                for index,part in enumerate(parts):
+                    insert(dict(part,_fragment_path=json.loads(value).get('_fragment_path','')+str(index)),prefix,enforce_hint=False)
                 counters['fragments']+=len(parts)-1
-                return build(prefix,depth+1)
-            axis=('x','y','z')[int(np.argmax(hi-lo))]
-            # SQL sort spills to scratch disk; no Python list of dataset IDs.
-            db.execute(f'UPDATE features SET path=? WHERE id IN (SELECT id FROM features WHERE path>=? AND path<? ORDER BY {axis},id LIMIT ?)',
-                       (prefix+'0',*where(prefix),n//2))
+                for fid,value in db.execute('SELECT id,data FROM features WHERE path>=? AND path<?',where(prefix)):
+                    fingerprint(fid,value)
+                return build_uncached(prefix,depth+1)
+            cut=reuse.cuts.get(prefix)
+            if cut is None:
+                axis=('x','y','z')[int(np.argmax(hi-lo))]
+                value,key=db.execute(f'SELECT {axis},sortkey FROM features WHERE path>=? AND path<? ORDER BY {axis},sortkey LIMIT 1 OFFSET ?',(*where(prefix),n//2-1)).fetchone()
+                cut=dict(axis=axis,value=value,key=key)
+                reuse.cuts[prefix]=cut
+            axis=cut['axis']
+            if axis not in ('x','y','z'):raise ValueError('invalid previous spatial partition axis')
+            db.execute(f'UPDATE features SET path=? WHERE path=? AND ({axis}<? OR ({axis}=? AND sortkey<=?))',
+                       (prefix+'0',prefix,cut['value'],cut['value'],cut['key']))
             db.execute('UPDATE features SET path=? WHERE path=?',(prefix+'1',prefix))
-            children=[build(prefix+'0',depth+1),build(prefix+'1',depth+1)]
+            children=[build(prefix+suffix,depth+1) for suffix in ('0','1') if stats(prefix+suffix)[0]]
             level=levels+int(math.ceil(math.log2(n/args.max_features)))
             coarse=encoded(prefix,center,max(1,level)) if n<=args.max_features else None
             if coarse is None:
                 counters['routingTiles']+=1
                 coarse=dict(geometricError=float(np.linalg.norm(hi-lo)),extras=dict(routing=True))
             return attach(coarse,lo,hi,center,children)
-        root=build('')
+        if counters['features']:
+            root=build('')
+        else:
+            root=dict(boundingVolume=dict(box=[0,0,0,.001,0,0,0,.001,0,0,0,.001]),geometricError=0,
+                      refine='REPLACE',_center=np.zeros(3),_padding=0.)
+            counters['tiles']=1
+            reuse.remember('',reuse.signature(db,''),root,0)
+
         basis=reader.frame.T
         anchor=reader.anchor+basis@root['_center']
         root['transform']=[*basis[:,0].tolist(),0,*basis[:,1].tolist(),0,*basis[:,2].tolist(),0,*anchor.tolist(),1]
         def clean(node):
-            node.pop('_center');node.pop('_padding')
+            node.pop('_center',None);node.pop('_padding',None)
             for child in node.get('children',[]):
                 clean(child)
         clean(root)
         b=root['boundingVolume']['box']
         manifest=dict(asset=dict(version='1.1'),extensionsUsed=['3DTILES_content_gltf_vector'],
                       geometricError=max(1.,root['geometricError'],2*float(np.linalg.norm([b[3],b[7],b[11]]))),root=root)
+        reuse_report=reuse.publish(manifest,reader)
         (output/'tileset.json').write_text(json.dumps(manifest,allow_nan=False))
         report_file.close()
         shared=db.execute('SELECT COUNT(*) FROM vertices WHERE shared=1').fetchone()[0]
         db.close()
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
-        repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,
-        lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',
+        repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
+        lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',
         errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained'),indent=2))
