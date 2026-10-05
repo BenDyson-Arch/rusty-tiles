@@ -39,6 +39,8 @@ enum Command {
     MeshTo3tz(MeshArgs),
     /// GeoJSON → glTF vector .3tz prototype (requires Python GDAL/GEOS and NumPy)
     Vector(VectorArgs),
+    /// LAS/LAZ → point-cloud 3D Tiles with spatial LOD (Python laspy and pyproj)
+    PointCloud(PointCloudArgs),
     /// DEM → quantized-mesh directory (requires Python GDAL and NumPy)
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
@@ -73,10 +75,65 @@ struct RasterArgs {
     min_zoom: u8,
     #[arg(long = "maxZoom")]
     max_zoom: u8,
+    #[arg(long, default_value = "image")]
+    display: String,
+    #[arg(long, default_value_t = 1)]
+    band: u16,
+    #[arg(long = "alphaBand", default_value_t = 0)]
+    alpha_band: u16,
+    #[arg(long = "displayMin", allow_hyphen_values = true)]
+    display_min: Option<f64>,
+    #[arg(long = "displayMax", allow_hyphen_values = true)]
+    display_max: Option<f64>,
+}
+
+#[derive(Args)]
+struct PointCloudArgs {
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    #[arg(short = 'o', long)]
+    output: PathBuf,
+    /// local XYZ metres, header CRS, or explicit 2D horizontal CRS (e.g. EPSG:32632)
+    #[arg(long = "sourceCrs")]
+    source_crs: String,
+    /// Metre offset to ellipsoidal height; required for geospatial input
+    #[arg(long = "heightOffset", allow_hyphen_values = true)]
+    height_offset: Option<f64>,
+    #[arg(long = "maxPoints", default_value_t = 50000)]
+    max_points: usize,
+    #[arg(long = "chunkPoints", default_value_t = 100000)]
+    chunk_points: usize,
 }
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Reuse unchanged subtrees from a compatible prior vector archive
+    #[arg(long = "reuseTileset")]
+    reuse_tileset: Option<PathBuf>,
+    /// Select a spatial layer; repeat to include several layers
+    #[arg(long = "layer")]
+    layers: Vec<String>,
+    /// Include every spatial layer (otherwise multi-layer inputs require selection)
+    #[arg(long = "allLayers", conflicts_with = "layers")]
+    all_layers: bool,
+    /// Override input CRS, or use local for metre XYZ
+    #[arg(long = "sourceCrs")]
+    source_crs: Option<String>,
+    /// Explicit additive offset from source heights to ellipsoidal metres
+    #[arg(long = "heightOffset", allow_hyphen_values = true)]
+    height_offset: Option<f64>,
+    /// Maximum encoded POSITION vertices per content tile
+    #[arg(long = "maxVertices", default_value_t = 65536)]
+    max_vertices: usize,
+    /// Maximum encoded GLB bytes per content tile
+    #[arg(long = "maxBytes", default_value_t = 4194304)]
+    max_bytes: usize,
+    #[arg(long = "maxTiles", default_value_t = 100000)]
+    max_tiles: usize,
+    /// Maximum coordinates in one source feature, bounding reader memory
+    #[arg(long = "maxSourceVertices", default_value_t = 1000000)]
+    max_source_vertices: usize,
+
     /// Base simplification tolerance in metres; doubles for each coarse level
     #[arg(long = "lodTolerance", default_value_t = 0.1)]
     lod_tolerance: f64,
@@ -154,6 +211,16 @@ fn run() -> Result<(), Error> {
             let opts = tileset_opts(&a)?;
             create_tileset_json(&a.input, &a.output, &opts)?;
         }
+        Command::PointCloud(a) => rusty_tiles::point_cloud::point_cloud_to_3tz(
+            &a.input,
+            &a.output,
+            &rusty_tiles::point_cloud::PointCloudOptions {
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_points: a.max_points,
+                chunk_points: a.chunk_points,
+            },
+        )?,
         Command::Convert(a) => {
             convert_to_3tz(&a.input, &a.output, &PackOptions { force: a.force })?;
         }
@@ -165,15 +232,26 @@ fn run() -> Result<(), Error> {
             let opts = mesh_opts(&a)?;
             mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
         }
-        Command::Vector(a) => vector::vector_to_3tz_with_lod(
+        Command::Vector(a) => vector::vector_to_3tz_with_options(
             &a.input,
             &a.output,
             a.max_features,
             a.repair,
             a.ambiguous_outlines,
-            &vector::VectorLodOptions {
-                tolerance_metres: a.lod_tolerance,
-                levels: a.lod_levels,
+            &vector::VectorOptions {
+                reuse_tileset: a.reuse_tileset,
+                lod: vector::VectorLodOptions {
+                    tolerance_metres: a.lod_tolerance,
+                    levels: a.lod_levels,
+                },
+                layers: a.layers,
+                all_layers: a.all_layers,
+                source_crs: a.source_crs,
+                height_offset: a.height_offset,
+                max_vertices: a.max_vertices,
+                max_bytes: a.max_bytes,
+                max_tiles: a.max_tiles,
+                max_source_vertices: a.max_source_vertices,
             },
         )?,
         Command::Terrain(a) => terrain::dem_to_terrain(
@@ -186,9 +264,19 @@ fn run() -> Result<(), Error> {
                 fill_height: a.fill_height,
             },
         )?,
-        Command::Raster(a) => {
-            rusty_tiles::raster::raster_to_directory(&a.input, &a.output, a.min_zoom, a.max_zoom)?
-        }
+        Command::Raster(a) => rusty_tiles::raster::raster_with_options(
+            &a.input,
+            &a.output,
+            &rusty_tiles::raster::RasterOptions {
+                min_zoom: a.min_zoom,
+                max_zoom: a.max_zoom,
+                display: a.display,
+                band: a.band,
+                alpha_band: a.alpha_band,
+                display_min: a.display_min,
+                display_max: a.display_max,
+            },
+        )?,
     }
     Ok(())
 }

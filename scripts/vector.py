@@ -183,7 +183,7 @@ def polygon(rings, repair=False, report=None):
     return positions, indices, loops, triangle_offsets, loop_offsets
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None):
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -192,15 +192,27 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         values = [f['properties'].get(key) for f in items]
         present = [v for v in values if v is not None]
         missing = len(present) != len(values)
+        expected = (schema_types or {}).get(key)
+        if expected == 'real' or (not expected and present and all(type(v) in (int,float) for v in present) and any(type(v) is float for v in present)):
+            if any(type(v) is int and abs(v)>2**53 for v in present):
+                raise ValueError(f'property {key!r} cannot represent large integers as float64 without loss')
+            values = [float(v) if v is not None else None for v in values]
+            present = [v for v in values if v is not None]
         if missing:
-            if all(isinstance(v, str) for v in present):
-                sentinel = '__RUSTY_TILES_MISSING__'
+            if expected == 'integer' or (not expected and present and all(type(v) is int for v in present)):
+                sentinel = -(2**53)  # exactly representable in JSON/JavaScript too
                 while sentinel in present:
-                    sentinel += '_'
-            elif present and all(type(v) in (int,float) for v in present):
+                    sentinel += 1
+            elif expected == 'real' or (present and all(type(v) in (int,float) for v in present)):
                 sentinel = -1.7976931348623157e308
                 if sentinel in present:
                     raise ValueError('reserved missing-value sentinel occurs in source')
+            elif expected == 'boolean':
+                raise ValueError(f'nullable boolean property {key!r} requires an explicit schema')
+            elif expected == 'string' or all(isinstance(v,str) for v in present):
+                sentinel = '__RUSTY_TILES_MISSING__'
+                while sentinel in present:
+                    sentinel += '_'
             else:
                 raise ValueError(f'nullable boolean/complex property {key!r} requires an explicit schema')
             values = [sentinel if v is None else v for v in values]
@@ -260,6 +272,8 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                     loopIndices=glb.accessor(loops, '<u4', 'SCALAR'), loopIndicesOffsets=glb.accessor(loop_offsets, '<u4', 'SCALAR'))
                 if 'EXT_mesh_polygon' not in glb.doc['extensionsUsed']:
                     glb.doc['extensionsUsed'].append('EXT_mesh_polygon')
+                if fill_only:
+                    ext.pop('EXT_mesh_polygon')
                 mode = 4
             else:
                 points = project(c)
@@ -271,12 +285,20 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 _FEATURE_ID_0=glb.accessor([fid]*len(points), '<u4', 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
             glb.doc['meshes'][0]['primitives'].append(primitive)
             all_positions.extend(points)
+    if fill_only:
+        glb.doc['extensionsUsed'] = [e for e in glb.doc['extensionsUsed'] if e != 'EXT_mesh_polygon']
+        glb.doc['extensionsUsed'].append('KHR_materials_unlit')
+        glb.doc['materials'] = [dict(doubleSided=True,extensions={'KHR_materials_unlit':{}},
+            pbrMetallicRoughness=dict(baseColorFactor=[1,1,1,1],metallicFactor=0,roughnessFactor=1))]
+        for primitive in glb.doc['meshes'][0]['primitives']:
+            primitive['material']=0
     glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]
     rounding = float(np.linalg.norm(p-p.astype('<f4'),axis=1).max())
     if encoding_report is not None:
         encoding_report['rounding'] = rounding
+        encoding_report['vertices'] = len(all_positions)
     low, high = p.min(axis=0), p.max(axis=0)
     center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
     return dict(box=[*center.tolist(), half[0], 0, 0, 0, half[1], 0, 0, 0, half[2]])
@@ -417,137 +439,19 @@ def union_bounds(boxes):
 
 
 def run(args):
-    tolerance = getattr(args,'lod_tolerance',.1)
-    levels = getattr(args,'lod_levels',3)
-    if args.max_features < 1 or tolerance <= 0 or not math.isfinite(tolerance) or not 1 <= levels <= 16:
-        raise ValueError('maxFeatures must be positive; lodTolerance must be finite and positive; lodLevels must be 1..16')
-    doc = json.loads(pathlib.Path(args.input).read_text())
-    crs = (doc.get('crs') or {}).get('properties',{}).get('name','')
-    if doc.get('type') != 'FeatureCollection' or crs not in ('','urn:ogc:def:crs:OGC:1.3:CRS84','urn:ogc:def:crs:EPSG::4979','urn:ogc:def:crs:EPSG::4326'):
-        raise ValueError('input must be a WGS84 longitude/latitude[/height] FeatureCollection')
-    features = doc['features']
-    if not features:
-        raise ValueError('empty feature collection')
-    points = []
-    for i, f in enumerate(features):
-        p = coordinates(f['geometry'])
-        if not p:
-            raise ValueError('empty geometry')
-        points.extend(p)
-        f['properties'] = dict(f.get('properties') or {})
-        if '_source_id' in f['properties']:
-            raise ValueError('_source_id is reserved for stable feature identity')
-        f['properties']['_source_id'] = json.dumps(f.get('id', i), separators=(',', ':'))
-        f['_center'] = np.mean(p, axis=0)
-    origin = np.mean(points, axis=0)
-    lon, lat = np.radians(origin[:2])
-    east = [-math.sin(lon), math.cos(lon), 0]
-    north = [-math.sin(lat)*math.cos(lon), -math.sin(lat)*math.sin(lon), math.cos(lat)]
-    up = [math.cos(lat)*math.cos(lon), math.cos(lat)*math.sin(lon), math.sin(lat)]
-    basis = np.array([east, north, up])
-    anchor = ecef([origin])[0]
-    def project(c):
-        c = [list(p) if len(p) == 3 else [*p, 0] for p in c]
-        return ((ecef(c)-anchor) @ basis.T)[:, [0, 2, 1]] * [1, 1, -1]
-    # Project once in float64 before simplification; all error is measured in metres.
-    def project_geometry(g):
-        kind,c = g['type'],g['coordinates']
-        if kind == 'Point':
-            return dict(type=kind,coordinates=project([c])[0].tolist())
-        if kind in ('MultiPoint','LineString'):
-            values = project(c).tolist()
-        elif kind in ('MultiLineString','Polygon'):
-            values = [project(p).tolist() for p in c]
-        elif kind == 'MultiPolygon':
-            values = [[project(r).tolist() for r in poly] for poly in c]
-        else:
-            raise ValueError(f'unsupported geometry {kind}')
-        return dict(type=kind,coordinates=values)
-    for feature in features:
-        feature['_center'] = project([feature['_center']])[0]
-        feature['geometry'] = project_geometry(feature['geometry'])
-    # Lock every source coordinate shared by different features. Closings don't count.
-    owners = {}
-    for i,feature in enumerate(features):
-        for path in paths(feature['geometry']):
-            for p in path:
-                owners.setdefault(tuple(p),set()).add(i)
-    locked = {p for p,ids in owners.items() if len(ids)>1}
-    del owners
-    output = pathlib.Path(args.output)
-    output.mkdir(exist_ok=True)
-    (output/'t').mkdir()
-    counter = 0
-    leaf_count = 0
-    reports, lod_reports = [], []
-    def content(items, level):
-        nonlocal counter
-        coarse, error = [], 0.0
-        for feature in items:
-            if level:
-                f,e = simplify_feature(feature,tolerance*2**(level-1),locked,lod_reports)
-            else:
-                f,e = feature,0.0
-            coarse.append(f)
-            error = max(error,e)
-        uri = f't/{counter}.glb'
-        counter += 1
-        encoding = {}
-        box = emit(coarse,output/uri,lambda p:np.asarray(p,dtype=float),
-                   getattr(args,'repair',False),reports if not level else None,
-                   getattr(args,'ambiguous_outlines',False),encoding_report=encoding)
-        rounding = encoding['rounding']
-        source_count = sum(len(path) for f in items for path in paths(f['geometry']))
-        output_count = sum(len(path) for f in coarse for path in paths(f['geometry']))
-        return dict(boundingVolume=box,geometricError=error+rounding if level else 0,
-            extras=dict(sourceVertices=source_count,vertices=output_count,geometryErrorMetres=error,
-                        positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
-            content=dict(uri=uri,extensions={'3DTILES_content_gltf_vector':dict(vector=True)}),refine='REPLACE')
-    def build(items):
-        nonlocal leaf_count
-        if len(items) <= args.max_features:
-            node = content(items,0)
-            leaf_count += 1
-            # A single detailed feature also gets actual coarse LOD levels.
-            for level in range(1,levels+1):
-                parent = content(items,level)
-                if parent['extras']['vertices'] >= node['extras']['vertices']:
-                    (output/parent['content']['uri']).unlink()
-                    continue
-                parent['children'] = [node]
-                parent['boundingVolume'] = union_bounds([parent['boundingVolume']['box'],node['boundingVolume']['box']])
-                parent['geometricError'] = max(parent['geometricError'],node['geometricError'])
-                node = parent
-            return node
-        centers = np.asarray([f['_center'] for f in items])
-        axis = np.ptp(centers,axis=0).argmax()
-        items = sorted(items,key=lambda f:f['_center'][axis])
-        children = [build(items[:len(items)//2]),build(items[len(items)//2:])]
-        # Upper parents use a larger tolerance while measuring against original data.
-        level = levels + int(math.ceil(math.log2(len(items)/args.max_features)))
-        node = content(items,level)
-        node['children'] = children
-        node['boundingVolume'] = union_bounds([node['boundingVolume']['box'],*[c['boundingVolume']['box'] for c in children]])
-        node['geometricError'] = max(node['geometricError'],*(c['geometricError'] for c in children))
-        return node
-    root = build(features)
-    root['transform'] = [*east,0,*north,0,*up,0,*anchor,1]
-    b = root['boundingVolume']['box']
-    tileset_error = max(1.0,root['geometricError'],2*float(np.linalg.norm([b[3],b[7],b[11]])))
-    result = dict(asset=dict(version='1.1'),extensionsUsed=['3DTILES_content_gltf_vector'],
-        geometricError=tileset_error,root=root)
-    (output/'tileset.json').write_text(json.dumps(result,indent=2,allow_nan=False))
-    # Repeated coarse-level fallbacks are one source/reason entry in the report.
-    unique = {(r['sourceId'],r['reason']):r for r in lod_reports}
-    def node_count(node):
-        return 1+sum(node_count(c) for c in node.get('children',[]))
-    total_tiles = node_count(root)
-    (output/'conversion.json').write_text(json.dumps(dict(features=len(features),leafTiles=leaf_count,
-        tiles=total_tiles,repairEnabled=getattr(args,'repair',False),polygons=reports,
-        lodToleranceMetres=tolerance,lodLevels=levels,lodFallbacks=list(unique.values()),
-        lockedSharedVertices=len(locked),pointPolicy='retain every semantic point feature',
-        errorPolicy='direct source-to-parent 3D path distance; planar polygon tolerance plus twice planarity deviation; float32 rounding'),indent=2))
-    print(f'vector: {len(features)} features, {leaf_count} full-detail leaves, {total_tiles} total tiles, {len(unique)} LOD fallbacks')
+    import sys
+    import types
+    if '__file__' in globals():
+        sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+    import hashlib
+    import vector_pipeline
+    import vector_reuse
+    import vector_source
+    sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
+    for module in (vector_source,vector_reuse,vector_pipeline):
+        sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
+    encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,simplify_feature=simplify_feature,encoder_digest=encoder))
 
 
 if __name__ == '__main__':
@@ -557,6 +461,15 @@ if __name__ == '__main__':
     p.add_argument('--lod-tolerance', type=float, default=.1)
     p.add_argument('--lod-levels', type=int, default=3)
     p.add_argument('--max-features', type=int, default=64)
+    p.add_argument('--layer', dest='layers', action='append', default=[])
+    p.add_argument('--all-layers', action='store_true')
+    p.add_argument('--reuse-tileset')
+    p.add_argument('--source-crs')
+    p.add_argument('--height-offset', type=float)
+    p.add_argument('--max-vertices', type=int, default=65536)
+    p.add_argument('--max-bytes', type=int, default=4194304)
+    p.add_argument('--max-tiles', type=int, default=100000)
+    p.add_argument('--max-source-vertices', type=int, default=1000000)
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
     a = p.parse_args()

@@ -78,7 +78,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     viewer.terrainProvider = provider;
     button('Terrain extent', () => viewer.camera.setView({destination: terrainBounds}));
   }
-  for (const [name, label] of [['mesh', '3D mesh'], ['annotations', 'Annotations']]) {
+  for (const [name, label] of [['mesh', '3D mesh'], ['annotations', 'Annotations'], ['point-cloud', 'Point cloud']]) {
     if (!config[name]) continue;
     const tiles = await C.Cesium3DTileset.fromUrl(config[name], {maximumScreenSpaceError: 8, backFaceCulling: name === 'mesh'});
     viewer.scene.primitives.add(tiles);
@@ -86,6 +86,9 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     if (name === 'annotations') {
       tiles.style = new C.Cesium3DTileStyle({color: "color('cyan', 0.65)", pointSize: 12});
       window.annotations = tiles;
+    } else if (name === 'point-cloud') {
+      tiles.pointCloudShading.attenuation = true;
+      window.pointCloud = tiles;
     } else window.tiles = tiles;
     tilesets.push(tiles);
     spheres.push(tiles.boundingSphere);
@@ -108,7 +111,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   const removeReady = viewer.scene.postRender.addEventListener(() => {
     if (!window.failures.length && tilesets.every(tiles => tiles.tilesLoaded) && viewer.scene.globe.tilesLoaded) {
       window.loaded = true;
-      status.textContent = 'Scene ready. Click an annotation for properties. Hide the mesh to inspect covered annotations.'
+      status.textContent = 'Scene ready. Click a point or annotation for properties. Hide covering layers to inspect them.'
         + (config.terrain ? '\nTerrain uses your supplied height datum and NoData fill settings.' : '');
       removeReady();
     }

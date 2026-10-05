@@ -1,6 +1,8 @@
 # rusty-tiles
 
-An MIT-licensed, standalone tool for textured GLB/glTF → 3D Tiles 1.1 → `.3tz`, raster imagery pyramids, DEM terrain tiles and experimental glTF vector tiles. Bring your own data; no survey datasets, access tokens or hosted services are bundled.
+An MIT-licensed, standalone tool for textured GLB/glTF → 3D Tiles 1.1 → `.3tz`, raster imagery pyramids, DEM terrain tiles, LAS/LAZ point-cloud tiles and experimental glTF vector tiles. Bring your own data; no survey datasets, access tokens or hosted services are bundled.
+
+Version 0.2.0 adds point-cloud LOD, GeoPackage vector input and reusable vector content. See [CHANGELOG.md](CHANGELOG.md) for release notes and compatibility limits.
 
 ## Build and run
 
@@ -72,6 +74,11 @@ Cesium consumes `tileset.json` and tile resources through a server capable of se
 
 ```sh
 cargo test --offline
+# After external GeoPackage diff application, reuse unaffected vector subtrees.
+target/release/rusty-tiles vector \
+  -i /path/to/your/updated.gpkg -o output/updated.3tz --layer roads \
+  --reuseTileset output/mapping.3tz
+
 python3 -m unittest discover -s tests -p 'test_*.py'
 # Optional external wrapper comparisons (requires npx and network/cache):
 cargo test --test golden -- --ignored
@@ -100,9 +107,9 @@ A matched conversion benchmark took 101.26 s before and 101.20 s after the rewri
 
 One intermediate PNG checksum failure did not recur in three subsequent full conversions; its cause remains unconfirmed. Set `RUSTY_TILES_DEBUG_IMAGES` to a diagnostic directory to retain a parent image if delivery decoding fails. Failed conversions do not publish an incomplete archive. The external wrapper oracle was unavailable during the full-model validation; this is not an oracle-parity claim. Clippy warnings are tracked as non-blocking style cleanup.
 
-## Raster, terrain and glTF vector lab commands
+## Raster, terrain and glTF vector commands
 
-These commands remain standalone lab tools. Python helpers are embedded in the Rust executable; terrain/vector need Python 3, NumPy and GDAL with GEOS. Raster needs the GDAL CLI (`gdal raster tile`, tested on 3.13.3). Existing output paths are rejected. Failed jobs clean their staging directory without publishing a partial result.
+Python helpers are embedded in the Rust executable. Raster and terrain require Python 3, NumPy and GDAL; vector additionally needs GEOS. Raster uses `gdal raster tile` on GDAL 3.11+, with `gdal2tiles` for older installations. The terrain encoder remains a regular-grid prototype and vector remains experimental. Existing output paths are rejected. Failed jobs clean their staging directory without publishing a partial result.
 
 ```sh
 # Preserve the source pixels in a COG and generate PNG XYZ display tiles.
@@ -116,22 +123,23 @@ target/release/rusty-tiles terrain \
   -i /path/to/your/dem.tif \
   -o output/terrain --maxZoom 20 --heightOffset 0 --fillHeight 0
 
-# GeoJSON -> glTF vector content, with source IDs and typed scalar properties.
+# GeoPackage -> glTF vector content, with layer identity and typed scalar properties.
 target/release/rusty-tiles vector \
-  -i /path/to/your/annotations.geojson -o output/annotations.3tz --maxFeatures 64
+  -i /path/to/your/mapping.gpkg -o output/mapping.3tz --layer roads \
+  --maxFeatures 64 --maxVertices 65536 --maxBytes 4194304
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-**Raster:** creates `source.cog.tif`, `tilejson.json` and `tiles/{z}/{x}/{y}.png`. The source COG retains original bands and georeferencing; PNG tiles are a reprojected display derivative. Numeric rasters need an explicit styling/scaling step for display; the tool does not invent a stretch. No PMTiles converter is bundled yet. A complete source/COG pixel-and-channel comparison passed during validation.
+**Raster:** creates `source.cog.tif`, `tilejson.json` and `tiles/{z}/{x}/{y}.png`. The source COG retains original bands and georeferencing; PNG tiles are a reprojected display derivative. Use `--display gray --band 1 --displayMin -10 --displayMax 10` for a numeric grayscale display with an explicit range. Use `--display image` for already-rendered byte (0–255) imagery and `--alphaBand 4` only when that band is transparency. Original values, bands and NoData are retained in the COG; the display is a separate derivative. Jobs exceeding 100,000 imagery tiles fail with an instruction to reduce zoom. `conversion.json` records the display settings. No PMTiles converter is bundled yet. A complete source/COG pixel-and-channel comparison passed during validation.
 
-**Terrain:** creates `layer.json`, TMS `{z}/{x}/{y}.terrain` files and `conversion.json`. The regular grid defaults to 65 samples per edge; shared boundaries and a common height quantization interval avoid mismatched edge heights. GDAL samples bounded raster windows. Availability starts at both hemisphere roots; Cesium can sample heights with `sampleTerrainMostDetailed`. `--fillHeight` explicitly defines missing/outside data. `--heightOffset` is a constant, not a spatial geoid transformation. Source datum and metre units must be established separately. Grid resolution and quantization are reported; there is no certified maximum surface-error bound or adaptive mesh simplifier yet. The files are uncompressed; serving HTTP gzip is optional for this preview. Terrain normals are not encoded in this prototype; the preview uses elevation colouring.
+**Terrain:** creates `layer.json`, TMS `{z}/{x}/{y}.terrain` files and `conversion.json`. The regular grid defaults to 65 samples per edge; shared boundaries and a common height quantization interval avoid mismatched edge heights. GDAL samples bounded raster windows. Availability starts at both hemisphere roots; Cesium can sample heights with `sampleTerrainMostDetailed`. `--fillHeight` explicitly defines missing/outside data. `--heightOffset` is a constant, not a spatial geoid transformation. Source datum and metre units must be established separately. Grid resolution and quantization are reported; there is no certified maximum surface-error bound or adaptive mesh simplifier yet. The files are uncompressed; serving HTTP gzip is optional for this preview. Each tile also has a `.heights.json` sidecar containing ellipsoidal metre samples in south-to-north row order, with `null` for missing/outside coverage before fill. The custom `heightOverlay` manifest entry lets clients preserve their base terrain where survey coverage is missing; it is not part of the quantized-mesh standard. `conversion.json` includes the encoded `heightRange`. Terrain normals are not encoded in this prototype; the preview uses elevation colouring.
 
-**Vectors:** targets `3DTILES_content_gltf_vector` on 3D Tiles 1.1, using `EXT_mesh_polygon`, `EXT_mesh_features` and `EXT_structural_metadata`. Polygon schema checked against Khronos glTF PR 2570 revision `c1a035499b70aeb5d8281470101423e5e285dfe3`; renderer tested with Cesium 1.143.0. This is a draft-format prototype, not a claim that 3D Tiles 2.0 is finalized. Whole features are partitioned into full-detail leaves, with simplified parent content and metre-based refinement error. Leaf geometry is retained. Buffered clipping, implicit tiling and batched line restart encoding are not implemented. See [vector LOD](docs/VECTOR.md) for simplification, fallback and memory limits. Points, lines, polygons and their Multi forms are supported. Polygon triangulation uses a best-fit plane but retains original 3D vertex positions, including nonplanar and vertical polygons. Holes are retained. Heterogeneous scalar schemas are supported; missing string/numeric values use explicit metadata noData values. Nullable booleans and complex/mixed property values still require an explicit schema. Unsupported inputs fail explicitly. `_source_id` preserves the JSON-encoded source ID, or original feature index when absent. The four-feature fixture rendered and picked all four property records in Cesium, including its polygon with a hole and vertical polygon.
+**Vectors:** targets `3DTILES_content_gltf_vector` on 3D Tiles 1.1, using `EXT_mesh_polygon`, `EXT_mesh_features` and `EXT_structural_metadata`. Polygon schema checked against Khronos glTF PR 2570 revision `c1a035499b70aeb5d8281470101423e5e285dfe3`; renderer tested with Cesium 1.143.0. This is a draft-format prototype, not a claim that 3D Tiles 2.0 is finalized. OGR layers (including GeoPackage) are streamed into a disk-backed spatial hierarchy with full-detail leaves and simplified parent content. Actual encoded feature, vertex and byte budgets are enforced. Oversized lines and multi-geometries fragment; oversized polygons retain their triangulated surface and encode source outlines separately to avoid internal seams. Parents that cannot retain all identities within budget route without content. Buffered clipping, implicit tiling and batched line restart encoding are not implemented. See [vector LOD](docs/VECTOR.md) for simplification, fallback and memory limits. Points, lines, polygons and their Multi forms are supported. Polygon triangulation uses a best-fit plane but retains original 3D vertex positions, including nonplanar and vertical polygons. Holes are retained. Heterogeneous scalar schemas are supported; missing string/numeric values use explicit metadata noData values. Nullable booleans and complex/mixed property values still require an explicit schema. Unsupported inputs fail explicitly. `_source_id` preserves the JSON-encoded source ID, or the OGR FID when absent; `_source_layer` disambiguates layer identity. The four-feature fixture rendered and picked all four property records in Cesium, including its polygon with a hole and vertical polygon.
 
 Terrain validation found zero encoded edge-height mismatch across 7,251 neighboring tile pairs. At 23 sampled source pixels, rendered heights differed by a mean 0.0232 m and maximum 0.0873 m. This is a sampled check, not a dataset-wide bound. That private test source had an unverified vertical datum; the terrain command remains a prototype requiring users to establish their own height datum.
 
-`--repair` permits GDAL/GEOS MakeValid for invalid polygon outlines and records changes in `conversion.json`. With `--ambiguousOutlines`, crossings that disagree by more than 2 cm in 3D retain their original closed 3D outlines and feature properties. Without that flag they fail explicitly. Real-data validation retained every input feature and checked all retained scalar properties; no real-data fixtures are distributed.
+`--repair` permits GDAL/GEOS MakeValid for invalid polygon outlines and records changes in `geometry-reports.jsonl` with a bounded sample in `conversion.json`. With `--ambiguousOutlines`, crossings that disagree by more than 2 cm in 3D retain their original closed 3D outlines and feature properties. Without that flag they fail explicitly. Real-data validation retained every input feature and checked all retained scalar properties; no real-data fixtures are distributed.
 
 ## Preview your own scene
 
@@ -172,8 +180,64 @@ python3 scripts/preview.py \
 Every data flag is optional; select at least one. Add `--terrain output/terrain` only for a DEM covering the same area and with the correct height reference. Layer toggles, extent buttons, annotation picking and an FPS display are included. Covered annotations retain their actual positions; hide the mesh to inspect them.
 
 To serve on your own network, explicitly pass `--host YOUR_INTERFACE_IP --port 9227`. Only use data you intend to share there. Nothing is uploaded or automatically published. Restarting the same command reuses your output directories; no files under `/tmp` are required. Generated files under `output/` and `target/` are ignored by git.
-# rusty-tiles
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, local checks, the `develop` → `main` release workflow, review requirements and data-sharing rules. Contributions normally target `develop`; `main` is protected for releases.
+
+## Point clouds (LAS/LAZ)
+
+Convert ordinary XYZ point clouds without application-specific axis conventions.
+Install the optional Python dependencies in the environment used by `python3`:
+
+```sh
+python3 -m pip install -r scripts/point-cloud-requirements.txt
+rusty-tiles point-cloud -i cloud.laz -o cloud.3tz \
+  --sourceCrs EPSG:32632 --heightOffset 0 --maxPoints 50000
+```
+
+Use `--sourceCrs header` to read the LAS horizontal CRS, or explicitly supply
+an EPSG code/WKT understood by PROJ. Geospatial inputs require a **2D horizontal
+CRS** and `--heightOffset`: source Z must be metres, with the supplied constant
+converting it to ellipsoidal height. Zero is appropriate only when that height
+reference is established. A constant is not a geoid transformation. Required
+PROJ operations must be available locally; ballpark transformations and automatic
+grid downloads are disabled. Compound/vertical and geocentric source CRSs are
+rejected in this first reader. Source X/Y follow ordinary easting/northing or
+longitude/latitude order; horizontal units are handled by PROJ.
+
+For engineering or unreferenced data, `--sourceCrs local` keeps XYZ in metres,
+Z up, without globe placement or height conversion. No coordinate system is
+guessed. Mesh commands retain their existing application-specific adapters;
+point-cloud coordinates do not use those adapters.
+
+The reader streams LAS/LAZ (including ordinary sequential reading of COPC files)
+into temporary disk records. Recursive binary spatial partitioning streams those
+records into smaller files; `--chunkPoints` (default 100,000) limits each input
+batch and `--maxPoints` (default 50,000) limits leaf content and parent samples.
+Each parent selects the first source point in each occupied cell of a bounded
+voxel grid. Cell diagonal plus float32 encoding error conservatively bounds the
+distance from source points to parent samples. `REPLACE` refinement prevents
+parent/child double rendering. Full-detail leaves retain every record, including
+coincident points. Degenerate partitions split by record count; excessively deep
+spatial hierarchies fail explicitly instead of overrunning recursion limits.
+
+Content uses standard glTF `POINTS` in 3D Tiles 1.1, with original 16-bit RGB,
+intensity, classification, return fields, and scalar numeric LAS dimensions in
+`EXT_structural_metadata`/`EXT_mesh_features`. Scaled scalar extra dimensions are
+stored as decoded float64 values; array extras and waveform dimensions fail
+explicitly. Source XYZ, integer X/Y/Z and stable source record indices are kept
+as metadata. Per-tile origins limit float32 position rounding; `conversion.json`
+reports the maximum rounding, source scales/offsets, CRS and settings. Leaves
+preserve all points, but rendered float32 positions are not bit-identical to the
+original float64 coordinates. Unknown VLRs, waveform payloads and source files
+are not copied; this is a display derivative, not a LAS archive.
+
+RAM scales with configured batch/sample budgets and dimension count, rather
+than the complete point count. Scratch disk and repeated passes trade I/O for
+bounded memory. See [CONTRIBUTING.md](CONTRIBUTING.md) for an opt-in public-data
+audit and measured results from one machine. Existing output
+paths are rejected and Rust publishes the archive only after successful encoding.
+
+Extract the archive and add `--point-cloud extracted-directory` to the existing
+preview command. The preview supports point-cloud attenuation, layer toggles and
+per-point property picking without a hosted service or token.

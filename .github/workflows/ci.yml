@@ -56,10 +56,16 @@ jobs:
             python=3.12
             gdal=3.12
             numpy=2
+            laspy>=2.6,<3
+            lazrs-python
+            pyproj>=3.7,<4
             -c conda-forge
           init-shell: bash
+      - name: Build CLI for derivative acceptance
+        shell: bash -el {0}
+        run: cargo build --locked
       - name: Test derivative encoding and preview isolation
         shell: bash -el {0}
         run: |
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
-          python -m unittest discover -s tests -p 'test_*.py'
+          RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'

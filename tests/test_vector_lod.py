@@ -27,6 +27,9 @@ def distance(points, path):
 
 def read(path):
     data = path.read_bytes()
+    if data[:4]==b'b3dm':
+        header=struct.unpack_from('<4s6I',data)
+        data=data[28+sum(header[3:]):]
     n = struct.unpack_from('<I',data,12)[0]
     doc = json.loads(data[20:20+n])
     binary = data[28+n:]
@@ -119,25 +122,30 @@ class VectorLodTests(unittest.TestCase):
             self.assertGreaterEqual(report['tiles'],2)
             self.assertLessEqual(report['tiles'],4)
 
-    def test_mixed_features_have_content_and_properties_at_every_level(self):
+    def test_mixed_features_route_with_bounded_content_and_preserve_properties(self):
         with tempfile.TemporaryDirectory() as tmp:
             vector.run(types.SimpleNamespace(input=str(ROOT/'tests/fixtures/vector.geojson'),output=tmp,max_features=2))
             root=json.loads((pathlib.Path(tmp)/'tileset.json').read_text())['root']
             def walk(node):
-                self.assertIn('content',node)
-                doc,_,ids=read(pathlib.Path(tmp)/node['content']['uri'])
-                schema=doc['extensions']['EXT_structural_metadata']['schema']['classes']['feature']['properties']
-                self.assertIn('height',schema)
-                self.assertEqual(len(ids),len(set(ids)))
+                ids=[]
+                if 'content' in node:
+                    doc,_,ids=read(pathlib.Path(tmp)/node['content']['uri'])
+                    schema=doc['extensions']['EXT_structural_metadata']['schema']['classes']['feature']['properties']
+                    self.assertIn('height',schema)
+                    self.assertLessEqual(len(ids),2)
+                    self.assertEqual(len(ids),len(set(ids)))
+                else:
+                    self.assertTrue(node['extras']['routing'])
                 all_ids=[]
                 for c in node.get('children',[]):
                     self.assertGreaterEqual(node['geometricError'],c['geometricError'])
                     all_ids.extend(walk(c))
                     b,bc=node['boundingVolume']['box'],c['boundingVolume']['box']
-                    self.assertTrue((np.abs(np.array(bc[:3])-b[:3])+np.array([bc[3],bc[7],bc[11]]) <= np.array([b[3],b[7],b[11]])+1e-8).all())
-                if all_ids:
+                    delta=np.array(c['transform'][12:15])
+                    self.assertTrue((np.abs(np.array(bc[:3])+delta-b[:3])+np.array([bc[3],bc[7],bc[11]]) <= np.array([b[3],b[7],b[11]])+1e-8).all())
+                if all_ids and ids:
                     self.assertEqual(sorted(ids),sorted(all_ids))
-                return ids
+                return all_ids or ids
             self.assertEqual(len(walk(root)),4)
 
 
