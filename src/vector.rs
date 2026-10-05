@@ -40,6 +40,12 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub reproducible: bool,
+    pub jobs: usize,
+    pub quantize: bool,
+    pub meshopt: bool,
+    /// Library callers supply the rusty-tiles executable used for native compression.
+    pub meshopt_encoder: Option<std::path::PathBuf>,
     pub parent_repair: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
@@ -63,6 +69,11 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            reproducible: false,
+            jobs: std::thread::available_parallelism().map_or(1, usize::from),
+            quantize: false,
+            meshopt: false,
+            meshopt_encoder: None,
             parent_repair: false,
             max_parent_features: 4096,
             where_clause: None,
@@ -147,7 +158,8 @@ pub fn vector_to_3tz_with_options(
             "invalid vector field selection or listFields setting",
         ));
     }
-    if options.max_parent_features == 0
+    if options.jobs == 0
+        || options.max_parent_features == 0
         || options.max_vertices < 4
         || options.max_bytes < 4096
         || options.max_tiles == 0
@@ -188,6 +200,10 @@ pub fn vector_to_3tz_with_options(
         ("vector_source", include_str!("../scripts/vector_source.py")),
         ("vector_reuse", include_str!("../scripts/vector_reuse.py")),
         (
+            "vector_parallel",
+            include_str!("../scripts/vector_parallel.py"),
+        ),
+        (
             "vector_pipeline",
             include_str!("../scripts/vector_pipeline.py"),
         ),
@@ -211,6 +227,8 @@ pub fn vector_to_3tz_with_options(
         )?)
         .arg(input)
         .arg(work.path())
+        .arg("--jobs")
+        .arg(options.jobs.to_string())
         .arg("--max-parent-features")
         .arg(options.max_parent_features.to_string())
         .arg("--max-features")
@@ -254,6 +272,20 @@ pub fn vector_to_3tz_with_options(
     }
     if options.skip_invalid {
         command.arg("--skip-invalid");
+    }
+    if options.reproducible {
+        command.arg("--reproducible");
+    }
+    if options.quantize {
+        command.arg("--quantize");
+    }
+    if options.meshopt {
+        command.arg("--meshopt-helper").arg(
+            options
+                .meshopt_encoder
+                .as_ref()
+                .ok_or_else(|| Error::msg("meshopt_encoder executable is required"))?,
+        );
     }
     if options.parent_repair {
         command.arg("--parent-repair");

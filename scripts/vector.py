@@ -71,13 +71,49 @@ class Glb:
 
     def accessor(self, values, dtype, kind):
         values = np.asarray(values, dtype=dtype)
-        view = self.view(values.tobytes())
-        a = dict(bufferView=view, componentType=5126 if dtype == '<f4' else 5125, count=len(values), type=kind)
+        if dtype == '<u2' and kind == 'SCALAR':
+            padded=np.zeros((len(values),2),dtype='<u2');padded[:,0]=values
+            view=self.view(padded.tobytes())
+            self.doc['bufferViews'][view]['byteStride']=4
+        else:view = self.view(values.tobytes())
+        a = dict(bufferView=view, componentType={'<f4':5126,'<u4':5125,'<u2':5123}[dtype], count=len(values), type=kind)
         if kind == 'VEC3':
             a.update(min=values.min(axis=0).tolist(), max=values.max(axis=0).tolist())
         i = len(self.doc['accessors'])
         self.doc['accessors'].append(a)
         return i
+
+    def quantize_positions(self):
+        indices={p['attributes']['POSITION'] for m in self.doc['meshes'] for p in m['primitives']}
+        positions={}
+        for index in indices:
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            positions[index]=np.frombuffer(self.data,dtype='<f4',count=accessor['count']*3,
+                offset=view['byteOffset']).reshape(-1,3).astype(float)
+        points=np.concatenate(list(positions.values()));lo=points.min(axis=0);extent=points.max(axis=0)-lo
+        scale=np.where(extent>0,extent,1.)
+        error=0.
+        for index,p in positions.items():
+            quantized=np.rint((p-lo)/scale*65535).clip(0,65535).astype('<u2')
+            decoded=quantized.astype(float)/65535*scale+lo
+            error=max(error,float(np.linalg.norm(decoded-p,axis=1).max()))
+            packed=np.zeros((len(p),4),dtype='<u2');packed[:,:3]=quantized
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            view.update(byteOffset=len(self.data),byteLength=packed.nbytes,byteStride=8)
+            self.data.extend(packed.tobytes())
+            accessor.update(componentType=5123,normalized=True,min=quantized.min(axis=0).tolist(),max=quantized.max(axis=0).tolist())
+        rebuilt=bytearray()
+        for view in self.doc['bufferViews']:
+            rebuilt.extend(b'\0'*(-len(rebuilt)%8))
+            value=self.data[view['byteOffset']:view['byteOffset']+view['byteLength']]
+            view['byteOffset']=len(rebuilt);rebuilt.extend(value)
+        self.data=rebuilt
+        self.doc['nodes'][0].update(translation=lo.tolist(),scale=scale.tolist())
+        self.doc['extensionsUsed'].append('KHR_mesh_quantization')
+        self.doc.setdefault('extensionsRequired',[]).append('KHR_mesh_quantization')
+        error=max(error,float(np.linalg.norm(extent/131070)))
+        error+=float(np.linalg.norm(lo-lo.astype('<f4'))+np.linalg.norm(scale-scale.astype('<f4'))+np.linalg.norm(scale)*2**-24)
+        return error
 
     def finish(self, path):
         self.doc['buffers'][0]['byteLength'] = len(self.data)
@@ -235,7 +271,7 @@ def validate_feature(feature, repair=False, ambiguous_outlines=False):
     return reports
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False, quantize=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -286,9 +322,11 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
             raise ValueError(f'unsupported/null/mixed property {key!r}; retain source and normalize explicitly')
         if missing:
             schema[key]['noData'] = sentinel
-    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty-tiles-vector', classes={'feature':dict(properties=schema)}),
+    glb.doc['extensions'] = {'EXT_structural_metadata': dict(schema=dict(id='rusty_tiles_vector', classes={'feature':dict(properties=schema)}),
         propertyTables=[dict(name='features', **{'class':'feature'}, count=len(items), properties=columns)])}
     all_positions = []
+    if len(items)>16777217:raise ValueError('too many exact feature IDs in one tile')
+    feature_id_dtype='<u2' if len(items)<=65536 else '<f4'
     for fid, feature in enumerate(items):
         parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
@@ -323,7 +361,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 if len(points) < (1 if mode == 0 else 2):
                     raise ValueError('empty/degenerate feature')
             primitive = dict(mode=mode, attributes=dict(POSITION=glb.accessor(points, '<f4', 'VEC3'),
-                _FEATURE_ID_0=glb.accessor([fid]*len(points), '<u4', 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
+                _FEATURE_ID_0=glb.accessor([fid]*len(points), feature_id_dtype, 'SCALAR')), indices=glb.accessor(indices, '<u4', 'SCALAR'), extensions=ext)
             glb.doc['meshes'][0]['primitives'].append(primitive)
             all_positions.extend(points)
     if fill_only:
@@ -334,11 +372,18 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         for primitive in glb.doc['meshes'][0]['primitives']:
             primitive['material']=0
     glb.finish(path)
+    before_bytes=path.stat().st_size
+    quantization_error=0.
+    if quantize:
+        quantization_error=glb.quantize_positions()
+        glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]
     rounding = float(np.linalg.norm(p-p.astype('<f4'),axis=1).max())
     if encoding_report is not None:
         encoding_report['rounding'] = rounding
+        encoding_report['quantizationError'] = quantization_error
+        encoding_report['beforeBytes'] = before_bytes
         encoding_report['vertices'] = len(all_positions)
     low, high = p.min(axis=0), p.max(axis=0)
     center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
@@ -526,11 +571,18 @@ def run(args):
     import vector_pipeline
     import vector_reuse
     import vector_source
+    import vector_parallel
     sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
-    for module in (vector_source,vector_reuse,vector_pipeline):
+    for module in (vector_source,vector_reuse,vector_pipeline,vector_parallel):
         sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
+    helper=getattr(args,'meshopt_helper',None)
+    if helper:
+        digest=hashlib.sha256()
+        with open(helper,'rb') as executable:
+            for chunk in iter(lambda:executable.read(65536),b''):digest.update(chunk)
+        sources.append(digest.hexdigest())
     encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
-    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder))
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder,sources=dict(zip(('vector','vector_source','vector_reuse','vector_pipeline','vector_parallel'),sources[:5]))))
 
 
 if __name__ == '__main__':
@@ -539,6 +591,8 @@ if __name__ == '__main__':
     p.add_argument('output')
     p.add_argument('--lod-tolerance', type=float, default=.1)
     p.add_argument('--lod-levels', type=int, default=3)
+    p.add_argument('--reproducible',action='store_true')
+    p.add_argument('--jobs',type=int,default=len(__import__('os').sched_getaffinity(0)) if hasattr(__import__('os'),'sched_getaffinity') else __import__('os').cpu_count() or 1)
     p.add_argument('--max-features', type=int, default=64)
     p.add_argument('--max-parent-features', type=int, default=4096)
     p.add_argument('--layer', dest='layers', action='append', default=[])
@@ -555,6 +609,8 @@ if __name__ == '__main__':
     p.add_argument('--field', dest='fields', action='append', default=[])
     p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])
     p.add_argument('--skip-invalid', action='store_true')
+    p.add_argument('--quantize', action='store_true')
+    p.add_argument('--meshopt-helper')
     p.add_argument('--parent-repair', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')

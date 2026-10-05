@@ -1,3 +1,5 @@
-numpy>=2,<3
-laspy[lazrs]>=2.6,<3
-pyproj>=3.7,<4
+# Known-good LAS/LAZ profile: Python >=3.12.
+numpy==2.5.3
+laspy[lazrs]==2.7.0
+lazrs==0.8.2
+pyproj==3.8.0
