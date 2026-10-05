@@ -45,7 +45,8 @@ archive only after conversion and packing succeed.
 
 Every content tile is checked against **actual encoded** vertices and bytes,
 summed across all contents including any `b3dm` wrapper.
-Defaults are 64 feature fragments, 65,536 POSITION vertices and 4 MiB across a tile’s contents.
+Defaults are 64 feature fragments per leaf (`--maxFeatures`), 4,096 per parent
+(`--maxParentFeatures`), 65,536 POSITION vertices and 4 MiB across a tile’s contents.
 `--maxTiles` caps hierarchy nodes at 100,000. Indivisible geometry or metadata
 that exceeds a budget fails; it does not silently publish an oversized tile.
 
@@ -67,6 +68,39 @@ triangle surface fragments are not simplified. Buffered spatial clipping, covera
 edge reconciliation, implicit tiling and primitive-restart line batching remain
 unimplemented.
 
+## Optional position quantization and compression
+
+`--quantize` writes normalized unsigned 16-bit positions with the standard
+[KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_mesh_quantization)
+extension. It is lossy: full-detail leaves retain feature topology/properties but
+positions have an additional conservative quantization error bound. Tile extras
+record `quantizationErrorMetres` separately from float32 rounding; it contributes
+to bounds padding and `geometricError`, including on leaves.
+
+`--meshopt` losslessly compresses accessor streams with
+[EXT_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_meshopt_compression).
+Feature IDs, polygon loop/triangle order and metadata remain intact. Required
+extensions and a standard placeholder buffer make unsupported decoders reject
+compressed content rather than read missing bytes. [KHR_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_meshopt_compression)
+remains a release candidate as checked on 2026-10-05; this encoder uses the
+ratified EXT encoding. Both options are off by default and can be combined:
+
+```sh
+rusty-tiles vector -i mapping.gpkg -o mapping.3tz --layer roads --quantize --meshopt
+```
+
+Budgets use the final encoded payload, including wrappers. Small contents can grow
+because of extension JSON overhead. `conversion.json.encoding` records options,
+maximum quantization error, and uncompressed/encoded byte totals across tile
+content references; deduplicated archive size can differ. Per-tile extras record
+both sizes. Reuse requires matching encoding settings and, for compression, the
+same native encoder binary. Library callers enabling meshopt supply its executable
+through `VectorOptions.meshopt_encoder`.
+
+The combined format is checked with the invented browser cases on CesiumJS
+1.142.0, 1.143.0 and 1.146.0. Repeat the fixture generator with `--quantize` and
+`--meshopt-helper /path/to/rusty-tiles`, then run the same native browser probe.
+
 ## Vector LOD
 
 `--lodTolerance` is the base simplification tolerance in metres, doubling at each
@@ -74,7 +108,9 @@ coarser level. `--lodLevels` (1–16, default 3) adds real simplification even f
 one detailed feature. Redundant levels with no vertex reduction are omitted.
 Parents simplify directly from original full-detail geometry with `REPLACE`
 refinement. If a parent cannot retain every feature within the budgets, it is a
-routing node without content. Semantic points and feature identities are never
+routing node without content; `extras.routingReason` identifies `parentFeatures`,
+`vertices`, `bytes`, or the conservative `estimatedBytes` memory guard. Parent
+feature counts are independent of the leaf partition budget. Semantic points and feature identities are never
 silently sampled away. Dense point-only collections therefore provide routing,
 not geometry reduction.
 
@@ -85,11 +121,21 @@ remaining tolerance is used for 3D path simplification; reported geometry error
 includes twice the planarity deviation and stays within the requested tolerance.
 Float32 rounding is added separately. Parent errors are monotonic. Full-detail leaves
 retain source vertices/segments subject to separately reported float32 rounding;
-leaf geometricError is zero. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
+leaf geometricError is zero with the default unquantized encoding. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
 unsimplified. `--repair` explicitly permits invalid-outline repairs;
 `--ambiguousOutlines` retains irreconcilable crossings as source 3D outlines.
 Oversized polygons requiring triangle fragmentation still need unambiguous filled
 geometry; outline fallback does not resolve their fragmentation.
+
+`--parentRepair` optionally substitutes source-chord outlines when invalid topology
+or topology/minimum-ring constraints would otherwise retain a polygon at full cost.
+This affects parent display only; filled full-detail leaves keep their existing
+repair policy. The source 3D AABB diagonal bounds the entire filled-surface/outline
+substitution, including removed fill and holes. A stand-in is emitted only when
+that conservative bound fits the requested tolerance; shared vertices remain
+locked. Reports record `substitution: parentOutline`, source identity, error and
+tolerance. This can reduce distant display fidelity; it never silently drops a
+feature or changes a leaf. If the bound does not fit, the original fallback remains.
 
 `conversion.json` records layers, CRS/height semantics, budgets, observed tile
 maxima, fragmentation and a bounded sample of geometry reports. The complete
@@ -148,6 +194,112 @@ that partial display is **not supported native vector behavior**. Earlier releas
 and other engines have not been tested. A runtime that accepts ordinary 3D Tiles
 or `b3dm` may still ignore polygon topology, vector styling or feature metadata.
 Successful triangle rendering alone is insufficient to establish compatibility.
+
+### Style and pick features by their properties
+
+Use the CesiumJS IIFE (`/cesium/Cesium.js`) and a tested runtime from the matrix
+above. Retained source properties are available on lines, polygon fills, source
+boundaries, repaired outlines and their LOD representations. Fragments retain
+`_source_id` and `_source_layer`, so several picked pieces can identify the same
+source feature. Fields excluded with `--fields`/`--dropFields` are unavailable.
+
+For a dataset with `category` and `status` string fields, change its display
+without rebuilding the archive:
+
+```js
+const tileset = await Cesium.Cesium3DTileset.fromUrl('/data/tileset.json');
+viewer.scene.primitives.add(tileset);
+tileset.style = new Cesium.Cesium3DTileStyle({
+  color: {
+    conditions: [
+      ["${category} === 'survey'", "color('cyan')"],
+      ["true", "color('orange')"],
+    ],
+  },
+  show: "${status} === 'active'",
+  lineWidth: 12,
+  pointSize: 12,
+});
+```
+
+Replace the field names and values with your dataset's properties. The fallback
+colour also covers missing categories; the status condition displays only active
+features. `show` controls presentation; `--where` excludes source records from the
+archive itself. See the [style API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileStyle.html).
+
+Pick a visible feature and read its source identity and retained properties:
+
+```js
+const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+handler.setInputAction((click) => {
+  const feature = viewer.scene.pick(click.position);
+  if (!feature || typeof feature.getProperty !== 'function') return;
+
+  const properties = Object.fromEntries(feature.getPropertyIds().map((key) => {
+    const value = feature.getProperty(key);
+    // BigInt needs a string before JSON serialization; undefined displays as null.
+    return [key, value === undefined ? null :
+      typeof value === 'bigint' ? value.toString() : value];
+  }));
+  console.log({
+    sourceIdJson: properties._source_id,
+    sourceLayer: properties._source_layer,
+    properties,
+  });
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+// Call handler.destroy() when disposing of this view.
+```
+
+`_source_id` is JSON text for the original ID, not a tile-local feature number.
+Keep that text when looking up source records: blindly parsing a large numeric ID
+as a JavaScript Number can lose precision. `_source_layer` distinguishes identical
+IDs from different layers. The public [feature API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileFeature.html)
+is shared by the tested native vector and model/fill picking paths; checking the
+method also avoids assuming every scene pick is a metadata feature.
+
+**Missing values in the tested CesiumJS 1.143 runtime:** strings and FLOAT64
+properties with `noData` return `undefined` from `getProperty`. Empty strings and
+zero remain valid source values. INT64 values return `bigint`, preserving integers
+larger than 2^53. In this runtime, missing INT64 values expose the raw BigInt sentinel
+instead of `undefined` (the fixture returns `-9007199254740992n`). The encoded schema
+still declares `noData`; the runtime compares its numeric JSON sentinel with a
+BigInt. A sentinel can move if the source contains that value, so compare with the
+property's `noData` from its encoded glTF metadata schema rather than hard-coding it:
+
+```js
+function integerOrNull(value, schemaNoData) {
+  if (value === undefined) return null;
+  if (typeof value === 'bigint' && schemaNoData !== undefined &&
+      value === BigInt(schemaNoData)) return null;
+  return value; // Keep exact integers as BigInt, or use toString() for JSON/UI.
+}
+```
+
+The helper takes `noData` from the relevant content's
+`EXT_structural_metadata.schema.classes.feature.properties[field]`; it does not
+use private Cesium internals. The picking example above serializes values but
+cannot infer a missing integer without that schema value. Nullable booleans are
+rejected during ingestion. `--listFields json` properties are JSON text strings;
+parse them separately if the application needs arrays.
+
+The optional acceptance probe uses two source features per case and checks
+property-based cyan/orange colours, visibility filtering, source identity, exact
+64-bit values and the missing-value behavior on lines, polygon fills, fragmented
+fills/boundaries, repaired outlines and points:
+
+```sh
+python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
+python3 scripts/preview.py --port 9257 \
+  --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
+  --annotations target/vector-metadata-cases
+# In another terminal, with Playwright available to Node:
+NODE_PATH=target/browser-probe/node_modules \
+  node tests/fixtures/vector_metadata.cjs http://127.0.0.1:9257
+```
+
+The probe downloads nothing and exits unsuccessfully if any assertion fails.
+Repeat it when changing the runtime version; the nullable INT64 observation above
+is specific to the checked 1.143 release.
 
 ### Repeat the browser check
 
@@ -326,3 +478,27 @@ Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
 identities and reasons remain in the diagnostics and geometry reports; actual
 GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
 native warnings as well as Python tracebacks for debugging.
+
+### Parallel encoding
+
+`vector --jobs N` limits the number of encoding processes; the CLI defaults to
+available cores. Use `--jobs 1` for a small-memory machine or embedding without
+worker processes. Workers read bounded candidates and shared-vertex masks from
+the SQLite spool through independent read-only connections. Leaf candidates and
+LOD candidates can run concurrently; source reading, partition decisions and
+manifest assembly remain ordered in the coordinator. Unchanged reusable
+subtrees launch no encoding jobs. Worker errors prevent archive publication.
+
+Each worker can hold a tile candidate up to the configured vertex/feature budgets,
+so choose `N` with available memory in mind. Hash-named payloads, hierarchy order,
+geometry reports and build-state signatures do not depend on completion order or
+worker count. `conversion.json.performance` records requested jobs, the number of
+workers that produced consumed candidates, and wall times for ingestion,
+partitioning, encoding and publication. Partitioning includes spool preparation;
+encoding includes coordinator overhead and process startup, and publication stops
+before Rust archive packing. Timings are diagnostic, not part of content identity.
+
+For a cacheable, byte-identical archive, add `--reproducible`; performance diagnostics
+are omitted from `conversion.json`, while content and reuse behavior are retained.
+See [reproducible builds](../CONTRIBUTING.md#reproducible-builds) for the precise
+comparison rules and tested scope.

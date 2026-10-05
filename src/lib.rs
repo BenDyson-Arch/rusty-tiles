@@ -40,3 +40,9 @@ pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 pub const ORACLE_NPM: &str = "3d-tiles-tools@0.5.4";
 
 pub mod raster;
+
+pub mod vector_encoding;
+
+pub mod doctor;
+
+pub mod validate;

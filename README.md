@@ -86,6 +86,10 @@ python3 -m zipfile -e output/example.3tz output/example
 
 You now have an archive and an extracted tileset. Continue to [preview your results](#preview-your-results) to view it.
 
+Check the installed environment with `rusty-tiles doctor --command vector` (or
+select `point-cloud`, `raster`, or `terrain`). See the [dependency profiles](CONTRIBUTING.md#check-and-reproduce-the-python-environment)
+for exact tested versions and `doctor --json` output.
+
 ## Convert your data
 
 Every command uses `-i` for input and `-o` for output. Paths below are examples; replace them with your files. Run `rusty-tiles COMMAND --help` for all options.
