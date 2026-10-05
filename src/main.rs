@@ -26,6 +26,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Check installed Python modules, native capabilities and local PROJ grids
+    Doctor(DoctorArgs),
     #[command(hide = true)]
     EncodeVectorContent {
         #[arg(short, long)]
@@ -50,6 +52,16 @@ enum Command {
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
     Raster(RasterArgs),
+}
+
+#[derive(Args)]
+struct DoctorArgs {
+    /// Check only these converters; repeat to select several
+    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert"])]
+    commands: Vec<String>,
+    /// Print the complete dependency inventory as one JSON object
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Args)]
@@ -251,6 +263,15 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Error> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Doctor(a) => {
+            let report = rusty_tiles::doctor::report(&a.commands)?;
+            rusty_tiles::doctor::display(&report, a.json);
+            if report["ready"] != true {
+                return Err(Error::msg(
+                    "selected converters have missing dependencies; see doctor report",
+                ));
+            }
+        }
         Command::EncodeVectorContent { input } => {
             println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
         }

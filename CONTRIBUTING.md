@@ -106,6 +106,40 @@ index functions fail this regression instead of being skipped.
 No upstream source or database fixtures are bundled; CI's core replacement tests
 run without external diff binaries.
 
+## Check and reproduce the Python environment
+
+Run `rusty-tiles doctor` before starting a job, or select converters explicitly:
+
+```sh
+rusty-tiles doctor --command vector --command terrain
+rusty-tiles doctor --command point-cloud --json
+```
+
+The check inventories the actual Python interpreter, module versions/locations,
+GEOS triangulation, PROJ database availability/data directories/local grids, and
+readiness for each converter. It exits unsuccessfully if a selected converter is
+missing a required capability. Native mesh/packing commands can be checked without
+Python. It does not install dependencies or fetch grids; an inventory is not proof
+that every requested CRS/height operation is supported.
+
+Known-good, exact Python profiles tested on 2026-10-05 are in
+`scripts/gdal-requirements.txt` (vector/raster/terrain) and
+`scripts/point-cloud-requirements.txt` (LAS/LAZ). Both require Python 3.12 or newer.
+The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
+build supporting constrained triangulation; a pip binding cannot replace those
+system libraries. Install a profile into a suitable environment explicitly:
+
+```sh
+python3 -m pip install -r scripts/gdal-requirements.txt
+python3 -m pip install -r scripts/point-cloud-requirements.txt
+rusty-tiles doctor --json
+```
+
+These are reproducible reference profiles, not the only supported environments.
+CI also checks the conda-forge GDAL 3.12 stack. PROJ grids and their licences remain
+separate from Python requirements; use the grid inventory and conversion's precise
+operation check when selecting a height reference.
+
 ## Python conversion diagnostics
 
 Data/conversion errors print concise messages; dependency installation guidance
