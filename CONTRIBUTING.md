@@ -91,7 +91,7 @@ libraries. The optional test uses upstream C++ geodiff and the local Go port:
 
 ```sh
 # Run from the go-geodiff checkout to resolve its existing Go module.
-go build -o /tmp/go-geodiff-driver /path/to/rusty-tiles/tests/geodiff_driver.go
+go build -o /tmp/go-geodiff-driver /path/to/rusty-tiles/tests/fixtures/geodiff_driver.go
 # Run from rusty-tiles with the actual upstream binary (2.3.0 tested).
 GEODIFF_CPP_BIN=/path/to/geodiff GO_GEODIFF_DRIVER=/tmp/go-geodiff-driver \
   python3 -m unittest discover -s tests -p 'test_geodiff_compat.py'

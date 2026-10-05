@@ -5,7 +5,7 @@ edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain and glTF vectors."
 license = "MIT"
 readme = "README.md"
-include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.py", "/scripts/*.sh", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/*.go", "/tests/fixtures/**", "/docs/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.py", "/scripts/*.sh", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
 
 [[bin]]
 name = "rusty-tiles"
