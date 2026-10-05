@@ -54,11 +54,21 @@ def spatial_ref(text):
     return srs
 
 
+class ProjectionEnvironmentError(RuntimeError):
+    environment_error = True
+
+
 def transformation(source, target):
     options = osr.CoordinateTransformationOptions()
     options.SetBallparkAllowed(False)
     options.SetOnlyBest(True)
-    return osr.CreateCoordinateTransformation(source, target, options)
+    try:
+        result = osr.CreateCoordinateTransformation(source, target, options)
+    except RuntimeError as error:
+        raise ProjectionEnvironmentError(f'cannot create strict CRS operation; check local PROJ database/grids with rusty-tiles doctor: {error}') from error
+    if result is None:
+        raise ProjectionEnvironmentError('no strict CRS operation available; check local PROJ database/grids with rusty-tiles doctor')
+    return result
 
 
 class Reader:
@@ -116,8 +126,11 @@ class Reader:
         self.on_feature_error = None
         self.schemas = {}
         self.layer_reports = []
-        self.target = spatial_ref('EPSG:4978')
-        self.geographic = spatial_ref('EPSG:4979')
+        try:
+            self.target = spatial_ref('EPSG:4978')
+            self.geographic = spatial_ref('EPSG:4979')
+        except RuntimeError as error:
+            raise ProjectionEnvironmentError(f'PROJ database unavailable: {error}') from error
         self.from_ecef = transformation(self.target, self.geographic)
 
     def keep_field(self,key):
