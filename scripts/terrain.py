@@ -133,15 +133,20 @@ def run(args):
                 tile = gdal.Warp('', vrt, format='MEM', outputBounds=[west-step/2, south-step/2, west+size+step/2, south+size+step/2],
                                  width=args.grid, height=args.grid, resampleAlg='bilinear', dstNodata=float('nan'), outputType=gdal.GDT_Float32)
                 heights = np.flipud(tile.ReadAsArray()).astype(np.float64)
+                # Preserve actual coverage independently of the standalone terrain fill.
+                # The client uses these heights to supplement its selected base terrain.
+                overlay = [float(h)+args.height_offset if np.isfinite(h) else None for h in heights.ravel()]
+                (folder / f'{y}.heights.json').write_text(json.dumps(dict(width=args.grid, height=args.grid, heights=overlay), separators=(',', ':'), allow_nan=False))
                 heights = np.where(np.isfinite(heights), heights+args.height_offset, args.fill_height)
                 (folder / f'{y}.terrain').write_bytes(encode(west, south, size, heights, low, high))
                 tiles += 1
         print(f'terrain level {z}: {total} tiles', file=sys.stderr)
     (dest / 'layer.json').write_text(json.dumps(dict(tilejson='2.1.0', format='quantized-mesh-1.0', version='1.0.0',
         scheme='tms', projection='EPSG:4326', minzoom=0, maxzoom=args.max_zoom, bounds=bounds,
-        tiles=['{z}/{x}/{y}.terrain'], available=available), indent=2))
+        tiles=['{z}/{x}/{y}.terrain'], available=available,
+        heightOverlay=dict(version=1, tiles=['{z}/{x}/{y}.heights.json'], grid=args.grid, rowOrder='south-to-north')), indent=2))
     (dest / 'conversion.json').write_text(json.dumps(dict(sourceCrs=source.GetProjection(), heightOffset=args.height_offset,
-        fillHeight=args.fill_height, grid=args.grid, tiles=tiles, heightQuantizationStep=(high-low)/32767,
+        fillHeight=args.fill_height, grid=args.grid, tiles=tiles, heightRange=[low,high], heightQuantizationStep=(high-low)/32767,
         sourcePixelDegrees=[gt[1],abs(gt[5])], finestGridDegrees=180/2**args.max_zoom/(args.grid-1),
         limitations='Regular-grid prototype. NoData/outside filled explicitly. Height datum supplied by caller. No certified maximum surface-error bound.'), indent=2))
 

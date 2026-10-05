@@ -75,6 +75,16 @@ struct RasterArgs {
     min_zoom: u8,
     #[arg(long = "maxZoom")]
     max_zoom: u8,
+    #[arg(long, default_value = "image")]
+    display: String,
+    #[arg(long, default_value_t = 1)]
+    band: u16,
+    #[arg(long = "alphaBand", default_value_t = 0)]
+    alpha_band: u16,
+    #[arg(long = "displayMin", allow_hyphen_values = true)]
+    display_min: Option<f64>,
+    #[arg(long = "displayMax", allow_hyphen_values = true)]
+    display_max: Option<f64>,
 }
 
 #[derive(Args)]
@@ -254,9 +264,19 @@ fn run() -> Result<(), Error> {
                 fill_height: a.fill_height,
             },
         )?,
-        Command::Raster(a) => {
-            rusty_tiles::raster::raster_to_directory(&a.input, &a.output, a.min_zoom, a.max_zoom)?
-        }
+        Command::Raster(a) => rusty_tiles::raster::raster_with_options(
+            &a.input,
+            &a.output,
+            &rusty_tiles::raster::RasterOptions {
+                min_zoom: a.min_zoom,
+                max_zoom: a.max_zoom,
+                display: a.display,
+                band: a.band,
+                alpha_band: a.alpha_band,
+                display_min: a.display_min,
+                display_max: a.display_max,
+            },
+        )?,
     }
     Ok(())
 }
