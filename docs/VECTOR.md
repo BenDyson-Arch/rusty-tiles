@@ -321,3 +321,8 @@ conversion and layer reports, and the build configuration includes it. Reusing
 with the same filter retains unchanged content; a changed filter triggers a
 fresh rebuild with `reuse.incompatibleReason: attribute filter changed` and no
 reused contents. A filter matching no records publishes an empty tileset.
+
+Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
+identities and reasons remain in the diagnostics and geometry reports; actual
+GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
+native warnings as well as Python tracebacks for debugging.

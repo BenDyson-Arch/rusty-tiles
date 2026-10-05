@@ -9,13 +9,26 @@ properties. GDAL/GEOS triangulates in a best-fit plane while retaining source
 import argparse
 import json
 import math
+import os
 import pathlib
 import struct
 
 import numpy as np
-from osgeo import ogr
+from osgeo import gdal, ogr
 
 ogr.UseExceptions()
+
+
+
+def geometry_operation(operation):
+    """Quiet native validity/repair warnings; retain exceptions and debug output."""
+    if os.environ.get('RUSTY_TILES_PYTHON_TRACEBACK') == '1':
+        return operation()
+    gdal.PushErrorHandler('CPLQuietErrorHandler')
+    try:
+        return operation()
+    finally:
+        gdal.PopErrorHandler()
 
 
 def coordinates(geometry):
@@ -107,10 +120,10 @@ def polygon(rings, repair=False, report=None):
             segments.append((q, xy[(i+1)%len(xy)], p, ring[(i+1)%len(ring)]))
         ogr_ring.CloseRings()
         shape.AddGeometry(ogr_ring)
-    valid = shape.IsValid()
+    valid = geometry_operation(shape.IsValid)
     if not valid and not repair:
         raise ValueError('invalid polygon topology; inspect source or explicitly use --repair')
-    repaired = shape.MakeValid() if not valid else shape
+    repaired = geometry_operation(shape.MakeValid) if not valid else shape
     shapes = []
     def collect(g):
         kind = ogr.GT_Flatten(g.GetGeometryType())
@@ -415,7 +428,7 @@ def simplify_polygon(rings, tolerance, locked):
             poly.AddGeometry(ring)
         return poly
     original = shape(opened)
-    if not original.IsValid():
+    if not geometry_operation(original.IsValid):
         return [r.tolist() for r in rings], 0.0, 'invalid source topology retained for existing repair policy'
     candidates, errors = [], []
     for ring in opened:
@@ -423,7 +436,7 @@ def simplify_polygon(rings, tolerance, locked):
         candidates.append(simplified)
         errors.append(error)
     candidate = shape(candidates)
-    if not candidate.IsValid() or candidate.GetArea() <= 0:
+    if not geometry_operation(candidate.IsValid) or candidate.GetArea() <= 0:
         return [r.tolist() for r in rings], 0.0, 'simplification would change polygon topology'
     if sum(map(len,candidates)) == sum(map(len,opened)):
         return [r.tolist() for r in rings], 0.0, None
