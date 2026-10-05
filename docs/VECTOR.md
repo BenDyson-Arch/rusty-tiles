@@ -68,6 +68,39 @@ triangle surface fragments are not simplified. Buffered spatial clipping, covera
 edge reconciliation, implicit tiling and primitive-restart line batching remain
 unimplemented.
 
+## Optional position quantization and compression
+
+`--quantize` writes normalized unsigned 16-bit positions with the standard
+[KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_mesh_quantization)
+extension. It is lossy: full-detail leaves retain feature topology/properties but
+positions have an additional conservative quantization error bound. Tile extras
+record `quantizationErrorMetres` separately from float32 rounding; it contributes
+to bounds padding and `geometricError`, including on leaves.
+
+`--meshopt` losslessly compresses accessor streams with
+[EXT_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_meshopt_compression).
+Feature IDs, polygon loop/triangle order and metadata remain intact. Required
+extensions and a standard placeholder buffer make unsupported decoders reject
+compressed content rather than read missing bytes. [KHR_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_meshopt_compression)
+remains a release candidate as checked on 2026-10-05; this encoder uses the
+ratified EXT encoding. Both options are off by default and can be combined:
+
+```sh
+rusty-tiles vector -i mapping.gpkg -o mapping.3tz --layer roads --quantize --meshopt
+```
+
+Budgets use the final encoded payload, including wrappers. Small contents can grow
+because of extension JSON overhead. `conversion.json.encoding` records options,
+maximum quantization error, and uncompressed/encoded byte totals across tile
+content references; deduplicated archive size can differ. Per-tile extras record
+both sizes. Reuse requires matching encoding settings and, for compression, the
+same native encoder binary. Library callers enabling meshopt supply its executable
+through `VectorOptions.meshopt_encoder`.
+
+The combined format is checked with the invented browser cases on CesiumJS
+1.142.0, 1.143.0 and 1.146.0. Repeat the fixture generator with `--quantize` and
+`--meshopt-helper /path/to/rusty-tiles`, then run the same native browser probe.
+
 ## Vector LOD
 
 `--lodTolerance` is the base simplification tolerance in metres, doubling at each
@@ -88,7 +121,7 @@ remaining tolerance is used for 3D path simplification; reported geometry error
 includes twice the planarity deviation and stays within the requested tolerance.
 Float32 rounding is added separately. Parent errors are monotonic. Full-detail leaves
 retain source vertices/segments subject to separately reported float32 rounding;
-leaf geometricError is zero. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
+leaf geometricError is zero with the default unquantized encoding. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
 unsimplified. `--repair` explicitly permits invalid-outline repairs;
 `--ambiguousOutlines` retains irreconcilable crossings as source 3D outlines.
 Oversized polygons requiring triangle fragmentation still need unambiguous filled

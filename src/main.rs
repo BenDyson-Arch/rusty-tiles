@@ -26,6 +26,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    EncodeVectorContent {
+        #[arg(short, long)]
+        input: PathBuf,
+    },
     /// GLB/glTF file or directory → tileset.json (3d-tiles-tools createTilesetJson)
     #[command(name = "createTilesetJson", alias = "create-tileset-json")]
     CreateTilesetJson(IoArgs),
@@ -173,6 +178,12 @@ struct VectorArgs {
     /// Preserve geometrically ambiguous filled polygons as their source 3D outlines
     #[arg(long = "ambiguousOutlines")]
     ambiguous_outlines: bool,
+    /// Quantize vector positions to normalized 16-bit integers (lossy, reported)
+    #[arg(long)]
+    quantize: bool,
+    /// Losslessly compress vector accessor buffers with EXT_meshopt_compression
+    #[arg(long)]
+    meshopt: bool,
     /// Allow explicitly reported outline stand-ins for unsimplifiable parent polygons
     #[arg(long = "parentRepair")]
     parent_repair: bool,
@@ -240,6 +251,9 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Error> {
     let cli = Cli::parse();
     match cli.command {
+        Command::EncodeVectorContent { input } => {
+            println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
+        }
         Command::CreateTilesetJson(a) => {
             let opts = tileset_opts(&a)?;
             create_tileset_json(&a.input, &a.output, &opts)?;
@@ -273,6 +287,13 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                quantize: a.quantize,
+                meshopt: a.meshopt,
+                meshopt_encoder: if a.meshopt {
+                    Some(std::env::current_exe()?)
+                } else {
+                    None
+                },
                 parent_repair: a.parent_repair,
                 max_parent_features: a.max_parent_features,
                 where_clause: a.where_clause,

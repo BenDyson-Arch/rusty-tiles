@@ -79,6 +79,38 @@ class Glb:
         self.doc['accessors'].append(a)
         return i
 
+    def quantize_positions(self):
+        indices={p['attributes']['POSITION'] for m in self.doc['meshes'] for p in m['primitives']}
+        positions={}
+        for index in indices:
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            positions[index]=np.frombuffer(self.data,dtype='<f4',count=accessor['count']*3,
+                offset=view['byteOffset']).reshape(-1,3).astype(float)
+        points=np.concatenate(list(positions.values()));lo=points.min(axis=0);extent=points.max(axis=0)-lo
+        scale=np.where(extent>0,extent,1.)
+        error=0.
+        for index,p in positions.items():
+            quantized=np.rint((p-lo)/scale*65535).clip(0,65535).astype('<u2')
+            decoded=quantized.astype(float)/65535*scale+lo
+            error=max(error,float(np.linalg.norm(decoded-p,axis=1).max()))
+            packed=np.zeros((len(p),4),dtype='<u2');packed[:,:3]=quantized
+            accessor=self.doc['accessors'][index];view=self.doc['bufferViews'][accessor['bufferView']]
+            view.update(byteOffset=len(self.data),byteLength=packed.nbytes,byteStride=8)
+            self.data.extend(packed.tobytes())
+            accessor.update(componentType=5123,normalized=True,min=quantized.min(axis=0).tolist(),max=quantized.max(axis=0).tolist())
+        rebuilt=bytearray()
+        for view in self.doc['bufferViews']:
+            rebuilt.extend(b'\0'*(-len(rebuilt)%8))
+            value=self.data[view['byteOffset']:view['byteOffset']+view['byteLength']]
+            view['byteOffset']=len(rebuilt);rebuilt.extend(value)
+        self.data=rebuilt
+        self.doc['nodes'][0].update(translation=lo.tolist(),scale=scale.tolist())
+        self.doc['extensionsUsed'].append('KHR_mesh_quantization')
+        self.doc.setdefault('extensionsRequired',[]).append('KHR_mesh_quantization')
+        error=max(error,float(np.linalg.norm(extent/131070)))
+        error+=float(np.linalg.norm(lo-lo.astype('<f4'))+np.linalg.norm(scale-scale.astype('<f4'))+np.linalg.norm(scale)*2**-24)
+        return error
+
     def finish(self, path):
         self.doc['buffers'][0]['byteLength'] = len(self.data)
         j = json.dumps(self.doc, separators=(',', ':'), allow_nan=False).encode()
@@ -235,7 +267,7 @@ def validate_feature(feature, repair=False, ambiguous_outlines=False):
     return reports
 
 
-def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
+def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False, quantize=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
     keys = set().union(*(f['properties'] for f in items))
@@ -334,11 +366,18 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         for primitive in glb.doc['meshes'][0]['primitives']:
             primitive['material']=0
     glb.finish(path)
+    before_bytes=path.stat().st_size
+    quantization_error=0.
+    if quantize:
+        quantization_error=glb.quantize_positions()
+        glb.finish(path)
     # glTF Y-up → tile Z-up.
     p = np.asarray(all_positions)[:, [0, 2, 1]] * [1, -1, 1]
     rounding = float(np.linalg.norm(p-p.astype('<f4'),axis=1).max())
     if encoding_report is not None:
         encoding_report['rounding'] = rounding
+        encoding_report['quantizationError'] = quantization_error
+        encoding_report['beforeBytes'] = before_bytes
         encoding_report['vertices'] = len(all_positions)
     low, high = p.min(axis=0), p.max(axis=0)
     center, half = (low+high)/2, np.maximum((high-low)/2+rounding, .001)
@@ -529,6 +568,12 @@ def run(args):
     sources=[globals().get('__source__') or pathlib.Path(__file__).read_text()]
     for module in (vector_source,vector_reuse,vector_pipeline):
         sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
+    helper=getattr(args,'meshopt_helper',None)
+    if helper:
+        digest=hashlib.sha256()
+        with open(helper,'rb') as executable:
+            for chunk in iter(lambda:executable.read(65536),b''):digest.update(chunk)
+        sources.append(digest.hexdigest())
     encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
     return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder))
 
@@ -555,6 +600,8 @@ if __name__ == '__main__':
     p.add_argument('--field', dest='fields', action='append', default=[])
     p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])
     p.add_argument('--skip-invalid', action='store_true')
+    p.add_argument('--quantize', action='store_true')
+    p.add_argument('--meshopt-helper')
     p.add_argument('--parent-repair', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')

@@ -6,6 +6,7 @@ import math
 import pathlib
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 
@@ -215,18 +216,25 @@ def run(args, writer):
                     vectors.append(dict(properties=feature['properties'],geometry=dict(type='MultiLineString',coordinates=boundary)))
             if fills:groups.append(('fill',fills,True))
             if vectors:groups.append(('vector',vectors,False))
-            contents=[];files=[];vertex_count=0;byte_count=0;rounding=0.;polygon_reports=[]
+            contents=[];files=[];vertex_count=0;byte_count=0;rounding=0.;quantization=0.;before_bytes=0;polygon_reports=[]
             for role,features,fill_only in groups:
                 uri=f't/{serial}-{role}.glb';file=output/uri;encoding={}
                 writer.emit(features,file,lambda p:np.asarray(p,dtype=float)-center,
                     getattr(args,'repair',False),polygon_reports if not level else None,
-                    getattr(args,'ambiguous_outlines',False),encoding,reader.schemas,fill_only=fill_only)
+                    getattr(args,'ambiguous_outlines',False),encoding,reader.schemas,fill_only=fill_only,quantize=getattr(args,'quantize',False))
+                before_bytes+=encoding['beforeBytes']
+                quantization=max(quantization,encoding['quantizationError'])
+                helper=getattr(args,'meshopt_helper',None)
+                if helper:
+                    compressed=subprocess.run([helper,'encode-vector-content','--input',str(file)],capture_output=True,text=True)
+                    if compressed.returncode:raise ValueError('meshopt encoding failed: '+compressed.stderr.strip())
                 if fill_only:
                     # Cesium 1.143 selects the draft vector GLB decoder at tileset
                     # scope. A standard b3dm wrapper routes only fills to its model
                     # decoder; the embedded GLB still uses modern feature metadata.
                     glb=file.read_bytes();table=b'{"BATCH_LENGTH":0}'
                     table+=b' '*(-(28+len(table))%8)
+                    before_bytes+=28+len(table)
                     wrapped=struct.pack('<4s6I',b'b3dm',1,28+len(table)+len(glb),len(table),0,0,0)+table+glb
                     file.unlink();uri=f't/{serial}-{role}.b3dm';file=output/uri;file.write_bytes(wrapped)
                 uri='t/'+hashlib.sha256(file.read_bytes()).hexdigest()+file.suffix
@@ -245,8 +253,8 @@ def run(args, writer):
             if not level:
                 for value in polygon_reports:report(value)
             node=dict(extras=dict(featureFragments=len(items),vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
-                    positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
-                    geometricError=error+rounding if level else 0)
+                    positionRoundingMetres=rounding,quantizationErrorMetres=quantization,uncompressedBytes=before_bytes,toleranceMetres=tolerance*2**(level-1) if level else 0),
+                    geometricError=error+rounding+quantization if level or getattr(args,'quantize',False) else 0)
             if len(contents)==1:node['content']=contents[0]
             else:node['contents']=contents
             return node
@@ -254,7 +262,7 @@ def run(args, writer):
             # Node and GLB have the same local origin; children translate relative to it.
             zcenter=center[[0,2,1]]*[1,-1,1]
             half=np.maximum((hi-lo)[[0,2,1]]/2,.001)
-            rounding=node.get('extras',{}).get('positionRoundingMetres',0.)
+            rounding=node.get('extras',{}).get('positionRoundingMetres',0.)+node.get('extras',{}).get('quantizationErrorMetres',0.)
             for child in children:
                 rounding=max(rounding,child['_padding'])
                 delta=child['_center']-zcenter
@@ -352,10 +360,19 @@ def run(args, writer):
         report_file.close()
         shared=db.execute('SELECT COUNT(*) FROM vertices WHERE shared=1').fetchone()[0]
         db.close()
+    nodes=[]
+    def collect(node):
+        nodes.append(node)
+        for child in node.get('children',[]):collect(child)
+    collect(root)
+    encoding_summary=dict(quantize=getattr(args,'quantize',False),meshopt=bool(getattr(args,'meshopt_helper',None)),
+        maximumQuantizationErrorMetres=max(n.get('extras',{}).get('quantizationErrorMetres',0.) for n in nodes),
+        uncompressedTileBytes=sum(n.get('extras',{}).get('uncompressedBytes',0) for n in nodes),
+        encodedTileBytes=sum(n.get('extras',{}).get('encodedBytes',0) for n in nodes))
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,parentFeatures=max_parent_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
         attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
-        parentRepairEnabled=getattr(args,'parent_repair',False),skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
+        encoding=encoding_summary,parentRepairEnabled=getattr(args,'parent_repair',False),skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',

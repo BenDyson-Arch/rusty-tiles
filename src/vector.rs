@@ -40,6 +40,10 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub quantize: bool,
+    pub meshopt: bool,
+    /// Library callers supply the rusty-tiles executable used for native compression.
+    pub meshopt_encoder: Option<std::path::PathBuf>,
     pub parent_repair: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
@@ -63,6 +67,9 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            quantize: false,
+            meshopt: false,
+            meshopt_encoder: None,
             parent_repair: false,
             max_parent_features: 4096,
             where_clause: None,
@@ -254,6 +261,14 @@ pub fn vector_to_3tz_with_options(
     }
     if options.skip_invalid {
         command.arg("--skip-invalid");
+    }
+    if options.quantize {
+        command.arg("--quantize");
+    }
+    if options.meshopt {
+        command
+            .arg("--meshopt-helper")
+            .arg(std::env::current_exe()?);
     }
     if options.parent_repair {
         command.arg("--parent-repair");
