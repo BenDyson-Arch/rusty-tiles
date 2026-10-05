@@ -20,6 +20,12 @@ use rusty_tiles::{terrain, vector};
     arg_required_else_help = true
 )]
 struct Cli {
+    /// Emit one machine-readable result on stdout (diagnostics stay on stderr)
+    #[arg(long, global = true)]
+    json: bool,
+    /// Emit newline-delimited phase events on stderr
+    #[arg(long, global = true, value_parser = ["json"])]
+    progress: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -59,9 +65,6 @@ struct DoctorArgs {
     /// Check only these converters; repeat to select several
     #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert"])]
     commands: Vec<String>,
-    /// Print the complete dependency inventory as one JSON object
-    #[arg(long)]
-    json: bool,
 }
 
 #[derive(Args)]
@@ -246,29 +249,145 @@ struct IoArgs {
     force: bool,
 }
 
+fn progress(enabled: bool, phase: &str, done: usize, total: usize) {
+    if enabled {
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"progress","phase":phase,"done":done,"total":total})
+        );
+    }
+}
+
 fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{e}");
-            if matches!(e, Error::NotImplemented { .. }) {
-                ExitCode::from(2)
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let code = error.exit_code();
+            if code != 0 && std::env::args().any(|arg| arg == "--json") {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok":false,"error":{"code":"usage","message":error.to_string()},"exitCode":code})
+                );
             } else {
-                ExitCode::from(1)
+                let _ = error.print();
             }
+            return ExitCode::from(code as u8);
+        }
+    };
+    // The internal compression worker has a separate JSON protocol.
+    let internal = matches!(cli.command, Command::EncodeVectorContent { .. });
+    let json = cli.json && !internal;
+    let events = cli.progress.is_some() && !internal;
+    let output = match &cli.command {
+        Command::CreateTilesetJson(a) | Command::GlbTo3tz(a) => Some(a.output.clone()),
+        Command::Convert(a) => Some(a.output.clone()),
+        Command::MeshTo3tz(a) => Some(a.io.output.clone()),
+        Command::Vector(a) => Some(a.output.clone()),
+        Command::PointCloud(a) => Some(a.output.clone()),
+        Command::Terrain(a) => Some(a.output.clone()),
+        Command::Raster(a) => Some(a.output.clone()),
+        _ => None,
+    };
+    if events {
+        std::env::set_var("RUSTY_TILES_PROGRESS_JSON", "1");
+    }
+    if json {
+        std::env::set_var("RUSTY_TILES_JSON_STDOUT", "1");
+    }
+    progress(events, "conversion", 0, 1);
+    match run(cli) {
+        Ok(report) => {
+            if report.as_ref().is_some_and(|report| report["ok"] == false) {
+                if let Some(report) = report {
+                    println!("{report}");
+                }
+                return ExitCode::from(4);
+            }
+            progress(events, "conversion", 1, 1);
+            if json {
+                if let Some(report) = report {
+                    println!("{report}");
+                } else {
+                    println!("{}", output_summary(output.as_deref()));
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            let (category, code) = error.category();
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code})
+                );
+            } else {
+                eprintln!("{error}");
+            }
+            if events {
+                eprintln!(
+                    "{}",
+                    serde_json::json!({"event":"failed","phase":"conversion","code":category})
+                );
+            }
+            ExitCode::from(code)
         }
     }
 }
 
-fn run() -> Result<(), Error> {
-    let cli = Cli::parse();
+fn output_summary(output: Option<&std::path::Path>) -> serde_json::Value {
+    use serde_json::json;
+    let mut report = serde_json::Value::Null;
+    let mut location = serde_json::Value::Null;
+    if let Some(path) = output {
+        if path.is_dir() {
+            let file = path.join("conversion.json");
+            if let Ok(data) = std::fs::read(&file) {
+                report = serde_json::from_slice(&data).unwrap_or_default();
+                location = json!({"path":file});
+            }
+        } else if let Ok(file) = std::fs::File::open(path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                if let Ok(mut entry) = archive.by_name("conversion.json") {
+                    use std::io::Read;
+                    let mut data = Vec::new();
+                    if entry.read_to_end(&mut data).is_ok() {
+                        report = serde_json::from_slice(&data).unwrap_or_default();
+                        location = json!({"archive":path,"entry":"conversion.json"});
+                    }
+                }
+            }
+        }
+    }
+    let mut counts = serde_json::Map::new();
+    if let Some(object) = report.as_object() {
+        for (key, value) in object {
+            if value.is_number() {
+                counts.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    json!({"ok":true,"output":output,"counts":counts,"skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location})
+}
+
+fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
+    let json = cli.json;
     match cli.command {
         Command::Doctor(a) => {
             let report = rusty_tiles::doctor::report(&a.commands)?;
-            rusty_tiles::doctor::display(&report, a.json);
+            if json {
+                let mut report = report;
+                report["ok"] = report["ready"].clone();
+                if report["ready"] != true {
+                    // Include the inventory in the single error result.
+                    report["error"] = serde_json::json!({"code":"environment","message":"selected converters have missing dependencies"});
+                    report["exitCode"] = 4.into();
+                }
+                return Ok(Some(report));
+            }
+            rusty_tiles::doctor::display(&report, false);
             if report["ready"] != true {
-                return Err(Error::msg(
-                    "selected converters have missing dependencies; see doctor report",
+                return Err(Error::Environment(
+                    "selected converters have missing dependencies; see doctor report".into(),
                 ));
             }
         }
@@ -364,7 +483,7 @@ fn run() -> Result<(), Error> {
             },
         )?,
     }
-    Ok(())
+    Ok(None)
 }
 
 fn tileset_opts(a: &IoArgs) -> Result<CreateTilesetOptions, Error> {

@@ -14,6 +14,7 @@ import struct
 import laspy
 import numpy as np
 from pyproj import CRS, Transformer, network
+from pyproj.exceptions import ProjError
 
 
 class Glb:
@@ -135,8 +136,13 @@ def transform_for(header, args):
     if crs.is_compound or crs.is_geocentric or len(crs.axis_info) != 2 or not (crs.is_projected or crs.is_geographic):
         raise ValueError('use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported')
     network.set_network_enabled(False)
-    transformer = Transformer.from_crs(crs.to_3d(), CRS.from_epsg(4978), always_xy=True,
-                                       allow_ballpark=False, only_best=True)
+    try:
+        transformer = Transformer.from_crs(crs.to_3d(), CRS.from_epsg(4978), always_xy=True,
+                                           allow_ballpark=False, only_best=True)
+    except ProjError as error:
+        error.environment_error = True
+        raise
+
     return transformer, crs.to_string()
 
 

@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import json
 import math
+import os
 import pathlib
 import sqlite3
 import struct
@@ -15,7 +16,13 @@ from vector_source import Reader, coordinate_list
 from vector_reuse import Reuse, canonical, contents
 
 
+def progress(phase, done, total=None):
+    if os.environ.get('RUSTY_TILES_PROGRESS_JSON') == '1':
+        print(json.dumps(dict(event='progress',phase=phase,done=done,total=total)),file=sys.stderr,flush=True)
+
+
 def run(args, writer):
+    progress('ingestion',0)
     tolerance = getattr(args, 'lod_tolerance', .1)
     levels = getattr(args, 'lod_levels', 3)
     max_vertices = getattr(args, 'max_vertices', 65536)
@@ -152,6 +159,7 @@ def run(args, writer):
             layer['invalidFeatures']=rejected.get(layer['name'],0)
         if failures and not getattr(args,'skip_invalid',False):
             raise ValueError(f"{failures} unconvertible feature(s); first failure: {first_failure['reason']}. No tileset published. Fix the reported features or explicitly use --skipInvalid.")
+        progress('ingestion',counters['features'],counters['features'])
         counters['skippedFeatures']=failures
         db.commit()
         counters['featuresWithoutGeometry']=reader.features_without_geometry
@@ -274,6 +282,7 @@ def run(args, writer):
                 node['children']=list(children)
                 node['geometricError']=max(node['geometricError'],*(c['geometricError'] for c in children))
             counters['tiles']+=1
+            progress('encoding',counters['tiles'])
             if counters['tiles']>max_tiles:
                 raise ValueError('hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly')
             if 'content' in node or 'contents' in node:
