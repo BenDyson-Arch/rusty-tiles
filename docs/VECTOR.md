@@ -45,7 +45,8 @@ archive only after conversion and packing succeed.
 
 Every content tile is checked against **actual encoded** vertices and bytes,
 summed across all contents including any `b3dm` wrapper.
-Defaults are 64 feature fragments, 65,536 POSITION vertices and 4 MiB across a tile’s contents.
+Defaults are 64 feature fragments per leaf (`--maxFeatures`), 4,096 per parent
+(`--maxParentFeatures`), 65,536 POSITION vertices and 4 MiB across a tile’s contents.
 `--maxTiles` caps hierarchy nodes at 100,000. Indivisible geometry or metadata
 that exceeds a budget fails; it does not silently publish an oversized tile.
 
@@ -74,7 +75,9 @@ coarser level. `--lodLevels` (1–16, default 3) adds real simplification even f
 one detailed feature. Redundant levels with no vertex reduction are omitted.
 Parents simplify directly from original full-detail geometry with `REPLACE`
 refinement. If a parent cannot retain every feature within the budgets, it is a
-routing node without content. Semantic points and feature identities are never
+routing node without content; `extras.routingReason` identifies `parentFeatures`,
+`vertices`, `bytes`, or the conservative `estimatedBytes` memory guard. Parent
+feature counts are independent of the leaf partition budget. Semantic points and feature identities are never
 silently sampled away. Dense point-only collections therefore provide routing,
 not geometry reduction.
 

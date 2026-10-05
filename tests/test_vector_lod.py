@@ -122,8 +122,9 @@ class VectorLodTests(unittest.TestCase):
             parents=[n for n in nodes(manifest['root']) if n.get('children') and 'content' in n]
             self.assertGreater(len(parents),0)
             for node in parents:
-                self.assertLess(node['extras']['vertices'],4*200)
+                self.assertLessEqual(node['extras']['vertices'],node['extras']['featureFragments']*200)
                 self.assertLessEqual(node['extras']['geometryErrorMetres'],node['extras']['toleranceMetres']+1e-12)
+            self.assertTrue(any(n['extras']['vertices']<n['extras']['featureFragments']*200 for n in parents))
             decoded=details(out);self.assertEqual(len(decoded),32)
             for fid,g,_ in features:
                 xyz=decoded[('wavy',str(fid),4)][0][1]
@@ -171,7 +172,7 @@ class VectorLodTests(unittest.TestCase):
                     doc,_,ids=read(pathlib.Path(tmp)/node['content']['uri'])
                     schema=doc['extensions']['EXT_structural_metadata']['schema']['classes']['feature']['properties']
                     self.assertIn('height',schema)
-                    self.assertLessEqual(len(ids),2)
+                    self.assertLessEqual(len(ids),4096 if node.get('children') else 2)
                     self.assertEqual(len(ids),len(set(ids)))
                 else:
                     self.assertTrue(node['extras']['routing'])

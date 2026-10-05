@@ -502,6 +502,7 @@ if __name__ == '__main__':
     p.add_argument('--lod-tolerance', type=float, default=.1)
     p.add_argument('--lod-levels', type=int, default=3)
     p.add_argument('--max-features', type=int, default=64)
+    p.add_argument('--max-parent-features', type=int, default=4096)
     p.add_argument('--layer', dest='layers', action='append', default=[])
     p.add_argument('--all-layers', action='store_true')
     p.add_argument('--reuse-tileset')

@@ -173,6 +173,9 @@ struct VectorArgs {
     /// Preserve geometrically ambiguous filled polygons as their source 3D outlines
     #[arg(long = "ambiguousOutlines")]
     ambiguous_outlines: bool,
+    /// Maximum feature fragments in parent content; leaves use maxFeatures
+    #[arg(long = "maxParentFeatures", default_value_t = 4096)]
+    max_parent_features: usize,
     #[arg(long = "maxFeatures", default_value_t = 64)]
     max_features: usize,
     #[arg(short = 'i', long = "input")]
@@ -267,6 +270,7 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                max_parent_features: a.max_parent_features,
                 where_clause: a.where_clause,
                 force: a.force,
                 list_fields: a.list_fields,

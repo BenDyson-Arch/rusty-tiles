@@ -20,7 +20,8 @@ def run(args, writer):
     max_vertices = getattr(args, 'max_vertices', 65536)
     max_bytes = getattr(args, 'max_bytes', 4194304)
     max_tiles = getattr(args, 'max_tiles', 100000)
-    if args.max_features < 1 or not math.isfinite(tolerance) or tolerance <= 0 or not 1 <= levels <= 16:
+    max_parent_features = getattr(args, 'max_parent_features', 4096)
+    if max_parent_features < 1 or args.max_features < 1 or not math.isfinite(tolerance) or tolerance <= 0 or not 1 <= levels <= 16:
         raise ValueError('positive feature budget/tolerance and 1..16 LOD levels required')
     if max_vertices < 4 or max_bytes < 4096 or max_tiles < 1:
         raise ValueError('maxVertices >= 4, maxBytes >= 4096 and positive maxTiles required')
@@ -179,11 +180,14 @@ def run(args, writer):
         for fid,value in db.execute('SELECT id,data FROM features'):
             fingerprint(fid,value)
         serial=0
+        last_budget_reason=None
         def encoded(prefix,center,level):
-            nonlocal serial
+            nonlocal serial,last_budget_reason
+            last_budget_reason=None
             items=[]; error=0.; vertices=0; approximate_bytes=0
             for feature in rows(prefix):
-                if len(items)>=args.max_features:
+                if len(items)>=(max_parent_features if level else args.max_features):
+                    last_budget_reason='parentFeatures' if level else 'features'
                     return None
                 if level:
                     fallback=[]
@@ -191,11 +195,13 @@ def run(args, writer):
                     for value in fallback:
                         report(value)
                     error=max(error,e)
-                vertices+=size(feature); approximate_bytes+=estimate(feature)
+                vertices+=size(feature); approximate_bytes+=estimate(feature)-(2048 if level else 0)
                 if vertices>max_vertices:
+                    last_budget_reason='vertices'
                     return None
                 # Metadata is irreducible; stop excessive accumulation before encoding.
                 if approximate_bytes>max_bytes*2:
+                    last_budget_reason='estimatedBytes'
                     return None
                 items.append(feature)
             serial+=1
@@ -233,10 +239,11 @@ def run(args, writer):
                 if not fill_only:content['extensions']={'3DTILES_content_gltf_vector':dict(vector=True)}
                 contents.append(content)
             if vertex_count>max_vertices or byte_count>max_bytes:
+                last_budget_reason='vertices' if vertex_count>max_vertices else 'bytes'
                 return None  # unused immutable candidates are pruned at publication
             if not level:
                 for value in polygon_reports:report(value)
-            node=dict(extras=dict(vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
+            node=dict(extras=dict(featureFragments=len(items),vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
                     positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
                     geometricError=error+rounding if level else 0)
             if len(contents)==1:node['content']=contents[0]
@@ -315,10 +322,10 @@ def run(args, writer):
             db.execute('UPDATE features SET path=? WHERE path=?',(prefix+'1',prefix))
             children=[build(prefix+suffix,depth+1) for suffix in ('0','1') if stats(prefix+suffix)[0]]
             level=levels+int(math.ceil(math.log2(n/args.max_features)))
-            coarse=encoded(prefix,center,max(1,level)) if n<=args.max_features else None
+            coarse=encoded(prefix,center,max(1,level))
             if coarse is None:
                 counters['routingTiles']+=1
-                coarse=dict(geometricError=float(np.linalg.norm(hi-lo)),extras=dict(routing=True))
+                coarse=dict(geometricError=float(np.linalg.norm(hi-lo)),extras=dict(routing=True,routingReason=last_budget_reason))
             return attach(coarse,lo,hi,center,children)
         if counters['features']:
             root=build('')
@@ -345,7 +352,7 @@ def run(args, writer):
         shared=db.execute('SELECT COUNT(*) FROM vertices WHERE shared=1').fetchone()[0]
         db.close()
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
-        budgets=dict(features=args.max_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
+        budgets=dict(features=args.max_features,parentFeatures=max_parent_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
         attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
         skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',

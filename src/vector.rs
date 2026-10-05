@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub max_parent_features: usize,
     pub where_clause: Option<String>,
     pub force: bool,
     pub list_fields: String,
@@ -61,6 +62,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            max_parent_features: 4096,
             where_clause: None,
             force: false,
             list_fields: "error".into(),
@@ -143,7 +145,8 @@ pub fn vector_to_3tz_with_options(
             "invalid vector field selection or listFields setting",
         ));
     }
-    if options.max_vertices < 4
+    if options.max_parent_features == 0
+        || options.max_vertices < 4
         || options.max_bytes < 4096
         || options.max_tiles == 0
         || options.max_source_vertices == 0
@@ -206,6 +209,8 @@ pub fn vector_to_3tz_with_options(
         )?)
         .arg(input)
         .arg(work.path())
+        .arg("--max-parent-features")
+        .arg(options.max_parent_features.to_string())
         .arg("--max-features")
         .arg(max_features.to_string())
         .arg("--lod-tolerance")
