@@ -3,7 +3,9 @@ use crate::Error;
 use std::process::Command;
 
 pub(crate) fn script(source: &str, label: &str, dependencies: &str) -> Result<String, Error> {
-    let wrapper = r#"if os.environ.get('RUSTY_TILES_JSON_STDOUT') == '1': sys.stdout=sys.stderr
+    let wrapper = r#"if os.environ.get('RUSTY_TILES_JSON_STDOUT') == '1':
+ os.dup2(sys.stderr.fileno(),sys.stdout.fileno())
+ sys.stdout=sys.stderr
 def failure(error, code, message):
  path=os.environ.get('RUSTY_TILES_RESULT_FILE')
  if path:
@@ -52,5 +54,33 @@ pub(crate) fn run(command: &mut Command, label: &str) -> Result<(), Error> {
         Some(4) => Err(Error::Environment(message)),
         Some(1) => Err(Error::Io(std::io::Error::other(message))),
         _ => Err(Error::Data(message)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn json_mode_redirects_native_and_inherited_child_stdout() {
+        let source = "import os,subprocess,sys\nprint('python diagnostic')\nos.write(1,b'native diagnostic\\n')\nsubprocess.run([sys.executable,'-c',\"import os;os.write(1,b'child diagnostic\\\\n')\"],check=True)";
+        let wrapper = script(source, "diagnostic-test", "").unwrap();
+        let output = match Command::new("python3")
+            .args(["-c", &wrapper])
+            .env("RUSTY_TILES_JSON_STDOUT", "1")
+            .output()
+        {
+            Ok(output) => output,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("Python 3 is unavailable; skipping Python descriptor check");
+                return;
+            }
+            Err(error) => panic!("{error}"),
+        };
+        assert!(output.status.success(), "{:?}", output.stderr);
+        assert!(output.stdout.is_empty(), "{:?}", output.stdout);
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        for message in ["python diagnostic", "native diagnostic", "child diagnostic"] {
+            assert!(stderr.contains(message), "{stderr}");
+        }
     }
 }

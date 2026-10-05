@@ -17,6 +17,39 @@ if os.environ.get('RUSTY_TILES_BIN') and not BIN.is_file():
 
 @unittest.skipUnless(BIN.exists(), 'build the local rusty-tiles executable first')
 class RasterImportTests(unittest.TestCase):
+    def test_json_stdout_and_explicit_alpha_intersect_source_mask(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);source=root/'rgba-mask.tif'
+            ds=gdal.GetDriverByName('GTiff').Create(str(source),256,256,4,gdal.GDT_Byte)
+            crs=osr.SpatialReference();crs.ImportFromEPSG(4326)
+            ds.SetProjection(crs.ExportToWkt());ds.SetGeoTransform([12.5,.00001,0,41.9,0,-.00001])
+            data=np.full((4,256,256),255,dtype=np.uint8)
+            data[:3]=0  # Valid black remains opaque where both coverage and alpha permit it.
+            data[3,128:192,128:192]=0
+            data[3,192:,192:]=128
+            for i in range(4):ds.GetRasterBand(i+1).WriteArray(data[i])
+            ds.GetRasterBand(4).SetColorInterpretation(gdal.GCI_AlphaBand)
+            ds.GetRasterBand(1).CreateMaskBand(gdal.GMF_PER_DATASET)
+            mask=np.full((256,256),255,dtype=np.uint8);mask[32:96,32:96]=0
+            ds.GetRasterBand(1).GetMaskBand().WriteArray(mask);ds=None
+            out=root/'out'
+            result=subprocess.run([str(BIN),'raster','-i',str(source),'-o',str(out),'--json',
+                '--minZoom','16','--maxZoom','16','--alphaBand','4'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertTrue(json.loads(result.stdout)['ok'],'stdout must contain exactly one JSON result')
+            def alpha_at(x,y):
+                n=2**16;lon=12.5+(x+.5)*.00001;lat=41.9-(y+.5)*.00001
+                tx=(lon+180)/360*n;ty=(1-math.asinh(math.tan(math.radians(lat)))/math.pi)/2*n
+                tile=gdal.Open(str(out/'tiles/16'/str(math.floor(tx))/f'{math.floor(ty)}.png')).ReadAsArray()
+                return int(tile[3,int((ty%1)*256),int((tx%1)*256)])
+            self.assertEqual(alpha_at(64,64),0,'separate source mask must override opaque alpha')
+            self.assertEqual(alpha_at(160,160),0,'explicit alpha must remain transparent')
+            self.assertEqual(alpha_at(112,112),255,'valid black must remain opaque')
+            self.assertEqual(alpha_at(224,224),128,'partial alpha must be preserved')
+            cog=gdal.Open(str(out/'source.cog.tif'))
+            np.testing.assert_array_equal(cog.ReadAsArray(),data)
+            np.testing.assert_array_equal(cog.GetRasterBand(1).GetMaskBand().ReadAsArray(),mask)
+
     def test_numeric_values_and_masks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp); source=root/'survey.tif'

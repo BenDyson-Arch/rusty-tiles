@@ -26,7 +26,8 @@ overrides the declaration; `--sourceCrs local` means local metre XYZ. Two-dimens
 geospatial sources are placed at ellipsoidal height zero. A 3D GeoPackage with
 only a horizontal CRS needs an explicit `--heightOffset`, in metres, to establish
 ellipsoidal heights. Native compound/3D CRS operations use their declared height
-reference instead. GeoJSON follows its conventional ellipsoidal metre heights.
+reference instead, including three-axis geographic CRSs such as EPSG:7843
+(GDA2020). GeoJSON follows its conventional ellipsoidal metre heights.
 PROJ networking and ballpark operations are disabled; missing required operations
 or grids fail. An additive height offset is not a spatial geoid transformation.
 Each tile has its own local origin to reduce float32 position rounding; the
@@ -38,8 +39,11 @@ The input features and shared-coordinate index are spooled to a temporary SQLite
 store beside the output. Median spatial partitioning uses disk-backed SQL sorts.
 The converter does not collect the entire dataset in a Python list. Memory still
 depends on one source feature, bounded by `--maxSourceVertices` (default 1,000,000),
-one candidate tile, the hierarchy and the OGR driver's own buffering. The SQLite
-cache is 32 MiB. Leave enough scratch disk space for transformed coordinates and
+one candidate tile, the hierarchy and the OGR driver's own buffering. Parent
+candidates are read and simplified one feature at a time; workers stop retaining
+geometry as soon as a vertex or estimated-byte guard fails. Coincident features
+with duplicate source IDs still partition into separate full-detail leaves.
+The SQLite cache is 32 MiB. Leave enough scratch disk space for transformed coordinates and
 indexes. Staging files are removed on success and failure; Rust publishes an
 archive only after conversion and packing succeed.
 

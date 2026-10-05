@@ -297,15 +297,26 @@ def run(args, writer):
                 return build_uncached(prefix,depth+1)
             partition_started=time.perf_counter()
             cut=reuse.cuts.get(prefix)
-            if cut is None:
+            def median_cut():
                 axis=('x','y','z')[int(np.argmax(hi-lo))]
-                value,key=db.execute(f'SELECT {axis},sortkey FROM features WHERE path>=? AND path<? ORDER BY {axis},sortkey LIMIT 1 OFFSET ?',(*where(prefix),n//2-1)).fetchone()
-                cut=dict(axis=axis,value=value,key=key)
-                reuse.cuts[prefix]=cut
+                value,key,fid=db.execute(f'SELECT {axis},sortkey,id FROM features WHERE path>=? AND path<? ORDER BY {axis},sortkey,id LIMIT 1 OFFSET ?',(*where(prefix),n//2-1)).fetchone()
+                return dict(axis=axis,value=value,key=key,id=fid)
+            if cut is None:cut=median_cut()
             axis=cut['axis']
             if axis not in ('x','y','z'):raise ValueError('invalid previous spatial partition axis')
-            db.execute(f'UPDATE features SET path=? WHERE path=? AND ({axis}<? OR ({axis}=? AND sortkey<=?))',
-                       (prefix+'0',prefix,cut['value'],cut['value'],cut['key']))
+            def selection(cut):
+                # Source IDs need not be unique. The spool row ID guarantees a
+                # strict median even for coincident, otherwise identical rows.
+                tie='(sortkey<? OR (sortkey=? AND id<=?))' if 'id' in cut else 'sortkey<=?'
+                values=(cut['key'],cut['key'],cut['id']) if 'id' in cut else (cut['key'],)
+                return f"({cut['axis']}<? OR ({cut['axis']}=? AND {tie}))",(cut['value'],cut['value'],*values)
+            condition,values=selection(cut)
+            left=db.execute(f'SELECT COUNT(*) FROM features WHERE path=? AND {condition}',(prefix,*values)).fetchone()[0]
+            if left==0 or left==n:
+                # A reused cut may no longer divide the current input.
+                cut=median_cut();condition,values=selection(cut)
+            reuse.cuts[prefix]=cut
+            db.execute(f'UPDATE features SET path=? WHERE path=? AND {condition}',(prefix+'0',prefix,*values))
             db.execute('UPDATE features SET path=? WHERE path=?',(prefix+'1',prefix))
             partition_seconds+=time.perf_counter()-partition_started
             level=levels+int(math.ceil(math.log2(n/args.max_features)))

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+import zipfile
 
 import numpy as np
 from osgeo import ogr, osr
@@ -39,6 +40,64 @@ def gpkg(path, layers, spatial_index=True):
 
 
 class GeoPackageTests(unittest.TestCase):
+    def test_declared_three_axis_crs_preserves_ellipsoidal_height(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            for epsg in (4979,7843,4937):
+                with self.subTest(epsg=epsg):
+                    p=root/f'{epsg}.gpkg';coordinates=[12.,50.,120.] if epsg==4937 else [153.,-27.,120.]
+                    gpkg(p,[('sites',epsg,[(1,dict(type='Point',coordinates=coordinates),None)])])
+                    args=types.SimpleNamespace(input=str(p),output=str(root/f'out-{epsg}'),max_features=1)
+                    reader=Reader(args);features=list(reader)
+                    self.assertEqual(len(features),1)
+                    self.assertEqual(reader.layer_reports[0]['heightMode'],'declared CRS')
+                    # Independent ellipsoidal-to-ECEF formula for the CRS ellipsoid.
+                    srs=osr.SpatialReference();srs.ImportFromEPSG(epsg)
+                    a=srs.GetSemiMajor();inverse=srs.GetInvFlattening();f=1/inverse;e2=f*(2-f)
+                    lon,lat=np.radians(coordinates[:2]);height=coordinates[2]
+                    radius=a/np.sqrt(1-e2*np.sin(lat)**2)
+                    expected=[(radius+height)*np.cos(lat)*np.cos(lon),
+                              (radius+height)*np.cos(lat)*np.sin(lon),(radius*(1-e2)+height)*np.sin(lat)]
+                    np.testing.assert_allclose(reader.anchor,expected,atol=.01,rtol=0)
+                    vector.run(args)
+                    self.assertTrue((pathlib.Path(args.output)/'tileset.json').is_file())
+                    args.height_offset=0
+                    with self.assertRaisesRegex(ValueError,'already defines heights'):list(Reader(args))
+
+    def test_coincident_duplicate_source_ids_partition_and_retain_every_feature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);source=root/'duplicates.geojson'
+            features=[dict(type='Feature',id=7,properties=dict(label='same'),
+                geometry=dict(type='Point',coordinates=[0,0,0])) for _ in range(8)]
+            source.write_text(json.dumps(dict(type='FeatureCollection',features=features)))
+            args=types.SimpleNamespace(input=str(source),output=str(root/'out'),source_crs='local',max_features=1)
+            vector.run(args)
+            out=pathlib.Path(args.output);manifest=json.loads((out/'tileset.json').read_text())
+            leaves=[n for n in nodes(manifest['root']) if not n.get('children')]
+            self.assertEqual(len(leaves),8)
+            for leaf in leaves:
+                self.assertEqual(leaf['extras']['featureFragments'],1)
+                self.assertEqual(read(out/leaf['content']['uri'])[2],['7'])
+            report=json.loads((out/'conversion.json').read_text())
+            self.assertEqual(report['features'],8);self.assertEqual(report['fragments'],8)
+            previous=root/'previous.3tz'
+            with zipfile.ZipFile(previous,'w') as archive:
+                for file in out.rglob('*'):
+                    if file.is_file():archive.write(file,file.relative_to(out).as_posix())
+            # Every surviving row moves to one side of the saved cuts. They
+            # must be recomputed while retaining duplicate source identities.
+            features=features[:3]
+            for feature in features:feature['geometry']['coordinates']=[100,0,0]
+            source.write_text(json.dumps(dict(type='FeatureCollection',features=features)))
+            args.output=str(root/'replacement');args.reuse_tileset=str(previous)
+            vector.run(args)
+            replacement=pathlib.Path(args.output)
+            updated=json.loads((replacement/'tileset.json').read_text())['root']
+            leaves=[n for n in nodes(updated) if not n.get('children')]
+            self.assertEqual(len(leaves),3)
+            for leaf in leaves:self.assertEqual(read(replacement/leaf['content']['uri'])[2],['7'])
+            self.assertEqual(json.loads((replacement/'conversion.json').read_text())['features'],3)
+
     def test_projected_layers_selection_and_exact_nullable_int64(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(tmp)/'source.gpkg'

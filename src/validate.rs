@@ -283,7 +283,7 @@ struct Check<'a> {
     reports: Value,
     tiles: usize,
     contents: usize,
-    seen: HashSet<String>,
+    active: HashSet<String>,
     schema: jsonschema::Validator,
 }
 impl Check<'_> {
@@ -294,9 +294,29 @@ impl Check<'_> {
         self.used.insert(name);
         Ok(())
     }
-    fn tileset(&mut self, name: &str) -> Result<(), Error> {
-        if !self.seen.insert(name.into()) {
-            return Err(invalid("cyclic or repeated external tileset reference"));
+    fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<(), Error> {
+        if let Some(value) = doc.get("schemaUri") {
+            let value = value
+                .as_str()
+                .ok_or_else(|| invalid("schemaUri must be a string"))?;
+            let name = uri(base, value)?;
+            self.reference(name.clone())?;
+            read_json(self.zip, &name)?;
+        }
+        Ok(())
+    }
+    fn tileset(
+        &mut self,
+        name: &str,
+        parent: Option<&Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+    ) -> Result<(), Error> {
+        if depth > 128 {
+            return Err(invalid("hierarchy exceeds validation depth limit"));
+        }
+        if !self.active.insert(name.into()) {
+            return Err(invalid("cyclic external tileset reference"));
         }
         self.reference(name.into())?;
         let doc = read_json(self.zip, name)?;
@@ -307,7 +327,18 @@ impl Check<'_> {
             return Err(invalid("asset.version must be 1.0 or 1.1"));
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
-        self.node(&doc["root"], name, None, error, 0)
+        self.metadata_schema(name, &doc)?;
+        // Each use has its own placement and constraints, even when the JSON
+        // file was already visited under another referring tile.
+        let result = self.node(
+            &doc["root"],
+            name,
+            parent,
+            parent_error.map_or(error, |parent| parent.min(error)),
+            depth,
+        );
+        self.active.remove(name);
+        result
     }
     fn node(
         &mut self,
@@ -375,10 +406,11 @@ impl Check<'_> {
             }
             bytes += self.zip.by_name(&name)?.size();
             if name.ends_with(".json") {
-                self.tileset(&name)?;
+                self.tileset(&name, Some(&bounds), Some(error), depth + 1)?;
                 continue;
             }
             if let Some(doc) = gltf(self.zip, &name)? {
+                self.metadata_schema(&name, &doc["extensions"]["EXT_structural_metadata"])?;
                 for primitive in doc["meshes"]
                     .as_array()
                     .into_iter()
@@ -488,7 +520,7 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
         reports: report,
         tiles: 0,
         contents: 0,
-        seen: HashSet::new(),
+        active: HashSet::new(),
         schema: jsonschema::validator_for(&serde_json::from_str(include_str!(
             "../docs/schema/tileset.schema.json"
         ))?)
@@ -507,7 +539,7 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
             return Err(invalid("vector build-state checksum mismatch"));
         }
     }
-    check.tileset("tileset.json")?;
+    check.tileset("tileset.json", None, None, 0)?;
     if let Some(limit) = check.reports["budgets"]["tiles"].as_u64() {
         if check.tiles as u64 > limit {
             return Err(invalid("hierarchy exceeds recorded tile budget"));
@@ -573,6 +605,147 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn tile(radius: f64, error: f64) -> Value {
+        json!({"boundingVolume":{"sphere":[0.,0.,0.,radius]},"geometricError":error,"refine":"REPLACE"})
+    }
+    fn tileset(root: Value, error: f64) -> Value {
+        json!({"asset":{"version":"1.1"},"geometricError":error,"root":root})
+    }
+    fn check_documents(documents: Vec<(String, Value)>) -> Result<Value, Error> {
+        let work = tempfile::tempdir().unwrap();
+        let data = work.path().join("data");
+        for (name, value) in documents {
+            let file = data.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, serde_json::to_vec(&value).unwrap()).unwrap();
+        }
+        let output = work.path().join("test.3tz");
+        crate::pack::convert_to_3tz(&data, &output, &Default::default()).unwrap();
+        archive(&output, None)
+    }
+    #[test]
+    fn external_roots_obey_referring_bounds_and_error() {
+        let mut root = tile(1., 0.);
+        root["content"] = json!({"uri":"external.json"});
+        let mut outside = tile(0.5, 50.);
+        outside["boundingVolume"]["sphere"][0] = json!(10000.);
+        let mut translated = tile(0.5, 0.);
+        let mut m = IDENTITY;
+        m[12] = 10000.;
+        translated["transform"] = json!(m);
+        for (child, message) in [
+            (outside, "bounds escape"),
+            (translated, "bounds escape"),
+            (tile(0.5, 50.), "geometricError increases"),
+        ] {
+            let error = check_documents(vec![
+                ("tileset.json".into(), tileset(root.clone(), 0.)),
+                ("external.json".into(), tileset(child, 50.)),
+            ])
+            .unwrap_err();
+            assert!(error.to_string().contains(message), "{error}");
+        }
+    }
+    #[test]
+    fn shared_external_tileset_is_checked_at_each_placement() {
+        let mut children = vec![];
+        for x in [-10., 10.] {
+            let mut child = tile(1., 0.);
+            let mut m = IDENTITY;
+            m[12] = x;
+            child["transform"] = json!(m);
+            child["content"] = json!({"uri":"nested/external.json"});
+            children.push(child);
+        }
+        let mut root = tile(20., 0.);
+        root["children"] = json!(children);
+        let docs = |root| {
+            vec![
+                ("tileset.json".into(), tileset(root, 0.)),
+                ("nested/external.json".into(), tileset(tile(0.5, 0.), 0.)),
+            ]
+        };
+        let report = check_documents(docs(root.clone())).unwrap();
+        assert_eq!(report["tiles"], 5);
+        assert_eq!(report["contentReferences"], 2);
+        root["children"][1]["boundingVolume"]["sphere"][3] = json!(0.1);
+        assert!(check_documents(docs(root))
+            .unwrap_err()
+            .to_string()
+            .contains("bounds escape"));
+    }
+    #[test]
+    fn external_cycles_fail_and_depth_continues_across_files() {
+        let mut root = tile(1., 0.);
+        root["content"] = json!({"uri":"nested/external.json"});
+        let mut child = tile(1., 0.);
+        child["content"] = json!({"uri":"../tileset.json"});
+        assert!(check_documents(vec![
+            ("tileset.json".into(), tileset(root, 0.)),
+            ("nested/external.json".into(), tileset(child, 0.)),
+        ])
+        .unwrap_err()
+        .to_string()
+        .contains("cyclic external"));
+        for length in [128, 129] {
+            let mut docs = vec![];
+            for depth in 0..=length {
+                let name = if depth == 0 {
+                    "tileset.json".into()
+                } else {
+                    format!("nested/{depth}.json")
+                };
+                let mut node = tile(1., 0.);
+                if depth < length {
+                    node["content"] = json!({"uri":if depth == 0 { "nested/1.json".into() } else { format!("{}.json", depth+1) }});
+                }
+                docs.push((name, tileset(node, 0.)));
+            }
+            let result = check_documents(docs);
+            if length == 128 {
+                assert_eq!(result.unwrap()["tiles"], 129);
+            } else {
+                assert!(result.unwrap_err().to_string().contains("depth limit"));
+            }
+        }
+    }
+    #[test]
+    fn metadata_schemas_are_resolved_relative_to_each_document() {
+        let schema = json!({"id":"fixture","classes":{}});
+        let mut doc = tileset(tile(1., 0.), 0.);
+        doc["schemaUri"] = json!("schemas/schema.json");
+        let missing = check_documents(vec![("tileset.json".into(), doc.clone())]).unwrap_err();
+        assert!(missing
+            .to_string()
+            .contains("missing archive entry: schemas/schema.json"));
+        assert!(check_documents(vec![
+            ("tileset.json".into(), doc.clone()),
+            ("schemas/schema.json".into(), schema.clone()),
+        ])
+        .is_ok());
+        doc["root"]["content"] = json!({"uri":"nested/external.json"});
+        let mut external = tileset(tile(0.5, 0.), 0.);
+        external["schemaUri"] = json!("../schemas/schema.json");
+        external["root"]["content"] = json!({"uri":"../models/content.gltf"});
+        let gltf = json!({"asset":{"version":"2.0"},"extensionsUsed":["EXT_structural_metadata"],
+            "extensions":{"EXT_structural_metadata":{"schemaUri":"../schemas/schema.json"}}});
+        assert!(check_documents(vec![
+            ("tileset.json".into(), doc),
+            ("nested/external.json".into(), external),
+            ("models/content.gltf".into(), gltf.clone()),
+            ("schemas/schema.json".into(), schema),
+        ])
+        .is_ok());
+        let mut root = tile(1., 0.);
+        root["content"] = json!({"uri":"models/content.gltf"});
+        assert!(check_documents(vec![
+            ("tileset.json".into(), tileset(root, 0.)),
+            ("models/content.gltf".into(), gltf),
+        ])
+        .unwrap_err()
+        .to_string()
+        .contains("missing archive entry: schemas/schema.json"));
+    }
     #[test]
     fn containment_uses_child_transform_and_rotated_half_axes() {
         let parent = Volume::Box(vec![0., 0., 0., 0., 10., 0., -2., 0., 0., 0., 0., 1.]);

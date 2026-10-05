@@ -208,6 +208,13 @@ It never downloads or installs a validator, extracts archive entries, or modifie
 input. The external check runs after the built-in checks pass; unsupported built-in
 cases must be checked directly with the official tool.
 
+External tileset roots retain the referring tile's bounds, geometric error and
+hierarchy depth. A shared external tileset is checked at each placement; only
+references on the active traversal path count as cycles. Local `schemaUri`
+dependencies in tilesets and glTF metadata are resolved relative to their
+document, checked for presence and valid JSON, and included in used entries.
+Full metadata schema semantics remain part of the official validator's checks.
+
 The schema bundle comes from Cesium GS's 3D Tiles specification at commit
 `4d781014b52294759834018a931223b98ac1ce47`. Relative schema references were rewritten
 to local `$defs`; source descriptions and requirements are retained. Attribution

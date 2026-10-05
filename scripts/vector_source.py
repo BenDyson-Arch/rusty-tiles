@@ -157,7 +157,7 @@ class Reader:
             if not self.local:
                 source = source.Clone()
                 source.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-                native_height = bool(source.IsCompound() or source.IsGeocentric() or source.GetAuthorityCode(None) == '4979')
+                native_height = bool(source.IsCompound() or source.IsGeocentric() or source.GetAxesCount() == 3)
                 if not native_height:
                     source.PromoteTo3D()
                 transform = transformation(source,self.target)
