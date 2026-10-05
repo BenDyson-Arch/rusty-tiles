@@ -220,3 +220,29 @@ thickness/rounding, and vector/point-cloud feature attributes use padded uint16
 The official 0.6.1 validator passes the standard mesh and uncompressed vector
 fixtures with zero errors; it still warns about the draft vector extension it
 does not implement. Runtime verification remains necessary for those extensions.
+
+### Reproducible builds
+
+For byte-identical vector archives, add `vector --reproducible`. This omits the
+entire diagnostic `conversion.json.performance` section (timings and worker
+utilization). With the same input, conversion options, encoder binary and
+GDAL/GEOS/NumPy/codec dependencies, repeated conversions produce the same archive
+bytes. Worker count can change without changing those bytes. Point-cloud and
+plain archive packing have no timing section and are reproducible by default.
+Source filesystem timestamps and the caller's archive-member order do not affect
+packing: `tileset.json` is first, remaining names are sorted, the index is last,
+and all members have fixed 1980-01-01 timestamps and 0644 permissions.
+
+Without `--reproducible`, vector payloads, manifests, build state, geometry reports
+and the conversion report excluding `performance` remain identical. Only that
+section is volatile; its length/CRC also changes the ZIP container's offsets,
+central-directory records and 3TZ index. Excluding those container records is
+necessary when comparing ordinary diagnostic archives. Do not compare their raw
+archive hashes for reproducibility.
+
+The guarantee does not equate a fresh build with a reuse build: ingestion history,
+reuse statistics and which geometry reports were produced differ. Different source
+paths/layer identities, dependency versions, options or externally generated input
+bytes can also change output. Mesh texture conversion depends on the selected
+external codec/build; byte equality here is exercised for vector, point-cloud and
+plain packing rather than promised across all external texture encoders.
