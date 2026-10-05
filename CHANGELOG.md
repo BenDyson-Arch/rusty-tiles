@@ -10,7 +10,7 @@
 - `vector --reuseTileset previous.3tz` reuses unchanged subtrees and immutable content after an externally applied GeoPackage diff. Spatial moves, insertions, deletions and shared boundaries invalidate affected branches; incompatible settings rebuild from source.
 - Explicit raster image/grayscale recipes that preserve source COG pixels and masks, with transparent display derivatives for missing coverage.
 - Terrain height sidecars and a custom `heightOverlay` manifest entry that retain missing coverage separately from filled terrain heights.
-- Opt-in public dataset download/audit helpers and compatibility tests for upstream geodiff and go-geodiff. Diff creation and application remain external to rusty-tiles.
+- Opt-in public dataset download/audit helpers and compatibility tests for upstream geodiff 2.3.0 and go-geodiff v0.4.3, including indexed GeoPackage moves, inserts and deletes. Diff creation and application remain external to rusty-tiles.
 
 ### Compatibility and limits
 
@@ -18,7 +18,6 @@
 - Point-cloud conversion requires Python, NumPy, `laspy[lazrs]` and pyproj. Raster/terrain/vector conversion requires Python, NumPy and GDAL; vector also needs GEOS. Helpers are embedded in the executable, but these Python dependencies must be installed separately.
 - Point-cloud compound vertical CRS, waveform payloads and array extra dimensions are unsupported. Height offsets are constant conversions; no vertical datum is guessed.
 - Vector reuse scans the updated source and repacks the output archive. It avoids encoding unchanged content; it does not avoid every source-processing step. Buffered grid clipping and implicit tiling remain unimplemented.
-- Indexed GeoPackage diff application in go-geodiff currently fails when spatial-index triggers require `ST_IsEmpty`; tracked in [go-geodiff #3](https://github.com/tinyowl-labs/go-geodiff/issues/3). Upstream geodiff application works in the compatibility tests.
 
 ## 0.1.0 — 2026-09-11
 

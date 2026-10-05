@@ -172,16 +172,17 @@ in the previous archive. Diff parsing, conflict resolution and sync belong to
 `go-geodiff`/`geodiff`, not this command.
 
 Compatibility tests created byte-identical diffs using upstream geodiff 2.3.0
-(`e71dfe1`) and go-geodiff (`bbdf585`), cross-applied them, and compared incremental
+(`e71dfe1`) and go-geodiff v0.4.3 (`ec6a8d3`), cross-applied them, and compared incremental
 world geometry/properties with a fresh conversion. For a 32-feature fixture with
 attribute, geometry, insert and delete changes, both paths reused 54 of 62
 published contents and encoded 8. Unchanged-input tests prohibit any encoder call.
 
-**Known external compatibility gap:** go-geodiff at `bbdf585` cannot apply geometry
-changes to the GDAL-generated indexed GeoPackage fixture: R-tree triggers call
-`ST_IsEmpty`, which its SQLite connection does not provide
-([go-geodiff issue #3](https://github.com/tinyowl-labs/go-geodiff/issues/3)). Upstream geodiff
-applies the same diff successfully. The test records this known skip and verifies
-that the failed Go apply is atomic; the successful cross-apply case uses a
-GeoPackage created without a spatial index. The tiler does not drop triggers or
-alter source databases to hide this gap.
+The same producer/cross-apply checks pass with GDAL-generated spatial indexes.
+After geometry moves, inserts and deletes, both applied databases retain the
+same R-tree rows and spatial-filter results as the fresh source, and their
+incremental tiles match fresh world geometry/properties. go-geodiff v0.4.3
+provides the spatial-index functions needed by those triggers and fixes
+[go-geodiff issue #3](https://github.com/tinyowl-labs/go-geodiff/issues/3).
+The opt-in test requires successful indexed application; older Go versions
+without these functions fail rather than being skipped. The tiler does not
+modify or drop source triggers.
