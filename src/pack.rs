@@ -110,7 +110,9 @@ pub fn pack_named_files(
         position: position.clone(),
     });
     let mut index = Vec::with_capacity(files.len());
-    for (name, path) in files {
+    let mut ordered: Vec<_> = files.iter().collect();
+    ordered.sort_by(|a, b| (a.0 != "tileset.json", &a.0).cmp(&(b.0 != "tileset.json", &b.0)));
+    for (name, path) in ordered {
         let mut source = File::open(path)?;
         let size = source.metadata()?.len();
         let offset = position.load(Ordering::Relaxed);
@@ -118,6 +120,8 @@ pub fn pack_named_files(
             name,
             zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored)
+                .last_modified_time(zip::DateTime::default())
+                .unix_permissions(0o644)
                 .large_file(size >= u32::MAX as u64),
         )?;
         let copied = std::io::copy(&mut source, &mut zip)?;
@@ -137,7 +141,10 @@ pub fn pack_named_files(
     });
     zip.start_file(
         TZ_INDEX_NAME,
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+        zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored)
+            .last_modified_time(zip::DateTime::default())
+            .unix_permissions(0o644),
     )?;
     for (hash, offset) in index {
         zip.write_all(&hash)?;
@@ -265,4 +272,28 @@ pub fn validate_3tz(path: &Path) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod reproducibility_tests {
+    use super::*;
+    #[test]
+    fn packing_is_independent_of_caller_entry_order() {
+        let work = tempfile::tempdir().unwrap();
+        let manifest = work.path().join("tileset.json");
+        let content = work.path().join("tile.glb");
+        fs::write(&manifest, b"{}").unwrap();
+        fs::write(&content, b"same payload").unwrap();
+        let mut files = vec![
+            ("tile.glb".into(), content),
+            ("tileset.json".into(), manifest),
+        ];
+        let a = work.path().join("a.3tz");
+        let b = work.path().join("b.3tz");
+        pack_named_files(&files, &a, &PackOptions::default()).unwrap();
+        files.reverse();
+        pack_named_files(&files, &b, &PackOptions::default()).unwrap();
+        assert_eq!(fs::read(&a).unwrap(), fs::read(&b).unwrap());
+        validate_3tz(&a).unwrap();
+    }
 }

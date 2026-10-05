@@ -236,6 +236,11 @@ def run(args, writer):
                 delta=child['_center']-zcenter
                 child['transform']=[1,0,0,0,0,1,0,0,0,0,1,0,*delta.tolist(),1]
             half+=rounding
+            # Minimum thickness and child rounding can extend beyond source bounds.
+            for child in children:
+                box=child['boundingVolume']['box']
+                child_half=np.array([box[3],box[7],box[11]])
+                half=np.maximum(half,np.abs(child['_center']-zcenter)+child_half)
             node.update(boundingVolume=dict(box=[0,0,0,half[0],0,0,0,half[1],0,0,0,half[2]]),refine='REPLACE',
                         _center=zcenter,_padding=rounding)
             if children:
@@ -357,7 +362,7 @@ def run(args, writer):
         maximumQuantizationErrorMetres=max(n.get('extras',{}).get('quantizationErrorMetres',0.) for n in nodes),
         uncompressedTileBytes=sum(n.get('extras',{}).get('uncompressedBytes',0) for n in nodes),
         encodedTileBytes=sum(n.get('extras',{}).get('encodedBytes',0) for n in nodes))
-    (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
+    report=dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         performance=dict(jobs=jobs,workersUsed=len(workers),phaseSeconds=dict(ingestion=ingestion_seconds,partitioning=partition_seconds,encoding=encoding_seconds,publication=time.perf_counter()-publication_started)),
         budgets=dict(features=args.max_features,parentFeatures=max_parent_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
         attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
@@ -365,5 +370,8 @@ def run(args, writer):
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',
-        errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained'),indent=2))
+        errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained')
+    if getattr(args,'reproducible',False):
+        report.pop('performance',None)
+    (output/'conversion.json').write_text(json.dumps(report,indent=2,allow_nan=False))
     print(f"vector: {counters['features']} source features, {counters['fragments']} fragments, {counters['leafTiles']} leaves, {counters['tiles']} tiles")

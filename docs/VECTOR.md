@@ -195,6 +195,112 @@ and other engines have not been tested. A runtime that accepts ordinary 3D Tiles
 or `b3dm` may still ignore polygon topology, vector styling or feature metadata.
 Successful triangle rendering alone is insufficient to establish compatibility.
 
+### Style and pick features by their properties
+
+Use the CesiumJS IIFE (`/cesium/Cesium.js`) and a tested runtime from the matrix
+above. Retained source properties are available on lines, polygon fills, source
+boundaries, repaired outlines and their LOD representations. Fragments retain
+`_source_id` and `_source_layer`, so several picked pieces can identify the same
+source feature. Fields excluded with `--fields`/`--dropFields` are unavailable.
+
+For a dataset with `category` and `status` string fields, change its display
+without rebuilding the archive:
+
+```js
+const tileset = await Cesium.Cesium3DTileset.fromUrl('/data/tileset.json');
+viewer.scene.primitives.add(tileset);
+tileset.style = new Cesium.Cesium3DTileStyle({
+  color: {
+    conditions: [
+      ["${category} === 'survey'", "color('cyan')"],
+      ["true", "color('orange')"],
+    ],
+  },
+  show: "${status} === 'active'",
+  lineWidth: 12,
+  pointSize: 12,
+});
+```
+
+Replace the field names and values with your dataset's properties. The fallback
+colour also covers missing categories; the status condition displays only active
+features. `show` controls presentation; `--where` excludes source records from the
+archive itself. See the [style API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileStyle.html).
+
+Pick a visible feature and read its source identity and retained properties:
+
+```js
+const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+handler.setInputAction((click) => {
+  const feature = viewer.scene.pick(click.position);
+  if (!feature || typeof feature.getProperty !== 'function') return;
+
+  const properties = Object.fromEntries(feature.getPropertyIds().map((key) => {
+    const value = feature.getProperty(key);
+    // BigInt needs a string before JSON serialization; undefined displays as null.
+    return [key, value === undefined ? null :
+      typeof value === 'bigint' ? value.toString() : value];
+  }));
+  console.log({
+    sourceIdJson: properties._source_id,
+    sourceLayer: properties._source_layer,
+    properties,
+  });
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+// Call handler.destroy() when disposing of this view.
+```
+
+`_source_id` is JSON text for the original ID, not a tile-local feature number.
+Keep that text when looking up source records: blindly parsing a large numeric ID
+as a JavaScript Number can lose precision. `_source_layer` distinguishes identical
+IDs from different layers. The public [feature API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileFeature.html)
+is shared by the tested native vector and model/fill picking paths; checking the
+method also avoids assuming every scene pick is a metadata feature.
+
+**Missing values in the tested CesiumJS 1.143 runtime:** strings and FLOAT64
+properties with `noData` return `undefined` from `getProperty`. Empty strings and
+zero remain valid source values. INT64 values return `bigint`, preserving integers
+larger than 2^53. In this runtime, missing INT64 values expose the raw BigInt sentinel
+instead of `undefined` (the fixture returns `-9007199254740992n`). The encoded schema
+still declares `noData`; the runtime compares its numeric JSON sentinel with a
+BigInt. A sentinel can move if the source contains that value, so compare with the
+property's `noData` from its encoded glTF metadata schema rather than hard-coding it:
+
+```js
+function integerOrNull(value, schemaNoData) {
+  if (value === undefined) return null;
+  if (typeof value === 'bigint' && schemaNoData !== undefined &&
+      value === BigInt(schemaNoData)) return null;
+  return value; // Keep exact integers as BigInt, or use toString() for JSON/UI.
+}
+```
+
+The helper takes `noData` from the relevant content's
+`EXT_structural_metadata.schema.classes.feature.properties[field]`; it does not
+use private Cesium internals. The picking example above serializes values but
+cannot infer a missing integer without that schema value. Nullable booleans are
+rejected during ingestion. `--listFields json` properties are JSON text strings;
+parse them separately if the application needs arrays.
+
+The optional acceptance probe uses two source features per case and checks
+property-based cyan/orange colours, visibility filtering, source identity, exact
+64-bit values and the missing-value behavior on lines, polygon fills, fragmented
+fills/boundaries, repaired outlines and points:
+
+```sh
+python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
+python3 scripts/preview.py --port 9257 \
+  --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
+  --annotations target/vector-metadata-cases
+# In another terminal, with Playwright available to Node:
+NODE_PATH=target/browser-probe/node_modules \
+  node tests/fixtures/vector_metadata.cjs http://127.0.0.1:9257
+```
+
+The probe downloads nothing and exits unsuccessfully if any assertion fails.
+Repeat it when changing the runtime version; the nullable INT64 observation above
+is specific to the checked 1.143 release.
+
 ### Repeat the browser check
 
 This check is optional and separate from the default test suite. It uses invented
@@ -391,3 +497,8 @@ workers that produced consumed candidates, and wall times for ingestion,
 partitioning, encoding and publication. Partitioning includes spool preparation;
 encoding includes coordinator overhead and process startup, and publication stops
 before Rust archive packing. Timings are diagnostic, not part of content identity.
+
+For a cacheable, byte-identical archive, add `--reproducible`; performance diagnostics
+are omitted from `conversion.json`, while content and reuse behavior are retained.
+See [reproducible builds](../CONTRIBUTING.md#reproducible-builds) for the precise
+comparison rules and tested scope.
