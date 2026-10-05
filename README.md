@@ -188,7 +188,7 @@ rusty-tiles raster -i measurements.tif -o output/measurements \
   --displayMin -10 --displayMax 10
 ```
 
-Output includes `source.cog.tif`, `tilejson.json`, and `tiles/{z}/{x}/{y}.png`. Display tiles are a reprojected derivative; original values, bands, masks, and NoData are retained in the COG. Use `--alphaBand` only for an image band containing transparency. Jobs exceeding 100,000 imagery tiles fail with guidance to reduce the zoom range.
+Output includes `source.cog.tif`, `tilejson.json`, and `tiles/{z}/{x}/{y}.png`. Display tiles are a reprojected derivative; original values, bands, masks, and NoData are retained in the COG. Use `--alphaBand` only for an image band containing transparency; display alpha is combined with source coverage so masked pixels remain transparent. Jobs exceeding 100,000 imagery tiles fail with guidance to reduce the zoom range.
 
 ### Terrain
 

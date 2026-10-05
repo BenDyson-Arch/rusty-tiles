@@ -157,10 +157,11 @@ class Reader:
             if not self.local:
                 source = source.Clone()
                 source.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-                native_height = bool(source.IsCompound() or source.IsGeocentric() or source.GetAuthorityCode(None) == '4979')
+                native_height = bool(source.IsCompound() or source.IsGeocentric() or source.GetAxesCount() == 3)
                 if not native_height:
                     source.PromoteTo3D()
                 transform = transformation(source,self.target)
+                epoch = source.GetCoordinateEpoch() or math.inf
             if self.local and getattr(self.args,'height_offset',None) is not None:
                 raise ValueError('local XYZ is in metres; height-offset is for geospatial placement')
             if native_height and getattr(self.args,'height_offset',None) is not None:
@@ -253,7 +254,10 @@ class Reader:
                             xyz[:,2] += height or 0.
                         # OSR traditionally orders easting/northing or longitude/latitude;
                         # promoted horizontal CRS uses metre Z. Missing operations fail.
-                        xyz = np.asarray(transform.TransformPoints(xyz.tolist()),dtype=float)[:,:3]
+                        # GDAL's Python batch binding supplies time zero for
+                        # XYZ triples. PROJ uses infinity for unspecified time;
+                        # preserve a declared coordinate epoch when available.
+                        xyz = np.asarray(transform.TransformPoints([[*p,epoch] for p in xyz.tolist()]),dtype=float)[:,:3]
                     if not np.isfinite(xyz).all():
                         raise ValueError('coordinate operation produced nonfinite positions')
                     if self.anchor is None:

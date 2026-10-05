@@ -9,6 +9,21 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 
+def apply_coverage(display, mask, alpha_band):
+    """Intersect source coverage and display alpha in bounded source windows."""
+    styled = gdal.Open(str(display), gdal.GA_Update)
+    alpha = styled.GetRasterBand(alpha_band)
+    for y in range(0, styled.RasterYSize, 256):
+        for x in range(0, styled.RasterXSize, 256):
+            width = min(256, styled.RasterXSize-x)
+            height = min(256, styled.RasterYSize-y)
+            values = alpha.ReadAsArray(x, y, width, height)
+            coverage = mask.ReadAsArray(x, y, width, height)
+            masked = coverage < values
+            values[masked] = coverage[masked]
+            alpha.WriteArray(values, x, y)
+    styled.FlushCache()
+
 def run(a):
     out = pathlib.Path(a.output)
     source = gdal.Open(a.input)
@@ -48,21 +63,7 @@ def run(a):
         colours.unlink()
         # Color relief respects NoData but does not apply an explicit source mask.
         # Combine it into alpha in bounded windows before display resampling.
-        mask = selected.GetRasterBand(1).GetMaskBand()
-        styled = gdal.Open(str(display), gdal.GA_Update)
-        alpha = styled.GetRasterBand(4)
-        for y in range(0, styled.RasterYSize, 256):
-            for x in range(0, styled.RasterXSize, 256):
-                width = min(256, styled.RasterXSize-x)
-                height = min(256, styled.RasterYSize-y)
-                values = alpha.ReadAsArray(x, y, width, height)
-                coverage = mask.ReadAsArray(x, y, width, height)
-                masked = coverage < values
-                values[masked] = coverage[masked]
-                alpha.WriteArray(values, x, y)
-        styled.FlushCache()
-        alpha = None
-        styled = None
+        apply_coverage(display, selected.GetRasterBand(1).GetMaskBand(), 4)
     else:
         if a.display_min is not None or a.display_max is not None:
             raise ValueError('displayMin/displayMax require gray display')
@@ -81,8 +82,19 @@ def run(a):
                              scaleParams=[[0, 255, 0, 255]], noData='none', maskBand='mask,1')
         for i, name in enumerate(interpretations, 1):
             vrt.GetRasterBand(i).SetColorInterpretation(gdal.GCI_GrayIndex if name == 'gray' else getattr(gdal, 'GCI_'+name.capitalize()+'Band'))
-        gdal.Warp(str(display), vrt, format='GTiff', dstSRS='EPSG:3857', dstAlpha=not bool(a.alpha_band),
-                  creationOptions=['TILED=YES', 'COMPRESS=DEFLATE'])
+        if a.alpha_band:
+            # Warp selects source alpha instead of a separate mask. Bake their
+            # intersection at source resolution before either is resampled.
+            combined = out / 'image-alpha.tif'
+            gdal.Translate(str(combined), vrt, format='GTiff', maskBand='none',
+                           creationOptions=['TILED=YES', 'COMPRESS=DEFLATE'])
+            apply_coverage(combined, vrt.GetRasterBand(1).GetMaskBand(), len(bands))
+            gdal.Warp(str(display), str(combined), format='GTiff', dstSRS='EPSG:3857', srcAlpha=True, dstAlpha=True,
+                      creationOptions=['TILED=YES', 'COMPRESS=DEFLATE'])
+            combined.unlink()
+        else:
+            gdal.Warp(str(display), vrt, format='GTiff', dstSRS='EPSG:3857', dstAlpha=True,
+                      creationOptions=['TILED=YES', 'COMPRESS=DEFLATE'])
     # gdal2tiles is available in the supported Debian GDAL runtime as well as newer GDAL.
     if int(gdal.VersionInfo('VERSION_NUM')) >= 3110000:
         command = ['gdal', 'raster', 'tile', '--webviewer=none', '--tiling-scheme=WebMercatorQuad',
@@ -90,7 +102,7 @@ def run(a):
     else:
         command = [sys.executable, '-m', 'osgeo_utils.gdal2tiles', '--xyz', '--webviewer=none',
                    '--processes=1', '-z', f'{a.min_zoom}-{a.max_zoom}']
-    subprocess.run(command + [str(display), str(out/'tiles')], check=True)
+    subprocess.run(command + [str(display), str(out/'tiles')], check=True, stdout=sys.stderr)
     display.unlink()
     (out/'tilejson.json').write_text(json.dumps(dict(tilejson='3.0.0', scheme='xyz', tiles=['tiles/{z}/{x}/{y}.png'],
         minzoom=a.min_zoom, maxzoom=a.max_zoom, bounds=bounds)))

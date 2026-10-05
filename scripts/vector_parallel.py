@@ -18,36 +18,36 @@ def encode(task, writer=None):
     center=np.asarray(center);output=pathlib.Path(output)
     tolerance=getattr(args,'lod_tolerance',.1);max_vertices=getattr(args,'max_vertices',65536);max_bytes=getattr(args,'max_bytes',4194304)
     max_parent_features=getattr(args,'max_parent_features',4096)
-    features=[];locked={};reports=[]
-    # Fetch a bounded candidate and shared-coordinate masks before releasing SQLite.
+    reports=[]
+    # Retain only budgeted simplified geometry and one source feature at a time.
     db=sqlite3.connect(pathlib.Path(spool).as_uri()+'?mode=ro',uri=True)
     try:
         cap=max_parent_features if level else args.max_features
-        for fid,data in db.execute('SELECT id,data FROM features WHERE path>=? AND path<? ORDER BY id LIMIT ?',
-                (prefix,prefix+'~',cap+1)):
-            feature=json.loads(data);feature['_worker_id']=fid
-            features.append(feature)
-            points=coordinate_list(feature['geometry'])
-            locked[fid]={tuple(p) for p in points if feature.get('_surface_fragment') or db.execute(
-                'SELECT shared FROM vertices WHERE x=? AND y=? AND z=?',p).fetchone()[0]}
+        count=db.execute('SELECT COUNT(*) FROM (SELECT 1 FROM features WHERE path>=? AND path<? LIMIT ?)',
+            (prefix,prefix+'~',cap+1)).fetchone()[0]
+        if count>cap:
+            return None,reports,'parentFeatures' if level else 'features',os.getpid()
+        def features():
+            for fid,data in db.execute('SELECT id,data FROM features WHERE path>=? AND path<? ORDER BY id',
+                    (prefix,prefix+'~')):
+                feature=json.loads(data)
+                locked={tuple(p) for p in coordinate_list(feature['geometry']) if feature.get('_surface_fragment') or db.execute(
+                    'SELECT shared FROM vertices WHERE x=? AND y=? AND z=?',p).fetchone()[0]}
+                yield feature,locked
+        def size(feature):return len(coordinate_list(feature['geometry']))
+        def estimate(feature):return size(feature)*32+len(json.dumps(feature['properties']).encode())+2048
+        result=_encode(features(),center,level,args,schemas,output,reports,tolerance,max_vertices,max_bytes,writer,size,estimate)
+        return (*result,os.getpid())
     finally: db.close()
-    def size(feature):return len(coordinate_list(feature['geometry']))
-    def estimate(feature):return size(feature)*32+len(json.dumps(feature['properties']).encode())+2048
-    result=_encode(features,locked,center,level,args,schemas,output,reports,tolerance,max_vertices,max_bytes,max_parent_features,writer,size,estimate)
-    return (*result,os.getpid())
 
 
-def _encode(features,locked,center,level,args,schemas,output,reports,tolerance,max_vertices,max_bytes,max_parent_features,writer,size,estimate):
-    last_budget_reason=None
+def _encode(features,center,level,args,schemas,output,reports,tolerance,max_vertices,max_bytes,writer,size,estimate):
     last_budget_reason=None
     items=[]; error=0.; vertices=0; approximate_bytes=0
-    for feature in features:
-        if len(items)>=(max_parent_features if level else args.max_features):
-            last_budget_reason='parentFeatures' if level else 'features'
-            return None,reports,last_budget_reason
+    for feature,locked in features:
         if level:
             fallback=[]
-            feature,e=writer.simplify_feature(feature,tolerance*2**(level-1),locked[feature['_worker_id']],fallback,
+            feature,e=writer.simplify_feature(feature,tolerance*2**(level-1),locked,fallback,
                 parent_repair=getattr(args,'parent_repair',False))
             for value in fallback:
                 reports.append(value)
