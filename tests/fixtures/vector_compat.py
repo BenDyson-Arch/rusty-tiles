@@ -26,7 +26,7 @@ def ring(radius, count, wave=0):
     return positions + [positions[0]]
 
 
-def generate(root):
+def generate(root, quantize=False, meshopt_helper=None):
     root.mkdir(parents=True, exist_ok=False)
     features = {
         'line': dict(type='LineString', coordinates=[
@@ -48,6 +48,7 @@ def generate(root):
         ])))
         vector.run(types.SimpleNamespace(
             input=str(source), output=str(root / name), max_features=64,
+            quantize=quantize, meshopt_helper=meshopt_helper,
             max_vertices=8 if name == 'fragmented' else 65536, max_bytes=16384,
             lod_tolerance=.2, lod_levels=3, repair=name == 'outline',
             ambiguous_outlines=name == 'outline',
@@ -81,6 +82,10 @@ def generate(root):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        raise SystemExit(__doc__)
-    generate(pathlib.Path(sys.argv[1]))
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('output',type=pathlib.Path)
+    parser.add_argument('--quantize',action='store_true')
+    parser.add_argument('--meshopt-helper')
+    args=parser.parse_args()
+    generate(args.output,args.quantize,args.meshopt_helper)

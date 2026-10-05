@@ -3,18 +3,28 @@ import contextlib
 import hashlib
 import json
 import math
+import os
 import pathlib
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
+import time
 
 import numpy as np
 from vector_source import Reader, coordinate_list
 from vector_reuse import Reuse, canonical, contents
 
 
+def progress(phase, done, total=None):
+    if os.environ.get('RUSTY_TILES_PROGRESS_JSON') == '1':
+        print(json.dumps(dict(event='progress',phase=phase,done=done,total=total)),file=sys.stderr,flush=True)
+
+
 def run(args, writer):
+    started=time.perf_counter()
+    progress('ingestion',0)
     tolerance = getattr(args, 'lod_tolerance', .1)
     levels = getattr(args, 'lod_levels', 3)
     max_vertices = getattr(args, 'max_vertices', 65536)
@@ -151,6 +161,8 @@ def run(args, writer):
             layer['invalidFeatures']=rejected.get(layer['name'],0)
         if failures and not getattr(args,'skip_invalid',False):
             raise ValueError(f"{failures} unconvertible feature(s); first failure: {first_failure['reason']}. No tileset published. Fix the reported features or explicitly use --skipInvalid.")
+        ingestion_seconds=time.perf_counter()-started
+        progress('ingestion',counters['features'],counters['features'])
         counters['skippedFeatures']=failures
         db.commit()
         counters['featuresWithoutGeometry']=reader.features_without_geometry
@@ -179,92 +191,63 @@ def run(args, writer):
             db.execute('UPDATE features SET fingerprint=? WHERE id=?',(hashlib.sha256(value.encode()+mask).hexdigest(),fid))
         for fid,value in db.execute('SELECT id,data FROM features'):
             fingerprint(fid,value)
-        serial=0
-        last_budget_reason=None
+        partition_seconds=time.perf_counter()-started-ingestion_seconds
+        encoding_started=time.perf_counter()
+        from concurrent.futures import ProcessPoolExecutor
+        import multiprocessing
+        import vector_parallel
+        bundle=pathlib.Path(scratch)/'workers';bundle.mkdir()
+        for name,source in writer.sources.items():
+            (bundle/(name+'.py')).write_text(source)
+        sys.path.insert(0,str(bundle))
+        cleanup.callback(lambda:sys.path.remove(str(bundle)))
+        jobs=getattr(args,'jobs',1)
+        if jobs<1:raise ValueError('jobs must be positive')
+        pool=cleanup.enter_context(ProcessPoolExecutor(max_workers=jobs,mp_context=multiprocessing.get_context('spawn'))) if jobs>1 else None
+        pending={};workers=set();last_budget_reason=None
+        spool=str(pathlib.Path(scratch)/'features.sqlite')
+        def schedule(prefix,center,level):
+            key=(prefix,level)
+            if key in pending:return
+            db.commit()
+            task=(spool,prefix,center.tolist(),level,args,reader.schemas,str(output))
+            pending[key]=pool.submit(vector_parallel.encode,task) if pool else task
         def encoded(prefix,center,level):
-            nonlocal serial,last_budget_reason
-            last_budget_reason=None
-            items=[]; error=0.; vertices=0; approximate_bytes=0
-            for feature in rows(prefix):
-                if len(items)>=(max_parent_features if level else args.max_features):
-                    last_budget_reason='parentFeatures' if level else 'features'
-                    return None
-                if level:
-                    fallback=[]
-                    feature,e=writer.simplify_feature(feature,tolerance*2**(level-1),locks(feature),fallback)
-                    for value in fallback:
-                        report(value)
-                    error=max(error,e)
-                vertices+=size(feature); approximate_bytes+=estimate(feature)-(2048 if level else 0)
-                if vertices>max_vertices:
-                    last_budget_reason='vertices'
-                    return None
-                # Metadata is irreducible; stop excessive accumulation before encoding.
-                if approximate_bytes>max_bytes*2:
-                    last_budget_reason='estimatedBytes'
-                    return None
-                items.append(feature)
-            serial+=1
-            groups=[]
-            fills=[f for f in items if f.get('_surface_fragment')]
-            vectors=[f for f in items if not f.get('_surface_fragment')]
-            for feature in fills:
-                boundary=[edge for triangle in feature['_triangle_boundaries'] for edge in triangle]
-                if boundary:
-                    vectors.append(dict(properties=feature['properties'],geometry=dict(type='MultiLineString',coordinates=boundary)))
-            if fills:groups.append(('fill',fills,True))
-            if vectors:groups.append(('vector',vectors,False))
-            contents=[];files=[];vertex_count=0;byte_count=0;rounding=0.;polygon_reports=[]
-            for role,features,fill_only in groups:
-                uri=f't/{serial}-{role}.glb';file=output/uri;encoding={}
-                writer.emit(features,file,lambda p:np.asarray(p,dtype=float)-center,
-                    getattr(args,'repair',False),polygon_reports if not level else None,
-                    getattr(args,'ambiguous_outlines',False),encoding,reader.schemas,fill_only=fill_only)
-                if fill_only:
-                    # Cesium 1.143 selects the draft vector GLB decoder at tileset
-                    # scope. A standard b3dm wrapper routes only fills to its model
-                    # decoder; the embedded GLB still uses modern feature metadata.
-                    glb=file.read_bytes();table=b'{"BATCH_LENGTH":0}'
-                    table+=b' '*(-(28+len(table))%8)
-                    wrapped=struct.pack('<4s6I',b'b3dm',1,28+len(table)+len(glb),len(table),0,0,0)+table+glb
-                    file.unlink();uri=f't/{serial}-{role}.b3dm';file=output/uri;file.write_bytes(wrapped)
-                uri='t/'+hashlib.sha256(file.read_bytes()).hexdigest()+file.suffix
-                target=output/uri
-                if target.exists():file.unlink()
-                else:file.rename(target)
-                file=target
-                files.append(file);byte_count+=file.stat().st_size;vertex_count+=encoding['vertices']
-                rounding=max(rounding,encoding['rounding'])
-                content=dict(uri=uri)
-                if not fill_only:content['extensions']={'3DTILES_content_gltf_vector':dict(vector=True)}
-                contents.append(content)
-            if vertex_count>max_vertices or byte_count>max_bytes:
-                last_budget_reason='vertices' if vertex_count>max_vertices else 'bytes'
-                return None  # unused immutable candidates are pruned at publication
-            if not level:
-                for value in polygon_reports:report(value)
-            node=dict(extras=dict(featureFragments=len(items),vertices=vertex_count,encodedBytes=byte_count,geometryErrorMetres=error,
-                    positionRoundingMetres=rounding,toleranceMetres=tolerance*2**(level-1) if level else 0),
-                    geometricError=error+rounding if level else 0)
-            if len(contents)==1:node['content']=contents[0]
-            else:node['contents']=contents
+            nonlocal last_budget_reason
+            schedule(prefix,center,level)
+            task=pending.pop((prefix,level))
+            node,values,last_budget_reason,pid=task.result() if pool else vector_parallel.encode(task,writer)
+            workers.add(pid)
+            for value in values:report(value)
             return node
+        def discard(prefix):
+            for key in [key for key in pending if key[0]==prefix]:
+                task=pending.pop(key)
+                if pool and not task.cancel():
+                    try:task.result()
+                    except Exception:pass  # This speculative candidate is not part of the hierarchy.
         def attach(node,lo,hi,center,children=()):
             # Node and GLB have the same local origin; children translate relative to it.
             zcenter=center[[0,2,1]]*[1,-1,1]
             half=np.maximum((hi-lo)[[0,2,1]]/2,.001)
-            rounding=node.get('extras',{}).get('positionRoundingMetres',0.)
+            rounding=node.get('extras',{}).get('positionRoundingMetres',0.)+node.get('extras',{}).get('quantizationErrorMetres',0.)
             for child in children:
                 rounding=max(rounding,child['_padding'])
                 delta=child['_center']-zcenter
                 child['transform']=[1,0,0,0,0,1,0,0,0,0,1,0,*delta.tolist(),1]
             half+=rounding
+            # Minimum thickness and child rounding can extend beyond source bounds.
+            for child in children:
+                box=child['boundingVolume']['box']
+                child_half=np.array([box[3],box[7],box[11]])
+                half=np.maximum(half,np.abs(child['_center']-zcenter)+child_half)
             node.update(boundingVolume=dict(box=[0,0,0,half[0],0,0,0,half[1],0,0,0,half[2]]),refine='REPLACE',
                         _center=zcenter,_padding=rounding)
             if children:
                 node['children']=list(children)
                 node['geometricError']=max(node['geometricError'],*(c['geometricError'] for c in children))
             counters['tiles']+=1
+            progress('encoding',counters['tiles'])
             if counters['tiles']>max_tiles:
                 raise ValueError('hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly')
             if 'content' in node or 'contents' in node:
@@ -280,12 +263,14 @@ def run(args, writer):
             reuse.remember(prefix,signature,node,stats(prefix)[0],reuse.cuts.get(prefix))
             return node
         def build_uncached(prefix,depth=0):
+            nonlocal partition_seconds
             if depth>64:
                 raise ValueError('partition depth exceeds 64')
             n,vertices,est,*bounds=stats(prefix)
             lo,hi=np.asarray(bounds[:3]),np.asarray(bounds[3:]); center=(lo+hi)/2
             leaf=None
             if n<=args.max_features and vertices<=max_vertices and est<=max_bytes*2:
+                for level in range(levels+1):schedule(prefix,center,level)
                 leaf=encoded(prefix,center,0)
             if leaf:
                 counters['leafTiles']+=1
@@ -299,6 +284,7 @@ def run(args, writer):
                         continue
                     node=attach(coarse,lo,hi,center,[node])
                 return node
+            discard(prefix)
             if n==1:
                 fid,value=db.execute('SELECT id,data FROM features WHERE path>=? AND path<?',where(prefix)).fetchone()
                 parts=split(json.loads(value))
@@ -309,6 +295,7 @@ def run(args, writer):
                 for fid,value in db.execute('SELECT id,data FROM features WHERE path>=? AND path<?',where(prefix)):
                     fingerprint(fid,value)
                 return build_uncached(prefix,depth+1)
+            partition_started=time.perf_counter()
             cut=reuse.cuts.get(prefix)
             if cut is None:
                 axis=('x','y','z')[int(np.argmax(hi-lo))]
@@ -320,8 +307,18 @@ def run(args, writer):
             db.execute(f'UPDATE features SET path=? WHERE path=? AND ({axis}<? OR ({axis}=? AND sortkey<=?))',
                        (prefix+'0',prefix,cut['value'],cut['value'],cut['key']))
             db.execute('UPDATE features SET path=? WHERE path=?',(prefix+'1',prefix))
-            children=[build(prefix+suffix,depth+1) for suffix in ('0','1') if stats(prefix+suffix)[0]]
+            partition_seconds+=time.perf_counter()-partition_started
             level=levels+int(math.ceil(math.log2(n/args.max_features)))
+            # Pre-encode eligible sibling leaves, excluding reusable subtrees.
+            for suffix in ('0','1'):
+                child_prefix=prefix+suffix
+                cn,cv,ce,*cb=stats(child_prefix)
+                previous=reuse.old.get('records',{}).get(child_prefix)
+                cached=previous and previous['signature']==reuse.signature(db,child_prefix)
+                if cn and not cached and cn<=args.max_features and cv<=max_vertices and ce<=max_bytes*2:
+                    child_center=(np.asarray(cb[:3])+np.asarray(cb[3:]))/2
+                    schedule(child_prefix,child_center,0)
+            children=[build(prefix+suffix,depth+1) for suffix in ('0','1') if stats(prefix+suffix)[0]]
             coarse=encoded(prefix,center,max(1,level))
             if coarse is None:
                 counters['routingTiles']+=1
@@ -335,6 +332,11 @@ def run(args, writer):
             counters['tiles']=1
             reuse.remember('',reuse.signature(db,''),root,0)
 
+        # Finish unused speculative LOD candidates before pruning immutable files.
+        if pool:
+            for future in pending.values():future.result()
+        encoding_seconds=max(0.,time.perf_counter()-encoding_started-(partition_seconds-(encoding_started-started-ingestion_seconds)))
+        publication_started=time.perf_counter()
         basis=reader.frame.T
         anchor=reader.anchor+basis@root['_center']
         root['transform']=[*basis[:,0].tolist(),0,*basis[:,1].tolist(),0,*basis[:,2].tolist(),0,*anchor.tolist(),1]
@@ -351,12 +353,25 @@ def run(args, writer):
         report_file.close()
         shared=db.execute('SELECT COUNT(*) FROM vertices WHERE shared=1').fetchone()[0]
         db.close()
-    (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
+    nodes=[]
+    def collect(node):
+        nodes.append(node)
+        for child in node.get('children',[]):collect(child)
+    collect(root)
+    encoding_summary=dict(quantize=getattr(args,'quantize',False),meshopt=bool(getattr(args,'meshopt_helper',None)),
+        maximumQuantizationErrorMetres=max(n.get('extras',{}).get('quantizationErrorMetres',0.) for n in nodes),
+        uncompressedTileBytes=sum(n.get('extras',{}).get('uncompressedBytes',0) for n in nodes),
+        encodedTileBytes=sum(n.get('extras',{}).get('encodedBytes',0) for n in nodes))
+    report=dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
+        performance=dict(jobs=jobs,workersUsed=len(workers),phaseSeconds=dict(ingestion=ingestion_seconds,partitioning=partition_seconds,encoding=encoding_seconds,publication=time.perf_counter()-publication_started)),
         budgets=dict(features=args.max_features,parentFeatures=max_parent_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
         attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
-        skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
+        encoding=encoding_summary,parentRepairEnabled=getattr(args,'parent_repair',False),skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',
-        errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained'),indent=2))
+        errorPolicy='direct original-to-parent distance plus float32 rounding; all source bounds retained')
+    if getattr(args,'reproducible',False):
+        report.pop('performance',None)
+    (output/'conversion.json').write_text(json.dumps(report,indent=2,allow_nan=False))
     print(f"vector: {counters['features']} source features, {counters['fragments']} fragments, {counters['leafTiles']} leaves, {counters['tiles']} tiles")
