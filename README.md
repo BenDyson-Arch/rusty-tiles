@@ -1,6 +1,6 @@
 # rusty-tiles
 
-An MIT-licensed, standalone tool for textured GLB/glTF → 3D Tiles 1.1 → `.3tz`, raster imagery pyramids, DEM terrain tiles and experimental glTF vector tiles. Bring your own data; no survey datasets, access tokens or hosted services are bundled.
+An MIT-licensed, standalone tool for textured GLB/glTF → 3D Tiles 1.1 → `.3tz`, raster imagery pyramids, DEM terrain tiles, LAS/LAZ point-cloud tiles and experimental glTF vector tiles. Bring your own data; no survey datasets, access tokens or hosted services are bundled.
 
 ## Build and run
 
@@ -183,3 +183,60 @@ To serve on your own network, explicitly pass `--host YOUR_INTERFACE_IP --port 9
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, local checks, the `develop` → `main` release workflow, review requirements and data-sharing rules. Contributions normally target `develop`; `main` is protected for releases.
+
+## Point clouds (LAS/LAZ)
+
+Convert ordinary XYZ point clouds without application-specific axis conventions.
+Install the optional Python dependencies in the environment used by `python3`:
+
+```sh
+python3 -m pip install -r scripts/point-cloud-requirements.txt
+rusty-tiles point-cloud -i cloud.laz -o cloud.3tz \
+  --sourceCrs EPSG:32632 --heightOffset 0 --maxPoints 50000
+```
+
+Use `--sourceCrs header` to read the LAS horizontal CRS, or explicitly supply
+an EPSG code/WKT understood by PROJ. Geospatial inputs require a **2D horizontal
+CRS** and `--heightOffset`: source Z must be metres, with the supplied constant
+converting it to ellipsoidal height. Zero is appropriate only when that height
+reference is established. A constant is not a geoid transformation. Required
+PROJ operations must be available locally; ballpark transformations and automatic
+grid downloads are disabled. Compound/vertical and geocentric source CRSs are
+rejected in this first reader. Source X/Y follow ordinary easting/northing or
+longitude/latitude order; horizontal units are handled by PROJ.
+
+For engineering or unreferenced data, `--sourceCrs local` keeps XYZ in metres,
+Z up, without globe placement or height conversion. No coordinate system is
+guessed. Mesh commands retain their existing application-specific adapters;
+point-cloud coordinates do not use those adapters.
+
+The reader streams LAS/LAZ (including ordinary sequential reading of COPC files)
+into temporary disk records. Recursive binary spatial partitioning streams those
+records into smaller files; `--chunkPoints` (default 100,000) limits each input
+batch and `--maxPoints` (default 50,000) limits leaf content and parent samples.
+Each parent selects the first source point in each occupied cell of a bounded
+voxel grid. Cell diagonal plus float32 encoding error conservatively bounds the
+distance from source points to parent samples. `REPLACE` refinement prevents
+parent/child double rendering. Full-detail leaves retain every record, including
+coincident points. Degenerate partitions split by record count; excessively deep
+spatial hierarchies fail explicitly instead of overrunning recursion limits.
+
+Content uses standard glTF `POINTS` in 3D Tiles 1.1, with original 16-bit RGB,
+intensity, classification, return fields, and scalar numeric LAS dimensions in
+`EXT_structural_metadata`/`EXT_mesh_features`. Scaled scalar extra dimensions are
+stored as decoded float64 values; array extras and waveform dimensions fail
+explicitly. Source XYZ, integer X/Y/Z and stable source record indices are kept
+as metadata. Per-tile origins limit float32 position rounding; `conversion.json`
+reports the maximum rounding, source scales/offsets, CRS and settings. Leaves
+preserve all points, but rendered float32 positions are not bit-identical to the
+original float64 coordinates. Unknown VLRs, waveform payloads and source files
+are not copied; this is a display derivative, not a LAS archive.
+
+RAM scales with configured batch/sample budgets and dimension count, rather
+than the complete point count. Scratch disk and repeated passes trade I/O for
+bounded memory; no large-dataset performance claim is made yet. Existing output
+paths are rejected and Rust publishes the archive only after successful encoding.
+
+Extract the archive and add `--point-cloud extracted-directory` to the existing
+preview command. The preview supports point-cloud attenuation, layer toggles and
+per-point property picking without a hosted service or token.

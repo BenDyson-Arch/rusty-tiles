@@ -7,7 +7,7 @@ import pathlib
 import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-MANIFESTS = {'mesh': 'tileset.json', 'annotations': 'tileset.json',
+MANIFESTS = {'point-cloud': 'tileset.json', 'mesh': 'tileset.json', 'annotations': 'tileset.json',
              'imagery': 'tilejson.json', 'terrain': 'layer.json'}
 
 
@@ -64,9 +64,9 @@ def main():
     args = parser.parse_args()
     if not (args.cesium/'Cesium.js').is_file():
         parser.error('--cesium must contain Cesium.js')
-    layers = {name: getattr(args, name) for name in MANIFESTS if getattr(args, name)}
+    layers = {name: getattr(args, name.replace('-', '_')) for name in MANIFESTS if getattr(args, name.replace('-', '_'))}
     if not layers:
-        parser.error('select at least one of --mesh, --annotations, --imagery, --terrain')
+        parser.error('select at least one of --point-cloud, --mesh, --annotations, --imagery, --terrain')
     for name, path in layers.items():
         if not (path/MANIFESTS[name]).is_file():
             parser.error(f'--{name} must contain {MANIFESTS[name]}')
