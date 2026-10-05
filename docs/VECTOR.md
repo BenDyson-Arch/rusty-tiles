@@ -70,8 +70,7 @@ contents, so filled surfaces and outlines remain pickable. Geometry reports
 explicitly record this policy.
 Shared vertices, including fragment seams, are locked during simplification;
 triangle surface fragments are not simplified. Buffered spatial clipping, coverage-wide
-edge reconciliation, implicit tiling and primitive-restart line batching remain
-unimplemented.
+edge reconciliation and implicit tiling remain unimplemented.
 
 ## Optional position quantization and compression
 
@@ -145,22 +144,52 @@ feature or changes a leaf. If the bound does not fit, the original fallback rema
 `conversion.json` records layers, CRS/height semantics, budgets, observed tile
 maxima, fragmentation and a bounded sample of geometry reports. The complete
 report stream is `geometry-reports.jsonl`. Tile `extras` records encoded vertices,
-bytes, geometry error, position rounding and requested tolerance.
+bytes, `primitives`, geometry error, position rounding and requested tolerance.
+`conversion.json.encoding.maximumTilePrimitives` is the largest primitive count
+across a tile’s contents; `primitiveReferences` sums those counts across content
+references in the hierarchy, including reused tiles. These measure glTF primitives,
+not GPU draw calls or unique files.
+
+### Geometry batching
+
+Each content groups points, disconnected line strips and polygons into at most
+three primitives, with per-vertex feature IDs linking every part to its original
+metadata row. Polygons share position/index buffers and use the draft polygon
+count and offsets to retain individual exteriors and holes. Disconnected strips
+use unsigned 32-bit restart indices, so batching introduces no connecting segment.
+Standard fragmented surface fills share one triangle primitive per fill content;
+source boundaries remain separate vector content. Vertex and byte budgets still
+apply to actual output across all contents.
+
+Multiple line strips require the draft `KHR_mesh_primitive_restart` extension,
+declared in both `extensionsUsed` and `extensionsRequired`. Engines without it
+cannot load that content correctly. A single strip does not require the extension.
+Batching does not promise one GPU draw call: a runtime can split a collection into
+several commands for styling or rendering limits.
+
+On the issue #54 fixture (3,000 twelve-vertex polygons, `--quantize --meshopt`),
+batching reduced glTF primitives from 24,000 to 255 across the hierarchy, JSON
+from 45,109,800 to 840,464 bytes, and archive size from 54,552,997 to 4,909,436
+bytes. The largest encoded tile changed from 3,367,108 bytes with 1,500 primitives
+to 359,556 bytes with one primitive containing all 3,000 features. This is an
+invented fixture measurement, not a general compression guarantee. Encoder
+changes require a fresh build before using `--reuseTileset` again.
 
 ## Compatibility and validation
 
-**Use CesiumJS 1.142.0 or a checked newer release for native vector content.**
-1.142.0 is the oldest release tested with the native vector decoder; it introduced
-experimental support for these extensions in
+**Use CesiumJS 1.143.0 for batched native vector content.**
+1.143.0 is the checked batching runtime and repository preview baseline.
+1.142.0 was the oldest release tested with unbatched native vector content; it
+introduced experimental support for these extensions in
 [Cesium PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
-The repository preview baseline is 1.143.0. Pin your application runtime and repeat
-the probe when upgrading: draft support can change without a stable compatibility
+Pin your application runtime and repeat the probe when upgrading: draft support can change without a stable compatibility
 promise.
 
 The encoder follows these draft revisions:
 
 | Extension | Encoding reference |
 | --- | --- |
+| `KHR_mesh_primitive_restart` | [glTF proposal revision `9811e84`](https://github.com/KhronosGroup/glTF/tree/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart), from [PR 2569](https://github.com/KhronosGroup/glTF/pull/2569): disconnected line strips separated by the maximum index value; required when used. |
 | `EXT_mesh_polygon` | [glTF proposal revision `c1a0354`](https://github.com/KhronosGroup/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), from [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570): polygon count, triangle offsets and ring-loop indices/offsets. |
 | `3DTILES_content_gltf_vector` | [3D Tiles proposal revision `c48ebdc`](https://github.com/CesiumGS/3d-tiles/blob/c48ebdc8db43dc00917b4f200eff5e2131d7e493/extensions/3DTILES_content_gltf_vector/README.md), from [PR 838](https://github.com/CesiumGS/3d-tiles/pull/838): optional tileset extension with `content.extensions.3DTILES_content_gltf_vector.vector = true`. |
 
@@ -169,7 +198,16 @@ Output declares 3D Tiles 1.1; this prototype does not claim a finalized 3D Tiles
 2.0 format. Fragmented surface fills use standard `b3dm`-wrapped glTF triangles,
 while their original boundaries use separate vector line content.
 
-The following matrix was checked on 2026-10-05 using the repository IIFE preview,
+On 2026-10-06, the five browser cases were repeated in CesiumJS 1.143.0 with two
+spatially separated features per case, both uncompressed and with
+`--quantize --meshopt`. Native loading, styled lines, empty polygon holes, LOD,
+fragmented fills/boundaries and both source IDs passed. Each unfragmented case
+used one glTF primitive and one native collection containing both features;
+line-gap picking confirmed no connecting segment. To repeat this check, generate
+`tests/fixtures/vector_compat.py OUTPUT --batch` and run the browser probe below.
+
+The following matrix predates geometry batching and was checked on 2026-10-05
+using the repository IIFE preview,
 headless Chromium with SwiftShader, GDAL 3.13.3 and NumPy 2.5.3. Each row used the
 same invented fixtures: a detailed 3D line, a polygon with a hole, a fragmented
 polygon with separate boundaries, an outline-only repaired polygon, and a point.
@@ -193,7 +231,7 @@ native vector rendering from an ordinary thin glTF line. Polygon ring topology
 does not itself promise visible styled outlines in every runtime; the fragmented
 boundary test uses the separately emitted line content.
 
-The three older releases did not report tile-loading errors in these fixtures.
+The three older releases did not report tile-loading errors in those unbatched fixtures.
 They ignored the optional draft extensions and displayed generic glTF geometry;
 that partial display is **not supported native vector behavior**. Earlier releases
 and other engines have not been tested. A runtime that accepts ordinary 3D Tiles

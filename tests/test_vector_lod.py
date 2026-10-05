@@ -49,6 +49,43 @@ def read(path):
     return doc,positions,ids
 
 
+def accessors(path):
+    """Decode uncompressed accessors independently, respecting component stride."""
+    data=path.read_bytes()
+    if data[:4]==b'b3dm':data=data[28+sum(struct.unpack_from('<4s6I',data)[3:]):]
+    n=struct.unpack_from('<I',data,12)[0];doc=json.loads(data[20:20+n]);binary=data[28+n:]
+    def decode(index):
+        ac=doc['accessors'][index];v=doc['bufferViews'][ac['bufferView']]
+        dtype=np.dtype({5123:'<u2',5125:'<u4',5126:'<f4'}[ac['componentType']])
+        width={'SCALAR':1,'VEC3':3}[ac['type']]
+        values=np.ndarray((ac['count'],width),dtype,buffer=binary,
+            offset=v.get('byteOffset',0)+ac.get('byteOffset',0),
+            strides=(v.get('byteStride',dtype.itemsize*width),dtype.itemsize)).copy()
+        return values.reshape(-1) if width==1 else values
+    return doc,decode
+
+
+def parts(path):
+    """Decode semantic parts, rather than treating shared vertex arrays as paths."""
+    doc,decode=accessors(path);out=[]
+    for prim in doc['meshes'][0]['primitives']:
+        pos=decode(prim['attributes']['POSITION']);fids=decode(prim['attributes']['_FEATURE_ID_0'])
+        indices=decode(prim['indices']);mode=prim['mode'];polygon=prim.get('extensions',{}).get('EXT_mesh_polygon')
+        if polygon:
+            loops=decode(polygon['loopIndices']);starts=decode(polygon['loopIndicesOffsets'])
+            groups=[np.unique(loop[loop!=0xffffffff]) for loop in np.split(loops,starts[1:])]
+        elif mode==3:
+            groups=[group[group!=0xffffffff] for group in np.split(indices,np.flatnonzero(indices==0xffffffff))]
+        elif mode==4:groups=indices.reshape(-1,3)
+        else:groups=[indices[fids[indices]==fid] for fid in np.unique(fids[indices])]
+        for group in groups:
+            if len(group):
+                fid=int(fids[group[0]])
+                if not np.all(fids[group]==fid):raise AssertionError('semantic part crosses feature identities')
+                out.append((mode,fid,pos[group]))
+    return out
+
+
 class VectorLodTests(unittest.TestCase):
     def test_3d_rdp_error_measured_independently_in_both_directions(self):
         x=np.linspace(0,30,301)

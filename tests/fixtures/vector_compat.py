@@ -26,7 +26,7 @@ def ring(radius, count, wave=0):
     return positions + [positions[0]]
 
 
-def generate(root, quantize=False, meshopt_helper=None):
+def generate(root, quantize=False, meshopt_helper=None, batch=False):
     root.mkdir(parents=True, exist_ok=False)
     features = {
         'line': dict(type='LineString', coordinates=[
@@ -43,13 +43,18 @@ def generate(root, quantize=False, meshopt_helper=None):
     cases = []
     for name, geometry in features.items():
         source = root / (name + '.geojson')
-        source.write_text(json.dumps(dict(type='FeatureCollection', features=[
-            dict(type='Feature', id=name, properties=dict(name=name), geometry=geometry)
-        ])))
+        items=[dict(type='Feature', id=name, properties=dict(name=name), geometry=geometry)]
+        def shift(value):
+            if isinstance(value[0],(float,int)):return [value[0]+60/78800,*value[1:]]
+            return [shift(part) for part in value]
+        if batch:
+            items.append(dict(type='Feature',id=name+'-second',properties=dict(name=name+'-second'),
+                geometry=dict(type=geometry['type'],coordinates=shift(geometry['coordinates']))))
+        source.write_text(json.dumps(dict(type='FeatureCollection', features=items)))
         vector.run(types.SimpleNamespace(
             input=str(source), output=str(root / name), max_features=64,
             quantize=quantize, meshopt_helper=meshopt_helper,
-            max_vertices=8 if name == 'fragmented' else 65536, max_bytes=16384,
+            max_vertices=(32 if batch else 8) if name == 'fragmented' else 65536, max_bytes=16384,
             lod_tolerance=.2, lod_levels=3, repair=name == 'outline',
             ambiguous_outlines=name == 'outline',
         ))
@@ -66,6 +71,9 @@ def generate(root, quantize=False, meshopt_helper=None):
             hole=pos(0, 0) if name in ('polygon', 'fragmented') else None,
             boundary=pos(20, 0) if name == 'fragmented' else None,
         ))
+        if batch:
+            cases[-1]['samples']=[dict(position=sample,id=json.dumps(name)),dict(position=shift(sample),id=json.dumps(name+'-second'))]
+            if name=='line':cases[-1]['gap']=pos(50,0)
     (root / 'cases.json').write_text(json.dumps(cases))
     # The repository preview boots from a single annotations/tileset.json.
     manifest = json.loads((root / 'line/tileset.json').read_text())
@@ -85,7 +93,8 @@ if __name__ == '__main__':
     import argparse
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output',type=pathlib.Path)
+    parser.add_argument('--batch',action='store_true')
     parser.add_argument('--quantize',action='store_true')
     parser.add_argument('--meshopt-helper')
     args=parser.parse_args()
-    generate(args.output,args.quantize,args.meshopt_helper)
+    generate(args.output,args.quantize,args.meshopt_helper,args.batch)
