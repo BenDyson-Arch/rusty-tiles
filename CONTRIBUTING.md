@@ -89,7 +89,7 @@ Replacement belongs to the tiler; diff creation/application stays in external
 libraries. The optional test uses upstream C++ geodiff and the local Go port:
 
 ```sh
-# Run from the go-geodiff checkout to resolve its existing Go module.
+# Run from a go-geodiff v0.4.3 or newer checkout to resolve its Go module.
 go build -o /tmp/go-geodiff-driver /path/to/rusty-tiles/tests/fixtures/geodiff_driver.go
 # Run from rusty-tiles with the actual upstream binary (2.3.0 tested).
 GEODIFF_CPP_BIN=/path/to/geodiff GO_GEODIFF_DRIVER=/tmp/go-geodiff-driver \
@@ -99,7 +99,9 @@ GEODIFF_CPP_BIN=/path/to/geodiff GO_GEODIFF_DRIVER=/tmp/go-geodiff-driver \
 The suite generates invented GeoPackage fixtures, checks byte-identical
 changesets, cross-applies them, and compares replacement output with fresh
 world geometry and scalar properties. It separately exercises GDAL spatial-index
-triggers. The Go `ST_IsEmpty` apply gap is reported explicitly as a known skip;
-upstream indexed apply and failed Go transaction rollback are still checked.
+triggers. Both implementations must successfully apply indexed geometry moves,
+inserts and deletes; the resulting R-tree rows, spatial queries and reused tiles
+are compared with the fresh GDAL source. Older Go versions that lack the spatial
+index functions fail this regression instead of being skipped.
 No upstream source or database fixtures are bundled; CI's core replacement tests
 run without external diff binaries.
