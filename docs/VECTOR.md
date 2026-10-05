@@ -186,3 +186,15 @@ provides the spatial-index functions needed by those triggers and fixes
 The opt-in test requires successful indexed application; older Go versions
 without these functions fail rather than being skipped. The tiler does not
 modify or drop source triggers.
+
+## Invalid features
+
+By default, ingestion checks all selected features and reports every feature-local
+geometry/coordinate failure with its source layer, ID and reason before failing.
+No archive is published. Use `--skipInvalid` to explicitly omit those features
+and publish the convertible remainder. `conversion.json` records the setting,
+`skippedFeatures`, per-layer `invalidFeatures` and a bounded report sample;
+`geometry-reports.jsonl` contains every skipped identity and reason. Unsupported
+layer schemas and configuration errors still fail the job. At least one
+convertible feature is required for an initial tileset. Tile/hierarchy limits and
+errors encountered during encoding remain fatal; they are not silently bypassed.

@@ -93,6 +93,7 @@ class Reader:
         self.local = getattr(args,'source_crs',None) == 'local'
         self.frame = getattr(args,'_reuse_frame',None)
         self.anchor = getattr(args,'_reuse_anchor',None)
+        self.on_feature_error = None
         self.schemas = {}
         self.layer_reports = []
         self.target = spatial_ref('EPSG:4978')
@@ -149,7 +150,11 @@ class Reader:
             for row in layer:
                 fid = row.GetFID()
                 prefix = f'layer {name!r}, FID {fid}: '
+                source_id = fid
                 try:
+                    native = row.GetNativeData() if self.driver == 'GeoJSON' else None
+                    if native:
+                        source_id = json.loads(native).get('id',fid)
                     g = row.GetGeometryRef()
                     points = geometry(g)
                     source_points = coordinate_list(points)
@@ -216,7 +221,9 @@ class Reader:
                     count += 1
                     yield dict(properties=properties,geometry=points)
                 except (ValueError,RuntimeError,TypeError) as error:
-                    raise ValueError(prefix+str(error)) from error
+                    if self.on_feature_error is None:
+                        raise ValueError(prefix+str(error)) from error
+                    self.on_feature_error(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),reason=str(error)))
             self.layer_reports.append(dict(name=name,features=count,sourceCrs=None if self.local else source.ExportToWkt(),
                 heightMode='local metres' if self.local else 'declared CRS' if native_height else 'explicit offset' if getattr(self.args,'height_offset',None) is not None else '2D ellipsoid zero' if self.driver != 'GeoJSON' else 'GeoJSON ellipsoidal metres',
                 heightOffset=getattr(self.args,'height_offset',None)))

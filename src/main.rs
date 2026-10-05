@@ -107,6 +107,9 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// Skip unconvertible features and report every omitted source identity
+    #[arg(long = "skipInvalid")]
+    skip_invalid: bool,
     /// Reuse unchanged subtrees from a compatible prior vector archive
     #[arg(long = "reuseTileset")]
     reuse_tileset: Option<PathBuf>,
@@ -239,6 +242,7 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                skip_invalid: a.skip_invalid,
                 reuse_tileset: a.reuse_tileset,
                 lod: vector::VectorLodOptions {
                     tolerance_metres: a.lod_tolerance,
