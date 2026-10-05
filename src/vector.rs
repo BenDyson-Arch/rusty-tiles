@@ -40,6 +40,7 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub skip_invalid: bool,
     pub lod: VectorLodOptions,
     pub reuse_tileset: Option<std::path::PathBuf>,
     pub layers: Vec<String>,
@@ -55,6 +56,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            skip_invalid: false,
             lod: VectorLodOptions::default(),
             reuse_tileset: None,
             layers: Vec::new(),
@@ -204,6 +206,9 @@ pub fn vector_to_3tz_with_options(
     }
     if let Some(offset) = options.height_offset {
         command.arg("--height-offset").arg(offset.to_string());
+    }
+    if options.skip_invalid {
+        command.arg("--skip-invalid");
     }
     if repair {
         command.arg("--repair");

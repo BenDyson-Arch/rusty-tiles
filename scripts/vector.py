@@ -183,6 +183,33 @@ def polygon(rings, repair=False, report=None):
     return positions, indices, loops, triangle_offsets, loop_offsets
 
 
+def geometry_parts(g):
+    kind, c = g['type'], g['coordinates']
+    if kind == 'Point':
+        parts = [('Point', [c])]
+    elif kind == 'MultiPoint':
+        parts = [('Point', c)]
+    elif kind in ('LineString', 'Polygon'):
+        parts = [(kind, c)]
+    elif kind in ('MultiLineString', 'MultiPolygon'):
+        parts = [(kind.removeprefix('Multi'), p) for p in c]
+    else:
+        raise ValueError(f'unsupported geometry {kind}')
+    return parts
+
+
+def validate_feature(feature, repair=False, ambiguous_outlines=False):
+    for kind, points in geometry_parts(feature['geometry']):
+        if kind == 'Polygon':
+            try:
+                polygon(points, repair)
+            except ValueError as error:
+                if not (ambiguous_outlines and 'projected intersection differs by more than 2 cm in 3D' in str(error)):
+                    raise
+        elif len(points) < (1 if kind == 'Point' else 2):
+            raise ValueError('empty/degenerate feature')
+
+
 def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
     glb = Glb()
     # Preserve scalar property types; unsupported schemas fail explicitly.
@@ -238,18 +265,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         propertyTables=[dict(name='features', **{'class':'feature'}, count=len(items), properties=columns)])}
     all_positions = []
     for fid, feature in enumerate(items):
-        g = feature['geometry']
-        kind, c = g['type'], g['coordinates']
-        if kind == 'Point':
-            parts = [('Point', [c])]
-        elif kind == 'MultiPoint':
-            parts = [('Point', c)]
-        elif kind in ('LineString', 'Polygon'):
-            parts = [(kind, c)]
-        elif kind in ('MultiLineString', 'MultiPolygon'):
-            parts = [(kind.removeprefix('Multi'), p) for p in c]
-        else:
-            raise ValueError(f'unsupported geometry {kind}')
+        parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
             ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
             if kind == 'Polygon':
@@ -451,7 +467,7 @@ def run(args):
     for module in (vector_source,vector_reuse,vector_pipeline):
         sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
     encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
-    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,simplify_feature=simplify_feature,encoder_digest=encoder))
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder))
 
 
 if __name__ == '__main__':
@@ -470,6 +486,7 @@ if __name__ == '__main__':
     p.add_argument('--max-bytes', type=int, default=4194304)
     p.add_argument('--max-tiles', type=int, default=100000)
     p.add_argument('--max-source-vertices', type=int, default=1000000)
+    p.add_argument('--skip-invalid', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
     a = p.parse_args()
