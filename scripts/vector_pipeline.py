@@ -127,6 +127,7 @@ def run(args, writer):
             value['outcome']='skipped' if getattr(args,'skip_invalid',False) else 'invalid'
             report(value)
             print(f"layer {name!r}, feature {value['sourceId']}: {value['reason']}",file=sys.stderr)
+        reader.on_missing_geometry=report
         reader.on_feature_error=failure
         for feature in reader:
             db.execute('SAVEPOINT feature')
@@ -150,8 +151,10 @@ def run(args, writer):
             raise ValueError(f"{failures} unconvertible feature(s); first failure: {first_failure['reason']}. No tileset published. Fix the reported features or explicitly use --skipInvalid.")
         counters['skippedFeatures']=failures
         db.commit()
+        counters['featuresWithoutGeometry']=reader.features_without_geometry
         if not counters['features'] and not reuse.previous:
-            raise ValueError('empty selected layers')
+            if not reader.features_without_geometry:raise ValueError('empty selected layers')
+            reader.anchor=np.zeros(3);reader.frame=np.eye(3)
         reuse.configure(args,reader)
         counters['fragments']=db.execute('SELECT COUNT(*) FROM features').fetchone()[0]
         def where(prefix):

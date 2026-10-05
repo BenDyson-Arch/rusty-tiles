@@ -102,6 +102,8 @@ class Reader:
         self.local = getattr(args,'source_crs',None) == 'local'
         self.frame = getattr(args,'_reuse_frame',None)
         self.anchor = getattr(args,'_reuse_anchor',None)
+        self.on_missing_geometry = None
+        self.features_without_geometry = 0
         self.on_feature_error = None
         self.schemas = {}
         self.layer_reports = []
@@ -160,9 +162,9 @@ class Reader:
                 if scalar is None:
                     raise ValueError(f'unsupported field type for {name}.{key}: {field.GetTypeName()}')
                 fields.append((key,scalar))
-                if self.driver != 'GeoJSON':
-                    self.register_type(key,scalar)
+                self.register_type(key,scalar)
             count = 0
+            without_geometry = 0
             layer.ResetReading()
             for row in layer:
                 fid = row.GetFID()
@@ -173,6 +175,13 @@ class Reader:
                     if native:
                         source_id = json.loads(native).get('id',fid)
                     g = row.GetGeometryRef()
+                    if g is None or g.IsEmpty():
+                        without_geometry += 1
+                        self.features_without_geometry += 1
+                        if self.on_missing_geometry:
+                            self.on_missing_geometry(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),
+                                reason='source geometry is null or empty',outcome='no-geometry'))
+                        continue
                     points = geometry(g)
                     source_points = coordinate_list(points)
                     if len(source_points)>getattr(self.args,'max_source_vertices',1000000):
@@ -246,7 +255,7 @@ class Reader:
                     if self.on_feature_error is None:
                         raise ValueError(prefix+str(error)) from error
                     self.on_feature_error(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),reason=str(error)))
-            self.layer_reports.append(dict(name=name,features=count,jsonFields=sorted(json_fields),sourceCrs=None if self.local else source.ExportToWkt(),
+            self.layer_reports.append(dict(name=name,features=count,featuresWithoutGeometry=without_geometry,jsonFields=sorted(json_fields),sourceCrs=None if self.local else source.ExportToWkt(),
                 heightMode='local metres' if self.local else 'declared CRS' if native_height else 'explicit offset' if getattr(self.args,'height_offset',None) is not None else '2D ellipsoid zero' if self.driver != 'GeoJSON' else 'GeoJSON ellipsoidal metres',
                 heightOffset=getattr(self.args,'height_offset',None)))
         self.schemas.update(_source_id='string',_source_layer='string')
