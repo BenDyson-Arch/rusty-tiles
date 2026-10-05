@@ -74,6 +74,10 @@ class Glb:
         path.write_bytes(struct.pack('<5I', 0x46546c67, 2, 28+len(j)+len(self.data), len(j), 0x4e4f534a) + j + struct.pack('<2I', len(self.data), 0x004e4942) + self.data)
 
 
+class OutlineFallback(ValueError):
+    """Source rings can be retained without inventing a filled surface."""
+
+
 def polygon(rings, repair=False, report=None):
     rings = [np.asarray(r, dtype=float) for r in rings]
     rings = [r[:-1] if np.array_equal(r[0], r[-1]) else r for r in rings]
@@ -116,10 +120,10 @@ def polygon(rings, repair=False, report=None):
             for child in g:
                 collect(child)
         elif not g.IsEmpty():
-            raise ValueError('repair produced collapsed non-polygon geometry; source needs review')
+            raise OutlineFallback('repair produced collapsed non-polygon geometry; source needs review')
     collect(repaired)
     if not shapes:
-        raise ValueError('polygon has no filled area')
+        raise OutlineFallback('polygon has no filled area')
     added = 0
     max_spread = 0.0
     def position(q):
@@ -143,7 +147,7 @@ def polygon(rings, repair=False, report=None):
         max_spread = max(max_spread,float(spread))
         # A crossing of unrelated 3D surfaces cannot be repaired as one vertex.
         if spread > .02:
-            raise ValueError('projected intersection differs by more than 2 cm in 3D; source needs review')
+            raise OutlineFallback('projected intersection differs by more than 2 cm in 3D; source needs review')
         lookup[key] = len(positions)
         positions.append(point)
         added += 1
@@ -181,6 +185,41 @@ def polygon(rings, repair=False, report=None):
                       duplicateVertices=duplicates, addedIntersectionVertices=added,
                       maximumIntersectionAdjustmentMetres=max_spread, polygonParts=len(shapes))
     return positions, indices, loops, triangle_offsets, loop_offsets
+
+
+def geometry_parts(g):
+    kind, c = g['type'], g['coordinates']
+    if kind == 'Point':
+        parts = [('Point', [c])]
+    elif kind == 'MultiPoint':
+        parts = [('Point', c)]
+    elif kind in ('LineString', 'Polygon'):
+        parts = [(kind, c)]
+    elif kind in ('MultiLineString', 'MultiPolygon'):
+        parts = [(kind.removeprefix('Multi'), p) for p in c]
+    else:
+        raise ValueError(f'unsupported geometry {kind}')
+    return parts
+
+
+def validate_feature(feature, repair=False, ambiguous_outlines=False):
+    reports=[]
+    parts=geometry_parts(feature['geometry'])
+    for kind, points in parts:
+        if kind == 'Polygon':
+            try:
+                polygon(points, repair)
+            except OutlineFallback as error:
+                if not ambiguous_outlines:raise
+                reports.append(dict(sourceId=feature['properties']['_source_id'],sourceLayer=feature['properties']['_source_layer'],
+                    topologyRepaired=False,outputGeometry='outline',reason=str(error)))
+        elif len(points) < (1 if kind == 'Point' else 2):
+            raise ValueError('empty/degenerate feature')
+    if reports:
+        # Normalize before budgeting, so a large collapsed outline can be split
+        # with the ordinary line fragmenter while retaining every source segment.
+        feature['geometry']=dict(type='MultiLineString',coordinates=[ring for kind,rings in parts for ring in rings])
+    return reports
 
 
 def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=False, encoding_report=None, schema_types=None, fill_only=False):
@@ -238,18 +277,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
         propertyTables=[dict(name='features', **{'class':'feature'}, count=len(items), properties=columns)])}
     all_positions = []
     for fid, feature in enumerate(items):
-        g = feature['geometry']
-        kind, c = g['type'], g['coordinates']
-        if kind == 'Point':
-            parts = [('Point', [c])]
-        elif kind == 'MultiPoint':
-            parts = [('Point', c)]
-        elif kind in ('LineString', 'Polygon'):
-            parts = [(kind, c)]
-        elif kind in ('MultiLineString', 'MultiPolygon'):
-            parts = [(kind.removeprefix('Multi'), p) for p in c]
-        else:
-            raise ValueError(f'unsupported geometry {kind}')
+        parts = geometry_parts(feature['geometry'])
         for kind, c in parts:
             ext = {'EXT_mesh_features': dict(featureIds=[dict(featureCount=len(items), attribute=0, propertyTable=0)])}
             if kind == 'Polygon':
@@ -257,7 +285,7 @@ def emit(items, path, project, repair=False, reports=None, ambiguous_outlines=Fa
                 try:
                     points, indices, loops, triangle_offsets, loop_offsets = polygon([project(r) for r in c], repair, report)
                 except ValueError as e:
-                    if ambiguous_outlines and 'projected intersection differs by more than 2 cm in 3D' in str(e):
+                    if ambiguous_outlines and isinstance(e,OutlineFallback):
                         if reports is not None:
                             reports.append(dict(sourceId=feature['properties']['_source_id'], topologyRepaired=False,
                                                 outputGeometry='outline', reason=str(e)))
@@ -375,7 +403,7 @@ def simplify_polygon(rings, tolerance, locked):
     origin = opened[0].mean(axis=0)
     _, _, basis = np.linalg.svd(opened[0]-origin, full_matrices=False)
     deviation = max(float(np.abs((r-origin) @ basis[2]).max()) for r in opened)
-    if deviation > 1e-6:
+    if 2*deviation >= tolerance:
         return [r.tolist() for r in rings], 0.0, 'nonplanar polygon retained'
     def shape(values):
         poly = ogr.Geometry(ogr.wkbPolygon)
@@ -391,7 +419,7 @@ def simplify_polygon(rings, tolerance, locked):
         return [r.tolist() for r in rings], 0.0, 'invalid source topology retained for existing repair policy'
     candidates, errors = [], []
     for ring in opened:
-        simplified, error = simplify_path(ring, tolerance, locked, closed=True)
+        simplified, error = simplify_path(ring, tolerance-2*deviation, locked, closed=True)
         candidates.append(simplified)
         errors.append(error)
     candidate = shape(candidates)
@@ -451,7 +479,7 @@ def run(args):
     for module in (vector_source,vector_reuse,vector_pipeline):
         sources.append(getattr(module,'__source__',None) or pathlib.Path(module.__file__).read_text())
     encoder=hashlib.sha256('\0'.join(sources).encode()).hexdigest()
-    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,simplify_feature=simplify_feature,encoder_digest=encoder))
+    return vector_pipeline.run(args,types.SimpleNamespace(emit=emit,polygon=polygon,validate_feature=validate_feature,simplify_feature=simplify_feature,encoder_digest=encoder))
 
 
 if __name__ == '__main__':
@@ -470,6 +498,11 @@ if __name__ == '__main__':
     p.add_argument('--max-bytes', type=int, default=4194304)
     p.add_argument('--max-tiles', type=int, default=100000)
     p.add_argument('--max-source-vertices', type=int, default=1000000)
+    p.add_argument('--where')
+    p.add_argument('--list-fields', choices=['error','json'], default='error')
+    p.add_argument('--field', dest='fields', action='append', default=[])
+    p.add_argument('--drop-field', dest='drop_fields', action='append', default=[])
+    p.add_argument('--skip-invalid', action='store_true')
     p.add_argument('--repair', action='store_true')
     p.add_argument('--ambiguous-outlines', action='store_true')
     a = p.parse_args()

@@ -6,6 +6,7 @@ import math
 import pathlib
 import sqlite3
 import struct
+import sys
 import tempfile
 
 import numpy as np
@@ -114,14 +115,47 @@ def run(args, writer):
                 (feature['properties']['_source_layer']+'\0'+feature['properties']['_source_id']+'\0'+feature.get('_fragment_path',''),owner))
             db.executemany('INSERT INTO vertices(x,y,z,owner) VALUES(?,?,?,?) ON CONFLICT(x,y,z) DO UPDATE SET shared=shared OR owner!=excluded.owner',
                            ((*point,owner) for point in p.tolist()))
+        failures = 0
+        first_failure = None
+        accepted = {}
+        rejected = {}
+        def failure(value):
+            nonlocal failures, first_failure
+            failures += 1
+            if first_failure is None:first_failure=value
+            name=value['sourceLayer'];rejected[name]=rejected.get(name,0)+1
+            value['outcome']='skipped' if getattr(args,'skip_invalid',False) else 'invalid'
+            report(value)
+            print(f"layer {name!r}, feature {value['sourceId']}: {value['reason']}",file=sys.stderr)
+        reader.on_missing_geometry=report
+        reader.on_feature_error=failure
         for feature in reader:
-            counters['features'] += 1
-            insert(feature)
+            db.execute('SAVEPOINT feature')
+            try:
+                feature_reports=writer.validate_feature(feature,getattr(args,'repair',False),getattr(args,'ambiguous_outlines',False))
+                insert(feature)
+            except (ValueError,RuntimeError,TypeError) as error:
+                db.execute('ROLLBACK TO feature')
+                failure(dict(sourceLayer=feature['properties']['_source_layer'],sourceId=feature['properties']['_source_id'],reason=str(error)))
+            else:
+                for value in feature_reports:report(value)
+                counters['features'] += 1
+                name=feature['properties']['_source_layer'];accepted[name]=accepted.get(name,0)+1
+            finally:
+                db.execute('RELEASE feature')
             if counters['features']%1000==0:
                 db.commit()
+        for layer in reader.layer_reports:
+            layer['features']=accepted.get(layer['name'],0)
+            layer['invalidFeatures']=rejected.get(layer['name'],0)
+        if failures and not getattr(args,'skip_invalid',False):
+            raise ValueError(f"{failures} unconvertible feature(s); first failure: {first_failure['reason']}. No tileset published. Fix the reported features or explicitly use --skipInvalid.")
+        counters['skippedFeatures']=failures
         db.commit()
+        counters['featuresWithoutGeometry']=reader.features_without_geometry
         if not counters['features'] and not reuse.previous:
-            raise ValueError('empty selected layers')
+            if not reader.features_without_geometry and getattr(args,'where',None) is None:raise ValueError('empty selected layers')
+            reader.anchor=np.zeros(3);reader.frame=np.eye(3)
         reuse.configure(args,reader)
         counters['fragments']=db.execute('SELECT COUNT(*) FROM features').fetchone()[0]
         def where(prefix):
@@ -312,7 +346,8 @@ def run(args, writer):
         db.close()
     (output/'conversion.json').write_text(json.dumps(dict(**counters,inputDriver=reader.driver,layers=reader.layer_reports,
         budgets=dict(features=args.max_features,vertices=max_vertices,bytes=max_bytes,tiles=max_tiles),
-        repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
+        attributeFilter=getattr(args,'where',None),metadata=dict(listFields=getattr(args,'list_fields','error'),fields=getattr(args,'fields',[]) or [],dropFields=getattr(args,'drop_fields',[]) or []),
+        skipInvalidEnabled=getattr(args,'skip_invalid',False),repairEnabled=getattr(args,'repair',False),lodToleranceMetres=tolerance,lodLevels=levels,reuse=reuse_report,
         lodFallbacks=reports,geometryReportCount=report_count,geometryReports='geometry-reports.jsonl',geometryReportsScope='current ingestion and newly encoded geometry; previous content reports remain in the prior archive',
         lockedSharedVertices=shared,pointPolicy='retain every semantic point feature; oversized parents route without content',
         polygonFragmentPolicy='standard glTF fills plus vector source boundaries; no internal fragment outlines',

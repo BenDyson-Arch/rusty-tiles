@@ -49,6 +49,9 @@ enum Command {
 
 #[derive(Args)]
 struct TerrainArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(short = 'i', long)]
     input: PathBuf,
     #[arg(short = 'o', long)]
@@ -67,6 +70,9 @@ struct TerrainArgs {
 
 #[derive(Args)]
 struct RasterArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(short = 'i', long)]
     input: PathBuf,
     #[arg(short = 'o', long)]
@@ -89,6 +95,9 @@ struct RasterArgs {
 
 #[derive(Args)]
 struct PointCloudArgs {
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(short = 'i', long)]
     input: PathBuf,
     #[arg(short = 'o', long)]
@@ -107,6 +116,24 @@ struct PointCloudArgs {
 
 #[derive(Args)]
 struct VectorArgs {
+    /// OGR attribute filter applied to every selected layer
+    #[arg(long = "where")]
+    where_clause: Option<String>,
+    /// Replace an existing output after successful conversion
+    #[arg(short = 'f', long)]
+    force: bool,
+    /// Encode list-valued properties as JSON strings, or reject them
+    #[arg(long = "listFields", default_value = "error", value_parser = ["error", "json"])]
+    list_fields: String,
+    /// Include only these source fields (comma-separated)
+    #[arg(long, value_delimiter = ',', conflicts_with = "drop_fields")]
+    fields: Vec<String>,
+    /// Exclude these source fields (comma-separated)
+    #[arg(long = "dropFields", value_delimiter = ',', conflicts_with = "fields")]
+    drop_fields: Vec<String>,
+    /// Skip unconvertible features and report every omitted source identity
+    #[arg(long = "skipInvalid")]
+    skip_invalid: bool,
     /// Reuse unchanged subtrees from a compatible prior vector archive
     #[arg(long = "reuseTileset")]
     reuse_tileset: Option<PathBuf>,
@@ -215,6 +242,7 @@ fn run() -> Result<(), Error> {
             &a.input,
             &a.output,
             &rusty_tiles::point_cloud::PointCloudOptions {
+                force: a.force,
                 source_crs: a.source_crs,
                 height_offset: a.height_offset,
                 max_points: a.max_points,
@@ -239,6 +267,12 @@ fn run() -> Result<(), Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                where_clause: a.where_clause,
+                force: a.force,
+                list_fields: a.list_fields,
+                fields: a.fields,
+                drop_fields: a.drop_fields,
+                skip_invalid: a.skip_invalid,
                 reuse_tileset: a.reuse_tileset,
                 lod: vector::VectorLodOptions {
                     tolerance_metres: a.lod_tolerance,
@@ -258,6 +292,7 @@ fn run() -> Result<(), Error> {
             &a.input,
             &a.output,
             &terrain::TerrainOptions {
+                force: a.force,
                 max_zoom: a.max_zoom,
                 grid: a.grid,
                 height_offset: a.height_offset,
@@ -268,6 +303,7 @@ fn run() -> Result<(), Error> {
             &a.input,
             &a.output,
             &rusty_tiles::raster::RasterOptions {
+                force: a.force,
                 min_zoom: a.min_zoom,
                 max_zoom: a.max_zoom,
                 display: a.display,

@@ -40,6 +40,12 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    pub where_clause: Option<String>,
+    pub force: bool,
+    pub list_fields: String,
+    pub fields: Vec<String>,
+    pub drop_fields: Vec<String>,
+    pub skip_invalid: bool,
     pub lod: VectorLodOptions,
     pub reuse_tileset: Option<std::path::PathBuf>,
     pub layers: Vec<String>,
@@ -55,6 +61,12 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            where_clause: None,
+            force: false,
+            list_fields: "error".into(),
+            fields: Vec::new(),
+            drop_fields: Vec::new(),
+            skip_invalid: false,
             lod: VectorLodOptions::default(),
             reuse_tileset: None,
             layers: Vec::new(),
@@ -117,6 +129,20 @@ pub fn vector_to_3tz_with_options(
     options: &VectorOptions,
 ) -> Result<(), Error> {
     let lod = &options.lod;
+    if options
+        .where_clause
+        .as_ref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(Error::msg("where filter must not be empty"));
+    }
+    if !matches!(options.list_fields.as_str(), "error" | "json")
+        || (!options.fields.is_empty() && !options.drop_fields.is_empty())
+    {
+        return Err(Error::msg(
+            "invalid vector field selection or listFields setting",
+        ));
+    }
     if options.max_vertices < 4
         || options.max_bytes < 4096
         || options.max_tiles == 0
@@ -143,7 +169,7 @@ pub fn vector_to_3tz_with_options(
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     let parent = output
@@ -162,18 +188,22 @@ pub fn vector_to_3tz_with_options(
         ),
     ] {
         script.push_str(&format!(
-            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={};exec(m.__source__,m.__dict__)\n",
+            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={}\nexec(compile(m.__source__, '<rusty-tiles/{name}.py>', 'exec'),m.__dict__)\n",
             serde_json::to_string(source)?
         ));
     }
     script.push_str(&format!(
-        "__source__={};exec(__source__,globals())",
+        "__source__={}\nexec(compile(__source__, '<rusty-tiles/vector.py>', 'exec'),globals())",
         serde_json::to_string(include_str!("../scripts/vector.py"))?
     ));
     let mut command = std::process::Command::new("python3");
     command
         .arg("-c")
-        .arg(script)
+        .arg(crate::python::script(
+            &script,
+            "vector",
+            "Python GDAL/GEOS and NumPy",
+        )?)
         .arg(input)
         .arg(work.path())
         .arg("--max-features")
@@ -205,17 +235,33 @@ pub fn vector_to_3tz_with_options(
     if let Some(offset) = options.height_offset {
         command.arg("--height-offset").arg(offset.to_string());
     }
+    if let Some(expression) = &options.where_clause {
+        command.arg("--where").arg(expression);
+    }
+    command.arg("--list-fields").arg(&options.list_fields);
+    for field in &options.fields {
+        command.arg("--field").arg(field);
+    }
+    for field in &options.drop_fields {
+        command.arg("--drop-field").arg(field);
+    }
+    if options.skip_invalid {
+        command.arg("--skip-invalid");
+    }
     if repair {
         command.arg("--repair");
     }
     if ambiguous_outlines {
         command.arg("--ambiguous-outlines");
     }
-    let status = command.status()?;
-    if !status.success() {
-        return Err(Error::msg("glTF vector prototype failed; Python GDAL/GEOS and NumPy are required. No archive published."));
-    }
-    crate::pack::convert_to_3tz(work.path(), output, &crate::pack::PackOptions::default())
+    crate::python::run(&mut command, "vector")?;
+    crate::pack::convert_to_3tz(
+        work.path(),
+        output,
+        &crate::pack::PackOptions {
+            force: options.force,
+        },
+    )
 }
 
 #[cfg(test)]

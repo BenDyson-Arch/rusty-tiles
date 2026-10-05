@@ -3,6 +3,7 @@ use crate::Error;
 use std::{path::Path, process::Command};
 
 pub struct RasterOptions {
+    pub force: bool,
     pub min_zoom: u8,
     pub max_zoom: u8,
     pub display: String,
@@ -22,6 +23,7 @@ pub fn raster_to_directory(
         input,
         output,
         &RasterOptions {
+            force: false,
             min_zoom,
             max_zoom,
             display: "image".into(),
@@ -41,7 +43,7 @@ pub fn raster_with_options(
     if !input.is_file() {
         return Err(Error::InputNotFound(input.into()));
     }
-    if output.exists() {
+    if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
     let parent = output
@@ -52,7 +54,11 @@ pub fn raster_with_options(
     let work = tempfile::tempdir_in(parent)?;
     let mut cmd = Command::new("python3");
     cmd.arg("-c")
-        .arg(include_str!("../scripts/raster.py"))
+        .arg(crate::python::script(
+            include_str!("../scripts/raster.py"),
+            "raster",
+            "Python GDAL and NumPy",
+        )?)
         .arg(input)
         .arg(work.path())
         .arg("--min-zoom")
@@ -71,12 +77,7 @@ pub fn raster_with_options(
     if let Some(v) = options.display_max {
         cmd.arg("--display-max").arg(v.to_string());
     }
-    if !cmd.status()?.success() {
-        return Err(Error::msg("Raster conversion failed; Python GDAL and an explicit display recipe are required. No output published."));
-    }
-    if output.exists() {
-        return Err(Error::OutputExists(output.into()));
-    }
-    std::fs::rename(work.path(), output)?;
+    crate::python::run(&mut cmd, "raster")?;
+    crate::output::publish_directory(work.path(), output, options.force)?;
     Ok(())
 }

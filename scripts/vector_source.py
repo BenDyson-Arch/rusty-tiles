@@ -90,14 +90,38 @@ class Reader:
         self.layers = [layer for layer in spatial if not requested or layer.GetName() in requested]
         if not self.layers:
             raise ValueError('input has no selected spatial layers')
+        self.where=getattr(args,'where',None)
+        if self.where is not None:
+            if not self.where.strip():raise ValueError('where filter must not be empty')
+            for layer in self.layers:
+                try:
+                    layer.SetAttributeFilter(self.where)
+                    layer.GetFeatureCount()  # force lazy drivers to validate the expression
+                except RuntimeError as error:
+                    raise ValueError(f'invalid attribute filter for layer {layer.GetName()!r}: {error}') from error
+        self.fields=set(getattr(args,'fields',[]) or [])
+        self.drop_fields=set(getattr(args,'drop_fields',[]) or [])
+        self.list_fields=getattr(args,'list_fields','error')
+        if self.list_fields not in ('error','json') or (self.fields and self.drop_fields):
+            raise ValueError('choose --fields or --dropFields, and listFields error/json')
+        known={layer.GetLayerDefn().GetFieldDefn(i).GetName() for layer in self.layers
+               for i in range(layer.GetLayerDefn().GetFieldCount())}
+        missing=(self.fields|self.drop_fields)-known
+        if missing:raise ValueError(f'unknown selected/excluded fields: {sorted(missing)}')
         self.local = getattr(args,'source_crs',None) == 'local'
         self.frame = getattr(args,'_reuse_frame',None)
         self.anchor = getattr(args,'_reuse_anchor',None)
+        self.on_missing_geometry = None
+        self.features_without_geometry = 0
+        self.on_feature_error = None
         self.schemas = {}
         self.layer_reports = []
         self.target = spatial_ref('EPSG:4978')
         self.geographic = spatial_ref('EPSG:4979')
         self.from_ecef = transformation(self.target, self.geographic)
+
+    def keep_field(self,key):
+        return (not self.fields or key in self.fields) and key not in self.drop_fields
 
     def register_type(self, name, kind):
         previous = self.schemas.get(name)
@@ -130,27 +154,43 @@ class Reader:
                 raise ValueError('declared 3D/vertical CRS already defines heights; use a horizontal CRS override to apply height-offset')
             definition = layer.GetLayerDefn()
             fields = []
+            json_fields = set()
             for i in range(definition.GetFieldCount()):
                 field = definition.GetFieldDefn(i)
                 key, kind = field.GetName(), field.GetType()
+                if not self.keep_field(key):continue
                 if key in ('_source_id','_source_layer'):
                     raise ValueError(f'reserved source property: {key}')
                 scalar = {ogr.OFTInteger:'integer',ogr.OFTInteger64:'integer',ogr.OFTReal:'real',
                           ogr.OFTString:'string',ogr.OFTDate:'string',ogr.OFTTime:'string',ogr.OFTDateTime:'string'}.get(kind)
                 if field.GetSubType() == ogr.OFSTBoolean:
                     scalar = 'boolean'
+                if kind in (ogr.OFTIntegerList,ogr.OFTInteger64List,ogr.OFTRealList,ogr.OFTStringList):
+                    if self.list_fields=='json':
+                        scalar='string';json_fields.add(key)
                 if scalar is None:
                     raise ValueError(f'unsupported field type for {name}.{key}: {field.GetTypeName()}')
                 fields.append((key,scalar))
-                if self.driver != 'GeoJSON':
-                    self.register_type(key,scalar)
+                self.register_type(key,scalar)
             count = 0
+            without_geometry = 0
             layer.ResetReading()
             for row in layer:
                 fid = row.GetFID()
                 prefix = f'layer {name!r}, FID {fid}: '
+                source_id = fid
                 try:
+                    native = row.GetNativeData() if self.driver == 'GeoJSON' else None
+                    if native:
+                        source_id = json.loads(native).get('id',fid)
                     g = row.GetGeometryRef()
+                    if g is None or g.IsEmpty():
+                        without_geometry += 1
+                        self.features_without_geometry += 1
+                        if self.on_missing_geometry:
+                            self.on_missing_geometry(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),
+                                reason='source geometry is null or empty',outcome='no-geometry'))
+                        continue
                     points = geometry(g)
                     source_points = coordinate_list(points)
                     if len(source_points)>getattr(self.args,'max_source_vertices',1000000):
@@ -164,16 +204,19 @@ class Reader:
                     has_z = bool(ogr.GT_HasZ(g.GetGeometryType()))
                     height = getattr(self.args,'height_offset',None)
                     if has_z and not self.local and not native_height and height is None and self.driver != 'GeoJSON':
-                        raise ValueError('3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres')
+                        raise ValueError('3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres, or --sourceCrs with the correct compound CRS (for example EPSG:7853+5711 when its geoid grid is installed)')
                     properties = {}
                     source_id = fid
                     native = row.GetNativeData() if self.driver == 'GeoJSON' else None
                     if native:
                         feature = json.loads(native)
-                        properties = dict(feature.get('properties') or {})
+                        properties = {key:value for key,value in (feature.get('properties') or {}).items() if self.keep_field(key)}
                         source_id = feature.get('id',fid)
                         # Native properties preserve exact JSON integer IDs and scalar types.
-                        for key,value in properties.items():
+                        for key,value in list(properties.items()):
+                            if isinstance(value,list) and self.list_fields=='json':
+                                value=json.dumps(value,separators=(',',':'),ensure_ascii=False,allow_nan=False)
+                                properties[key]=value;json_fields.add(key)
                             if key in ('_source_id','_source_layer'):
                                 raise ValueError(f'reserved source property: {key}')
                             if value is None:
@@ -186,6 +229,8 @@ class Reader:
                     else:
                         for key,scalar in fields:
                             value = row.GetField(key)
+                            if key in json_fields and value is not None:
+                                value=json.dumps(value,separators=(',',':'),ensure_ascii=False,allow_nan=False)
                             if scalar == 'boolean' and value is not None:
                                 value = bool(value)
                             properties[key] = value
@@ -216,8 +261,10 @@ class Reader:
                     count += 1
                     yield dict(properties=properties,geometry=points)
                 except (ValueError,RuntimeError,TypeError) as error:
-                    raise ValueError(prefix+str(error)) from error
-            self.layer_reports.append(dict(name=name,features=count,sourceCrs=None if self.local else source.ExportToWkt(),
+                    if self.on_feature_error is None:
+                        raise ValueError(prefix+str(error)) from error
+                    self.on_feature_error(dict(sourceLayer=name,sourceId=json.dumps(source_id,separators=(',',':')),reason=str(error)))
+            self.layer_reports.append(dict(name=name,features=count,attributeFilter=self.where,featuresWithoutGeometry=without_geometry,jsonFields=sorted(json_fields),sourceCrs=None if self.local else source.ExportToWkt(),
                 heightMode='local metres' if self.local else 'declared CRS' if native_height else 'explicit offset' if getattr(self.args,'height_offset',None) is not None else '2D ellipsoid zero' if self.driver != 'GeoJSON' else 'GeoJSON ellipsoidal metres',
                 heightOffset=getattr(self.args,'height_offset',None)))
         self.schemas.update(_source_id='string',_source_layer='string')
