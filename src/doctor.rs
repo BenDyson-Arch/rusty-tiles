@@ -3,6 +3,47 @@ use crate::error::Error;
 use serde_json::{json, Value};
 
 pub fn report(selected: &[String]) -> Result<Value, Error> {
+    if !selected.is_empty() && selected.iter().all(|name| name == "point-cloud") {
+        return Ok(
+            json!({"ready":true,"commands":{"point-cloud":point_cloud_readiness()},"selectedCommands":selected}),
+        );
+    }
+    let mut report = python_report(selected)?;
+    report["commands"]["point-cloud"] = point_cloud_readiness();
+    let names: Vec<_> = if selected.is_empty() {
+        report["commands"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
+    } else {
+        selected.to_vec()
+    };
+    report["ready"] = names
+        .iter()
+        .all(|name| report["commands"][name]["ready"] == true)
+        .into();
+    report["selectedCommands"] = json!(names);
+    Ok(report)
+}
+
+fn point_cloud_readiness() -> Value {
+    #[cfg(feature = "native-geospatial")]
+    let geospatial = match crate::geospatial::versions().and_then(|versions| {
+        crate::geospatial::Crs::from_definition("EPSG:4326")?;
+        Ok(versions)
+    }) {
+        Ok(versions) => json!({"ready":true,"versions":versions}),
+        Err(error) => json!({"ready":false,"error":error.to_string()}),
+    };
+    #[cfg(not(feature = "native-geospatial"))]
+    let geospatial = json!({"ready":false,"error":"rebuild with --features native-geospatial for geospatial placement"});
+    json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
+        "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
+}
+
+fn python_report(selected: &[String]) -> Result<Value, Error> {
     let result = std::process::Command::new("python3")
         .arg("-c")
         .arg(include_str!("../scripts/doctor.py"))
@@ -15,12 +56,18 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let native = ["mesh-to-3tz", "glb-to-3tz", "createTilesetJson", "convert"];
+            let native = [
+                "mesh-to-3tz",
+                "glb-to-3tz",
+                "createTilesetJson",
+                "convert",
+                "point-cloud",
+            ];
             let mut commands = serde_json::Map::new();
             for name in native {
                 commands.insert(name.into(), json!({"ready":true,"requires":[]}));
             }
-            for name in ["vector", "raster", "terrain", "point-cloud"] {
+            for name in ["vector", "raster", "terrain"] {
                 commands.insert(name.into(), json!({"ready":false,"missing":["python3"]}));
             }
             let ready =
@@ -37,6 +84,21 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
 pub fn display(report: &Value, json_output: bool) {
     if json_output {
         println!("{report}");
+        return;
+    }
+    if !report["python"].is_object() {
+        let cloud = &report["commands"]["point-cloud"];
+        println!("point-cloud: native LAS/LAZ ready (local XYZ)");
+        println!(
+            "geospatial placement: {}",
+            if cloud["geospatial"]["ready"] == true {
+                "ready; conversion validates source CRS/grids"
+            } else {
+                cloud["geospatial"]["error"]
+                    .as_str()
+                    .unwrap_or("unavailable")
+            }
+        );
         return;
     }
     println!(

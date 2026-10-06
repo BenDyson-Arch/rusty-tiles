@@ -41,9 +41,40 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 
+For native geospatial work, install GDAL >= 3.11, PROJ >= 9.2, their headers and `pkg-config` files, and libclang, then run `cargo test --locked --features native-geospatial`. CI tests the minimum GDAL 3.11 and the GDAL 3.13 stack separately from the existing Rust and Python jobs. Native CRS tests use independent coordinate references and synthetic local grids; they require no Python or grid downloads. Create native handles within each worker: spatial references and transformations deliberately cannot be sent or shared between threads. Native CRS operations use GDAL's process-wide offline policy; do not re-enable PROJ networking while they are running.
+
 `cargo clippy --all-targets` is useful during review. Existing style warnings are not a required CI gate; avoid adding new warnings. Optional external-oracle and user-supplied-model tests are ignored by default and must be invoked explicitly. See the README for their dependencies and inputs.
 
 For geometry, texture, coordinate or archive changes, add a regression that checks the meaningful output: triangle membership/winding, texels/materials, independent coordinate references, metadata values, archive indexing, or failure publication behavior. For preview changes, check rendering and picking using invented fixtures. For performance changes, compare the same source, settings, camera and hardware, and report memory and fidelity as well as timing. Do not claim hardware FPS from a software-rendered browser.
+
+## Native point-cloud validation
+
+`cargo test --locked` exercises real local LAS/LAZ CLI conversions with an empty executable path. The native feature suite also checks header/explicit CRS placement against an independent UTM/ECEF reference. `RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p test_point_cloud.py` uses laspy/pyproj as independent fixture readers and decoded-output oracles. It checks all supported point formats, scalar types and flags, original/decoded values, first-point voxel samples, full-detail coverage, error/bounds/budgets, and rejected input cleanup. Build with `native-geospatial` for the geospatial cases.
+
+The optional browser probe uses invented data and the existing preview. Install `scripts/point-cloud-requirements.txt`, native build dependencies, Node/npm, Playwright and Chromium, then:
+
+```sh
+cargo build --locked --features native-geospatial
+mkdir -p target/cloud-browser-case
+PYTHONPATH=tests python3 - <<'PY'
+from pathlib import Path
+from pyproj import CRS
+from test_point_cloud import fixture
+fixture(Path('target/cloud-browser-case/cloud.laz'), crs=CRS.from_epsg(32632))
+PY
+target/debug/rusty-tiles point-cloud -i target/cloud-browser-case/cloud.laz \
+  -o target/cloud-browser-case/cloud.3tz --sourceCrs header --heightOffset 10 \
+  --maxPoints 16 --chunkPoints 11
+python3 -m zipfile -e target/cloud-browser-case/cloud.3tz target/cloud-browser-case/tiles
+npm install --prefix target/cloud-browser --no-save --package-lock=false cesium@1.143.0 playwright
+python3 scripts/preview.py --point-cloud target/cloud-browser-case/tiles \
+  --cesium target/cloud-browser/node_modules/cesium/Build/Cesium --port 9271
+# In another terminal:
+NODE_PATH="$PWD/target/cloud-browser/node_modules" CHROMIUM=/usr/bin/chromium \
+  node tests/fixtures/point_cloud.cjs http://127.0.0.1:9271
+```
+
+The probe checks the Cesium 1.143 IIFE, coarse-to-full refinement, actual rendered feature picking and original scalar properties, then repeats after a cache-disabled reload. Software-rendered Chromium verifies behavior; it does not establish hardware performance.
 
 ## Review and permissions
 
@@ -118,13 +149,15 @@ rusty-tiles doctor --command point-cloud --json
 The check inventories the actual Python interpreter, module versions/locations,
 GEOS triangulation, PROJ database availability/data directories/local grids, and
 readiness for each converter. It exits unsuccessfully if a selected converter is
-missing a required capability. Native mesh/packing commands can be checked without
+missing a required capability. Native point-cloud/mesh/packing commands can be checked without
 Python. It does not install dependencies or fetch grids; an inventory is not proof
 that every requested CRS/height operation is supported.
 
+`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. An all-command doctor still inventories Python dependencies for the converters that have not yet migrated.
+
 Known-good, exact Python profiles tested on 2026-10-05 are in
 `scripts/gdal-requirements.txt` (vector/raster/terrain) and
-`scripts/point-cloud-requirements.txt` (LAS/LAZ). Both require Python 3.12 or newer.
+`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud conversion itself has no Python dependency.
 The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
 build supporting constrained triangulation; a pip binding cannot replace those
 system libraries. Install a profile into a suitable environment explicitly:

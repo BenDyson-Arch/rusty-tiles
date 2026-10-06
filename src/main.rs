@@ -59,7 +59,7 @@ enum Command {
     MeshTo3tz(MeshArgs),
     /// GeoJSON → glTF vector .3tz prototype (requires Python GDAL/GEOS and NumPy)
     Vector(VectorArgs),
-    /// LAS/LAZ → point-cloud 3D Tiles with spatial LOD (Python laspy and pyproj)
+    /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
     /// DEM → quantized-mesh directory (requires Python GDAL and NumPy)
     Terrain(TerrainArgs),
