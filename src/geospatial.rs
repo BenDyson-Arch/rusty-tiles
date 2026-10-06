@@ -154,6 +154,48 @@ impl Crs {
         Ok(crs)
     }
 
+    fn promote_with_metre_height(&mut self) -> Result<(), Error> {
+        let _errors = QuietErrors::new();
+        let epoch = self.coordinate_epoch();
+        // SAFETY: Promotion mutates the uniquely owned SRS. The exported JSON
+        // is a GDAL allocation copied into Rust before its matching free.
+        let mut raw = null_mut();
+        unsafe {
+            if gdal_sys::OSRPromoteTo3D(self.0.as_ptr(), null()) != 0
+                || gdal_sys::OSRExportToPROJJSON(self.0.as_ptr(), &mut raw, null()) != 0
+            {
+                return Err(Error::Environment(diagnostic(
+                    "cannot promote horizontal CRS to 3D",
+                )));
+            }
+        }
+        let definition = unsafe { string(raw) };
+        // SAFETY: Successful export returned this allocation, freed once.
+        unsafe { gdal_sys::VSIFree(raw.cast()) };
+        let mut document: serde_json::Value = serde_json::from_str(&definition)?;
+        let crs = if document["type"] == "BoundCRS" {
+            &mut document["source_crs"]
+        } else {
+            &mut document
+        };
+        // PROJ 9.9 promotes projected Z using the horizontal linear units.
+        // Our caller's new height axis is explicitly metres, independently of
+        // source XY units. Retain every horizontal/datum/operation definition.
+        let axis = crs
+            .pointer_mut("/coordinate_system/axis/2")
+            .ok_or_else(|| Error::Environment("promoted CRS has no third axis".into()))?;
+        axis["unit"] = "metre".into();
+        if let Some(axis) = crs.pointer_mut("/base_crs/coordinate_system/axis/2") {
+            axis["unit"] = "metre".into();
+        }
+        let mut promoted = Self::from_definition(&serde_json::to_string(&document)?)?;
+        if let Some(epoch) = epoch {
+            promoted.set_coordinate_epoch(epoch)?;
+        }
+        *self = promoted;
+        Ok(())
+    }
+
     pub fn coordinate_epoch(&self) -> Option<f64> {
         // SAFETY: self retains its valid SRS handle for the call.
         let epoch = unsafe { gdal_sys::OSRGetCoordinateEpoch(self.0.as_ptr()) };
@@ -388,7 +430,7 @@ pub struct EcefTransform {
 }
 
 impl EcefTransform {
-    pub fn new(source: Crs, height_offset: Option<f64>) -> Result<Self, Error> {
+    pub fn new(mut source: Crs, height_offset: Option<f64>) -> Result<Self, Error> {
         if height_offset.is_some_and(|v| !v.is_finite()) {
             return Err(Error::Data("height offset must be finite".into()));
         }
@@ -405,13 +447,7 @@ impl EcefTransform {
             if !horizontal || height_offset.is_none() {
                 return Err(Error::Data("horizontal CRS input requires an explicit height offset to ellipsoidal metres (0 when established)".into()));
             }
-            let _errors = QuietErrors::new();
-            // SAFETY: Promotion mutates this owned SRS without transferring it.
-            if unsafe { gdal_sys::OSRPromoteTo3D(source.0.as_ptr(), null()) } != 0 {
-                return Err(Error::Environment(diagnostic(
-                    "cannot promote horizontal CRS to 3D",
-                )));
-            }
+            source.promote_with_metre_height()?;
         }
         let target = Crs::from_definition("EPSG:4978")?;
         Ok(Self {
