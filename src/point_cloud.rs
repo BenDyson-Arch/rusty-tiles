@@ -3,12 +3,12 @@ use crate::error::Error;
 use std::path::Path;
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Write},
+    io::{BufWriter, Write},
 };
 
 mod source;
 mod tiles;
-use source::{header_crs, las_error, Layout, RAW};
+use source::{header_crs, las_error, read_source, Layout, RAW};
 
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
@@ -109,8 +109,8 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
     std::fs::create_dir(output.join("t"))?;
     let path = output.join("scratch/source.bin");
     let (layout, origin, count, resolved, scales, offsets) = {
-        let mut reader = las::Reader::new(BufReader::new(File::open(input)?)).map_err(las_error)?;
-        let header = reader.header();
+        let (mut reader, header) = read_source(input)?;
+        let header = &header;
         let layout = Layout::new(header)?;
         let (mut coordinates, resolved) = Coordinates::new(header, options)?;
         let expected = header.number_of_points();

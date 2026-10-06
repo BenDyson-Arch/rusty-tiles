@@ -1,6 +1,32 @@
 //! LAS record layout and Extra Bytes decoding. Numeric source bytes are copied
 //! directly, avoiding lossy round trips through las::Point or floating integers.
 use crate::Error;
+use std::{
+    fs::File,
+    io::{BufReader, Seek, SeekFrom},
+    path::Path,
+};
+
+pub(super) fn read_source(input: &Path) -> Result<(las::Reader, las::Header), Error> {
+    let mut file = BufReader::new(File::open(input)?);
+    let raw_header = las::raw::Header::read_from(&mut file).map_err(las_error)?;
+    let mut evlrs = Vec::new();
+    // las 0.11.1 loads only the first EVLR. Use the declared on-disk count and
+    // offset for both LAS and LAZ, before resolving CRS or Extra Bytes metadata.
+    if let Some(evlr) = raw_header.evlr {
+        file.seek(SeekFrom::Start(evlr.start_of_first_evlr))?;
+        for _ in 0..evlr.number_of_evlrs {
+            evlrs.push(las::Vlr::new(
+                las::raw::Vlr::read_from(&mut file, true).map_err(las_error)?,
+            ));
+        }
+    }
+    file.rewind()?;
+    let reader = las::Reader::new(file).map_err(las_error)?;
+    let mut builder = las::Builder::from(reader.header().clone());
+    builder.evlrs = evlrs;
+    Ok((reader, builder.into_header().map_err(las_error)?))
+}
 
 // Scratch records: relative XYZ, original source index, scaled source XYZ, then
 // the complete decompressed LAS record. All fields use explicit little endian.

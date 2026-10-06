@@ -93,6 +93,21 @@ def fixture(path, count=257, identical=False, crs=None, point_format=3):
     return data
 
 
+def evlr_fixture(path, extended_extra=False):
+    from pyproj import CRS
+    from laspy.vlrs.vlrlist import VLRList
+    data = fixture(path, count=5, point_format=7, crs=CRS.from_epsg(32632))
+    wkt = data.header.vlrs.extract('WktCoordinateSystemVlr')[0]
+    data.evlrs = VLRList([
+        laspy.VLR(user_id='unrelated', record_id=1, record_data=b'ignored'),
+        wkt,
+    ])
+    if extended_extra:
+        data.evlrs.append(data.header.vlrs.extract('ExtraBytesVlr')[0])
+    data.write(path)
+    return data
+
+
 @unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native CLI acceptance')
 class PointCloudTests(unittest.TestCase):
     def convert(self, tmp, suffix='.las', **kwargs):
@@ -334,6 +349,57 @@ class PointCloudTests(unittest.TestCase):
                     run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                         height_offset=0., max_points=16, chunk_points=11))
                 self.assertFalse(out.exists())
+
+    def test_wkt_and_extra_bytes_after_unrelated_evlr(self):
+        from pyproj import CRS, Transformer
+        transform = Transformer.from_crs(32632, 4978, always_xy=True)
+        for suffix in ('.las', '.laz'):
+            for extended_extra in (False, True):
+                with self.subTest(suffix=suffix, extended_extra=extended_extra), tempfile.TemporaryDirectory() as tmp:
+                    source = pathlib.Path(tmp) / ('cloud' + suffix)
+                    data = evlr_fixture(source, extended_extra)
+                    independent = laspy.read(source)
+                    self.assertEqual(len(independent.evlrs), 3 if extended_extra else 2)
+                    self.assertEqual(independent.header.parse_crs(), CRS.from_epsg(32632))
+                    out = pathlib.Path(tmp) / 'tiles'
+                    report = run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
+                        height_offset=7., max_points=16, chunk_points=2))
+                    self.assertEqual(CRS.from_wkt(report['resolvedCrs']), CRS.from_epsg(32632))
+                    self.assertEqual(report['points'], len(data.points))
+                    manifest = json.loads((out / 'tileset.json').read_text())
+                    positions, props = read_glb(out / 't/0.glb')
+                    placed = positions + np.array(manifest['root']['transform'][12:15])
+                    expected = np.column_stack(transform.transform(data.x, data.y, np.asarray(data.z) + 7.))
+                    np.testing.assert_allclose(placed, expected, atol=2e-6, rtol=0)
+                    for name in data.point_format.dimension_names:
+                        np.testing.assert_array_equal(props[name], np.asarray(data[name]), err_msg=name)
+
+    def test_invalid_later_evlrs_fail_without_replacing_output(self):
+        for suffix in ('.las', '.laz'):
+            for case in ('duplicate_wkt', 'truncated'):
+                with self.subTest(suffix=suffix, case=case), tempfile.TemporaryDirectory() as tmp:
+                    source = pathlib.Path(tmp) / ('cloud' + suffix)
+                    data = evlr_fixture(source)
+                    if case == 'duplicate_wkt':
+                        data.evlrs.append(data.evlrs[1])
+                        data.write(source)
+                    else:
+                        source.write_bytes(source.read_bytes()[:-1])
+                    output = pathlib.Path(tmp) / 'cloud.3tz'
+                    output.write_bytes(b'original')
+                    before = set(pathlib.Path(tmp).iterdir())
+                    result = subprocess.run([BIN, '--json', 'point-cloud', '-i', str(source), '-o', str(output),
+                        '--sourceCrs', 'header', '--heightOffset', '7', '--force'],
+                        capture_output=True, text=True, env=dict(os.environ, PATH=''))
+                    response = json.loads(result.stdout)
+                    self.assertEqual(result.returncode, 3, result.stdout)
+                    self.assertEqual(response['error']['code'], 'data')
+                    if case == 'duplicate_wkt':
+                        self.assertIn('multiple LAS WKT', response['error']['message'])
+                    else:
+                        self.assertIn('invalid LAS/LAZ', response['error']['message'])
+                    self.assertEqual(output.read_bytes(), b'original')
+                    self.assertEqual(set(pathlib.Path(tmp).iterdir()), before)
 
     def test_waveform_formats_are_explicitly_rejected(self):
         for fmt in (4, 5, 9, 10):
