@@ -1570,50 +1570,51 @@ impl SceneSampler {
         prims: &[TilePrimitive],
         target_px_per_m: Option<f32>,
     ) -> Result<Self, Error> {
-        let mut images = Vec::new();
-        let mut tri_img = Vec::new();
-        let mut tri_uv = Vec::new();
-        let mut tri_n = Vec::new();
-        let mut tris = Vec::new();
-        for p in prims {
-            let Some(jpeg) = &p.jpeg else { continue };
-            if p.uvs.len() != p.positions.len() || p.indices.len() < 3 {
-                continue;
-            }
-            let mut rgba = image::load_from_memory(jpeg)
-                .map_err(|e| Error::msg(format!("child atlas: {e}")))?
-                .to_rgba8();
-            if let Some(target) = target_px_per_m {
-                if let Some(d) = texel_density(p, rgba.width(), rgba.height()) {
-                    let f = d / target.max(1e-6);
-                    if f >= 2.0 {
-                        let f = (1u32 << (f.floor().min(64.0) as u32).ilog2()) as f32;
-                        let nw = ((rgba.width() as f32 / f).round() as u32).max(1);
-                        let nh = ((rgba.height() as f32 / f).round() as u32).max(1);
-                        rgba = crate::tile::resize_colour(&rgba, nw, nh);
+        let usable: Vec<&TilePrimitive> = prims
+            .iter()
+            .filter(|p| {
+                p.jpeg.is_some() && p.uvs.len() == p.positions.len() && p.indices.len() >= 3
+            })
+            .collect();
+        // Child atlases decode independently of each other and of the
+        // triangle grid; results keep the children's order.
+        let (images, (tri_img, tri_uv, tri_n, grid)) = rayon::join(
+            || {
+                usable
+                    .par_iter()
+                    .map(|p| decode_child_atlas(p, target_px_per_m))
+                    .collect::<Vec<_>>()
+            },
+            || {
+                let ntri = usable.iter().map(|p| p.indices.len() / 3).sum();
+                let mut tri_img = Vec::with_capacity(ntri);
+                let mut tri_uv = Vec::with_capacity(ntri);
+                let mut tri_n = Vec::with_capacity(ntri);
+                let mut tris = Vec::with_capacity(ntri);
+                for (img_id, p) in usable.iter().enumerate() {
+                    for tri in p.indices.as_chunks::<3>().0 {
+                        let (ia, ib, ic) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+                        let (a, b, c) = (p.positions[ia], p.positions[ib], p.positions[ic]);
+                        tris.push([a, b, c]);
+                        tri_img.push(img_id as u32);
+                        tri_uv.push([p.uvs[ia], p.uvs[ib], p.uvs[ic]]);
+                        tri_n.push(grid::face_normal_area(a, b, c).0);
                     }
                 }
-            }
-            let img_id = images.len() as u32;
-            images.push(rgba);
-            for tri in p.indices.as_chunks::<3>().0 {
-                let (ia, ib, ic) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-                let (a, b, c) = (p.positions[ia], p.positions[ib], p.positions[ic]);
-                tris.push([a, b, c]);
-                tri_img.push(img_id);
-                tri_uv.push([p.uvs[ia], p.uvs[ib], p.uvs[ic]]);
-                tri_n.push(grid::face_normal_area(a, b, c).0);
-            }
-        }
-        if images.is_empty() || tris.is_empty() {
+                let grid = (!tris.is_empty()).then(|| TriGrid::new(tris));
+                (tri_img, tri_uv, tri_n, grid)
+            },
+        );
+        let images = images.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let Some(grid) = grid.filter(|_| !images.is_empty()) else {
             return Err(Error::msg("no textured children to bake from"));
-        }
+        };
         Ok(Self {
             images,
             tri_img,
             tri_uv,
             tri_n,
-            grid: TriGrid::new(tris),
+            grid,
         })
     }
 
@@ -1653,6 +1654,27 @@ impl SceneSampler {
             v,
         ))
     }
+}
+
+/// Decode one child atlas; with `target_px_per_m`, box-downsample it by a
+/// power of two toward that texel density.
+fn decode_child_atlas(p: &TilePrimitive, target_px_per_m: Option<f32>) -> Result<RgbaImage, Error> {
+    let encoded = p.jpeg.as_deref().unwrap_or_default();
+    let mut rgba = image::load_from_memory(encoded)
+        .map_err(|e| Error::msg(format!("child atlas: {e}")))?
+        .to_rgba8();
+    if let Some(target) = target_px_per_m {
+        if let Some(d) = texel_density(p, rgba.width(), rgba.height()) {
+            let f = d / target.max(1e-6);
+            if f >= 2.0 {
+                let f = (1u32 << (f.floor().min(64.0) as u32).ilog2()) as f32;
+                let nw = ((rgba.width() as f32 / f).round() as u32).max(1);
+                let nh = ((rgba.height() as f32 / f).round() as u32).max(1);
+                rgba = crate::tile::resize_colour(&rgba, nw, nh);
+            }
+        }
+    }
+    Ok(rgba)
 }
 
 fn sample_rgba(img: &RgbaImage, u: f32, v: f32) -> [u8; 4] {
