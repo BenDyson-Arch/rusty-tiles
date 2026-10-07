@@ -1,22 +1,16 @@
 //! Streaming OGR features; explicit axes, heights, filters and exact typed fields.
 use super::*;
-use crate::geospatial::{self, Crs, EcefTransform, QuietErrors, StrictTransform};
-use std::{
-    ffi::{c_void, CString},
-    ptr::{null, NonNull},
+use crate::geospatial::{
+    self,
+    native::{c_str, Dataset},
+    Crs, EcefTransform, QuietErrors, StrictTransform,
 };
+use std::{ffi::c_void, ptr::NonNull};
 
-struct Dataset(NonNull<c_void>);
-impl Drop for Dataset {
-    fn drop(&mut self) {
-        unsafe {
-            gdal_sys::GDALClose(self.0.as_ptr());
-        }
-    }
-}
 struct Row(NonNull<c_void>);
 impl Drop for Row {
     fn drop(&mut self) {
+        // SAFETY: The feature is uniquely owned and destroyed exactly once.
         unsafe {
             gdal_sys::OGR_F_Destroy(self.0.as_ptr());
         }
@@ -44,7 +38,7 @@ impl Frame {
     }
 }
 pub(super) struct Reader {
-    _dataset: Dataset,
+    _dataset: Dataset<'static>,
     layers: Vec<gdal_sys::OGRLayerH>,
     pub driver: String,
     pub schemas: BTreeMap<String, String>,
@@ -52,32 +46,22 @@ pub(super) struct Reader {
     pub frame: Option<Frame>,
     pub without_geometry: usize,
 }
-fn cstring(text: &str) -> Result<CString, Error> {
-    CString::new(text).map_err(|_| data("vector argument contains NUL"))
-}
 impl Reader {
     pub fn new(input: &Path, options: &VectorOptions, frame: Option<Frame>) -> Result<Self, Error> {
-        geospatial::offline()?;
+        // Native GeoJSON members are retained only for GeoJSON ingestion.
+        let geojson = input
+            .extension()
+            .is_some_and(|s| s.eq_ignore_ascii_case("geojson") || s.eq_ignore_ascii_case("json"));
+        let dataset = Dataset::open_vector(
+            input,
+            if geojson { &[c"NATIVE_DATA=YES"] } else { &[] },
+            "OGR cannot open vector input",
+        )?;
+        let raw = dataset.raw();
         let _errors = QuietErrors::new();
-        let filename = CString::new(input.as_os_str().as_encoded_bytes())
-            .map_err(|_| data("vector filename contains NUL"))?;
-        // SAFETY: Driver registration is GDAL-managed; dataset owns its handle.
-        // Layers borrowed below remain live until this dataset's matching close.
+        // SAFETY: The dataset owns its handle on this thread. Layers borrowed
+        // below remain live until the Reader's dataset is closed.
         unsafe {
-            gdal_sys::GDALAllRegister();
-            let open = [c"NATIVE_DATA=YES".as_ptr(), null()];
-            let open_options = if input.extension().is_some_and(|s| {
-                s.eq_ignore_ascii_case("geojson") || s.eq_ignore_ascii_case("json")
-            }) {
-                open.as_ptr()
-            } else {
-                null()
-            };
-            let raw = gdal_sys::GDALOpenEx(filename.as_ptr(), 0x04, null(), open_options, null());
-            let dataset = Dataset(
-                NonNull::new(raw)
-                    .ok_or_else(|| data(geospatial::diagnostic("OGR cannot open vector input")))?,
-            );
             let driver = geospatial::string(gdal_sys::GDALGetDriverShortName(
                 gdal_sys::GDALGetDatasetDriver(raw),
             ));
@@ -120,7 +104,7 @@ impl Reader {
             let mut known = BTreeSet::new();
             for layer in &layers {
                 if let Some(expression) = &options.where_clause {
-                    let expr = cstring(expression)?;
+                    let expr = c_str(expression)?;
                     let result = gdal_sys::OGR_L_SetAttributeFilter(*layer, expr.as_ptr());
                     gdal_sys::OGR_L_GetFeatureCount(*layer, 1);
                     if result != 0
@@ -515,7 +499,7 @@ unsafe fn read_geometry(
                 .map(|i| points(gdal_sys::OGR_G_GetGeometryRef(g, i)))
                 .collect::<Result<_, _>>()?,
         ),
-        4 | 5 | 6 => {
+        4..=6 => {
             let parts = (0..gdal_sys::OGR_G_GetGeometryCount(g))
                 .map(|i| read_geometry(gdal_sys::OGR_G_GetGeometryRef(g, i), count, limit))
                 .collect::<Result<Vec<_>, _>>()?;

@@ -60,15 +60,7 @@ fn uri(base: &str, value: &str) -> Result<String, Error> {
     }
     Ok(parts.join("/"))
 }
-fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
-    a.iter().zip(b).map(|(a, b)| a * b).sum()
-}
-fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    std::array::from_fn(|i| a[i] - b[i])
-}
-fn norm(a: [f64; 3]) -> f64 {
-    dot(a, a).sqrt()
-}
+use crate::vec3::{dot, norm, sub};
 const IDENTITY: [f64; 16] = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
 ];

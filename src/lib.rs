@@ -26,6 +26,8 @@ pub mod terrain;
 pub mod texture;
 pub mod tile;
 pub mod tileset;
+mod tileset_node;
+mod vec3;
 pub mod vector;
 
 pub use compress::write_glb_compressed;

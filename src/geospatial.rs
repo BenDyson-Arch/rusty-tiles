@@ -5,6 +5,8 @@
 //! PROJ networking policy; callers must not re-enable it while converting.
 //! Local grid data and the PROJ database are still required.
 
+pub(crate) mod native;
+
 use crate::Error;
 use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut, NonNull};
@@ -126,8 +128,10 @@ impl Crs {
     /// Clone a dataset-owned SRS, retaining its coordinate epoch and datum.
     /// Caller must keep the borrowed native handle live for this call.
     pub(crate) unsafe fn clone_native(raw: gdal_sys::OGRSpatialReferenceH) -> Result<Self, Error> {
+        // SAFETY: The caller keeps raw live; OSRClone returns an independent SRS.
         let owned = NonNull::new(unsafe { gdal_sys::OSRClone(raw) })
             .ok_or_else(|| Error::Data("cannot clone source CRS".into()))?;
+        // SAFETY: Configures the uniquely owned clone.
         unsafe {
             gdal_sys::OSRSetAxisMappingStrategy(
                 owned.as_ptr(),
@@ -204,9 +208,9 @@ impl Crs {
     fn promote_with_metre_height(&mut self) -> Result<(), Error> {
         let _errors = QuietErrors::new();
         let epoch = self.coordinate_epoch();
+        let mut raw = null_mut();
         // SAFETY: Promotion mutates the uniquely owned SRS. The exported JSON
         // is a GDAL allocation copied into Rust before its matching free.
-        let mut raw = null_mut();
         unsafe {
             if gdal_sys::OSRPromoteTo3D(self.0.as_ptr(), null()) != 0
                 || gdal_sys::OSRExportToPROJJSON(self.0.as_ptr(), &mut raw, null()) != 0
@@ -216,6 +220,7 @@ impl Crs {
                 )));
             }
         }
+        // SAFETY: Successful export returned a live null-terminated string.
         let definition = unsafe { string(raw) };
         // SAFETY: Successful export returned this allocation, freed once.
         unsafe { gdal_sys::VSIFree(raw.cast()) };
@@ -572,6 +577,7 @@ mod tests {
         struct Pop;
         impl Drop for Pop {
             fn drop(&mut self) {
+                // SAFETY: Pops the single handler this test pushed.
                 unsafe { gdal_sys::CPLPopErrorHandler() };
             }
         }
@@ -588,6 +594,7 @@ mod tests {
                 gdal_sys::CPLError(gdal_sys::CPLErr::CE_Warning, 1, c"scoped warning".as_ptr());
             }
         }
+        // SAFETY: No format placeholders; static null-terminated string.
         unsafe {
             gdal_sys::CPLError(
                 gdal_sys::CPLErr::CE_Warning,
