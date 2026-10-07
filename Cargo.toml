@@ -11,6 +11,10 @@ include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.m
 name = "rusty-tiles"
 path = "src/main.rs"
 
+[features]
+default = []
+native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names"] }
@@ -33,6 +37,11 @@ zenwebp = "0.4"
 tempfile = "3"
 sha2 = "0.10"
 jsonschema = { version = "0.33", default-features = false }
+gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
+las = { version = "0.11.1", features = ["laz"] }
+
+[build-dependencies]
+pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }

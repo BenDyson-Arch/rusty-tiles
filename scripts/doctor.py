@@ -6,14 +6,14 @@ import os
 import pathlib
 import sys
 
-NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert']
-PYTHON=['vector','raster','terrain','point-cloud']
+NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert','point-cloud']
+PYTHON=['vector','raster','terrain']
 
 
 def report(selected=()):
     modules={};loaded={}
     for name,package in [('numpy','numpy'),('gdal','osgeo.gdal'),('ogr','osgeo.ogr'),
-            ('osr','osgeo.osr'),('laspy','laspy'),('lazrs','lazrs'),('pyproj','pyproj')]:
+            ('osr','osgeo.osr')]:
         try:
             module=importlib.import_module(package);loaded[name]=module
             version=module.VersionInfo('--version') if name=='gdal' else getattr(module,'__version__',None)
@@ -38,19 +38,11 @@ def report(selected=()):
             reference=loaded['osr'].SpatialReference()
             database['gdalAvailable']=reference.ImportFromEPSG(4326)==0
         except Exception as error:database.update(gdalAvailable=False,gdalError=str(error))
-    if 'pyproj' in loaded:
-        try:
-            loaded['pyproj'].CRS.from_epsg(4326)
-            database['pyprojAvailable']=True
-        except Exception as error:database.update(pyprojAvailable=False,pyprojError=str(error))
     paths=[]
     for name in ('PROJ_DATA','PROJ_LIB'):
         if os.environ.get(name):paths.extend(os.environ[name].split(os.pathsep))
     if 'osr' in loaded:
         try:paths.extend(loaded['osr'].GetPROJSearchPaths())
-        except Exception:pass
-    if 'pyproj' in loaded:
-        try:paths.append(loaded['pyproj'].datadir.get_data_dir())
         except Exception:pass
     paths=list(dict.fromkeys(str(pathlib.Path(p).expanduser()) for p in paths if p))
     grids=[]
@@ -60,13 +52,12 @@ def report(selected=()):
             for suffix in ('*.gtx','*.gsb','*.tif','*.bin'):
                 grids.extend(str(p) for p in root.glob(suffix) if p.is_file())
     groups={'vector':['numpy','gdal','ogr','osr'], 'raster':['numpy','gdal'],
-        'terrain':['numpy','gdal'], 'point-cloud':['numpy','laspy','lazrs','pyproj']}
+        'terrain':['numpy','gdal']}
     commands={name:dict(ready=True,requires=[]) for name in NATIVE}
     for name,requires in groups.items():
         missing=[m for m in requires if not modules[m]['available']]
         if name=='vector' and not triangulation:missing.append('GEOS constrained triangulation')
         if name in ('vector','raster','terrain') and not database.get('gdalAvailable'):missing.append('PROJ database')
-        if name=='point-cloud' and not database.get('pyprojAvailable'):missing.append('pyproj PROJ database')
         commands[name]=dict(ready=not missing,requires=requires,missing=missing)
     selected=list(selected) or NATIVE+PYTHON
     return dict(ready=all(commands[name]['ready'] for name in selected),selectedCommands=selected,

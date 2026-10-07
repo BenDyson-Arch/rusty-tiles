@@ -45,23 +45,30 @@ To build without installing, use `cargo build --release` and run `target/release
 
 If `pkg-config` finds libjpeg-turbo, the build uses native JPEG acceleration and requires that shared library at runtime. Otherwise it uses the portable Rust encoder. Prefix the install command with `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` to force a portable build.
 
+#### Optional native geospatial build
+
+The Python-to-Rust migration is tracked in [issues #56–63](https://github.com/BenDyson-Arch/rusty-tiles/issues/56). Its foundation is the optional `native-geospatial` feature:
+
+```sh
+cargo install --path . --locked --features native-geospatial
+```
+
+This feature requires GDAL >= 3.11 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
+
+The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Raster, terrain, vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
+
 ### 2. Install the dependencies for your data
 
 | Commands | Runtime dependencies |
 | --- | --- |
 | Mesh conversion and archive utilities | No Python required |
-| `point-cloud` | Python 3, NumPy, `laspy[lazrs]`, pyproj |
+| `point-cloud --sourceCrs local` | No Python or GDAL required |
+| Geospatial `point-cloud` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `raster`, `terrain` | Python 3, NumPy, GDAL |
 | `vector` | Python 3, NumPy, GDAL with GEOS |
 | Local preview | Python 3; Node/npm to install the Cesium runtime |
 
 The CLI embeds its conversion scripts; their Python libraries must be installed in the environment used by `python3`.
-
-For point clouds:
-
-```sh
-python3 -m pip install -r scripts/point-cloud-requirements.txt
-```
 
 For GDAL-based commands, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
 
@@ -71,7 +78,7 @@ conda activate rusty-tiles
 python3 -c "from osgeo import gdal; import numpy; print(gdal.VersionInfo('--version'))"
 ```
 
-For a combined environment, install the point-cloud requirements after activating it.
+The point-cloud Python requirements are for development fixtures and independent audits, rather than conversion.
 
 ### 3. Try the included example
 
@@ -135,7 +142,7 @@ rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz \
   --sourceCrs local --maxPoints 50000 --chunkPoints 100000
 ```
 
-For geospatial LAS/LAZ, use `--sourceCrs header` or an explicit horizontal CRS such as `EPSG:32632`, and supply `--heightOffset`. A zero offset is appropriate only when source Z is already ellipsoidal metres. [Coordinate requirements](#coordinates-and-height) apply.
+For geospatial LAS/LAZ, build with `--features native-geospatial`, use `--sourceCrs header` or an explicit horizontal CRS such as `EPSG:32632`, and supply `--heightOffset`. Header CRS declarations may be WKT or GeoTIFF EPSG keys; custom GeoTIFF definitions require an explicit CRS override. A zero offset is appropriate only when source Z is already ellipsoidal metres. [Coordinate requirements](#coordinates-and-height) apply.
 
 The reader streams points through disk-backed partitions. Coarse tiles use voxel samples; detailed leaves retain every point, including coincident points. Metadata keeps source coordinates, source record indices, original RGB, and supported numeric LAS fields for picking and inspection.
 

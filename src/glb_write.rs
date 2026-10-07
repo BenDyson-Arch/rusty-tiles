@@ -8,6 +8,66 @@ use gltf_json::{accessor, buffer, image as gimage, material, mesh, scene, textur
 
 use crate::error::Error;
 
+/// Small GLB builder for feature attributes and structural metadata. Views are
+/// eight-byte aligned so numeric property tables can retain 64-bit source values.
+pub(crate) struct MetadataGlb {
+    pub document: serde_json::Value,
+    binary: Vec<u8>,
+}
+
+impl MetadataGlb {
+    pub fn new(generator: &str) -> Self {
+        Self {
+            document: serde_json::json!({
+                "asset":{"version":"2.0","generator":generator},
+                "buffers":[{"byteLength":0}], "bufferViews":[], "accessors":[],
+                "scenes":[{"nodes":[0]}], "scene":0, "nodes":[{"mesh":0}]
+            }),
+            binary: Vec::new(),
+        }
+    }
+
+    pub fn view(&mut self, bytes: &[u8]) -> usize {
+        self.binary.resize(self.binary.len().next_multiple_of(8), 0);
+        let views = self.document["bufferViews"].as_array_mut().unwrap();
+        let index = views.len();
+        views.push(
+            serde_json::json!({"buffer":0,"byteOffset":self.binary.len(),"byteLength":bytes.len()}),
+        );
+        self.binary.extend_from_slice(bytes);
+        index
+    }
+
+    pub fn accessor(&mut self, description: serde_json::Value) -> usize {
+        let accessors = self.document["accessors"].as_array_mut().unwrap();
+        let index = accessors.len();
+        accessors.push(description);
+        index
+    }
+
+    pub fn finish(mut self) -> Result<Vec<u8>, Error> {
+        pad4(&mut self.binary);
+        self.document["buffers"][0]["byteLength"] = self.binary.len().into();
+        let mut json = serde_json::to_vec(&self.document)?;
+        json.resize(json.len().next_multiple_of(4), b' ');
+        let length = 28_usize
+            .checked_add(json.len())
+            .and_then(|n| n.checked_add(self.binary.len()))
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or_else(|| Error::Data("GLB exceeds the 32-bit format size limit".into()))?;
+        Ok(gltf::Glb {
+            header: gltf::binary::Header {
+                magic: *b"glTF",
+                version: 2,
+                length,
+            },
+            json: Cow::Owned(json),
+            bin: Some(Cow::Owned(self.binary)),
+        }
+        .to_vec()?)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct TilePrimitive {
     pub positions: Vec<[f32; 3]>,
