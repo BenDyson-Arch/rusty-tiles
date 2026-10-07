@@ -207,7 +207,7 @@ rusty-tiles doctor --command vector --command terrain
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
 | `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium` | Where to look for a Cesium runtime. This check is informational only. |
 
-`doctor` reports linked GDAL, PROJ and GEOS versions. It also reports each command's readiness, the PROJ search paths and the local grid count. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
+`doctor` reports linked GDAL, PROJ and GEOS versions. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
 
 ## Exit codes
 

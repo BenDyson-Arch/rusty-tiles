@@ -6,6 +6,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- Fixed converter recipes and committed output digests, cross-commit comparison tooling and a manual release acceptance workflow. CI fails when the Python acceptance binary is missing and checks native Clippy warnings.
 - Every multi-word camelCase option now also accepts a kebab-case alias, such as `--sourceCrs`/`--source-crs` and `--maxPoints`/`--max-points`. camelCase stays the primary spelling. The `create-tileset-json`, `glbTo3tz` and `meshTo3tz` subcommand aliases are now shown in help.
 - `doctor` reports whether a Cesium runtime is present at the README location or at `doctor --cesium DIR`. This check is informational only.
 - `raster --progress json` reports `cog`, `display` and `tiling` phases. `tiling` counts XYZ tiles.
@@ -14,6 +15,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Changed
 
+- Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
+- Benchmark harnesses, public-data audits and recorded evidence now live in `bench/`.
 - Converter help lists `-i`, `-o` and `-f` first.
 - `doctor --command` accepts aliased subcommand spellings. It takes its list from the same table as the readiness report.
 - `--json` conversion results add a `settings` object. `counts` now holds only genuine counts, such as `points`, `tiles` and `features`. Settings such as `heightOffset`, `grid` or `lodLevels` moved from `counts` to `settings`.
@@ -35,6 +38,9 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Published `.3tz` files honor the process umask instead of retaining temporary-file mode 0600.
+- `doctor --command` limits both human and JSON command inventories to the selected commands.
+- Empty triangle grids allocate one cell and return immediately from nearest-surface searches.
 - `glb-to-3tz`, and small `mesh-to-3tz` inputs, no longer stage in a fixed `<output>.tileset-work` folder, which deleted any existing folder of that name.
 - An output created by another process during a conversion is reported as an output conflict, exit 5, instead of an I/O error.
 

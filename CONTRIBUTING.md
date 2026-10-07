@@ -88,7 +88,9 @@ cargo test --locked --features native-geospatial
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 
-The default suite runs real local LAS/LAZ conversions. The native suite adds CLI acceptance for doctor, preview, point cloud, raster, terrain and vector. Native CRS tests use independent references and synthetic local grids, with no Python or downloads. `cargo clippy --all-targets` is useful in review. It is not a CI gate, but avoid adding warnings.
+The default suite runs real local LAS/LAZ conversions. The native suite adds CLI acceptance for doctor, preview, point cloud, raster, terrain and vector. Native CRS tests use independent references and synthetic local grids, with no Python or downloads. `cargo clippy --locked --all-targets --features native-geospatial -- -D warnings` is a CI gate in the native GDAL matrix.
+
+Doctor, machine results, native diagnostics, preview, force replacement and archive validation now run in Rust. Their inputs are generated locally, and the CLI runs with an empty executable `PATH`. The remaining Python tests use independent readers or frozen converter oracles.
 
 ### Python acceptance
 
@@ -102,7 +104,7 @@ RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" \
   target/pyenv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-`--system-site-packages` reuses the system GDAL bindings. Otherwise install `scripts/gdal-requirements.txt` into the venv too. Both profiles need Python 3.12 or newer. Without `RUSTY_TILES_BIN`, almost every test is skipped. The run prints `WARNING: RUSTY_TILES_BIN is not set`, so check the skip count before trusting a pass. With the binary set, only the two geodiff tests skip unless their tools are configured.
+`--system-site-packages` reuses the system GDAL bindings. Otherwise install `scripts/gdal-requirements.txt` into the venv too. Both profiles need Python 3.12 or newer. Without `RUSTY_TILES_BIN`, CLI tests skip locally and print one warning. CI sets `RUSTY_TILES_REQUIRE_BIN=1`, which makes a missing binary fail the suite. With the binary set, only the two geodiff tests skip unless their tools are configured.
 
 ### Optional tests
 
@@ -136,8 +138,8 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 | `tests/fixtures/terrain_oracle.py` | The original Python terrain converter, compared at every grid size |
 | `tests/fixtures/raster_oracle.py` | The original Python raster converter, compared tile by tile |
 | `tests/fixtures/*.cjs` | Browser probes, described below |
-| `tests/fixtures/benchmark_*.py` | Repeatable benchmark harnesses |
-| `tests/fixtures/*_results.json`, `public_runtime_audit.json` | Recorded evidence, listed below |
+| `bench/benchmark_*.py` | Repeatable benchmark harnesses |
+| `bench/*_results.json`, `bench/public_runtime_audit.json` | Recorded evidence, listed below |
 | `docs/schema/` | Bundled tileset schema used by `validate`. Do not edit. |
 
 Oracles are development tools. They are never embedded and conversion never falls back to Python. Acceptance tests run the native CLI with an empty executable `PATH`. laspy and pyproj act as independent readers for point clouds.
@@ -185,9 +187,26 @@ cmp output/a.3tz output/b.3tz
 
 Without `--reproducible`, payloads, manifests, build state and reports still match. The performance section changes the ZIP offsets and index, so raw archive hashes differ. Compare members, not the archive. A fresh build and a reuse build are not byte-equal, because their ingestion history and reuse statistics differ. Mesh texture bytes depend on the codec build and are not promised equal.
 
+The fixed recipe test `tests/output_digests.rs` runs every enabled converter twice. It checks committed SHA-256 digests for the five recipes independent of GDAL and PROJ: two mesh recipes, `glb-to-3tz`, `createTilesetJson` and `convert`. Native recipes check repeatability on the current library stack. The digest test takes about 1.3 seconds with native geospatial enabled.
+
+Regenerate the portable digests only after reviewing an intended output change:
+
+```sh
+UPDATE_OUTPUT_DIGESTS=1 cargo test --locked --test output_digests
+scripts/compare_outputs.sh develop
+```
+
+The comparison script builds each revision in its own release target directory. It runs 12 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
+
 ## Release checklist
 
-1. CI passes on `develop`. Its jobs are `Rust`, `Native geospatial` for GDAL 3.12 and 3.13, `Python` and `Python-free runtime`.
+1. CI passes on `develop`. Its jobs are `Rust`, `Native geospatial` for GDAL 3.12 and 3.13, `Python` and `Python-free runtime`. The manual workflow also runs `Release acceptance`.
+
+   ```sh
+   scripts/release_acceptance.sh
+   ```
+
+   This builds the release CLI and checks doctor, the README vector conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing build. Browser probes run when `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Missing optional steps are printed. A failed required step or enabled browser probe fails the script.
 2. The Docker acceptance stage passes. It runs every native test binary in a runtime image with no Python.
 
    ```sh
@@ -210,27 +229,27 @@ These files record measured runs. Read them for numbers. They describe one machi
 
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |
-| [`public_runtime_audit.json`](tests/fixtures/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `scripts/public_data.py`, `scripts/audit_point_cloud.py`, `scripts/audit_vector.py` |
-| [`vector_benchmark_results.json`](tests/fixtures/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `tests/fixtures/benchmark_vector.py` |
-| [`raster_benchmark_results.json`](tests/fixtures/raster_benchmark_results.json) | Native raster against the Python baseline at `9a95862`, with every PNG byte compared | `tests/fixtures/benchmark_raster.py` |
-| [`terrain_benchmark_results.json`](tests/fixtures/terrain_benchmark_results.json) | First native terrain at `62091ea` against Python | `tests/fixtures/benchmark_terrain.py` |
-| [`terrain_performance_results.json`](tests/fixtures/terrain_performance_results.json) | Parallel terrain encoding, with byte-identical payloads | `tests/fixtures/benchmark_terrain.py --mode performance` |
-| [`runtime_benchmark_results.json`](tests/fixtures/runtime_benchmark_results.json) | Native doctor and preview against the Python helpers at `bf3346c` | `tests/fixtures/benchmark_runtime.py BINARY RESULTS.json` |
+| [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
+| [`vector_benchmark_results.json`](bench/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
+| [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Native raster against the Python baseline at `9a95862`, with every PNG byte compared | `bench/benchmark_raster.py` |
+| [`terrain_benchmark_results.json`](bench/terrain_benchmark_results.json) | First native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` |
+| [`terrain_performance_results.json`](bench/terrain_performance_results.json) | Parallel terrain encoding, with byte-identical payloads | `bench/benchmark_terrain.py --mode performance` |
+| [`runtime_benchmark_results.json`](bench/runtime_benchmark_results.json) | Native doctor and preview against the Python helpers at `bf3346c` | `bench/benchmark_runtime.py BINARY RESULTS.json` |
 
 Benchmarks build the old and new binaries in separate worktrees and target directories against the same GDAL stack. They use warm caches, one warmup and rotated method order. Peak RSS is the largest process from Linux `wait4`, not a process-tree sum. Run each script with `--help` for its arguments.
 
 Public data downloads are opt-in and stay outside the repository. The helper records licence, attribution and SHA-256 provenance.
 
 ```sh
-python3 scripts/public_data.py autzen /path/to/cache
+python3 bench/public_data.py autzen /path/to/cache
 rusty-tiles point-cloud -i /path/to/cache/autzen-local-metres.las \
   -o /path/to/cache/autzen.3tz --source-crs local
-python3 scripts/audit_point_cloud.py /path/to/cache/autzen-local-metres.las /path/to/cache/autzen.3tz
-python3 scripts/public_data.py roads /path/to/cache
+python3 bench/audit_point_cloud.py /path/to/cache/autzen-local-metres.las /path/to/cache/autzen.3tz
+python3 bench/public_data.py roads /path/to/cache
 rusty-tiles vector -i /path/to/cache/natural-earth-roads.gpkg -o /path/to/roads.3tz \
   --layer roads --height-offset 0 --max-features 64 --max-vertices 4096 \
   --max-bytes 131072 --lod-tolerance 100 --jobs 4
-python3 scripts/audit_vector.py /path/to/cache/natural-earth-roads.gpkg /path/to/roads.3tz
+python3 bench/audit_vector.py /path/to/cache/natural-earth-roads.gpkg /path/to/roads.3tz
 ```
 
 The Autzen helper converts international feet and US survey feet to local metres and removes CRS declarations. That audit validates local conversion and metadata, not a datum transform. Sources are [PDAL Autzen data](https://github.com/PDAL/data/tree/main/autzen) under [CC BY 4.0](https://github.com/PDAL/data/blob/main/LICENSE) and [Natural Earth roads](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/roads/) under [public-domain terms](https://www.naturalearthdata.com/about/terms-of-use/).
