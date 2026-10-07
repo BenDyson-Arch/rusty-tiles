@@ -5,8 +5,10 @@
   <g transform="translate(0 -40)" font-family="Arial, Helvetica, sans-serif" fill="#f4f7fb">
     <!-- The same little landscape, in five different representations. -->
     <g transform="translate(76 66)" stroke="#e7a575" stroke-width="1.6" stroke-linejoin="round">
-      <path d="M0 72 33 24 60 35 91 4 119 63 75 93Z" fill="#e7a575" fill-opacity=".15"/>
-      <path d="M0 72 51 61 33 24 M51 61 60 35 91 4 M51 61 119 63 M51 61 75 93 M0 72 75 93 M60 35 119 63" fill="none"/>
+      <path d="M0 68 36 20 80 8 120 60 76 94 24 84Z" fill="#e7a575" fill-opacity=".12"/>
+      <path d="M36 20 80 8 62 48Z" fill="#e7a575" fill-opacity=".18" stroke="none"/>
+      <path d="M62 48 120 60 76 94Z" fill="#e7a575" fill-opacity=".08" stroke="none"/>
+      <path d="M0 68 62 48 36 20 M80 8 62 48 120 60 M76 94 62 48 24 84" fill="none"/>
     </g>
     <g transform="translate(272 68)" fill="#80c5e6">
       <circle cx="4" cy="69" r="2.8"/><circle cx="13" cy="57" r="2.4"/><circle cx="23" cy="43" r="2.8"/>
