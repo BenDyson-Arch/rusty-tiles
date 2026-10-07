@@ -153,11 +153,11 @@ missing a required capability. Native point-cloud/mesh/packing commands can be c
 Python. It does not install dependencies or fetch grids; an inventory is not proof
 that every requested CRS/height operation is supported.
 
-`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. An all-command doctor still inventories Python dependencies for the converters that have not yet migrated.
+`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. `doctor --command raster` checks the linked GDAL/PROJ versions, database, COG/GTiff/PNG drivers and native raster tile algorithm without Python or a GDAL executable. A default build reports the missing native feature. An all-command doctor still inventories Python dependencies for the converters that have not yet migrated.
 
 Known-good, exact Python profiles tested on 2026-10-05 are in
-`scripts/gdal-requirements.txt` (vector/raster runtime and development terrain oracles) and
-`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud and terrain conversion themselves have no Python dependency.
+`scripts/gdal-requirements.txt` (vector runtime and development raster/terrain oracles) and
+`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud, terrain and raster conversion themselves have no Python dependency.
 The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
 build supporting constrained triangulation; a pip binding cannot replace those
 system libraries. Install a profile into a suitable environment explicitly:
@@ -324,3 +324,31 @@ python3 tests/fixtures/benchmark_terrain.py --mode performance --old-ref 62091ea
 This compares the prior native 1 metre path with the new single-worker and four-worker paths, and requires identical terrain payloads, coverage sidecars, manifests and geometry counts. Serial and parallel conversion reports must also match. Encoding batches hold at most four grids; native GDAL datasets and warps remain on the sampling thread. Retry pruning avoids identical meshopt candidates, and surface validation avoids rechecking unchanged source edges while still checking changed triangle intersections.
 
 The optimized run is recorded in [`tests/fixtures/terrain_performance_results.json`](tests/fixtures/terrain_performance_results.json). With four encoders, median warm release times improved from 0.118 to 0.064 seconds (small flat), 7.161 to 5.332 seconds (regional smooth), and 27.224 to 5.355 seconds (projected rugged), with byte-identical terrain payloads and unchanged geometry counts/coverage. The same rugged case improved to 14.968 seconds with one worker; peak RSS with four workers rose from 99.3 to 104.2 MiB. An additional run with the default Rayon configuration completed in 5.282 seconds at 113.9 MiB. Sampling remains serial, and memory measurements retain the largest-process `wait4` definition above.
+
+## Native raster validation
+
+Native raster acceptance runs the real CLI with an empty executable `PATH`, checks decoded PNG pixels and source COG bands/masks/NoData/metadata, and verifies successful replacement, rollback, categorized JSON errors, progress and repeatability. `tests/fixtures/raster_oracle.py` preserves the former Python implementation for development comparisons on the same GDAL stack. RGB with explicit alpha, numeric grayscale, projected grayscale and byte grayscale fixtures compare every decoded tile and recipe/TileJSON output. Native GDAL 3.11/3.13 CI also creates and converts an invented raster without Python bindings. Display resampling follows the installed GDAL tile algorithm defaults, as before; native output baselines require the same GDAL/PROJ/codec versions.
+
+For release performance comparisons, build the original Python CLI from `9a95862` (its raster path is unchanged through `3f0026c`) and the current native CLI against the same GDAL/PROJ stack. The development Python environment needs NumPy, GDAL bindings and the `gdal` executable for the baseline. Then run:
+
+```sh
+python3 tests/fixtures/benchmark_raster.py \
+  --old-bin target/raster-old-build/release/rusty-tiles \
+  --new-bin target/release/rusty-tiles \
+  --old-ref 9a95862 --work target/raster-benchmark
+```
+
+The Linux benchmark uses one warmup and at least three full CLI repetitions per method in rotated order. It compares Python defaults, a one-worker Python control and the native converter with an empty executable `PATH`. Fixture generation and fidelity checks are outside the measured interval. Each case checks every decoded tile pixel and PNG byte, TileJSON/recipes, and all source-resolution COG values, masks and band metadata. CPU includes waited descendants; peak RSS is the largest process, not aggregate process-tree memory. Recorded measurements are in [`tests/fixtures/raster_benchmark_results.json`](tests/fixtures/raster_benchmark_results.json).
+
+On the recorded i7-12700KF/GDAL 3.13.3 stack, median warm release times were:
+
+| Fixture | Python default | Native | Python peak RSS | Native peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| 256² colour + alpha | 0.185 s | 0.069 s | 81.2 MiB | 58.5 MiB |
+| 4096² regional colour + alpha | 9.116 s | 5.681 s | 313.1 MiB | 293.6 MiB |
+| 4096² regional grayscale | 7.765 s | 4.470 s | 289.3 MiB | 282.1 MiB |
+| 2048² projected colour + alpha | 3.540 s | 2.286 s | 168.9 MiB | 210.0 MiB |
+
+Every PNG byte matched, and source samples/masks/metadata and TileJSON/recipes were preserved. Python defaults used all 20 logical CPUs for tiling; the native pools were capped at four. The one-worker Python control is included in the raw results. These synthetic, warm-cache measurements do not predict throughput on cold storage or larger inputs.
+
+Native COG compression and tiling use at most four workers in separate stages. The GDAL block cache and explicit display warp budget remain 64 MiB each. Temporary TIFFs are uncompressed and deleted before publication; reserve scratch space for their full bands, including any reprojected display raster. This trades disk capacity for less repeated compression while retaining DEFLATE on the published COG and identical PNG output on the tested dependency stack.
