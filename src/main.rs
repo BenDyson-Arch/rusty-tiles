@@ -39,7 +39,7 @@ enum Command {
         #[arg(long)]
         external_validator: Option<PathBuf>,
     },
-    /// Check installed Python modules, native capabilities and local PROJ grids
+    /// Check linked native capabilities and local PROJ database/grids
     Doctor(DoctorArgs),
     #[command(hide = true)]
     EncodeVectorContent {
@@ -57,7 +57,7 @@ enum Command {
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// GeoJSON → glTF vector .3tz prototype (requires Python GDAL/GEOS and NumPy)
+    /// Vector sources → glTF .3tz (requires native GDAL/GEOS)
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
@@ -70,7 +70,7 @@ enum Command {
 #[derive(Args)]
 struct DoctorArgs {
     /// Check only these converters; repeat to select several
-    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert"])]
+    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert","validate"])]
     commands: Vec<String>,
 }
 

@@ -146,14 +146,19 @@ rusty-tiles doctor --command vector --command terrain
 rusty-tiles doctor --command point-cloud --json
 ```
 
-The check inventories the actual Python interpreter, module versions/locations,
-GEOS triangulation, PROJ database availability/data directories/local grids, and
-readiness for each converter. It exits unsuccessfully if a selected converter is
-missing a required capability. Native point-cloud/mesh/packing commands can be checked without
-Python. It does not install dependencies or fetch grids; an inventory is not proof
-that every requested CRS/height operation is supported.
+The native, read-only check reports linked GDAL/GEOS/PROJ versions and capabilities,
+PROJ database readiness, effective search paths and top-level local grid files.
+It does not import Python, install dependencies or fetch grids. Listing a grid
+is not proof that a particular height operation is available: conversion still
+validates its source-specific, offline, only-best operation.
 
-`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. `doctor --command raster` checks the linked GDAL/PROJ versions, database, COG/GTiff/PNG drivers and native raster tile algorithm without Python or a GDAL executable. A default build reports the missing native feature. `doctor --command vector` checks native GDAL/GEOS triangulation and CRS readiness without Python. The all-command doctor still provides its legacy Python development inventory until #61 migrates that inventory.
+Selected readiness is independent of unrelated commands. Mesh/archive utilities
+and local XYZ point clouds work in the default build; unavailable geospatial
+commands report the missing `native-geospatial` feature. With that feature,
+`raster` checks COG/GTiff/PNG and the raster tile algorithm, and `vector` checks
+GEOS triangulation. Missing native capabilities/database produce environment
+exit code 4 with the inventory retained in the single `--json` result. Missing
+source-specific grids are reported by conversion, also as environment errors.
 
 Known-good, exact Python profiles tested on 2026-10-05 are in
 `scripts/gdal-requirements.txt` (development vector/raster/terrain oracles) and

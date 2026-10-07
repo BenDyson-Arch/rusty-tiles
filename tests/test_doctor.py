@@ -1,4 +1,4 @@
-"""Actual CLI readiness inventory handles missing interpreters and modules."""
+"""Native CLI readiness inventory is offline and independent of Python."""
 import json
 import os
 import pathlib
@@ -43,6 +43,30 @@ class DoctorTests(unittest.TestCase):
         self.assertNotIn('python', report)
         result,report=self.run_doctor('--command','convert',env=env)
         self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(report['ready'])
+
+    def test_all_commands_without_python(self):
+        result,report=self.run_doctor(env=dict(os.environ,PATH=''))
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertTrue(report['ready'])
+        self.assertEqual(set(report['selectedCommands']),set(report['commands']))
+        self.assertNotIn('python',report)
+        self.assertNotIn('modules',report)
+        self.assertFalse(report['proj']['networkEnabled'])
+        self.assertTrue(report['proj']['database']['ready'])
+
+    def test_missing_database_is_environment_error_only_for_selected_geospatial(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env=dict(os.environ,PATH='',PROJ_DATA=tmp,PROJ_LIB=tmp)
+            result,report=self.run_doctor('--command','terrain',env=env)
+            self.assertEqual(result.returncode,4,result.stderr)
+            self.assertFalse(report['ok'])
+            self.assertEqual(report['error']['code'],'environment')
+            self.assertIn('database',report['proj']['database']['error'])
+            self.assertTrue(report['nativeGeospatial']['versions']['gdal'])
+            result,report=self.run_doctor('--command','mesh-to-3tz',env=env)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertTrue(report['ready'])
+            self.assertFalse(report['proj']['database']['ready'])
 
     def test_local_grid_inventory_is_read_only(self):
         with tempfile.TemporaryDirectory() as tmp:

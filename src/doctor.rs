@@ -3,21 +3,22 @@ use crate::error::Error;
 use serde_json::{json, Value};
 
 pub fn report(selected: &[String]) -> Result<Value, Error> {
-    let mut report = if !selected.is_empty()
-        && selected.iter().all(|name| {
-            matches!(
-                name.as_str(),
-                "point-cloud" | "terrain" | "raster" | "vector"
-            )
-        }) {
-        json!({"commands":{}})
-    } else {
-        python_report(selected)?
-    };
-    report["commands"]["point-cloud"] = point_cloud_readiness();
-    report["commands"]["terrain"] = terrain_readiness();
-    report["commands"]["raster"] = raster_readiness();
-    report["commands"]["vector"] = vector_readiness();
+    let geospatial = geospatial_readiness();
+    let mut report =
+        json!({"commands":{},"nativeGeospatial":geospatial,"proj":proj_inventory(&geospatial)});
+    for name in [
+        "mesh-to-3tz",
+        "glb-to-3tz",
+        "createTilesetJson",
+        "convert",
+        "validate",
+    ] {
+        report["commands"][name] = json!({"ready":true,"requires":[],"backend":"native Rust"});
+    }
+    report["commands"]["point-cloud"] = point_cloud_readiness(&geospatial);
+    report["commands"]["terrain"] = terrain_readiness(&geospatial);
+    report["commands"]["raster"] = raster_readiness(&geospatial);
+    report["commands"]["vector"] = vector_readiness(&geospatial);
     let names: Vec<_> = if selected.is_empty() {
         report["commands"]
             .as_object()
@@ -28,6 +29,11 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     } else {
         selected.to_vec()
     };
+    for name in &names {
+        if !report["commands"][name].is_object() {
+            return Err(Error::Data(format!("unknown readiness command: {name}")));
+        }
+    }
     report["ready"] = names
         .iter()
         .all(|name| report["commands"][name]["ready"] == true)
@@ -36,14 +42,12 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     Ok(report)
 }
 
-fn terrain_readiness() -> Value {
-    let geospatial = geospatial_readiness();
-    json!({"ready":geospatial["ready"],"requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
+fn terrain_readiness(geospatial: &Value) -> Value {
+    json!({"ready":geospatial["ready"],"backend":"native GDAL/Rust","requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
         "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
 }
 
-fn raster_readiness() -> Value {
-    let geospatial = geospatial_readiness();
+fn raster_readiness(geospatial: &Value) -> Value {
     #[cfg(feature = "native-geospatial")]
     let tiling = match crate::raster::tile_available() {
         Ok(()) => json!({"ready":true}),
@@ -57,8 +61,7 @@ fn raster_readiness() -> Value {
         "note":"Native COG, display and tiling APIs; no Python or GDAL executable required."})
 }
 
-fn vector_readiness() -> Value {
-    let geospatial = geospatial_readiness();
+fn vector_readiness(geospatial: &Value) -> Value {
     #[cfg(feature = "native-geospatial")]
     let geometry = match crate::vector::native_available() {
         Ok(()) => json!({"ready":true}),
@@ -74,11 +77,11 @@ fn vector_readiness() -> Value {
 
 fn geospatial_readiness() -> Value {
     #[cfg(feature = "native-geospatial")]
-    let geospatial = match crate::geospatial::versions().and_then(|versions| {
-        crate::geospatial::Crs::from_definition("EPSG:4326")?;
-        Ok(versions)
-    }) {
-        Ok(versions) => json!({"ready":true,"versions":versions}),
+    let geospatial = match crate::geospatial::versions() {
+        Ok(versions) => match crate::geospatial::Crs::from_definition("EPSG:4326") {
+            Ok(_) => json!({"ready":true,"versions":versions}),
+            Err(error) => json!({"ready":false,"versions":versions,"error":error.to_string()}),
+        },
         Err(error) => json!({"ready":false,"error":error.to_string()}),
     };
     #[cfg(not(feature = "native-geospatial"))]
@@ -86,48 +89,47 @@ fn geospatial_readiness() -> Value {
     geospatial
 }
 
-fn point_cloud_readiness() -> Value {
-    let geospatial = geospatial_readiness();
+fn point_cloud_readiness(geospatial: &Value) -> Value {
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
         "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
 }
 
-fn python_report(selected: &[String]) -> Result<Value, Error> {
-    let result = std::process::Command::new("python3")
-        .arg("-c")
-        .arg(include_str!("../scripts/doctor.py"))
-        .args(selected)
-        .output();
-    match result {
-        Ok(output) if output.status.success() => Ok(serde_json::from_slice(&output.stdout)?),
-        Ok(output) => Err(Error::msg(format!(
-            "dependency check failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let native = [
-                "mesh-to-3tz",
-                "glb-to-3tz",
-                "createTilesetJson",
-                "convert",
-                "point-cloud",
-            ];
-            let mut commands = serde_json::Map::new();
-            for name in native {
-                commands.insert(name.into(), json!({"ready":true,"requires":[]}));
-            }
-            for name in ["vector", "raster", "terrain"] {
-                commands.insert(name.into(), json!({"ready":false,"missing":["python3"]}));
-            }
-            let ready =
-                !selected.is_empty() && selected.iter().all(|name| native.contains(&name.as_str()));
-            Ok(
-                json!({"ready":ready,"python":{"available":false,"error":"python3 interpreter not found"},
-                "commands":commands,"selectedCommands":selected}),
-            )
+fn proj_inventory(database: &Value) -> Value {
+    let mut paths = std::collections::BTreeSet::new();
+    for name in ["PROJ_DATA", "PROJ_LIB"] {
+        if let Some(value) = std::env::var_os(name) {
+            paths.extend(std::env::split_paths(&value).filter(|path| !path.as_os_str().is_empty()));
         }
-        Err(error) => Err(error.into()),
     }
+    #[cfg(feature = "native-geospatial")]
+    paths.extend(crate::geospatial::proj_search_paths());
+    let mut grids = std::collections::BTreeSet::new();
+    let mut inventory_errors = Vec::new();
+    for path in &paths {
+        match std::fs::read_dir(path) {
+            Ok(entries) => {
+                for entry in entries {
+                    match entry {
+                        Ok(entry) => {
+                            let file = entry.path();
+                            if file.is_file()
+                                && file.extension().is_some_and(|suffix| {
+                                    matches!(suffix.to_str(), Some("gtx" | "gsb" | "tif" | "bin"))
+                                })
+                            {
+                                grids.insert(file);
+                            }
+                        }
+                        Err(error) => inventory_errors.push(format!("{}: {error}", path.display())),
+                    }
+                }
+            }
+            Err(error) => inventory_errors.push(format!("{}: {error}", path.display())),
+        }
+    }
+    json!({"database":database,"dataDirectories":paths,"availableGrids":grids,
+        "inventoryErrors":inventory_errors,"networkEnabled":false,
+        "note":"Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."})
 }
 
 pub fn display(report: &Value, json_output: bool) {
@@ -135,43 +137,21 @@ pub fn display(report: &Value, json_output: bool) {
         println!("{report}");
         return;
     }
-    if !report["python"].is_object() {
-        if let Some(commands) = report["commands"].as_object() {
-            for (name, info) in commands {
-                println!(
-                    "{name}: {}",
-                    if info["ready"] == true {
-                        "ready"
-                    } else {
-                        "unavailable"
-                    }
-                );
-                let geospatial = &info["geospatial"];
-                if geospatial["ready"] == false {
-                    println!(
-                        "  native geospatial: {}",
-                        geospatial["error"].as_str().unwrap_or("unavailable")
-                    );
-                }
-            }
-        }
-        return;
+    if let Some(versions) = report["nativeGeospatial"]["versions"].as_object() {
+        println!(
+            "GDAL: {}",
+            versions["gdal"].as_str().unwrap_or("unavailable")
+        );
+        println!("PROJ: {}", versions["proj"]);
+        println!("GEOS: {}", versions["geos"]);
     }
-    println!(
-        "Python: {}",
-        report["python"]["executable"]
-            .as_str()
-            .unwrap_or("not found")
-    );
-    if let Some(modules) = report["modules"].as_object() {
-        for (name, info) in modules {
-            println!(
-                "{name}: {}",
-                info["version"]
-                    .as_str()
-                    .unwrap_or_else(|| info["error"].as_str().unwrap_or("unavailable"))
-            );
-        }
+    if report["nativeGeospatial"]["ready"] == false {
+        println!(
+            "Native geospatial: {}",
+            report["nativeGeospatial"]["error"]
+                .as_str()
+                .unwrap_or("unavailable")
+        );
     }
     if let Some(commands) = report["commands"].as_object() {
         for (name, info) in commands {
@@ -180,15 +160,16 @@ pub fn display(report: &Value, json_output: bool) {
                 if info["ready"] == true {
                     "ready"
                 } else {
-                    "missing dependencies"
+                    "unavailable"
                 }
             );
+            for capability in ["geospatial", "geometry", "tiling"] {
+                if let Some(error) = info[capability]["error"].as_str() {
+                    println!("  {capability}: {error}");
+                }
+            }
         }
     }
-    println!(
-        "GEOS: {}",
-        report["geos"]["version"].as_str().unwrap_or("unavailable")
-    );
     if let Some(paths) = report["proj"]["dataDirectories"].as_array() {
         for path in paths {
             println!("PROJ data: {}", path.as_str().unwrap_or(""));
@@ -200,4 +181,5 @@ pub fn display(report: &Value, json_output: bool) {
             println!("  {}", grid.as_str().unwrap_or(""));
         }
     }
+    println!("{}", report["proj"]["note"].as_str().unwrap_or(""));
 }

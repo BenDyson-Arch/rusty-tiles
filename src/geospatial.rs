@@ -47,6 +47,25 @@ pub fn versions() -> Result<Versions, Error> {
     }
 }
 
+/// Copy GDAL's effective PROJ search paths; the API returns an owned CSL list.
+pub(crate) fn proj_search_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    // SAFETY: GDAL returns a null-terminated list owned by this call. Each
+    // live string is copied before the matching CSLDestroy frees the list.
+    unsafe {
+        let list = gdal_sys::OSRGetPROJSearchPaths();
+        if !list.is_null() {
+            let mut cursor = list;
+            while !(*cursor).is_null() {
+                paths.push(string(*cursor).into());
+                cursor = cursor.add(1);
+            }
+            gdal_sys::CSLDestroy(list);
+        }
+    }
+    paths
+}
+
 pub(crate) fn offline() -> Result<(), Error> {
     versions()?;
     // SAFETY: This GDAL API updates its mutex-protected network policy. All
