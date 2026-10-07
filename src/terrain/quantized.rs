@@ -1,12 +1,15 @@
 //! Regular-grid quantized-mesh 1.0 encoder. Heights use one float32-ended
 //! interval for the whole pyramid, so adjacent edges decode identically.
-use crate::Error;
+use crate::{
+    vec3::{dot, norm, sub},
+    Error,
+};
 const A: f64 = 6_378_137.;
 const B: f64 = 6_356_752.314_245_179;
 
-fn length(p: [f64; 3]) -> f64 {
-    p.iter().map(|v| v * v).sum::<f64>().sqrt()
-}
+/// Deliberately not `georef::geodetic_to_ecef`: e² derived from B/A and
+/// `e2 * sin²` grouping differ from it in the last ulp, which would change
+/// published `.terrain` bytes (centres, horizon points and quantization).
 fn ecef(lon: f64, lat: f64, height: f64) -> [f64; 3] {
     let (lon, lat) = (lon.to_radians(), lat.to_radians());
     let e2 = 1. - (B / A).powi(2);
@@ -64,14 +67,11 @@ pub(super) fn encode(
             .fold(f64::NEG_INFINITY, f64::max);
         (min + max) / 2.
     });
-    let radius = xyz
-        .iter()
-        .map(|p| length(std::array::from_fn(|axis| p[axis] - center[axis])))
-        .fold(0., f64::max);
+    let radius = xyz.iter().map(|&p| norm(sub(p, center))).fold(0., f64::max);
     let mut direction = [center[0] / A, center[1] / A, center[2] / B];
-    let norm = length(direction);
-    direction = if norm > 0. {
-        direction.map(|v| v / norm)
+    let length = norm(direction);
+    direction = if length > 0. {
+        direction.map(|v| v / length)
     } else {
         [1., 0., 0.]
     };
@@ -82,10 +82,10 @@ pub(super) fn encode(
         let mut candidate: f64 = 0.;
         for p in &xyz {
             let scaled = [p[0] / A, p[1] / A, p[2] / B];
-            let len = length(scaled);
+            let len = norm(scaled);
             let unit = scaled.map(|v| v / len);
-            let cosine: f64 = (0..3).map(|i| unit[i] * direction[i]).sum();
-            let sine = length([
+            let cosine = dot(unit, direction);
+            let sine = norm([
                 unit[1] * direction[2] - unit[2] * direction[1],
                 unit[2] * direction[0] - unit[0] * direction[2],
                 unit[0] * direction[1] - unit[1] * direction[0],

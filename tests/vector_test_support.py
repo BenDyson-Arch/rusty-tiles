@@ -1,33 +1,27 @@
-"""Frozen Python geometry oracle; integration runs use the actual native CLI.
+"""Native vector CLI helpers for the Python acceptance tests.
 
-Acceptance always invokes the selected native CLI. The frozen module remains
-untouched and is available only for explicitly selected development comparisons.
+Acceptance always invokes the selected native CLI. Tests that compare with
+the frozen Python oracle import it from tests/fixtures/vector_oracle directly.
 """
-import importlib.util
 import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+import types
+import unittest
 import zipfile
 
-ORACLE = pathlib.Path(__file__).parent / 'fixtures/vector_oracle'
-sys.path.insert(0, str(ORACLE))
-spec = importlib.util.spec_from_file_location('vector_oracle', ORACLE / 'vector.py')
-vector = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vector)
-python_run = vector.run
-
+from cli_bin import BIN
 
 def native_run(args):
-    if not os.environ.get('RUSTY_TILES_BIN'):
-        import unittest
-        raise unittest.SkipTest('set RUSTY_TILES_BIN for native CLI acceptance')
+    if not BIN:
+        raise unittest.SkipTest('RUSTY_TILES_BIN is not set; set it to the rusty-tiles binary for native CLI acceptance')
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
         archive = pathlib.Path(scratch) / 'output.3tz'
-        command = [os.environ['RUSTY_TILES_BIN'], 'vector', '-i', str(args.input), '-o', str(archive)]
+        command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
             max_vertices='maxVertices', max_bytes='maxBytes', max_tiles='maxTiles',
             max_source_vertices='maxSourceVertices', lod_tolerance='lodTolerance', lod_levels='lodLevels',
@@ -60,10 +54,8 @@ def native_run(args):
                     tiles.extract(name, output)
 
 
-# Keep the original module untouched for explicitly selected Python comparisons.
-import types
-vector = types.SimpleNamespace(**vector.__dict__)
-vector.run = native_run
+# Tests call vector.run and vector.emit; both use the native CLI.
+vector = types.SimpleNamespace(run=native_run)
 
 # Actual native CLI encoding fixtures. Oracle emit/math is never substituted
 # for native code when the acceptance binary is selected.
@@ -72,7 +64,6 @@ _native_frames = {}
 def native_emit(items, path, transform, encoding_report=None, reports=None, **kwargs):
     import json
     import shutil
-    import types
     import numpy as np
     if kwargs.pop('fill_only', False):
         raise AssertionError('filled fragments must be exercised through CLI budgets')

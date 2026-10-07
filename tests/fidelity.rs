@@ -158,7 +158,7 @@ fn leaves_preserve_triangles_float_attributes_rgba_and_materials() {
             let t: Vec<_> = r.read_tex_coords(0).unwrap().into_f32().collect();
             let indices: Vec<_> = r.read_indices().unwrap().into_u32().collect();
             count += indices.len() / 3;
-            for tri in indices.chunks_exact(3) {
+            for tri in indices.as_chunks::<3>().0 {
                 let mut source_ids: Vec<_> = tri
                     .iter()
                     .map(|&i| {
@@ -431,7 +431,7 @@ fn full_model_leaf_triangle_audit() {
             }
             let positions: Vec<_> = reader.read_positions().unwrap().collect();
             let indices: Vec<_> = reader.read_indices().unwrap().into_u32().collect();
-            for t in indices.chunks_exact(3) {
+            for t in indices.as_chunks::<3>().0 {
                 actual.push(signature([
                     positions[t[0] as usize],
                     positions[t[1] as usize],
@@ -494,8 +494,8 @@ fn opaque_parent_keeps_colour_even_when_source_alpha_is_zero() {
     let (_, _, images) = gltf::import_slice(&expanded).unwrap();
     assert!(!images.is_empty());
     for image in images {
-        for p in image.pixels.chunks_exact(4) {
-            assert_eq!(p, [200, 50, 20, 255]);
+        for p in image.pixels.as_chunks::<4>().0 {
+            assert_eq!(*p, [200, 50, 20, 255]);
         }
     }
 }

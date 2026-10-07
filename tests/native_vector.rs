@@ -1,4 +1,6 @@
 //! Native vector acceptance on the GDAL minimum, without Python or executables.
+mod support;
+
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn vector_is_reproducible_and_reuses_native_content_without_executables() {
@@ -142,4 +144,15 @@ fn compressed_point_aggregates_refine_and_reuse_without_executables() {
     let report: Value = serde_json::from_reader(zip.by_name("conversion.json").unwrap()).unwrap();
     assert!(report["pointAggregation"]["contentTiles"].as_u64().unwrap() > 0);
     assert_eq!(report["reuse"]["rebuiltContents"], 0);
+}
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn force_replaces_only_successful_output() {
+    support::force_replaces_only_successful_output(
+        "vector",
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector.geojson"),
+        &[],
+        false,
+    );
 }

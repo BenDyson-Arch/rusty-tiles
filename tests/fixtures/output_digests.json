@@ -1,0 +1,48 @@
+{
+  "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes the archive entry order). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
+  "recipes": {
+    "convert": {
+      "#order": "5513ed7130bd10c3154e8c7f8cdfa77b5b4500edc500ac35d448a4b6093bdb3e",
+      "@3dtilesIndex1@": "68e1877333cb23e78bc58800637a07a3672c73671b8812f3e25325b9585b0621",
+      "mesh.glb": "cd552ebb1c7b23065df6e3d90d4c17d87aa22389cdb70e2924e721e3bfbdd4a9",
+      "tileset.json": "f9f8e39282b040f8775eb6d2be7ecc24784fb728e03721f50a03361256034e3e"
+    },
+    "createTilesetJson": {
+      "tileset.json": "b88cb28be933b13a789c0c7c3714d647bd92223d934e2f7f59f8144ea40e5f3c"
+    },
+    "glb-to-3tz": {
+      "#order": "5513ed7130bd10c3154e8c7f8cdfa77b5b4500edc500ac35d448a4b6093bdb3e",
+      "@3dtilesIndex1@": "85c924486aed01d22268746dada923ae81b636747690967eda99fa9ad367b5dd",
+      "mesh.glb": "cd552ebb1c7b23065df6e3d90d4c17d87aa22389cdb70e2924e721e3bfbdd4a9",
+      "tileset.json": "92d9298b11152c09badeb7904506f0c228ee05e81fc8d4c9d188429bfa8ff676"
+    },
+    "mesh-lossless-nomeshopt": {
+      "#order": "da94d108b8c70caf09619a1979ed9bdb2ad31ee1f86eccf33bee72276b9ee0af",
+      "@3dtilesIndex1@": "ef504cb48670978d47e81b7b60009aa8edee248b4fe90538230e7fce6a0b2c19",
+      "t/0.glb": "8970d697306ec2ffd4aa4b0b4e3dff3486a4a906eb6d1a12930f211917a369cb",
+      "t/1.glb": "d74e8f2027abf6dd0fc95e92bac1dfbd355476cf3b22d234c2c3f4415b62e1af",
+      "t/2.glb": "d17454cf9deddf6f808edd91aae2013a9f409eeb2c43d408c0e119b909d95433",
+      "t/3.glb": "c9808891490319987a19449ce6477a54643b331b952370120281381fb4fdc8c1",
+      "t/4.glb": "5c829868068209d8abfd1b9af90645bdc3897b7383e5c15e772ca4c2e5b20f0e",
+      "t/5.glb": "cd353726d7ef52e4b10ea3eac9d475a3317ec55469725213daaa0a9e9a111572",
+      "t/6.glb": "14f36220fe9decda7c845bd512d129bc260164d7fd13d060073b5c69164d8287",
+      "t/7.glb": "b6003c8bd2d8223e3a5445e95d6357972da1e2c0198f015e548872a745934966",
+      "t/8.glb": "2d2d32ea9de9380b7af4147539b2c2170464c9c80cbd4238743f990d2892587c",
+      "tileset.json": "8e01af45e9501b48536dc20a9580beb6ba3029a56b9bc611c9809c6079d4318e"
+    },
+    "mesh-webp": {
+      "#order": "da94d108b8c70caf09619a1979ed9bdb2ad31ee1f86eccf33bee72276b9ee0af",
+      "@3dtilesIndex1@": "ca189a6b228fce1601e975c0cf538288253f4b04be172c8b1aa1107cd0bbd6b0",
+      "t/0.glb": "4487e189334013282c3d02bccdf05d494b3951683fdd0388a872fa95786359f0",
+      "t/1.glb": "050a89af751731409ae5c9f5d3fbd82d5a67e89b183c216e2c55f65577e53fc3",
+      "t/2.glb": "d59e2eb7320614f468669a72a28783f70686d43429c6330e4969c939f9f88287",
+      "t/3.glb": "d793731a1bbb6a04942de2f988b1c7514929d34570a10434d3592c35161f7594",
+      "t/4.glb": "edc67e2ef5007445b4c44b72dcb46d0594430596eece005cc64989e97d75f960",
+      "t/5.glb": "a87b88322b69abd13e33145b9b0385e5add1d2d6b21f58bc9826bc7da1aa2096",
+      "t/6.glb": "ec43ea6d8f08de3739cfe1f2c8d0fdc050d5276e4e6927f251da90d61b0fa5d7",
+      "t/7.glb": "e753b05fe17310b01ad341cb035db3052290f53390df5d45b4bfbcb8a672dd84",
+      "t/8.glb": "b9a9bb4746a4a4b2673015ca4913d1fa21751ab3fbed2ab2a52a323e760dfb63",
+      "tileset.json": "8e01af45e9501b48536dc20a9580beb6ba3029a56b9bc611c9809c6079d4318e"
+    }
+  }
+}

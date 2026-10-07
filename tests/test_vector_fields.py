@@ -1,6 +1,5 @@
 """Metadata selection and explicit JSON list representation."""
 import json
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -10,7 +9,7 @@ import unittest
 from test_vector_lod import vector
 from test_vector_reuse import details
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class VectorFieldTests(unittest.TestCase):
     def source(self,root):
@@ -48,7 +47,7 @@ class VectorFieldTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'unknown selected'):
                 vector.run(self.args(p,root/'typo',fields=['missing']))
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN to exercise field argv')
+    @requires_bin('set RUSTY_TILES_BIN to exercise field argv')
     def test_cli_accepts_field_lists_and_rejects_conflicting_modes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=self.source(root)

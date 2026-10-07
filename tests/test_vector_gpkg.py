@@ -13,6 +13,7 @@ import zipfile
 import numpy as np
 from osgeo import ogr, osr
 from test_vector_lod import vector, read, parts
+from cli_bin import requires_bin
 
 
 
@@ -230,7 +231,7 @@ class GeoPackageTests(unittest.TestCase):
 
 
 class CliGeoPackageTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN to exercise native ingestion and archive publication')
+    @requires_bin('set RUSTY_TILES_BIN to exercise native ingestion and archive publication')
     def test_cli_native_reader_and_atomic_failure(self):
         import zipfile
         with tempfile.TemporaryDirectory() as tmp:

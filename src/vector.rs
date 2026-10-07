@@ -13,7 +13,10 @@ pub(crate) fn native_available() -> Result<(), Error> {
     native::available()
 }
 
-use crate::error::Error;
+use crate::{
+    error::Error,
+    report::{ConversionResult, Reporter},
+};
 
 pub const SPEC_ISSUE: &str = "https://github.com/CesiumGS/3d-tiles/issues/825";
 pub const SPEC_PR: &str = "https://github.com/CesiumGS/3d-tiles/pull/838";
@@ -154,84 +157,120 @@ pub fn vector_to_3tz_with_options(
     ambiguous_outlines: bool,
     options: &VectorOptions,
 ) -> Result<(), Error> {
+    vector_to_3tz_reported(
+        input,
+        output,
+        max_features,
+        repair,
+        ambiguous_outlines,
+        options,
+        &Reporter::default(),
+    )
+    .map(drop)
+}
+
+/// [`vector_to_3tz_with_options`] with `ingestion`/`encoding` progress and
+/// per-feature warnings sent to `reporter`, returning the published archive
+/// and its report.
+pub fn vector_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    max_features: usize,
+    repair: bool,
+    ambiguous_outlines: bool,
+    options: &VectorOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
     let lod = &options.lod;
     if options
         .where_clause
         .as_ref()
         .is_some_and(|value| value.trim().is_empty())
     {
-        return Err(Error::msg("where filter must not be empty"));
-    }
-    if !matches!(options.list_fields.as_str(), "error" | "json")
-        || (!options.fields.is_empty() && !options.drop_fields.is_empty())
-    {
         return Err(Error::msg(
-            "invalid vector field selection or listFields setting",
+            "--where must not be empty; omit it to convert every feature",
         ));
     }
-    if options.jobs == 0
-        || options.max_parent_features == 0
-        || options.max_vertices < 4
-        || options.max_bytes < 4096
-        || options.max_tiles == 0
-        || options.max_source_vertices == 0
-        || options.height_offset.is_some_and(|v| !v.is_finite())
-        || (options.all_layers && !options.layers.is_empty())
-    {
+    if !matches!(options.list_fields.as_str(), "error" | "json") {
+        return Err(Error::msg(format!(
+            "--listFields must be error or json, got {:?}",
+            options.list_fields
+        )));
+    }
+    if !options.fields.is_empty() && !options.drop_fields.is_empty() {
         return Err(Error::msg(
-            "invalid vector input selection or content budgets",
+            "--fields and --dropFields cannot be combined; choose one field selection",
         ));
     }
-    if max_features == 0
-        || !lod.tolerance_metres.is_finite()
-        || lod.tolerance_metres <= 0.0
-        || !(1..=16).contains(&lod.levels)
+    if options.all_layers && !options.layers.is_empty() {
+        return Err(Error::msg(
+            "--allLayers cannot be combined with --layer; choose one layer selection",
+        ));
+    }
+    if options
+        .height_offset
+        .is_some_and(|value| !value.is_finite())
     {
-        return Err(Error::msg("invalid vector LOD budgets: positive finite tolerance, positive feature budget and 1..16 levels required"));
+        return Err(Error::msg(
+            "--heightOffset must be a finite number of metres",
+        ));
+    }
+    for (flag, value, minimum) in [
+        ("--jobs", options.jobs, 1),
+        ("--maxFeatures", max_features, 1),
+        ("--maxParentFeatures", options.max_parent_features, 1),
+        ("--maxVertices", options.max_vertices, 4),
+        ("--maxBytes", options.max_bytes, 4096),
+        ("--maxTiles", options.max_tiles, 1),
+        ("--maxSourceVertices", options.max_source_vertices, 1),
+    ] {
+        if value < minimum {
+            return Err(Error::msg(format!(
+                "{flag} must be at least {minimum}, got {value}"
+            )));
+        }
+    }
+    if !lod.tolerance_metres.is_finite() || lod.tolerance_metres <= 0.0 {
+        return Err(Error::msg(format!(
+            "--lodTolerance must be a positive finite number of metres, got {}",
+            lod.tolerance_metres
+        )));
+    }
+    if !(1..=16).contains(&lod.levels) {
+        return Err(Error::msg(format!(
+            "--lodLevels must be between 1 and 16, got {}",
+            lod.levels
+        )));
     }
     if let Some(previous) = &options.reuse_tileset {
         if !previous.is_file() {
             return Err(Error::InputNotFound(previous.clone()));
         }
     }
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
-    }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
-    }
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
     #[cfg(not(feature = "native-geospatial"))]
     {
-        let _ = (repair, ambiguous_outlines);
+        let _ = (repair, ambiguous_outlines, reporter);
         Err(Error::Environment(
             "vector conversion requires a build with native-geospatial".into(),
         ))
     }
     #[cfg(feature = "native-geospatial")]
     {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let work = tempfile::tempdir_in(parent)?;
-        #[cfg(feature = "native-geospatial")]
-        native::convert(
+        let job = crate::output::Job::begin(output, options.force)?;
+        // The tileset tree is staged apart from the job's scratch space.
+        let staging = job.staging("tiles")?;
+        let report = native::convert(
             input,
-            work.path(),
+            &staging,
             max_features,
             repair,
             ambiguous_outlines,
             options,
+            reporter,
         )?;
-        #[cfg(feature = "native-geospatial")]
-        crate::pack::convert_to_3tz(
-            work.path(),
-            output,
-            &crate::pack::PackOptions {
-                force: options.force,
-            },
-        )
+        job.publish_tree_3tz(&staging, Some(report))
     }
 }
 

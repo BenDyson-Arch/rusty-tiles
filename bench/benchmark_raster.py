@@ -10,8 +10,8 @@ import numpy as np
 from osgeo import gdal, osr
 
 gdal.UseExceptions(); osr.UseExceptions()
-ROOT=pathlib.Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location('timing', ROOT/'tests/fixtures/benchmark_terrain.py')
+ROOT=pathlib.Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('timing', ROOT/'bench/benchmark_terrain.py')
 timing=importlib.util.module_from_spec(spec);spec.loader.exec_module(timing)
 METHODS=['python-default','rust-native','python-one-worker']
 CASES=[

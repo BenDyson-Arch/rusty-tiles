@@ -1,8 +1,16 @@
 //! Disk-backed spatial partitioning; only an input chunk or a tile's bounded
 //! representatives/full-detail records are held in memory at a time.
 use super::source::{position, Layout, RAW};
-use super::{progress, PointCloudOptions};
-use crate::{glb_write::MetadataGlb, Error};
+use super::PointCloudOptions;
+use crate::report::Reporter;
+use crate::{
+    glb_write::MetadataGlb,
+    tileset_node::{
+        box_half, box_json, enclose_children, top_level_error, translation, translation_offset,
+    },
+    vec3::{norm_hypot as norm, sub},
+    Error,
+};
 use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
@@ -10,10 +18,6 @@ use std::{
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
-
-fn norm(point: [f64; 3]) -> f64 {
-    point[0].hypot(point[1]).hypot(point[2])
-}
 
 struct Records {
     reader: BufReader<File>,
@@ -57,6 +61,7 @@ impl Records {
 }
 
 pub(super) struct Tree<'a> {
+    pub reporter: &'a Reporter,
     pub layout: &'a Layout,
     pub options: &'a PointCloudOptions,
     pub output: &'a Path,
@@ -95,7 +100,7 @@ impl Tree<'_> {
             return Err(Error::Data("empty point partition".into()));
         }
         drop(records);
-        let extent: [f64; 3] = std::array::from_fn(|i| hi[i] - lo[i]);
+        let extent = sub(hi, lo);
         if !norm(extent).is_finite() {
             return Err(Error::Data(
                 "point extent exceeds finite coordinate range".into(),
@@ -118,15 +123,15 @@ impl Tree<'_> {
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6));
-        let delta: [f64; 3] = std::array::from_fn(|i| center[i] - parent_center[i]);
-        let mut node = json!({"boundingVolume":{"box":box_values(half)},
-            "transform":[1,0,0,0,0,1,0,0,0,0,1,0,delta[0],delta[1],delta[2],1],
+        let mut node = json!({"boundingVolume":{"box":box_json(0., half)},
+            "transform":translation(sub(center, parent_center)),
             "geometricError":error + if leaf {0.} else {rounding},
             "refine":"REPLACE","content":{"uri":uri}});
         if leaf {
             std::fs::remove_file(path)?;
             self.leaf_points += count;
-            progress("tiling", self.leaf_points, self.total_points);
+            self.reporter
+                .progress("tiling", self.leaf_points, self.total_points);
             return Ok(node);
         }
         if depth >= 64 {
@@ -180,20 +185,16 @@ impl Tree<'_> {
             self.build(&paths[0], center, depth + 1)?,
             self.build(&paths[1], center, depth + 1)?,
         ];
-        for child in &children {
-            for i in 0..3 {
-                let offset = child["transform"][12 + i].as_f64().unwrap().abs();
-                let child_half = child["boundingVolume"]["box"][3 + i * 4].as_f64().unwrap();
-                half[i] = half[i].max(offset + child_half);
-            }
-            node["geometricError"] = node["geometricError"]
-                .as_f64()
-                .unwrap()
-                .max(child["geometricError"].as_f64().unwrap())
-                .into();
-        }
-        node["boundingVolume"]["box"] = json!(box_values(half));
-        node["children"] = json!(children);
+        let offsets = [
+            translation_offset(&children[0])?,
+            translation_offset(&children[1])?,
+        ];
+        let own_error = error + rounding;
+        let error = enclose_children(&mut half, own_error, offsets.into_iter().zip(&children))?;
+        node["geometricError"] = error.into();
+        node["boundingVolume"]["box"] = box_json(0., half);
+        // Move, rather than re-serialise, each finished subtree into its parent.
+        node["children"] = Value::Array(children.into());
         Ok(node)
     }
 
@@ -219,12 +220,6 @@ impl Tree<'_> {
     }
 }
 
-fn box_values(half: [f64; 3]) -> [f64; 12] {
-    [
-        0., 0., 0., half[0], 0., 0., 0., half[1], 0., 0., 0., half[2],
-    ]
-}
-
 fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f64, Error> {
     let count = rows.len() / layout.record_len;
     if count > 16_777_217 {
@@ -246,7 +241,7 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
                 "tile positions exceed finite float32 range".into(),
             ));
         }
-        rounding = rounding.max(norm(std::array::from_fn(|i| local[i] - encoded[i] as f64)));
+        rounding = rounding.max(norm(sub(local, encoded.map(f64::from))));
         for i in 0..3 {
             lo[i] = lo[i].min(encoded[i]);
             hi[i] = hi[i].max(encoded[i]);
@@ -306,13 +301,14 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
     Ok(rounding)
 }
 
+/// Tileset-level error; NaN (reported by the caller as a nonfinite extent)
+/// when the root is malformed.
 pub(super) fn tileset_error(root: &Value) -> f64 {
-    let box_ = &root["boundingVolume"]["box"];
-    (2. * norm([
-        box_[3].as_f64().unwrap(),
-        box_[7].as_f64().unwrap(),
-        box_[11].as_f64().unwrap(),
-    ]))
-    .max(1.)
-    .max(root["geometricError"].as_f64().unwrap())
+    match (
+        box_half(&root["boundingVolume"]["box"]),
+        root["geometricError"].as_f64(),
+    ) {
+        (Ok(half), Some(error)) => top_level_error(2. * norm(half), error, 1.),
+        _ => f64::NAN,
+    }
 }

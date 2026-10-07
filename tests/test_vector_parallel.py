@@ -1,6 +1,5 @@
 """Parallel completion must not change manifests, payloads or reuse semantics."""
 import json
-import os
 import pathlib
 import sqlite3
 import subprocess
@@ -13,9 +12,9 @@ import weakref
 import zipfile
 
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
-@unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for parallel acceptance')
+@requires_bin('set RUSTY_TILES_BIN for parallel acceptance')
 class ParallelVectorTests(unittest.TestCase):
     def test_workers_preserve_content_manifest_and_reuse(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,6 @@
 //! Draft vector GLBs, typed metadata, quantization and direct Rust meshopt.
 use super::*;
-use crate::glb_write::MetadataGlb;
+use crate::glb::{self, MetadataGlb};
 use std::io::Write;
 
 #[derive(Default)]
@@ -25,21 +25,6 @@ pub(super) struct Candidate {
     pub reports: Vec<Value>,
     pub reason: Option<&'static str>,
     pub worker: usize,
-}
-fn extension(glb: &mut MetadataGlb, name: &str, required: bool) {
-    glb.document["extensionsUsed"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!(name));
-    if required {
-        if glb.document.get("extensionsRequired").is_none() {
-            glb.document["extensionsRequired"] = json!([]);
-        }
-        glb.document["extensionsRequired"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!(name));
-    }
 }
 fn view(glb: &mut MetadataGlb, bytes: &[u8]) -> usize {
     glb.view(if bytes.is_empty() { &[0] } else { bytes })
@@ -220,7 +205,7 @@ fn emit(
     repair: bool,
     schemas: &BTreeMap<String, String>,
     fill_only: bool,
-    quantize: bool,
+    options: &VectorOptions,
     reports: &mut Vec<Value>,
 ) -> Result<Encoded, Error> {
     if items.len() > 16777217 {
@@ -311,7 +296,7 @@ fn emit(
         }
     }
     if line_restart {
-        extension(&mut glb, "KHR_mesh_primitive_restart", true);
+        glb::add_extension(&mut glb.document, "KHR_mesh_primitive_restart", true)?;
     }
     let mut position_accessors = Vec::new();
     for (mode, batch) in &batches {
@@ -319,7 +304,7 @@ fn emit(
         if *mode == 4 && !fill_only {
             ext["EXT_mesh_polygon"] = json!({"count":batch.triangles.len(),"indicesOffsets":u32_accessor(&mut glb,&batch.triangles),
                 "loopIndices":u32_accessor(&mut glb,&batch.loops),"loopIndicesOffsets":u32_accessor(&mut glb,&batch.loop_offsets)});
-            extension(&mut glb, "EXT_mesh_polygon", false);
+            glb::add_extension(&mut glb.document, "EXT_mesh_polygon", false)?;
         }
         let values: Vec<Point> = batch
             .points
@@ -355,7 +340,7 @@ fn emit(
         glb.document["meshes"][0]["primitives"].as_array_mut().unwrap().push(json!({"mode":mode,"attributes":{"POSITION":position,"_FEATURE_ID_0":id_accessor},"indices":index,"extensions":ext}));
     }
     if fill_only {
-        extension(&mut glb, "KHR_materials_unlit", false);
+        glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
         glb.document["materials"] = json!([{"doubleSided":true,"extensions":{"KHR_materials_unlit":{}},"pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1],"metallicFactor":0,"roughnessFactor":1}}]);
         for primitive in glb.document["meshes"][0]["primitives"]
             .as_array_mut()
@@ -369,9 +354,14 @@ fn emit(
         .map(|p| norm(sub(*p, p.map(|v| v as f32 as f64))))
         .fold(0., f64::max);
     let mut quantization: f64 = 0.;
-    let before_bytes;
-    if quantize {
-        before_bytes = glb.clone().finish()?.len();
+    // Uncompressed, unquantized GLB size. Measured without serialising when
+    // quantization or meshopt will change the bytes that are written.
+    let measured = if options.quantize || options.meshopt {
+        Some(glb.encoded_len()?)
+    } else {
+        None
+    };
+    if options.quantize {
         let (lo, hi) = bounds(position_accessors.iter().flat_map(|(_, _, p)| p.iter()))?;
         let extent = sub(hi, lo);
         let scale = extent.map(|v| if v > 0. { v } else { 1. });
@@ -406,16 +396,21 @@ fn emit(
         glb.compact_views();
         glb.document["nodes"][0]["translation"] = json!(lo);
         glb.document["nodes"][0]["scale"] = json!(scale);
-        extension(&mut glb, "KHR_mesh_quantization", true);
+        glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
         quantization = quantization.max(norm(mul(extent, 1. / 131070.)));
         quantization += norm(sub(lo, lo.map(|v| v as f32 as f64)))
             + norm(sub(scale, scale.map(|v| v as f32 as f64)))
             + norm(scale) * 2f64.powi(-24);
-    } else {
-        before_bytes = 0;
     }
-    let bytes = glb.finish()?;
-    let before_bytes = if quantize { before_bytes } else { bytes.len() };
+    // One serialisation: meshopt rewrites the in-memory document and binary.
+    let bytes = if options.meshopt {
+        let (mut document, binary) = glb.into_parts();
+        let packed = crate::vector_encoding::compress_document(&mut document, &binary)?;
+        glb::encode_glb(&document, &packed)?
+    } else {
+        glb.finish()?
+    };
+    let before_bytes = measured.unwrap_or(bytes.len());
     Ok(Encoded {
         bytes,
         vertices: all_positions.len(),
@@ -426,17 +421,31 @@ fn emit(
     })
 }
 
+/// Inputs shared by every candidate encoded in one build.
+#[derive(Clone, Copy)]
+pub(super) struct Encoder<'a> {
+    pub spool: &'a Path,
+    pub max_features: usize,
+    pub repair: bool,
+    pub options: &'a VectorOptions,
+    pub schemas: &'a BTreeMap<String, String>,
+    pub output: &'a Path,
+}
+
 pub(super) fn encode(
-    spool: &Path,
+    encoder: Encoder<'_>,
     prefix: &str,
     center: Point,
     level: u32,
-    max_features: usize,
-    repair: bool,
-    options: &VectorOptions,
-    schemas: &BTreeMap<String, String>,
-    output: &Path,
 ) -> Result<Candidate, Error> {
+    let Encoder {
+        spool,
+        max_features,
+        repair,
+        options,
+        schemas,
+        output,
+    } = encoder;
     let db =
         rusqlite::Connection::open_with_flags(spool, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(sql)?;
@@ -591,7 +600,7 @@ pub(super) fn encode(
                 schemas
             },
             fill,
-            options.quantize,
+            options,
             &mut reports,
         )?;
         if level == 0 {
@@ -602,11 +611,7 @@ pub(super) fn encode(
         before_bytes += encoded.before_bytes;
         rounding = rounding.max(encoded.rounding);
         quantization = quantization.max(encoded.quantization);
-        let mut bytes = if options.meshopt {
-            crate::vector_encoding::compress_bytes(&encoded.bytes)?
-        } else {
-            encoded.bytes
-        };
+        let mut bytes = encoded.bytes;
         let suffix = if fill { "b3dm" } else { "glb" };
         if fill {
             let mut table = b"{\"BATCH_LENGTH\":0}".to_vec();
@@ -766,18 +771,16 @@ mod tests {
                 max_bytes: 4096,
                 ..Default::default()
             };
-            let candidate = encode(
-                &spool,
-                "",
-                [0.; 3],
-                1,
-                1,
-                false,
-                &options,
-                &BTreeMap::new(),
-                root.path(),
-            )
-            .unwrap();
+            let schemas = BTreeMap::new();
+            let encoder = Encoder {
+                spool: &spool,
+                max_features: 1,
+                repair: false,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+            };
+            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
             assert!(candidate.node.is_none());
             assert_eq!(candidate.reason, Some(expected));
         }

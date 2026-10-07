@@ -50,6 +50,7 @@ fn encoder() -> String {
         include_str!("reuse.rs"),
         include_str!("../../vector_encoding.rs"),
         include_str!("../../glb_write.rs"),
+        include_str!("../../glb.rs"),
         include_str!("../../bbox.rs"),
         include_str!("../../georef.rs"),
         include_str!("../../geospatial.rs"),

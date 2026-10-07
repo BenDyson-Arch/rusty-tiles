@@ -13,7 +13,7 @@ import laspy
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BIN = os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 
 def run(args):
@@ -108,7 +108,7 @@ def evlr_fixture(path, extended_extra=False):
     return data
 
 
-@unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native CLI acceptance')
+@requires_bin('set RUSTY_TILES_BIN for native CLI acceptance')
 class PointCloudTests(unittest.TestCase):
     def convert(self, tmp, suffix='.las', **kwargs):
         source = pathlib.Path(tmp) / ('cloud' + suffix)

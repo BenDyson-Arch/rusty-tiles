@@ -1,6 +1,8 @@
 use serde_json::Value;
 use std::{path::Path, process::Command};
 
+mod support;
+
 fn source(root: &Path) -> std::path::PathBuf {
     let path = root.join("dem.asc");
     std::fs::write(&path,"ncols 2\nnrows 2\nxllcorner 12\nyllcorner 41\ncellsize 0.1\nNODATA_value -9999\n100 110\n120 -9999\n").unwrap();
@@ -109,5 +111,55 @@ fn resource_limit_and_bad_source_preserve_existing_directory() {
         std::fs::read_to_string(output.join("sentinel")).unwrap(),
         "keep"
     );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 3);
+}
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn force_replaces_only_successful_output() {
+    let root = tempfile::tempdir().unwrap();
+    support::force_replaces_only_successful_output(
+        "terrain",
+        &source(root.path()),
+        &["--maxZoom", "0", "--heightOffset", "0", "--fillHeight", "0"],
+        true,
+    );
+}
+
+/// The published directory and its files follow the umask. The private
+/// `.tiles-work-*` directory is 0700 but is never the published path.
+#[cfg(all(unix, feature = "native-geospatial"))]
+#[test]
+fn published_directory_modes_follow_umask() {
+    let root = tempfile::tempdir().unwrap();
+    let input = source(root.path());
+    let output = root.path().join("tiles");
+    let result = support::with_umask_022(&[
+        "terrain".as_ref(),
+        "-i".as_ref(),
+        input.as_os_str(),
+        "-o".as_ref(),
+        output.as_os_str(),
+        "--maxZoom".as_ref(),
+        "0".as_ref(),
+        "--heightOffset".as_ref(),
+        "0".as_ref(),
+        "--fillHeight".as_ref(),
+        "0".as_ref(),
+    ] as &[&std::ffi::OsStr]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    for entry in walkdir::WalkDir::new(&output) {
+        let entry = entry.unwrap();
+        let expected = if entry.file_type().is_dir() {
+            0o755
+        } else {
+            0o644
+        };
+        assert_eq!(support::mode(entry.path()), expected, "{:?}", entry.path());
+    }
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 3);
 }

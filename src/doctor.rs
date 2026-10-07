@@ -2,7 +2,39 @@
 use crate::error::Error;
 use serde_json::{json, Value};
 
-pub fn report(selected: &[String]) -> Result<Value, Error> {
+use std::path::Path;
+
+/// Subcommands with a readiness entry: canonical name, then accepted aliases.
+/// `doctor --command` takes its values from this list, and the CLI tests check
+/// it against the clap subcommand definitions so the two cannot drift.
+pub const COMMANDS: &[(&str, &[&str])] = &[
+    ("vector", &[]),
+    ("raster", &[]),
+    ("terrain", &[]),
+    ("point-cloud", &[]),
+    ("mesh-to-3tz", &["meshTo3tz"]),
+    ("glb-to-3tz", &["glbTo3tz"]),
+    ("createTilesetJson", &["create-tileset-json"]),
+    ("convert", &[]),
+    ("validate", &[]),
+    ("preview", &[]),
+];
+
+/// Cesium runtime location used by the README install instructions.
+pub const DEFAULT_CESIUM: &str = "target/preview-runtime/node_modules/cesium/Build/Cesium";
+
+/// Canonical readiness name for a subcommand name or alias.
+pub fn canonical(name: &str) -> Option<&'static str> {
+    COMMANDS
+        .iter()
+        .find(|(canonical, aliases)| *canonical == name || aliases.contains(&name))
+        .map(|(canonical, _)| *canonical)
+}
+
+/// Readiness of `selected` commands (all when empty). Only the selected
+/// commands appear under `commands`. `cesium` is the preview
+/// runtime directory to look for; it defaults to [`DEFAULT_CESIUM`].
+pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error> {
     let geospatial = geospatial_readiness();
     let mut report =
         json!({"commands":{},"nativeGeospatial":geospatial,"proj":proj_inventory(&geospatial)});
@@ -12,28 +44,28 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
         "createTilesetJson",
         "convert",
         "validate",
-        "preview",
     ] {
         report["commands"][name] = json!({"ready":true,"requires":[],"backend":"native Rust"});
     }
+    report["commands"]["preview"] = preview_readiness(cesium.unwrap_or(Path::new(DEFAULT_CESIUM)));
     report["commands"]["point-cloud"] = point_cloud_readiness(&geospatial);
     report["commands"]["terrain"] = terrain_readiness(&geospatial);
     report["commands"]["raster"] = raster_readiness(&geospatial);
     report["commands"]["vector"] = vector_readiness(&geospatial);
-    let names: Vec<_> = if selected.is_empty() {
-        report["commands"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect()
-    } else {
-        selected.to_vec()
-    };
-    for name in &names {
-        if !report["commands"][name].is_object() {
-            return Err(Error::Data(format!("unknown readiness command: {name}")));
+    let mut names: Vec<String> = Vec::new();
+    if selected.is_empty() {
+        names.extend(report["commands"].as_object().unwrap().keys().cloned());
+    }
+    for name in selected {
+        let name = canonical(name)
+            .ok_or_else(|| Error::Data(format!("unknown readiness command: {name}")))?;
+        if !names.iter().any(|selected| selected == name) {
+            names.push(name.to_owned());
         }
+    }
+    if !selected.is_empty() {
+        let commands = report["commands"].as_object_mut().unwrap();
+        commands.retain(|name, _| names.contains(name));
     }
     report["ready"] = names
         .iter()
@@ -41,6 +73,16 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
         .into();
     report["selectedCommands"] = json!(names);
     Ok(report)
+}
+
+/// Informational only: preview always takes an explicit `--cesium`, so a
+/// missing runtime at the checked path never makes the command unavailable.
+fn preview_readiness(cesium: &Path) -> Value {
+    let found = cesium.join("Cesium.js").is_file();
+    json!({"ready":true,"requires":[],"backend":"native Rust",
+        "cesium":{"path":cesium.to_string_lossy(),"found":found,
+            "note":if found {"Cesium IIFE runtime found; pass this directory to preview --cesium."}
+                else {"No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium."}}})
 }
 
 fn terrain_readiness(geospatial: &Value) -> Value {
@@ -185,6 +227,13 @@ pub fn display(report: &Value, json_output: bool) {
             for capability in ["geospatial", "geometry", "tiling"] {
                 if let Some(error) = info[capability]["error"].as_str() {
                     println!("  {capability}: {error}");
+                }
+            }
+            if let Some(path) = info["cesium"]["path"].as_str() {
+                if info["cesium"]["found"] == true {
+                    println!("  cesium: found at {path}");
+                } else {
+                    println!("  cesium: not found at {path} (informational; pass preview --cesium <Build/Cesium>)");
                 }
             }
         }

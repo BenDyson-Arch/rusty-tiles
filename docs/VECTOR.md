@@ -1,297 +1,268 @@
-# glTF vector prototype
+# Vector guide
 
-The standalone `vector` command reads OGR spatial layers, including GeoPackage,
-GeoJSON and Shapefile, into draft `3DTILES_content_gltf_vector` content in a
-3D Tiles 1.1 `.3tz` archive. Build with `native-geospatial`; GDAL >= 3.12,
-GEOS >= 3.10, PROJ >= 9.2 and SQLite are required. Python is used only for
-development fixtures and independent audits. No source datasets,
-credentials or hosted services are bundled.
+This page explains how the `vector` command turns GIS features into 3D Tiles. It is for users converting GeoPackage, GeoJSON or Shapefile data, and for developers who style and pick the result in CesiumJS. Every option and default is in the [command reference](CLI.md#vector).
 
-```sh
-rusty-tiles vector -i mapping.gpkg -o mapping.3tz --layer roads \
-  --maxFeatures 64 --maxVertices 65536 --maxBytes 4194304 \
-  --lodTolerance 0.1 --lodLevels 3
-```
+The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
-`--layer NAME` is repeatable. Multiple spatial layers require explicit selection
-or `--allLayers`; a single spatial layer is selected automatically. `_source_id`
-is the JSON-encoded native GeoJSON ID or OGR FID, and `_source_layer` identifies
-the original layer. Together they identify a source feature, including when it
-appears in several fragments. These property names are reserved. Scalar fields
-retain their types; missing numeric/string fields use explicit `noData`. Nullable
-64-bit integers remain integers without a float conversion. Incompatible types
-across selected layers, complex fields, nullable booleans, measured geometries,
-geometry collections and curves fail explicitly.
+## Requirements
 
-Layers use their declared CRS and traditional X/Y axis order. `--sourceCrs`
-overrides the declaration; `--sourceCrs local` means local metre XYZ. Two-dimensional
-geospatial sources are placed at ellipsoidal height zero. A 3D GeoPackage with
-only a horizontal CRS needs an explicit `--heightOffset`, in metres, to establish
-ellipsoidal heights. Native compound/3D CRS operations use their declared height
-reference instead, including three-axis geographic CRSs such as EPSG:7843
-(GDA2020). GeoJSON follows its conventional ellipsoidal metre heights.
-Declared coordinate epochs are retained; a missing epoch stays unspecified.
-PROJ networking and ballpark operations are disabled; missing required operations
-or grids fail. An additive height offset is not a spatial geoid transformation.
-Each tile has its own local origin to reduce float32 position rounding; the
-reported rounding still depends on the spatial extent of its contents.
+- A build with the `native-geospatial` feature.
+- GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite.
+- CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
 
-## Budgets and memory
+Conversion runs offline and needs no Python.
 
-The input features and shared-coordinate index are spooled to a temporary SQLite
-store beside the output. Median spatial partitioning uses disk-backed SQL sorts.
-The Rust converter streams features into disk-backed storage. Memory still
-depends on one source feature, bounded by `--maxSourceVertices` (default 1,000,000),
-one candidate tile, the hierarchy and the OGR driver's own buffering. Parent
-candidates are read and simplified one feature at a time; workers stop retaining
-geometry as soon as a vertex or estimated-byte guard fails. Coincident features
-with duplicate source IDs still partition into separate full-detail leaves.
-The SQLite cache is 32 MiB. Leave enough scratch disk space for transformed coordinates and
-indexes. Staging files are removed on success and failure; Rust publishes an
-archive only after conversion and packing succeed.
+## Convert a layer
 
-Every content tile is checked against **actual encoded** vertices and bytes,
-summed across all contents including any `b3dm` wrapper.
-Defaults are 64 feature fragments per leaf (`--maxFeatures`), 4,096 per parent
-(`--maxParentFeatures`), 65,536 POSITION vertices and 4 MiB across a tile’s contents.
-`--maxTiles` caps hierarchy nodes at 100,000. Indivisible geometry or metadata
-that exceeds a budget fails; it does not silently publish an oversized tile.
-
-Oversized lines split with a shared endpoint, retaining every original segment.
-Multi-geometries split into smaller parts. Oversized polygons partition their
-triangulated filled surface, preserving original Z and holes. Filled fragments use
-standard unlit, double-sided glTF triangles in a `b3dm` compatibility wrapper;
-source boundaries use separate draft
-vector line content. A tile can contain both through the 3D Tiles 1.1 `contents`
-array. Cesium 1.143 chooses its vector GLB decoder at tileset scope; the standard
-`b3dm` container selects its model decoder for fills. This is a legacy container
-workaround, with modern glTF feature metadata inside, rather than a private
-extension. Original exterior and hole boundary segments occur exactly once; internal
-triangle edges are not emitted as outlines. Feature metadata is present in both
-contents, so filled surfaces and outlines remain pickable. Geometry reports
-explicitly record this policy.
-Shared vertices, including fragment seams, are locked during simplification;
-triangle surface fragments are not simplified. Buffered spatial clipping, coverage-wide
-edge reconciliation and implicit tiling remain unimplemented.
-
-## Optional position quantization and compression
-
-`--quantize` writes normalized unsigned 16-bit positions with the standard
-[KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_mesh_quantization)
-extension. It is lossy: full-detail leaves retain feature topology/properties but
-positions have an additional conservative quantization error bound. Tile extras
-record `quantizationErrorMetres` separately from float32 rounding; it contributes
-to bounds padding and `geometricError`, including on leaves.
-
-`--meshopt` losslessly compresses accessor streams with
-[EXT_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_meshopt_compression).
-Feature IDs, polygon loop/triangle order and metadata remain intact. Required
-extensions and a standard placeholder buffer make unsupported decoders reject
-compressed content rather than read missing bytes. [KHR_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_meshopt_compression)
-remains a release candidate as checked on 2026-10-05; this encoder uses the
-ratified EXT encoding. Both options are off by default and can be combined:
+These examples use placeholder file names. Replace them with your own data.
 
 ```sh
-rusty-tiles vector -i mapping.gpkg -o mapping.3tz --layer roads --quantize --meshopt
+rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads \
+  --max-features 64 --max-vertices 65536 --max-bytes 4194304 \
+  --lod-tolerance 0.1 --lod-levels 3
 ```
 
-Budgets use the final encoded payload, including wrappers. Small contents can grow
-because of extension JSON overhead. `conversion.json.encoding` records options,
-maximum quantization error, and uncompressed/encoded byte totals across tile
-content references; deduplicated archive size can differ. Per-tile extras record
-both sizes. Reuse requires matching encoding settings and, for compression, the
-same native encoder revision. Compression runs in process; the compatibility
-field `VectorOptions.meshopt_encoder` is ignored.
+A file with one spatial layer is selected automatically. A file with several layers needs `--layer` for each layer you want, or `--all-layers`.
 
-The combined format is checked with the invented browser cases on CesiumJS
-1.142.0, 1.143.0 and 1.146.0. Repeat the fixture generator with `--quantize` and
-`--meshopt-helper /path/to/rusty-tiles`, then run the same native browser probe.
+## Feature identity and properties
 
-## Vector LOD
+Every feature keeps two reserved properties.
 
-`--lodTolerance` is the base simplification tolerance in metres, doubling at each
-coarser level. `--lodLevels` (1–16, default 3) adds real simplification even for
-one detailed feature. Redundant levels with no vertex reduction are omitted.
-Parents simplify directly from original full-detail geometry with `REPLACE`
-refinement. If a parent cannot retain every feature within the budgets, it is a
-routing node without content; `extras.routingReason` identifies `parentFeatures`,
-`vertices`, `bytes`, or the conservative `estimatedBytes` memory guard. With
-aggregation enabled, `pointAggregationTolerance` and `pointAggregationBudget`
-also identify conservative fallbacks. Parent
-feature counts are independent of the leaf partition budget. The default retains
-all semantic points and feature identities; dense point collections route without
-geometry reduction unless aggregation is explicitly requested.
-
-Lines use iterative 3D Ramer–Douglas–Peucker with a conservative continuous path
-error bound. Polygon rings can simplify when twice their best-fit-plane deviation fits inside
-the requested tolerance and the candidate retains validity and holes. The
-remaining tolerance is used for 3D path simplification; reported geometry error
-includes twice the planarity deviation and stays within the requested tolerance.
-Float32 rounding is added separately. Parent errors are monotonic. Full-detail leaves
-retain source vertices/segments subject to separately reported float32 rounding;
-leaf geometricError is zero with the default unquantized encoding. Polygons whose nonplanarity exceeds that budget and invalid candidates remain
-unsimplified. `--repair` explicitly permits invalid-outline repairs;
-`--ambiguousOutlines` retains irreconcilable crossings as source 3D outlines.
-Oversized polygons requiring triangle fragmentation still need unambiguous filled
-geometry; outline fallback does not resolve their fragmentation.
-
-`--parentRepair` optionally substitutes source-chord outlines when invalid topology
-or topology/minimum-ring constraints would otherwise retain a polygon at full cost.
-This affects parent display only; filled full-detail leaves keep their existing
-repair policy. The source 3D AABB diagonal bounds the entire filled-surface/outline
-substitution, including removed fill and holes. A stand-in is emitted only when
-that conservative bound fits the requested tolerance; shared vertices remain
-locked. Reports record `substitution: parentOutline`, source identity, error and
-tolerance. This can reduce distant display fidelity; it never silently drops a
-feature or changes a leaf. If the bound does not fit, the original fallback remains.
-
-`conversion.json` records layers, CRS/height semantics, budgets, observed tile
-maxima, fragmentation and a bounded sample of geometry reports. The complete
-report stream is `geometry-reports.jsonl`. Tile `extras` records encoded vertices,
-bytes, `primitives`, geometry error, position rounding and requested tolerance.
-`conversion.json.encoding.maximumTilePrimitives` is the largest primitive count
-across a tile’s contents; `primitiveReferences` sums those counts across content
-references in the hierarchy, including reused tiles. These measure glTF primitives,
-not GPU draw calls or unique files.
-
-### Optional dense point aggregation
-
-`--aggregatePoints` permits count aggregates in **point-only parent tiles**.
-Point and MultiPoint coordinates are grouped by source layer and 3D voxel using
-the same budgeted grid as the Rust point-cloud sampler. Each aggregate is placed
-at the first original point in source-identity order, with picking properties
-`aggregation: "voxel"`, `sourceLayer` and integer `pointCount`. These use the
-metadata class `pointAggregate`, have no `_source_id`, and do not inherit an
-individual source feature's properties. Counts refer to point coordinates;
-a MultiPoint feature contributes once for each coordinate. Source properties and
-identities remain available in every full-detail leaf. Styles for distant
-aggregates must use aggregate properties, rather than assume original fields exist.
-
-```sh
-rusty-tiles vector -i observations.gpkg -o observations.3tz --layer observations \
-  --aggregatePoints --maxParentFeatures 64 --lodTolerance 5
-```
-
-Every parent is calculated directly from original coordinates, including on reuse
-after edits. Layers remain separate, even for coincident points. Workers retain
-at most the parent feature/vertex budget in aggregate records and apply the usual
-estimated-memory and actual encoded-byte guards. Mixed geometry parents use the
-existing retention/routing policy. If aggregation makes no reduction, exceeds the
-budgets, or its measured original-to-representative 3D distance (including a
-numerical cushion) exceeds the requested metre tolerance, original content is
-retained when it fits; otherwise the tile routes to children. Geometry and source
-bounds remain conservative through REPLACE refinement.
-
-Tile `extras.pointAggregation` records counts, grouping, grid cell diagonal and
-the maximum distance bound; `conversion.json.pointAggregation` reports whether
-the option is enabled and how many content tiles aggregate points. Geometry
-reports mark the substitution explicitly. Aggregated parents use the requested
-tolerance as their geometric error, plus encoding error, so even coincident
-aggregates refine to original identities at close range. This intentionally
-conservative error is promoted to be at least the child error. Full-detail leaves
-never aggregate. Reuse requires the same aggregation option as its baseline.
-
-Buffered spatial/grid clipping with coverage-wide edge reconciliation and
-implicit tiling remain open in #2. Point aggregation does not address either.
-
-### Geometry batching
-
-Each content groups points, disconnected line strips and polygons into at most
-three primitives, with per-vertex feature IDs linking every part to its original
-metadata row. Polygons share position/index buffers and use the draft polygon
-count and offsets to retain individual exteriors and holes. Disconnected strips
-use unsigned 32-bit restart indices, so batching introduces no connecting segment.
-Standard fragmented surface fills share one triangle primitive per fill content;
-source boundaries remain separate vector content. Vertex and byte budgets still
-apply to actual output across all contents.
-
-Multiple line strips require the draft `KHR_mesh_primitive_restart` extension,
-declared in both `extensionsUsed` and `extensionsRequired`. Engines without it
-cannot load that content correctly. A single strip does not require the extension.
-Batching does not promise one GPU draw call: a runtime can split a collection into
-several commands for styling or rendering limits.
-
-On the issue #54 fixture (3,000 twelve-vertex polygons, `--quantize --meshopt`),
-batching reduced glTF primitives from 24,000 to 255 across the hierarchy, JSON
-from 45,109,800 to 840,464 bytes, and archive size from 54,552,997 to 4,909,436
-bytes. The largest encoded tile changed from 3,367,108 bytes with 1,500 primitives
-to 359,556 bytes with one primitive containing all 3,000 features. This is an
-invented fixture measurement, not a general compression guarantee. Encoder
-changes require a fresh build before using `--reuseTileset` again.
-
-## Compatibility and validation
-
-**Use CesiumJS 1.143.0 for batched native vector content.**
-1.143.0 is the checked batching runtime and repository preview baseline.
-1.142.0 was the oldest release tested with unbatched native vector content; it
-introduced experimental support for these extensions in
-[Cesium PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
-Pin your application runtime and repeat the probe when upgrading: draft support can change without a stable compatibility
-promise.
-
-The encoder follows these draft revisions:
-
-| Extension | Encoding reference |
+| Property | Contents |
 | --- | --- |
-| `KHR_mesh_primitive_restart` | [glTF proposal revision `9811e84`](https://github.com/KhronosGroup/glTF/tree/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart), from [PR 2569](https://github.com/KhronosGroup/glTF/pull/2569): disconnected line strips separated by the maximum index value; required when used. |
-| `EXT_mesh_polygon` | [glTF proposal revision `c1a0354`](https://github.com/KhronosGroup/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), from [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570): polygon count, triangle offsets and ring-loop indices/offsets. |
-| `3DTILES_content_gltf_vector` | [3D Tiles proposal revision `c48ebdc`](https://github.com/CesiumGS/3d-tiles/blob/c48ebdc8db43dc00917b4f200eff5e2131d7e493/extensions/3DTILES_content_gltf_vector/README.md), from [PR 838](https://github.com/CesiumGS/3d-tiles/pull/838): optional tileset extension with `content.extensions.3DTILES_content_gltf_vector.vector = true`. |
+| `_source_id` | The original GeoJSON ID or OGR FID, as JSON text |
+| `_source_layer` | The original layer name |
 
-Feature metadata uses `EXT_mesh_features` and `EXT_structural_metadata`.
-Output declares 3D Tiles 1.1; this prototype does not claim a finalized 3D Tiles
-2.0 format. Fragmented surface fills use standard `b3dm`-wrapped glTF triangles,
-while their original boundaries use separate vector line content.
+Together they identify a source feature. This holds even when a feature is split into several fragments.
 
-On 2026-10-06, the five browser cases were repeated in CesiumJS 1.143.0 with two
-spatially separated features per case, both uncompressed and with
-`--quantize --meshopt`. Native loading, styled lines, empty polygon holes, LOD,
-fragmented fills/boundaries and both source IDs passed. Each unfragmented case
-used one glTF primitive and one native collection containing both features;
-line-gap picking confirmed no connecting segment. To repeat this check, generate
-`tests/fixtures/vector_compat.py OUTPUT --batch` and run the browser probe below.
+Scalar fields keep their types. Missing numbers and strings use an explicit `noData` value. Nullable 64-bit integers stay integers.
 
-The following matrix predates geometry batching and was checked on 2026-10-05
-using the repository IIFE preview,
-headless Chromium with SwiftShader, GDAL 3.13.3 and NumPy 2.5.3. Each row used the
-same invented fixtures: a detailed 3D line, a polygon with a hole, a fragmented
-polygon with separate boundaries, an outline-only repaired polygon, and a point.
+These inputs fail with a clear message:
 
-| CesiumJS | Load | Lines / outlines | Polygon and fragmented fills | Line / polygon LOD | Property picking | Native vector decoder |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1.139.1 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
-| 1.140.0 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
-| 1.141.0 | Pass | Thin fallback; styled width absent | Pass; holes empty | Pass | Lines/fills/outlines pass; point unreliable | No |
-| **1.142.0** | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
-| 1.143.0 | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
-| 1.146.0 | Pass | Pass, including styled widths | Pass; holes empty | Pass | Pass, including points and boundaries | Yes |
+- Fields whose types differ across selected layers.
+- Complex fields that are not excluded.
+- Nullable booleans.
+- Measured geometries, geometry collections and curves.
 
-LOD checks observed 2 → 201 line vertices and 24 → 140 polygon vertices while
-moving from coarse to full detail. Fragmented fills and semantic points are not
-simplified; their hierarchy routes to the full-detail contents. Picking checks
-`_source_id`, `_source_layer` and `name` from rendered features, including fill
-and outline fallback. Styled line checks pick five pixels off the centerline;
-fragmented boundary checks pick outside the filled polygon. These distinguish
-native vector rendering from an ordinary thin glTF line. Polygon ring topology
-does not itself promise visible styled outlines in every runtime; the fragmented
-boundary test uses the separately emitted line content.
+### Choose fields
 
-The three older releases did not report tile-loading errors in those unbatched fixtures.
-They ignored the optional draft extensions and displayed generic glTF geometry;
-that partial display is **not supported native vector behavior**. Earlier releases
-and other engines have not been tested. A runtime that accepts ordinary 3D Tiles
-or `b3dm` may still ignore polygon topology, vector styling or feature metadata.
-Successful triangle rendering alone is insufficient to establish compatibility.
+- `--fields name,category` keeps only the listed fields.
+- `--drop-fields tags,notes` removes the listed fields.
 
-### Style and pick features by their properties
+The two options are mutually exclusive. Unknown names fail. Identity properties are always kept.
 
-Use the CesiumJS IIFE (`/cesium/Cesium.js`) and a tested runtime from the matrix
-above. Retained source properties are available on lines, polygon fills, source
-boundaries, repaired outlines and their LOD representations. Fragments retain
-`_source_id` and `_source_layer`, so several picked pieces can identify the same
-source feature. Fields excluded with `--fields`/`--dropFields` are unavailable.
+List fields fail by default. `--list-fields json` stores each list as JSON text. Element order, nulls and exact integers are kept. An empty list becomes `[]`. A missing list stays `noData`.
 
-For a dataset with `category` and `status` string fields, change its display
-without rebuilding the archive:
+### Filter features
+
+`--where "category = 'public'"` applies an OGR attribute filter to every selected layer. It runs before features are read. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset.
+
+## Coordinates and height
+
+Each layer uses its declared CRS with traditional X and Y axis order. `--source-crs` overrides the declaration. `--source-crs local` means local metre XYZ.
+
+| Source | Height rule |
+| --- | --- |
+| 2D geospatial features | Placed at ellipsoidal height zero |
+| 3D features with only a horizontal CRS | Need `--height-offset` in metres |
+| Compound or 3D CRS | Use the declared height reference |
+| GeoJSON | Uses its conventional ellipsoidal metre heights |
+
+Three-axis geographic CRSs such as EPSG:7843 use their declared height. Declared coordinate epochs are kept. A missing epoch stays unspecified.
+
+PROJ networking and ballpark operations are disabled. A missing operation or grid fails the job. An additive height offset is not a geoid transformation.
+
+Each tile has its own local origin to reduce float32 rounding. The reported rounding still depends on the tile's extent.
+
+## Invalid and empty features
+
+By default, the command checks every selected feature first. It reports each failure with its layer, ID and reason, then publishes nothing.
+
+`--skip-invalid` omits those features and publishes the rest. The omitted identities and reasons go to `conversion.json` and `geometry-reports.jsonl`. Schema errors, configuration errors and encoding errors still fail the job. An initial build needs at least one convertible feature.
+
+Features with NULL or empty geometry are omitted automatically, because they have nothing to draw. They do not need `--skip-invalid`. `featuresWithoutGeometry` counts them, and each appears in the report stream with outcome `no-geometry`. A selection of only geometry-free records publishes a valid empty tileset.
+
+### Repair options
+
+| Option | Effect |
+| --- | --- |
+| `--repair` | Repair invalid polygon outlines. Each repair is reported. |
+| `--ambiguous-outlines` | With `--repair`, keep polygons that collapse or self-intersect as their original 3D rings in line content |
+| `--parent-repair` | Allow outline stand-ins in parent tiles when a polygon cannot be simplified |
+
+With `--repair --ambiguous-outlines`, a repair that collapses to lines or points keeps the original closed rings as outlines. The report records `outputGeometry: outline` and the reason. No fill is invented. Without the flags, a collapse is a reported failure.
+
+`--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. No feature is dropped.
+
+Oversized polygons that need triangle fragmentation still need unambiguous filled geometry. Outline fallback does not resolve their fragmentation.
+
+Raw GDAL and GEOS warnings are quiet by default. Set `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` to see them.
+
+## Tile budgets
+
+Every tile is checked against its actual encoded vertices and bytes. The check sums all contents in the tile, including any `b3dm` wrapper.
+
+| Budget | Default |
+| --- | --- |
+| Feature fragments per leaf, `--max-features` | 64 |
+| Feature fragments per parent, `--max-parent-features` | 4,096 |
+| POSITION vertices per tile, `--max-vertices` | 65,536 |
+| Bytes per tile, `--max-bytes` | 4 MiB |
+| Tiles in the hierarchy, `--max-tiles` | 100,000 |
+| Coordinates in one source feature, `--max-source-vertices` | 1,000,000 |
+
+Indivisible geometry that exceeds a budget fails. An oversized tile is never published silently. Coincident features with the same source ID still go to separate leaves.
+
+Large features are split to fit:
+
+- Lines split at a shared endpoint. Every original segment is kept.
+- Multi-geometries split into smaller parts.
+- Polygons split their triangulated fill. Original Z and holes are kept.
+
+A split polygon has two kinds of content. Fills are standard unlit, double-sided glTF triangles inside a `b3dm` wrapper. Source boundaries are separate vector line content. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Both contents carry feature metadata, so fills and outlines are pickable. The `b3dm` wrapper is a compatibility workaround for Cesium's decoder selection, not a private extension.
+
+Buffered grid clipping, coverage-wide edge reconciliation and implicit tiling are not implemented.
+
+### Memory and scratch disk
+
+Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. Memory depends on one source feature, one candidate tile per worker, the hierarchy and the OGR driver. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
+
+## Level of detail
+
+Parents are simplified directly from the original geometry and use `REPLACE` refinement.
+
+- `--lod-tolerance` is the base tolerance in metres. It doubles at each coarser level.
+- `--lod-levels` sets how many coarse levels sit above each leaf, from 1 to 16.
+
+Levels that remove no vertices are omitted. Parent errors never decrease toward the root.
+
+Lines use 3D Ramer-Douglas-Peucker simplification with a conservative error bound. A polygon ring simplifies only when its planarity deviation leaves room inside the tolerance and the result stays valid. Polygons that are too far from planar stay unsimplified. Shared vertices, including fragment seams, are locked. Triangle fill fragments are not simplified.
+
+Leaves keep every source vertex and segment. Their only change is float32 rounding, which is reported. Leaf `geometricError` is zero unless you quantize.
+
+A parent that cannot fit all its features within the budgets becomes a routing node without content. `extras.routingReason` says why: `parentFeatures`, `vertices`, `bytes` or `estimatedBytes`.
+
+By default, every semantic point is kept. Dense point layers get a routing hierarchy rather than sampling.
+
+### Point aggregation
+
+`--aggregate-points` replaces points in point-only parents with per-layer count aggregates. Leaves always keep the original points and properties.
+
+```sh
+rusty-tiles vector -i observations.gpkg -o output/observations.3tz --layer observations \
+  --aggregate-points --max-parent-features 64 --lod-tolerance 5
+```
+
+Points are grouped by layer and 3D voxel, using the same grid as the point-cloud sampler. Each aggregate sits at its first original point and has these properties:
+
+| Property | Value |
+| --- | --- |
+| `aggregation` | `"voxel"` |
+| `sourceLayer` | The source layer |
+| `pointCount` | Number of point coordinates grouped |
+
+Aggregates use the metadata class `pointAggregate` and have no `_source_id`. Styles for distant tiles must use these properties, not the original fields. A MultiPoint counts once per coordinate.
+
+Aggregation falls back to the original content when it gives no reduction, breaks a budget, or exceeds the tolerance. If the original content does not fit either, the tile routes to its children. The parent's geometric error is at least the tolerance, so aggregates always refine to originals up close. `extras.pointAggregation` and `conversion.json.pointAggregation` record what happened.
+
+## Encoding
+
+### Batching
+
+Each content holds at most three primitives: points, lines and polygons. Per-vertex feature IDs link every part to its metadata row. Polygons keep separate exteriors and holes through the draft polygon offsets.
+
+Several line strips in one primitive need the draft `KHR_mesh_primitive_restart` extension. It is declared as required. Engines without it cannot load that content. A single strip does not need it. Batching does not promise one GPU draw call.
+
+### Quantization and compression
+
+Both options are off by default and can be combined.
+
+```sh
+rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads --quantize --meshopt
+```
+
+| Option | Extension | Effect |
+| --- | --- | --- |
+| `--quantize` | `KHR_mesh_quantization` | Lossy 16-bit positions. The added error is reported and included in bounds and `geometricError`. |
+| `--meshopt` | `EXT_meshopt_compression` | Lossless compression of accessor buffers |
+
+Compressed content declares its extensions as required. A decoder without support rejects it rather than reading missing bytes. This encoder uses the ratified EXT encoding. `KHR_meshopt_compression` was still a release candidate when checked on 2026-10-05.
+
+Budgets use the final encoded size. Small contents can grow because of extension JSON. `conversion.json.encoding` records the options, quantization error and byte totals. Each tile's `extras` records encoded vertices, bytes, `primitives`, geometry error, rounding and tolerance.
+
+### Workers and reproducibility
+
+`--jobs N` limits encoding threads. The default is the number of available cores. Each worker can hold one candidate tile up to the budgets, so lower `N` on a small machine. Output does not depend on worker count or completion order.
+
+`conversion.json.performance` records timings. These change between runs. Add `--reproducible` to omit them and get byte-identical archives from the same input, options, binary and libraries. See [byte-identity checking](../CONTRIBUTING.md#check-byte-identity) for the comparison rules.
+
+## Reports
+
+| File in the archive | Contents |
+| --- | --- |
+| `conversion.json` | Layers, CRS and height decisions, budgets, tile maxima, encoding, reuse, and a sample of geometry reports |
+| `geometry-reports.jsonl` | Every geometry report, skipped feature and repair |
+| `vector-build.json` | Build state used by `--reuse-tileset` |
+
+`conversion.json.encoding.maximumTilePrimitives` is the largest primitive count in one tile. `primitiveReferences` sums primitive counts across the hierarchy. Neither is a GPU draw-call count.
+
+## Reuse after edits
+
+`--reuse-tileset` rebuilds only what changed since an earlier archive. Apply your edits with an external tool first. This example needs `geodiff` and a changeset you have made:
+
+```sh
+geodiff apply updated.gpkg changes.diff
+rusty-tiles vector -i updated.gpkg -o output/updated.3tz --layer roads \
+  --reuse-tileset output/mapping.3tz
+```
+
+### What must match
+
+Reuse needs the same layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and the same GDAL, GEOS and PROJ versions. Archives made by the earlier Python converter need a fresh native build first.
+
+A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
+
+### How reuse works
+
+- Content file names contain their SHA-256 hash. Unchanged payloads keep their URLs and bytes.
+- Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
+- `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
+- Every reused payload is checked against its recorded checksum.
+- `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
+
+Reuse saves geometry encoding, not every step. The updated source is still scanned and projected, and the archive is repacked. Source files and the earlier archive are opened read-only, and source triggers are never modified. Geometry reports cover only the new build; earlier reports stay in the earlier archive. A feature that loses its geometry is removed. Repeated edits can unbalance partitions. A fresh build resets them.
+
+The archive is never updated in place. Publish the new archive, and keep the previous one for rollback. Diff creation, application and conflict resolution belong to `geodiff` or `go-geodiff`, not to this command. Tested versions are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#verification-evidence).
+
+## Compatibility
+
+Use CesiumJS 1.143.0 for batched vector content. It is the tested runtime and the preview baseline. Pin your runtime and repeat the browser check when you upgrade, because draft support can change.
+
+| CesiumJS | Result with unbatched fixtures, 2026-10-05 |
+| --- | --- |
+| 1.139.1 to 1.141.0 | Loads as generic glTF. Styled line widths are missing and point picking is unreliable. Not supported. |
+| 1.142.0 | Native vector rendering, styling and picking. The oldest working release. |
+| 1.143.0, 1.146.0 | Native vector rendering, styling and picking |
+
+Batched content was checked on 1.143.0 on 2026-10-06. The combined `--quantize --meshopt` format was checked on 1.142.0, 1.143.0 and 1.146.0. Other engines are untested. Rendering triangles alone does not prove compatibility.
+
+The encoder follows these draft revisions.
+
+| Extension | Reference |
+| --- | --- |
+| `KHR_mesh_primitive_restart` | [glTF revision `9811e84`](https://github.com/KhronosGroup/glTF/tree/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart), [PR 2569](https://github.com/KhronosGroup/glTF/pull/2569) |
+| `EXT_mesh_polygon` | [glTF revision `c1a0354`](https://github.com/KhronosGroup/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570) |
+| `3DTILES_content_gltf_vector` | [3D Tiles revision `c48ebdc`](https://github.com/CesiumGS/3d-tiles/blob/c48ebdc8db43dc00917b4f200eff5e2131d7e493/extensions/3DTILES_content_gltf_vector/README.md), [PR 838](https://github.com/CesiumGS/3d-tiles/pull/838) |
+
+Feature metadata uses `EXT_mesh_features` and `EXT_structural_metadata`. Cesium added experimental support for these vector extensions in [PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
+
+## Style and pick features
+
+Use the CesiumJS IIFE build at `/cesium/Cesium.js`. Source properties are available on lines, fills, boundaries, repaired outlines and their LOD versions. Excluded fields are not.
+
+### Style by property
+
+This example assumes `category` and `status` string fields. Replace them with your own.
 
 ```js
 const tileset = await Cesium.Cesium3DTileset.fromUrl('/data/tileset.json');
@@ -309,12 +280,9 @@ tileset.style = new Cesium.Cesium3DTileStyle({
 });
 ```
 
-Replace the field names and values with your dataset's properties. The fallback
-colour also covers missing categories; the status condition displays only active
-features. `show` controls presentation; `--where` excludes source records from the
-archive itself. See the [style API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileStyle.html).
+`show` hides features in the viewer. `--where` removes them from the archive. See the [style API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileStyle.html).
 
-Pick a visible feature and read its source identity and retained properties:
+### Pick a feature
 
 ```js
 const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
@@ -337,21 +305,16 @@ handler.setInputAction((click) => {
 // Call handler.destroy() when disposing of this view.
 ```
 
-`_source_id` is JSON text for the original ID, not a tile-local feature number.
-Keep that text when looking up source records: blindly parsing a large numeric ID
-as a JavaScript Number can lose precision. `_source_layer` distinguishes identical
-IDs from different layers. The public [feature API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileFeature.html)
-is shared by the tested native vector and model/fill picking paths; checking the
-method also avoids assuming every scene pick is a metadata feature.
+`_source_id` is JSON text, not a tile-local number. Keep it as text when you look up source records. Parsing a large numeric ID as a JavaScript Number can lose precision. `_source_layer` separates identical IDs from different layers. See the [feature API](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileFeature.html).
 
-**Missing values in the tested CesiumJS 1.143 runtime:** strings and FLOAT64
-properties with `noData` return `undefined` from `getProperty`. Empty strings and
-zero remain valid source values. INT64 values return `bigint`, preserving integers
-larger than 2^53. In this runtime, missing INT64 values expose the raw BigInt sentinel
-instead of `undefined` (the fixture returns `-9007199254740992n`). The encoded schema
-still declares `noData`; the runtime compares its numeric JSON sentinel with a
-BigInt. A sentinel can move if the source contains that value, so compare with the
-property's `noData` from its encoded glTF metadata schema rather than hard-coding it:
+### Missing values in CesiumJS 1.143
+
+| Property type | Missing value returns |
+| --- | --- |
+| String, FLOAT64 | `undefined` |
+| INT64 | The raw BigInt `noData` sentinel, such as `-9007199254740992n` |
+
+Empty strings and zero are real values. INT64 values return `bigint`, so integers above 2^53 stay exact. The sentinel can change if the source uses that value. Compare with the property's `noData` from the content's `EXT_structural_metadata.schema.classes.feature.properties[field]`:
 
 ```js
 function integerOrNull(value, schemaNoData) {
@@ -362,239 +325,6 @@ function integerOrNull(value, schemaNoData) {
 }
 ```
 
-The helper takes `noData` from the relevant content's
-`EXT_structural_metadata.schema.classes.feature.properties[field]`; it does not
-use private Cesium internals. The picking example above serializes values but
-cannot infer a missing integer without that schema value. Nullable booleans are
-rejected during ingestion. `--listFields json` properties are JSON text strings;
-parse them separately if the application needs arrays.
+`--list-fields json` values are JSON text strings. Parse them if you need arrays. Repeat this check when you change runtime version, because the INT64 behaviour is specific to 1.143.
 
-The optional acceptance probe uses two source features per case and checks
-property-based cyan/orange colours, visibility filtering, source identity, exact
-64-bit values and the missing-value behavior on lines, polygon fills, fragmented
-fills/boundaries, repaired outlines and points:
-
-```sh
-RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
-rusty-tiles preview --port 9257 \
-  --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
-  --annotations target/vector-metadata-cases
-# In another terminal, with Playwright available to Node:
-NODE_PATH=target/browser-probe/node_modules \
-  node tests/fixtures/vector_metadata.cjs http://127.0.0.1:9257
-```
-
-The probe downloads nothing and exits unsuccessfully if any assertion fails.
-Both probes repeat their checks after a cache-disabled hard refresh.
-For the count-aggregate near/far case, add `--aggregate-points` to
-`vector_compat.py` and `--require-aggregates` alongside `--require-native` to
-`vector_compat.cjs`. The probe picks explicit aggregate counts at distance,
-then original source identities after refinement, including quantized/meshopt
-content when those generator options are selected.
-Repeat it when changing the runtime version; the nullable INT64 observation above
-is specific to the checked 1.143 release.
-
-### Repeat the browser check
-
-This check is optional and separate from the default test suite. It uses invented
-geometry and downloads no datasets. Build the native CLI and install the
-development Python fixture dependencies,
-Node.js, a Chromium executable, Playwright and one explicitly pinned Cesium release:
-
-```sh
-RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_compat.py /tmp/rusty-tiles-vector-compat
-npm install --prefix target/vector-browser --no-save --package-lock=false playwright
-npm install --prefix target/vector-runtime --no-save --package-lock=false cesium@1.143.0
-rusty-tiles preview \
-  --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
-  --annotations /tmp/rusty-tiles-vector-compat --port 9250
-```
-
-The fixture output directory must be new. In a second terminal, from the same
-repository checkout:
-
-```sh
-NODE_PATH="$PWD/target/vector-browser/node_modules" CHROMIUM=/usr/bin/chromium \
-  node tests/fixtures/vector_compat.cjs http://127.0.0.1:9250 --require-native
-```
-
-The probe prints JSON containing the runtime version, selected vertex counts,
-rendered picks/properties, native collection types and browser/tile errors. It
-exits unsuccessfully if a native rendering, LOD or picking check fails. To inspect
-an older release's fallback behavior, change the pinned Cesium installation and
-omit `--require-native`. Private traversal fields are used only in this diagnostic;
-applications should use public CesiumJS APIs. These checks establish fixture
-compatibility, not a GPU/performance guarantee or support for every source geometry.
-
-### Public dataset validation
-
-On 2026-10-05, the public-domain Natural Earth roads collection, converted to a
-GeoPackage, completed in 84.0 seconds with 124.4 MiB peak subprocess RSS on the
-validation machine (debug Rust build, GDAL 3.13.3). All 56,600 features and 652,521
-source segments survived in 1,024 full-detail leaves and 2,465 hierarchy nodes.
-An archive audit checked every scalar property and every leaf position against
-the projected input. Maximum observed position rounding was 0.104 m across this
-global dataset. Every GLB respected the requested 8,192-vertex/1-MiB limits;
-observed maxima were 2,414 vertices and 118,972 bytes. These are measurements of
-one run, not throughput or accuracy guarantees.
-
-Reproduce the input and conversion explicitly (downloads are opt-in):
-
-```sh
-python3 scripts/public_data.py roads /path/to/cache
-rusty-tiles vector -i /path/to/cache/natural-earth-roads.gpkg \
-  -o /path/to/cache/natural-earth-roads.3tz --layer roads \
-  --maxVertices 8192 --maxBytes 1048576
-```
-
-The download helper writes license, attribution, preparation and SHA-256
-provenance beside the downloaded files. See the
-[Natural Earth roads source](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/roads/)
-and [public-domain terms](https://www.naturalearthdata.com/about/terms-of-use/).
-No public datasets are committed to this repository.
-
-## Replace affected content after edits
-
-Changesets stay outside the tiler. Apply a GeoPackage diff with `geodiff` or a
-compatible tool, then supply the resulting GeoPackage and the previous archive:
-
-```sh
-geodiff apply updated.gpkg changes.diff
-rusty-tiles vector -i updated.gpkg -o updated.3tz --layer roads \
-  --reuseTileset previous.3tz
-```
-
-Use the same selection, height policy, budgets and LOD options as the baseline.
-The baseline must have been created by the same native encoder revision and GDAL/GEOS/PROJ
-versions. Python archives require a fresh native baseline: their encoder identity
-is incompatible, even when source geometry and options match. Incompatible
-settings/schema/CRS or missing build state fail explicitly;
-run a fresh conversion without `--reuseTileset` in that case. Initial archives
-include `vector-build.json`; it stores partition decisions, signatures and the
-original local frame. Deleting the original anchor feature therefore does not
-move unchanged content into a new coordinate frame.
-
-Partition cuts and feature/fragment tie keys remain stable across revisions.
-Changed geometry/properties, inserts, deletes and shared-coordinate locks affect
-subtree signatures. The encoder reuses matching subtrees and rebuilds changed
-branches and their bounds/errors. A shared-vertex edit also invalidates the
-neighbour whose simplification constraints changed. Repeated edits can unbalance
-retained partitions; a fresh conversion resets them. There is no incremental
-update to an existing archive in place: publish a new archive or manifest after
-validation, retaining the previous one for rollback.
-
-Content filenames contain their SHA-256 hash. Unchanged payloads retain identical
-URLs and bytes; changed payloads get new URLs. The manifest references only the
-current contents. Reuse validates previous state/manifest checksums and every
-reused content checksum. `conversion.json.reuse` reports reused subtrees, tiles
-and unique contents, and newly encoded published contents.
-
-This saves geometry encoding, not every step of ingestion. The updated source is
-still scanned/projected, shared vertices are indexed, and initial oversized
-geometry fragmentation can still run. The `.3tz` archive is repacked, including
-unchanged payloads. Existing source files and archives are opened read-only.
-Geometry reports cover current ingestion/new encoding; historical reports remain
-in the previous archive. Diff parsing, conflict resolution and sync belong to
-`go-geodiff`/`geodiff`, not this command.
-
-Compatibility tests created byte-identical diffs using upstream geodiff 2.3.0
-(`e71dfe1`) and go-geodiff v0.4.3 (`ec6a8d3`), cross-applied them, and compared incremental
-world geometry/properties with a fresh conversion. For a 32-feature fixture with
-attribute, geometry, insert and delete changes, both paths reused 54 of 62
-published contents and encoded 8. Unchanged-input tests check that the native report records zero rebuilt contents.
-
-The same producer/cross-apply checks pass with GDAL-generated spatial indexes.
-After geometry moves, inserts and deletes, both applied databases retain the
-same R-tree rows and spatial-filter results as the fresh source, and their
-incremental tiles match fresh world geometry/properties. go-geodiff v0.4.3
-provides the spatial-index functions needed by those triggers and fixes
-[go-geodiff issue #3](https://github.com/tinyowl-labs/go-geodiff/issues/3).
-The opt-in test requires successful indexed application; older Go versions
-without these functions fail rather than being skipped. The tiler does not
-modify or drop source triggers.
-
-## Invalid features
-
-By default, ingestion checks all selected features and reports every feature-local
-geometry/coordinate failure with its source layer, ID and reason before failing.
-No archive is published. Use `--skipInvalid` to explicitly omit those features
-and publish the convertible remainder. `conversion.json` records the setting,
-`skippedFeatures`, per-layer `invalidFeatures` and a bounded report sample;
-`geometry-reports.jsonl` contains every skipped identity and reason. Unsupported
-layer schemas and configuration errors still fail the job. At least one
-convertible feature is required for an initial tileset. Tile/hierarchy limits and
-errors encountered during encoding remain fatal; they are not silently bypassed.
-
-## Field selection and lists
-
-Use `--fields name,category` to include source fields, or `--dropFields tags,notes`
-to exclude them before schema validation. These modes are mutually exclusive;
-unknown names fail explicitly. Source identity/layer metadata remains present.
-List-valued fields are rejected by default. `--listFields json` stores arrays as
-JSON text in string properties, retaining element order, nulls and exact JSON
-integers rather than flattening or joining values. Empty arrays become `[]`;
-missing values remain metadata NoData. Per-layer `jsonFields` and the top-level
-`metadata` section in `conversion.json` record the representation and selection.
-Other complex property values still fail unless excluded. Field/list settings
-participate in prior-tileset compatibility checks.
-
-## Records without geometry
-
-NULL and empty geometries are omitted automatically: they have nothing to draw.
-They are distinct from invalid drawable geometry and do not need `--skipInvalid`.
-`featuresWithoutGeometry` counts them globally and per layer, and the full report
-stream records each source identity with outcome `no-geometry`. Drawable feature
-counts and tile metadata exclude these records. A selection consisting entirely
-of geometry-free records publishes a valid empty tileset with its counts and
-reports. Reuse can remove formerly drawable features that become geometry-free.
-
-## Collapsed repairs
-
-With `--repair --ambiguousOutlines`, a polygon whose repair collapses to lines,
-points or no filled area retains its original closed 3D rings as line content.
-The report records `outputGeometry: outline`, identity and the collapse reason;
-no fill is fabricated. Ambiguous 3D intersections use the same explicit fallback.
-Normalization happens before budgeting, so large outlines use line fragmentation
-without dropping source segments. A MultiPolygon requiring this fallback retains
-all its rings as outlines. Without the flag, collapse remains a reported failure.
-
-## Attribute filtering
-
-`--where "category = 'public'"` applies an OGR attribute filter to every selected
-layer, before feature reading/validation. The expression must be valid in each
-selected layer; invalid filters fail before publication. Filtered-out features
-are absent from geometry, metadata and feature counts. Filters may use source
-fields excluded from tile metadata. `attributeFilter` records the expression in
-conversion and layer reports, and the build configuration includes it. Reusing
-with the same filter retains unchanged content; a changed filter triggers a
-fresh rebuild with `reuse.incompatibleReason: attribute filter changed` and no
-reused contents. A filter matching no records publishes an empty tileset.
-
-Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
-identities and reasons remain in the diagnostics and geometry reports; actual
-GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
-native warnings for debugging; this historical variable name remains supported.
-
-### Parallel encoding
-
-`vector --jobs N` limits the number of Rayon encoding threads; the CLI defaults to
-available cores. Use `--jobs 1` for a small-memory machine or serial embedding.
-Workers read bounded candidates and shared-vertex masks from the SQLite spool
-through independent read-only connections. LOD candidates for the same leaf can
-run concurrently; source reading, partition decisions and
-manifest assembly remain ordered in the coordinator. Unchanged reusable
-subtrees launch no encoding jobs. Worker errors prevent archive publication.
-
-Each worker can hold a tile candidate up to the configured vertex/feature budgets,
-so choose `N` with available memory in mind. Hash-named payloads, hierarchy order,
-geometry reports and build-state signatures do not depend on completion order or
-worker count. `conversion.json.performance` records requested jobs, the number of
-workers that produced consumed candidates, and wall times for ingestion,
-partitioning, encoding and publication. Partitioning includes spool preparation;
-encoding includes coordinator overhead, and publication stops
-before Rust archive packing. Timings are diagnostic, not part of content identity.
-
-For a cacheable, byte-identical archive, add `--reproducible`; performance diagnostics
-are omitted from `conversion.json`, while content and reuse behavior are retained.
-See [reproducible builds](../CONTRIBUTING.md#reproducible-builds) for the precise
-comparison rules and tested scope.
+Browser probes that check these behaviours are described in [CONTRIBUTING.md](../CONTRIBUTING.md#browser-probes).

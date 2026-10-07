@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check release tag
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: tag
+        name: Match the tag to Cargo.toml and main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          test "$RELEASE_TAG" = "v$version"
+          git merge-base --is-ancestor HEAD origin/main
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Test the checksum-verifying installer
+        run: python3 -m unittest discover -s tests -p test_install.py -v
+
+  binaries:
+    name: Binary (${{ matrix.target }})
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
+      RELEASE_VERSION: ${{ needs.check.outputs.version }}
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Build and test the default CLI
+        run: |
+          cargo test --locked --target "$RELEASE_TARGET"
+          cargo build --locked --release --target "$RELEASE_TARGET"
+      - name: Package and smoke test
+        run: |
+          set -eu
+          suffix=
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
+          binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
+          "$binary" --version
+          "$binary" doctor --command mesh-to-3tz
+          mkdir -p smoke dist stage
+          "$binary" mesh-to-3tz -i tests/fixtures/example.gltf -o smoke/example.3tz --cartographic-position-degrees 153.02 -27.47 0
+          "$binary" validate smoke/example.3tz
+          cp "$binary" LICENSE stage/
+          asset="rusty-tiles-$RELEASE_VERSION-$RELEASE_TARGET"
+          if [[ "$RELEASE_TARGET" == *windows* ]]; then
+            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE)
+          else
+            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  container:
+    name: Native geospatial image (Linux amd64)
+    needs: [check, binaries]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test and publish the Python-free runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          image="ghcr.io/${RELEASE_REPO,,}:$RELEASE_TAG"
+          docker build --target acceptance -t rusty-tiles:acceptance .
+          docker build --target runtime \
+            --label "org.opencontainers.image.source=https://github.com/$RELEASE_REPO" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$image" .
+          docker run --rm --network none "$image" doctor --json
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"
+
+  publish:
+    name: Publish release
+    needs: [check, binaries, container]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: dist
+      - name: Attach checksums and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          set -eu
+          cd dist
+          sha256sum *.tgz *.zip > SHA256SUMS
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" ./*.tgz ./*.zip SHA256SUMS --clobber
+          if [ "$PRERELEASE" = true ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          else
+            image="ghcr.io/${GH_REPO,,}"
+            printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            docker buildx imagetools create -t "$image:latest" "$image:$RELEASE_TAG"
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          fi

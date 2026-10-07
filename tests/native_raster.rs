@@ -1,5 +1,7 @@
 //! Run the real converter without Python or a GDAL executable, also in the
 //! GDAL 3.12 CI job which does not install development Python bindings.
+mod support;
+
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn raster_cli_preserves_source_and_coverage_without_executables() {
@@ -232,4 +234,32 @@ fn default_build_reports_native_raster_requirement() {
         .unwrap()
         .contains("native-geospatial"));
     assert!(!output.exists());
+}
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn force_replaces_only_successful_output() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("source.asc");
+    std::fs::write(
+        &input,
+        "ncols 2\nnrows 2\nxllcorner 12\nyllcorner 41\ncellsize 0.1\n1 1\n1 1\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("source.prj"), r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]"#).unwrap();
+    support::force_replaces_only_successful_output(
+        "raster",
+        &input,
+        &[
+            "--maxZoom",
+            "0",
+            "--display",
+            "gray",
+            "--displayMin",
+            "0",
+            "--displayMax",
+            "1",
+        ],
+        true,
+    );
 }

@@ -17,7 +17,7 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASELINE = 'bf3346c4808d54df52548badabde7dc0d65c0723'
 
 def fetch(url,path):

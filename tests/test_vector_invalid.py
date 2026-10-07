@@ -2,7 +2,6 @@
 import contextlib
 import io
 import json
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -11,7 +10,7 @@ import unittest
 
 from test_vector_lod import vector, read
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class InvalidFeatureTests(unittest.TestCase):
     def source(self,root):
@@ -49,7 +48,7 @@ class InvalidFeatureTests(unittest.TestCase):
             _,positions,ids=read(out/manifest['root']['content']['uri'])
             self.assertEqual(ids,['1']);self.assertEqual(len(positions[0]),4)
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for actual CLI publication checks')
+    @requires_bin('set RUSTY_TILES_BIN for actual CLI publication checks')
     def test_cli_strict_publishes_nothing_and_skip_mode_publishes_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=self.source(root);out=root/'result.3tz'

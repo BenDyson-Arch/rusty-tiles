@@ -8,6 +8,7 @@ mod source;
 mod store;
 
 use super::VectorOptions;
+use crate::vec3::{add, dot, mul, norm, sub, y_up_to_z_up as zup};
 use crate::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -21,24 +22,6 @@ type Point = [f64; 3];
 type PointKey = [u64; 3];
 fn key(point: Point) -> PointKey {
     point.map(|v| if v == 0. { 0 } else { v.to_bits() })
-}
-fn sub(a: Point, b: Point) -> Point {
-    std::array::from_fn(|i| a[i] - b[i])
-}
-fn add(a: Point, b: Point) -> Point {
-    std::array::from_fn(|i| a[i] + b[i])
-}
-fn mul(a: Point, s: f64) -> Point {
-    a.map(|v| v * s)
-}
-fn dot(a: Point, b: Point) -> f64 {
-    a.iter().zip(b).map(|(a, b)| a * b).sum()
-}
-fn norm(a: Point) -> f64 {
-    dot(a, a).sqrt()
-}
-fn zup(p: Point) -> Point {
-    [p[0], -p[2], p[1]]
 }
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -150,7 +133,8 @@ pub(super) fn convert(
     repair: bool,
     ambiguous_outlines: bool,
     options: &VectorOptions,
-) -> Result<(), Error> {
+    reporter: &crate::report::Reporter,
+) -> Result<Value, Error> {
     store::convert(
         input,
         output,
@@ -158,6 +142,7 @@ pub(super) fn convert(
         repair,
         ambiguous_outlines,
         options,
+        reporter,
     )
 }
 
@@ -168,10 +153,10 @@ pub(crate) fn available() -> Result<(), Error> {
             "native vector requires GDAL with GEOS >= 3.10".into(),
         ));
     }
-    // SAFETY: Registration is GDAL-managed; these lookups return borrowed
+    crate::geospatial::native::init()?;
+    // SAFETY: Drivers are registered; these lookups return borrowed
     // process-lifetime drivers and do not open or alter any datasets.
     unsafe {
-        gdal_sys::GDALAllRegister();
         for driver in [c"GeoJSON", c"GPKG", c"ESRI Shapefile"] {
             if gdal_sys::GDALGetDriverByName(driver.as_ptr()).is_null() {
                 return Err(Error::Environment(format!(

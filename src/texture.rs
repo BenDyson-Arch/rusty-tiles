@@ -6,16 +6,18 @@
 //! the children's atlases through a dense-grid nearest-surface sampler,
 //! after downsampling each child atlas to the parent's texel density.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::Cursor;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use image::imageops::{self, FilterType};
 use image::{DynamicImage, RgbImage, RgbaImage};
+use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
-use crate::grid::{self, TriGrid};
+use crate::grid::{self, IdMap, TriGrid};
 use crate::hlod::{Timing, TIMING};
 use crate::mesh::EncodedImage;
 
@@ -24,6 +26,10 @@ pub const CHART_GUTTER_PX: u32 = 4;
 /// Parent atlas: how far baked colour is dilated into uncovered texels.
 const PARENT_DILATE_PX: u32 = 16;
 const MIN_ATLAS: u32 = 64;
+/// Parent bake: triangles per parallel task, and per buffered window (bounds
+/// the texels held before they are written back in order).
+const RASTER_CHUNK_TRIS: usize = 64;
+const RASTER_WINDOW_TRIS: usize = 16_384;
 /// `--tileSize` is the *preferred* leaf atlas. Charts that would otherwise
 /// downscale grow up to this edge first (one 4096² atlas, not a crushed 1024).
 pub const MAX_LEAF_ATLAS: u32 = 4096;
@@ -228,9 +234,9 @@ pub fn plan_leaf_atlas_limit(
     let mut tri_chart: Vec<Vec<u32>> = Vec::with_capacity(textured.len());
     for (img, prim) in &textured {
         let (w, h) = image_dims[*img as usize];
-        let mut cell_chart: HashMap<(i64, i64), u32> = HashMap::new();
+        let mut cell_chart: IdMap<(i64, i64), u32> = IdMap::default();
         let mut per_tri = Vec::with_capacity(prim.indices.len() / 3);
-        for t in prim.indices.chunks_exact(3) {
+        for t in prim.indices.as_chunks::<3>().0 {
             let uv = [
                 prim.uvs[t[0] as usize],
                 prim.uvs[t[1] as usize],
@@ -396,7 +402,7 @@ pub fn plan_leaf_atlas_limit(
 
     // Blits + UV remap.
     let mut blits = Vec::with_capacity(live.len());
-    let mut chart_dst: HashMap<u32, (usize, [f32; 4])> = HashMap::new();
+    let mut chart_dst: IdMap<u32, (usize, [f32; 4])> = IdMap::default();
     for (k, &ci) in live.iter().enumerate() {
         let c = &charts[ci];
         let (w, h) = image_dims[c.image as usize];
@@ -420,8 +426,8 @@ pub fn plan_leaf_atlas_limit(
     for (gi, (_, prim)) in textured.iter().enumerate() {
         let has_n = prim.normals.len() == prim.positions.len();
         any_n |= has_n;
-        let mut weld: HashMap<(u32, u32), u32> = HashMap::new();
-        for (ti, t) in prim.indices.chunks_exact(3).enumerate() {
+        let mut weld: IdMap<(u32, u32), u32> = IdMap::default();
+        for (ti, t) in prim.indices.as_chunks::<3>().0.iter().enumerate() {
             let ci = tri_chart[gi][ti];
             let Some(&(k, src)) = chart_dst.get(&ci) else {
                 continue;
@@ -807,7 +813,7 @@ pub fn texel_density(prim: &TilePrimitive, img_w: u32, img_h: u32) -> Option<f32
     }
     let mut uv_area = 0.0f64;
     let mut area = 0.0f64;
-    for t in prim.indices.chunks_exact(3) {
+    for t in prim.indices.as_chunks::<3>().0 {
         let (a, b, c) = (t[0] as usize, t[1] as usize, t[2] as usize);
         let (_, ar) =
             grid::face_normal_area(prim.positions[a], prim.positions[b], prim.positions[c]);
@@ -826,12 +832,13 @@ pub fn texel_density(prim: &TilePrimitive, img_w: u32, img_h: u32) -> Option<f32
 }
 
 /// Chart-unwrap `simplified`, then bake each texel from the nearest child
-/// surface. Returns the textured proxy and its texel size in metres.
+/// surface. Returns the textured proxy, its texel size in metres, and the
+/// sampler's grid over the [`sampled_child`] triangles (for reuse).
 pub fn bake_simplified(
     simplified: &TilePrimitive,
     children: &[TilePrimitive],
     atlas_size: u32,
-) -> Result<(TilePrimitive, f64), Error> {
+) -> Result<(TilePrimitive, f64, TriGrid), Error> {
     let mut size = atlas_size.max(MIN_ATLAS);
     let t0 = Instant::now();
     let (unwrapped, (aw, ah)) = loop {
@@ -850,58 +857,51 @@ pub fn bake_simplified(
     Timing::add(&TIMING.sampler, t0);
     let t0 = Instant::now();
     let mut atlas = RgbaImage::from_pixel(aw, ah, image::Rgba([128, 128, 128, 255]));
-    let denom_w = aw as f32;
-    let denom_h = ah as f32;
-
-    for tri in unwrapped.indices.chunks_exact(3) {
-        let ia = tri[0] as usize;
-        let ib = tri[1] as usize;
-        let ic = tri[2] as usize;
-        let pa = unwrapped.positions[ia];
-        let pb = unwrapped.positions[ib];
-        let pc = unwrapped.positions[ic];
-        let ua = unwrapped.uvs[ia];
-        let ub = unwrapped.uvs[ib];
-        let uc = unwrapped.uvs[ic];
-        let (face_n, area) = grid::face_normal_area(pa, pb, pc);
-        if area <= 1e-15 {
-            continue;
-        }
-        let mut seed: Option<u32> = None;
-
-        let px = |t: [f32; 2]| -> (i32, i32) {
-            (
-                (t[0] * denom_w).floor() as i32,
-                (t[1] * denom_h).floor() as i32,
-            )
-        };
-        let (x0, y0) = px(ua);
-        let (x1, y1) = px(ub);
-        let (x2, y2) = px(uc);
-        let min_x = x0.min(x1).min(x2).max(0);
-        let max_x = (x0.max(x1).max(x2) + 1).min(aw as i32 - 1);
-        let min_y = y0.min(y1).min(y2).max(0);
-        let max_y = (y0.max(y1).max(y2) + 1).min(ah as i32 - 1);
-        if min_x > max_x || min_y > max_y {
-            continue;
-        }
-        for py in min_y..=max_y {
-            for px in min_x..=max_x {
-                let q = [(px as f32 + 0.5) / denom_w, (py as f32 + 0.5) / denom_h];
-                let (b0, b1, b2) = bary_uv(ua, ub, uc, q);
-                // Slightly generous so texel centres on shared edges get colour.
-                if b0 < -2e-3 || b1 < -2e-3 || b2 < -2e-3 {
-                    continue;
+    // Each triangle's texels depend only on that triangle (the sampler seed
+    // restarts per triangle), so triangles bake in parallel. Results are
+    // written back in triangle order, keeping later triangles' wins on shared
+    // edge texels (and the first error) exactly as a serial pass. A failed
+    // chunk cancels only later chunks: a serial pass would stop there, and
+    // every earlier chunk still completes, so the first error is unchanged.
+    let tris = unwrapped.indices.as_chunks::<3>().0;
+    let first_failed = AtomicUsize::new(usize::MAX);
+    for (w, window) in tris.chunks(RASTER_WINDOW_TRIS).enumerate() {
+        let base = w * RASTER_WINDOW_TRIS.div_ceil(RASTER_CHUNK_TRIS);
+        let baked = window
+            .par_chunks(RASTER_CHUNK_TRIS)
+            .enumerate()
+            .map(|(c, chunk)| -> Option<Result<BakedTexels, Error>> {
+                let id = base + c;
+                let cancelled = || first_failed.load(Ordering::Relaxed) < id;
+                let mut texels = Vec::new();
+                for tri in chunk {
+                    let raster = raster_triangle(
+                        &unwrapped,
+                        tri,
+                        (aw, ah),
+                        &sampler,
+                        &cancelled,
+                        &mut texels,
+                    );
+                    match raster {
+                        Ok(true) => {}
+                        Ok(false) => return None,
+                        Err(e) => {
+                            first_failed.fetch_min(id, Ordering::Relaxed);
+                            return Some(Err(e));
+                        }
+                    }
                 }
-                let pos = [
-                    pa[0] * b0 + pb[0] * b1 + pc[0] * b2,
-                    pa[1] * b0 + pb[1] * b1 + pc[1] * b2,
-                    pa[2] * b0 + pb[2] * b1 + pc[2] * b2,
-                ];
-                // Match geometric orientation; authored shading normals may
-                // intentionally point away from the triangle's winding.
-                let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
-                atlas.put_pixel(px as u32, py as u32, image::Rgba(rgb));
+                Some(Ok(texels))
+            })
+            .collect::<Vec<_>>();
+        for texels in baked {
+            // Cancelled chunks all follow the failed chunk returned here.
+            let Some(texels) = texels else {
+                unreachable!("raster chunk cancelled without an earlier failure")
+            };
+            for (x, y, rgba) in texels? {
+                atlas.put_pixel(x, y, image::Rgba(rgba));
             }
         }
     }
@@ -926,7 +926,79 @@ pub fn bake_simplified(
             jpeg,
         },
         texel_m,
+        sampler.grid,
     ))
+}
+
+/// Baked parent texels `(x, y, rgba)`, in rasterisation order.
+type BakedTexels = Vec<(u32, u32, [u8; 4])>;
+
+/// Bake one parent triangle's texels from the children, appending
+/// `(x, y, rgba)` in scan order. Returns `Ok(false)` if `cancelled` fired.
+fn raster_triangle(
+    unwrapped: &TilePrimitive,
+    tri: &[u32; 3],
+    (aw, ah): (u32, u32),
+    sampler: &SceneSampler,
+    cancelled: &dyn Fn() -> bool,
+    out: &mut BakedTexels,
+) -> Result<bool, Error> {
+    let denom_w = aw as f32;
+    let denom_h = ah as f32;
+    let ia = tri[0] as usize;
+    let ib = tri[1] as usize;
+    let ic = tri[2] as usize;
+    let pa = unwrapped.positions[ia];
+    let pb = unwrapped.positions[ib];
+    let pc = unwrapped.positions[ic];
+    let ua = unwrapped.uvs[ia];
+    let ub = unwrapped.uvs[ib];
+    let uc = unwrapped.uvs[ic];
+    let (face_n, area) = grid::face_normal_area(pa, pb, pc);
+    if area <= 1e-15 {
+        return Ok(true);
+    }
+    let mut seed: Option<u32> = None;
+
+    let px = |t: [f32; 2]| -> (i32, i32) {
+        (
+            (t[0] * denom_w).floor() as i32,
+            (t[1] * denom_h).floor() as i32,
+        )
+    };
+    let (x0, y0) = px(ua);
+    let (x1, y1) = px(ub);
+    let (x2, y2) = px(uc);
+    let min_x = x0.min(x1).min(x2).max(0);
+    let max_x = (x0.max(x1).max(x2) + 1).min(aw as i32 - 1);
+    let min_y = y0.min(y1).min(y2).max(0);
+    let max_y = (y0.max(y1).max(y2) + 1).min(ah as i32 - 1);
+    if min_x > max_x || min_y > max_y {
+        return Ok(true);
+    }
+    for py in min_y..=max_y {
+        for px in min_x..=max_x {
+            let q = [(px as f32 + 0.5) / denom_w, (py as f32 + 0.5) / denom_h];
+            let (b0, b1, b2) = bary_uv(ua, ub, uc, q);
+            // Slightly generous so texel centres on shared edges get colour.
+            if b0 < -2e-3 || b1 < -2e-3 || b2 < -2e-3 {
+                continue;
+            }
+            let pos = [
+                pa[0] * b0 + pb[0] * b1 + pc[0] * b2,
+                pa[1] * b0 + pb[1] * b1 + pc[1] * b2,
+                pa[2] * b0 + pb[2] * b1 + pc[2] * b2,
+            ];
+            // Match geometric orientation; authored shading normals may
+            // intentionally point away from the triangle's winding.
+            if cancelled() {
+                return Ok(false);
+            }
+            let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
+            out.push((px as u32, py as u32, rgb));
+        }
+    }
+    Ok(true)
 }
 
 /// Grow charts by connectivity + normal, fold tiny charts into a neighbour,
@@ -942,7 +1014,7 @@ fn chart_unwrap(
     let has_n = mesh.normals.len() == mesh.positions.len();
     let mut face_n = vec![[0.0f32; 3]; ntri];
     let mut face_area = vec![0.0f32; ntri];
-    for (fi, tri) in mesh.indices.chunks_exact(3).enumerate() {
+    for (fi, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         let (n, a) = grid::face_normal_area(
             mesh.positions[tri[0] as usize],
             mesh.positions[tri[1] as usize],
@@ -952,8 +1024,8 @@ fn chart_unwrap(
         face_area[fi] = a;
     }
 
-    let mut edge_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
-    for (fi, tri) in mesh.indices.chunks_exact(3).enumerate() {
+    let mut edge_faces: IdMap<(u32, u32), Vec<usize>> = IdMap::default();
+    for (fi, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         for k in 0..3 {
             let a = tri[k];
             let b = tri[(k + 1) % 3];
@@ -1091,7 +1163,7 @@ fn chart_unwrap(
 
     struct Layout {
         faces: Vec<usize>,
-        xy: HashMap<u32, [f32; 2]>,
+        xy: IdMap<u32, [f32; 2]>,
         wm: f32,
         hm: f32,
     }
@@ -1101,7 +1173,7 @@ fn chart_unwrap(
             continue;
         }
         let (tangent, bitangent) = plane_basis(ch.normal);
-        let mut xy: HashMap<u32, [f32; 2]> = HashMap::new();
+        let mut xy: IdMap<u32, [f32; 2]> = IdMap::default();
         let mut min = [f32::INFINITY; 2];
         let mut max = [f32::NEG_INFINITY; 2];
         for &fi in &ch.faces {
@@ -1235,7 +1307,7 @@ fn chart_unwrap(
         let ih = bh.saturating_sub(pad * 2).max(1);
         let ox = x + pad;
         let oy = y + pad;
-        let mut remap: HashMap<u32, u32> = HashMap::new();
+        let mut remap: IdMap<u32, u32> = IdMap::default();
         let mut verts: Vec<(&u32, &[f32; 2])> = layout.xy.iter().collect();
         verts.sort_by_key(|(vi, _)| **vi);
         for (&vi, &pxy) in verts {
@@ -1332,7 +1404,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
     let w = img.width().max(1);
     let h = img.height().max(1);
     let mut cover = vec![false; (w * h) as usize];
-    for tri in indices.chunks_exact(3) {
+    for tri in indices.as_chunks::<3>().0 {
         let t0 = uvs[tri[0] as usize];
         let t1 = uvs[tri[1] as usize];
         let t2 = uvs[tri[2] as usize];
@@ -1367,63 +1439,80 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
         }
     }
 
+    // Breadth-first dilation. Every covered texel is a distance-0 seed, and
+    // seeds are expanded in scan order before any texel they reach, which is
+    // the FIFO order of a queue pre-filled with them, so the seeds need not
+    // be queued. A texel takes the colour of whichever neighbour reaches it
+    // first and is never rewritten. Work on a copy with a one-texel border
+    // marked as reached, so neighbour steps need no bounds tests.
+    let (wu, hu) = (w as usize, h as usize);
+    let pw = wu + 2;
+    let mut colour = vec![[0u8; 4]; pw * (hu + 2)];
+    let mut dist = vec![0u32; pw * (hu + 2)];
     let mut sum = [0u64; 4];
     let mut n = 0u64;
-    let mut dist = vec![u32::MAX; (w * h) as usize];
-    let mut q = VecDeque::new();
-    for y in 0..h {
-        for x in 0..w {
-            let i = (y * w + x) as usize;
-            if cover[i] {
-                let p = img.get_pixel(x, y).0;
-                sum[0] += p[0] as u64;
-                sum[1] += p[1] as u64;
-                sum[2] += p[2] as u64;
-                sum[3] += p[3] as u64;
+    for (y, row) in img.as_chunks::<4>().0.chunks_exact(wu).enumerate() {
+        let start = (y + 1) * pw + 1;
+        colour[start..start + wu].copy_from_slice(row);
+        for (x, px) in row.iter().enumerate() {
+            if cover[y * wu + x] {
+                for (s, &c) in sum.iter_mut().zip(px) {
+                    *s += c as u64;
+                }
                 n += 1;
-                dist[i] = 0;
-                q.push_back((x, y));
+            } else {
+                dist[start + x] = u32::MAX;
             }
         }
     }
-    while let Some((x, y)) = q.pop_front() {
-        let d = dist[(y * w + x) as usize];
+    // Same neighbour order as a dy-major, dx-minor scan of the 3×3 block.
+    let pw_i = pw as isize;
+    let steps = [-pw_i - 1, -pw_i, -pw_i + 1, -1, 1, pw_i - 1, pw_i, pw_i + 1];
+    let expand = |i: usize, colour: &mut [[u8; 4]], dist: &mut [u32], queue: &mut Vec<u32>| {
+        let d = dist[i];
         if d >= max_dist {
-            continue;
+            return;
         }
-        let src = *img.get_pixel(x, y);
-        for dy in -1i32..=1 {
-            for dx in -1i32..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
-                    continue;
-                }
-                let j = (ny as u32 * w + nx as u32) as usize;
-                if dist[j] != u32::MAX {
-                    continue;
-                }
-                dist[j] = d + 1;
-                img.put_pixel(nx as u32, ny as u32, src);
-                q.push_back((nx as u32, ny as u32));
+        let src = colour[i];
+        for step in steps {
+            let j = i.wrapping_add_signed(step);
+            if dist[j] != u32::MAX {
+                continue;
+            }
+            dist[j] = d + 1;
+            colour[j] = src;
+            queue.push(j as u32);
+        }
+    };
+    let mut queue: Vec<u32> = Vec::new();
+    for y in 0..hu {
+        for x in 0..wu {
+            if cover[y * wu + x] {
+                expand((y + 1) * pw + x + 1, &mut colour, &mut dist, &mut queue);
             }
         }
     }
-    if let Some(n) = std::num::NonZeroU64::new(n) {
-        let mean = image::Rgba([
+    let mut head = 0;
+    while head < queue.len() {
+        let i = queue[head] as usize;
+        head += 1;
+        expand(i, &mut colour, &mut dist, &mut queue);
+    }
+    let mean = std::num::NonZeroU64::new(n).map(|n| {
+        [
             (sum[0] / n) as u8,
             (sum[1] / n) as u8,
             (sum[2] / n) as u8,
             (sum[3] / n) as u8,
-        ]);
-        for y in 0..h {
-            for x in 0..w {
-                if dist[(y * w + x) as usize] == u32::MAX {
-                    img.put_pixel(x, y, mean);
-                }
+        ]
+    });
+    for (y, row) in img.as_chunks_mut::<4>().0.chunks_exact_mut(wu).enumerate() {
+        let start = (y + 1) * pw + 1;
+        for (x, px) in row.iter_mut().enumerate() {
+            match (dist[start + x], mean) {
+                (u32::MAX, Some(mean)) => *px = mean,
+                (u32::MAX, None) => {}
+                _ => *px = colour[start + x],
             }
         }
     }
@@ -1500,6 +1589,12 @@ fn bary_uv(a: [f32; 2], b: [f32; 2], c: [f32; 2], p: [f32; 2]) -> (f32, f32, f32
 // Sampler
 // ---------------------------------------------------------------------------
 
+/// Whether [`SceneSampler`] samples this primitive (its triangles, in order,
+/// make up the sampler grid).
+pub fn sampled_child(p: &TilePrimitive) -> bool {
+    p.jpeg.is_some() && p.uvs.len() == p.positions.len() && p.indices.len() >= 3
+}
+
 /// Nearest-surface colour lookup over a set of textured primitives.
 pub struct SceneSampler {
     images: Vec<RgbaImage>,
@@ -1517,50 +1612,46 @@ impl SceneSampler {
         prims: &[TilePrimitive],
         target_px_per_m: Option<f32>,
     ) -> Result<Self, Error> {
-        let mut images = Vec::new();
-        let mut tri_img = Vec::new();
-        let mut tri_uv = Vec::new();
-        let mut tri_n = Vec::new();
-        let mut tris = Vec::new();
-        for p in prims {
-            let Some(jpeg) = &p.jpeg else { continue };
-            if p.uvs.len() != p.positions.len() || p.indices.len() < 3 {
-                continue;
-            }
-            let mut rgba = image::load_from_memory(jpeg)
-                .map_err(|e| Error::msg(format!("child atlas: {e}")))?
-                .to_rgba8();
-            if let Some(target) = target_px_per_m {
-                if let Some(d) = texel_density(p, rgba.width(), rgba.height()) {
-                    let f = d / target.max(1e-6);
-                    if f >= 2.0 {
-                        let f = (1u32 << (f.floor().min(64.0) as u32).ilog2()) as f32;
-                        let nw = ((rgba.width() as f32 / f).round() as u32).max(1);
-                        let nh = ((rgba.height() as f32 / f).round() as u32).max(1);
-                        rgba = crate::tile::resize_colour(&rgba, nw, nh);
+        let usable: Vec<&TilePrimitive> = prims.iter().filter(|p| sampled_child(p)).collect();
+        // Child atlases decode independently of each other and of the
+        // triangle grid; results keep the children's order.
+        let (images, (tri_img, tri_uv, tri_n, grid)) = rayon::join(
+            || {
+                usable
+                    .par_iter()
+                    .map(|p| decode_child_atlas(p, target_px_per_m))
+                    .collect::<Vec<_>>()
+            },
+            || {
+                let ntri = usable.iter().map(|p| p.indices.len() / 3).sum();
+                let mut tri_img = Vec::with_capacity(ntri);
+                let mut tri_uv = Vec::with_capacity(ntri);
+                let mut tri_n = Vec::with_capacity(ntri);
+                let mut tris = Vec::with_capacity(ntri);
+                for (img_id, p) in usable.iter().enumerate() {
+                    for tri in p.indices.as_chunks::<3>().0 {
+                        let (ia, ib, ic) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+                        let (a, b, c) = (p.positions[ia], p.positions[ib], p.positions[ic]);
+                        tris.push([a, b, c]);
+                        tri_img.push(img_id as u32);
+                        tri_uv.push([p.uvs[ia], p.uvs[ib], p.uvs[ic]]);
+                        tri_n.push(grid::face_normal_area(a, b, c).0);
                     }
                 }
-            }
-            let img_id = images.len() as u32;
-            images.push(rgba);
-            for tri in p.indices.chunks_exact(3) {
-                let (ia, ib, ic) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-                let (a, b, c) = (p.positions[ia], p.positions[ib], p.positions[ic]);
-                tris.push([a, b, c]);
-                tri_img.push(img_id);
-                tri_uv.push([p.uvs[ia], p.uvs[ib], p.uvs[ic]]);
-                tri_n.push(grid::face_normal_area(a, b, c).0);
-            }
-        }
-        if images.is_empty() || tris.is_empty() {
+                let grid = (!tris.is_empty()).then(|| TriGrid::new(tris));
+                (tri_img, tri_uv, tri_n, grid)
+            },
+        );
+        let images = images.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let Some(grid) = grid.filter(|_| !images.is_empty()) else {
             return Err(Error::msg("no textured children to bake from"));
-        }
+        };
         Ok(Self {
             images,
             tri_img,
             tri_uv,
             tri_n,
-            grid: TriGrid::new(tris),
+            grid,
         })
     }
 
@@ -1600,6 +1691,27 @@ impl SceneSampler {
             v,
         ))
     }
+}
+
+/// Decode one child atlas; with `target_px_per_m`, box-downsample it by a
+/// power of two toward that texel density.
+fn decode_child_atlas(p: &TilePrimitive, target_px_per_m: Option<f32>) -> Result<RgbaImage, Error> {
+    let encoded = p.jpeg.as_deref().unwrap_or_default();
+    let mut rgba = image::load_from_memory(encoded)
+        .map_err(|e| Error::msg(format!("child atlas: {e}")))?
+        .to_rgba8();
+    if let Some(target) = target_px_per_m {
+        if let Some(d) = texel_density(p, rgba.width(), rgba.height()) {
+            let f = d / target.max(1e-6);
+            if f >= 2.0 {
+                let f = (1u32 << (f.floor().min(64.0) as u32).ilog2()) as f32;
+                let nw = ((rgba.width() as f32 / f).round() as u32).max(1);
+                let nh = ((rgba.height() as f32 / f).round() as u32).max(1);
+                rgba = crate::tile::resize_colour(&rgba, nw, nh);
+            }
+        }
+    }
+    Ok(rgba)
 }
 
 fn sample_rgba(img: &RgbaImage, u: f32, v: f32) -> [u8; 4] {
@@ -1734,7 +1846,7 @@ mod tests {
             ))
             .unwrap(),
         );
-        let (parent, _) = bake_simplified(&mesh, std::slice::from_ref(&mesh), 64).unwrap();
+        let (parent, _, _) = bake_simplified(&mesh, std::slice::from_ref(&mesh), 64).unwrap();
         let atlas = image::load_from_memory(parent.jpeg.as_ref().unwrap())
             .unwrap()
             .to_rgba8();

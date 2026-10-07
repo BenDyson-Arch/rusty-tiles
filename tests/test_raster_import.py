@@ -8,14 +8,12 @@ import tempfile
 import unittest
 import numpy as np
 from osgeo import gdal, osr
+from cli_bin import BIN, requires_bin
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-BIN=pathlib.Path(os.environ.get('RUSTY_TILES_BIN',ROOT/'target/debug/rusty-tiles'))
 gdal.UseExceptions(); osr.UseExceptions()
-if os.environ.get('RUSTY_TILES_BIN') and not BIN.is_file():
-    raise RuntimeError(f'configured CLI is missing: {BIN}')
 
-@unittest.skipUnless(BIN.exists(), 'build the local rusty-tiles executable first')
+@requires_bin('set RUSTY_TILES_BIN for raster acceptance')
 class RasterImportTests(unittest.TestCase):
     def call(self, *args, **kwargs):
         # The development oracle uses Python; the actual CLI gets no executable PATH.
@@ -199,9 +197,9 @@ class RasterImportTests(unittest.TestCase):
             ({},['--maxZoom','1','--display','other'],'display must'),
             ({},['--maxZoom','1','--band','0','--display','gray','--displayMin','0','--displayMax','1'],'band does not exist'),
             ({},['--maxZoom','1','--alphaBand','4'],'band does not exist'),
-            ({},['--maxZoom','1','--displayMin','0'],'require gray'),
-            ({},['--maxZoom','1','--display','gray','--displayMin','nan','--displayMax','1'],'finite increasing range'),
-            ({},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1','--alphaBand','1'],'alphaBand is for image'),
+            ({},['--maxZoom','1','--displayMin','0'],'require --display gray'),
+            ({},['--maxZoom','1','--display','gray','--displayMin','nan','--displayMax','1'],'--displayMin and --displayMax must be finite'),
+            ({},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1','--alphaBand','1'],'--alphaBand applies only to --display image'),
             ({'scale':2},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1'],'scaled bands'),
             ({'crs':None},['--maxZoom','1'],'declared CRS'),
             ({'gt':[12,.01,0,86,0,-.01]},['--maxZoom','1'],'polar coverage'),

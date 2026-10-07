@@ -1,6 +1,5 @@
 """Independent count, distance, identity and reuse checks for opt-in point LOD."""
 import json
-import os
 import pathlib
 import struct
 import tempfile
@@ -12,6 +11,7 @@ from test_vector_lod import accessors
 from test_vector_reuse import archive, details, payloads, report
 from test_vector_gpkg import gpkg
 from vector_test_support import native_run
+from cli_bin import requires_bin
 
 
 def nodes(node, parent=None):
@@ -45,7 +45,7 @@ def content(path, world):
     return doc, properties, xyz
 
 
-@unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'), 'select the native CLI')
+@requires_bin('select the native CLI')
 class PointAggregationTests(unittest.TestCase):
     def args(self, source, output, **kwargs):
         return types.SimpleNamespace(input=str(source), output=str(output), source_crs='local',

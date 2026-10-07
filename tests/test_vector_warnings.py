@@ -11,10 +11,10 @@ from unittest import mock
 from osgeo import gdal
 from test_vector_lod import vector
 
-BIN = os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class GeometryWarningTests(unittest.TestCase):
-    @unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native stderr acceptance')
+    @requires_bin('set RUSTY_TILES_BIN for native stderr acceptance')
     def test_skip_and_repair_are_quiet_and_debug_retains_native_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -30,7 +30,7 @@ class GeometryWarningTests(unittest.TestCase):
                 (['--skipInvalid'], False), (['--repair'], False), (['--repair'], True),
             ]):
                 output = root/f'out-{index}.3tz'
-                env = dict(os.environ, RUSTY_TILES_PYTHON_TRACEBACK='1' if debug else '0')
+                env = dict(os.environ, RUSTY_TILES_NATIVE_DIAGNOSTICS='1' if debug else '0')
                 result = subprocess.run([BIN,'vector','-i',str(source),'-o',str(output),
                     '--sourceCrs','local',*flags],capture_output=True,text=True,env=env)
                 self.assertEqual(result.returncode,0,result.stderr)

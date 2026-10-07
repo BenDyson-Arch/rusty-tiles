@@ -1,5 +1,8 @@
 //! General-purpose LAS/LAZ point-cloud tiling, with disk-backed spatial LOD.
-use crate::error::Error;
+use crate::{
+    error::Error,
+    report::{ConversionResult, Reporter},
+};
 use std::path::Path;
 use std::{
     fs::File,
@@ -26,30 +29,29 @@ pub fn point_cloud_to_3tz(
     output: &Path,
     options: &PointCloudOptions,
 ) -> Result<(), Error> {
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
+    point_cloud_to_3tz_reported(input, output, options, &Reporter::default()).map(drop)
+}
+
+/// [`point_cloud_to_3tz`] with `ingestion` and `tiling` progress sent to
+/// `reporter`, returning the published archive and its report.
+pub fn point_cloud_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    options: &PointCloudOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
+    if options.max_points == 0 {
+        return Err(Error::msg("--maxPoints must be at least 1"));
     }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
+    if options.chunk_points == 0 {
+        return Err(Error::msg("--chunkPoints must be at least 1"));
     }
-    if options.max_points == 0 || options.chunk_points == 0 {
-        return Err(Error::msg("point budgets must be positive"));
-    }
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let work = tempfile::tempdir_in(parent)?;
-    let staging = work.path().join("tiles");
-    convert(input, &staging, options)?;
-    crate::pack::convert_to_3tz(
-        &staging,
-        output,
-        &crate::pack::PackOptions {
-            force: options.force,
-        },
-    )
+    let job = crate::output::Job::begin(output, options.force)?;
+    let staging = job.staging("tiles")?;
+    let report = convert(input, &staging, options, reporter)?;
+    job.publish_tree_3tz(&staging, Some(report))
 }
 
 enum Coordinates {
@@ -95,16 +97,24 @@ impl Coordinates {
         }
     }
 
-    fn transform(&mut self, positions: Vec<[f64; 3]>) -> Result<Vec<[f64; 3]>, Error> {
+    fn transform<'p>(
+        &mut self,
+        positions: &'p [[f64; 3]],
+    ) -> Result<std::borrow::Cow<'p, [[f64; 3]]>, Error> {
         match self {
-            Self::Local => Ok(positions),
+            Self::Local => Ok(positions.into()),
             #[cfg(feature = "native-geospatial")]
-            Self::Ecef(transform) => transform.transform(&positions),
+            Self::Ecef(transform) => transform.transform(positions).map(Into::into),
         }
     }
 }
 
-fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(), Error> {
+fn convert(
+    input: &Path,
+    output: &Path,
+    options: &PointCloudOptions,
+    reporter: &Reporter,
+) -> Result<serde_json::Value, Error> {
     std::fs::create_dir_all(output.join("scratch"))?;
     std::fs::create_dir(output.join("t"))?;
     let path = output.join("scratch/source.bin");
@@ -136,7 +146,7 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
         let mut origin = None;
         let mut count = 0_u64;
         let mut file = BufWriter::new(File::create(&path)?);
-        progress("ingestion", 0, expected);
+        reporter.progress("ingestion", 0, expected);
         loop {
             let n = reader
                 .fill_points(options.chunk_points as u64, &mut points)
@@ -157,13 +167,13 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
                 }
                 xyz.push(source);
             }
-            let projected = coordinates.transform(xyz.clone())?;
+            let projected = coordinates.transform(&xyz)?;
             let origin = *origin.get_or_insert(projected[0]);
             for ((raw, source), point) in points
                 .raw_bytes()
                 .chunks_exact(raw_len)
                 .zip(&xyz)
-                .zip(projected)
+                .zip(projected.iter())
             {
                 for i in 0..3 {
                     let relative = point[i] - origin[i];
@@ -179,7 +189,7 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
                 file.write_all(raw)?;
                 count += 1;
             }
-            progress("ingestion", count, expected);
+            reporter.progress("ingestion", count, expected);
         }
         file.flush()?;
         if count != expected {
@@ -195,6 +205,7 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
         )
     };
     let mut tree = tiles::Tree {
+        reporter,
         layout: &layout,
         options,
         output,
@@ -203,7 +214,7 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
         total_points: count,
         leaf_points: 0,
     };
-    progress("tiling", 0, count);
+    reporter.progress("tiling", 0, count);
     let mut root = tree.build(&path, [0.; 3], 0)?;
     for i in 0..3 {
         let value = root["transform"][12 + i].as_f64().unwrap() + origin[i];
@@ -231,28 +242,7 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
         "maxPositionRoundingMetres":tree.max_rounding,
         "sampling":"first source point per voxel; celldiagonal bounds source-to-sample distance",
         "maxPoints":options.max_points,"chunkPoints":options.chunk_points,"encoder":"rusty-tiles-native-las-v1"});
-    std::fs::write(
-        output.join("conversion.json"),
-        serde_json::to_vec_pretty(&report)?,
-    )?;
-    if std::env::var_os("RUSTY_TILES_JSON_STDOUT").is_none()
-        && std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_none()
-    {
-        eprintln!(
-            "point cloud: {count} points, {} tiles; max local float32 rounding {:.6} m",
-            tree.tiles, tree.max_rounding
-        );
-    }
-    Ok(())
-}
-
-fn progress(phase: &str, done: u64, total: u64) {
-    if std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_some() {
-        eprintln!(
-            "{}",
-            serde_json::json!({"event":"progress","phase":phase,"done":done,"total":total})
-        );
-    }
+    crate::output::write_report(output, report, true)
 }
 
 #[cfg(test)]

@@ -13,12 +13,12 @@ from osgeo import gdal, osr
 from test_derivatives import decode_terrain
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BIN = os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 spec = importlib.util.spec_from_file_location('terrain_reference', ROOT/'tests/fixtures/terrain_oracle.py')
 oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 
-@unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native terrain acceptance')
+@requires_bin('set RUSTY_TILES_BIN for native terrain acceptance')
 class NativeTerrainTests(unittest.TestCase):
     def source(self, root, *, crs=4326, bands=1, unit='m', scale=None, offset=None, nodata=False, gt=None):
         path=root/'dem.tif'

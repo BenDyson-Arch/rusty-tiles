@@ -1,6 +1,5 @@
 """Explicit parent display stand-ins have a conservative surface error bound."""
 import json
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -11,7 +10,7 @@ import numpy as np
 from test_vector_lod import vector, distance
 from test_vector_gpkg import nodes
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 def feature():
     corners=np.array([[0,0,0],[2,2,0],[2,0,0],[0,2,0],[0,0,0]],float)
@@ -39,7 +38,7 @@ class ParentRepairTests(unittest.TestCase):
                     self.assertTrue(manifest['root'].get('children'))
             self.assertEqual(leaves[0],leaves[1])
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for parentRepair CLI acceptance')
+    @requires_bin('set RUSTY_TILES_BIN for parentRepair CLI acceptance')
     def test_cli_option_is_wired(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);source=feature();source['id']=1;source['properties']=dict(name='bow');p=root/'bow.geojson';out=root/'out.3tz'

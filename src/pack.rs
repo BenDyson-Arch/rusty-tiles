@@ -1,8 +1,8 @@
 //! One-pass stored ZIP/ZIP64 with a 3TZ index and atomic publication.
-use crate::error::Error;
+use crate::{error::Error, output::Job, report::ConversionResult};
 use std::{
     collections::HashSet,
-    fs::{self, File},
+    fs::File,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{
@@ -17,13 +17,28 @@ pub struct PackOptions {
 }
 
 pub fn convert_to_3tz(input: &Path, output: &Path, opts: &PackOptions) -> Result<(), Error> {
+    convert_to_3tz_reported(input, output, opts).map(drop)
+}
+
+/// [`convert_to_3tz`] returning the published result.
+pub fn convert_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    opts: &PackOptions,
+) -> Result<ConversionResult, Error> {
     let root = tileset_root(input)?;
     if !root.join("tileset.json").is_file() {
         return Err(Error::MissingTilesetJson);
     }
+    Job::begin(output, opts.force)?.publish_tree_3tz(&root, None)
+}
+
+/// Every file below `root` as `(archive name, path)`, `tileset.json` first,
+/// skipping the archive being written and any stale 3TZ index.
+pub(crate) fn tree_members(root: &Path, output: &Path) -> Result<Vec<(String, PathBuf)>, Error> {
     let absolute_output = std::path::absolute(output)?;
     let mut files = Vec::new();
-    for entry in walkdir::WalkDir::new(&root) {
+    for entry in walkdir::WalkDir::new(root) {
         let entry = entry.map_err(|e| Error::msg(e.to_string()))?;
         if !entry.file_type().is_file() {
             continue;
@@ -33,7 +48,7 @@ pub fn convert_to_3tz(input: &Path, output: &Path, opts: &PackOptions) -> Result
         }
         let name = entry
             .path()
-            .strip_prefix(&root)
+            .strip_prefix(root)
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
@@ -42,7 +57,7 @@ pub fn convert_to_3tz(input: &Path, output: &Path, opts: &PackOptions) -> Result
         }
     }
     files.sort_by(|a, b| (a.0 != "tileset.json", &a.0).cmp(&(b.0 != "tileset.json", &b.0)));
-    pack_named_files(&files, output, opts)
+    Ok(files)
 }
 struct Tracked<W> {
     writer: W,
@@ -70,12 +85,18 @@ pub fn pack_named_files(
     output: &Path,
     opts: &PackOptions,
 ) -> Result<(), Error> {
-    if output.exists() && !opts.force {
-        return Err(Error::OutputExists(output.to_path_buf()));
-    }
+    Job::begin(output, opts.force)?
+        .publish_3tz(files, None)
+        .map(drop)
+}
+
+/// Reject archives without a root manifest and unsafe, duplicate or missing
+/// member paths before any bytes are written.
+pub(crate) fn check_members(files: &[(String, PathBuf)], output: &Path) -> Result<(), Error> {
     if !files.iter().any(|(n, _)| n == "tileset.json") {
         return Err(Error::MissingTilesetJson);
     }
+    let absolute_output = std::path::absolute(output)?;
     let mut seen = HashSet::new();
     for (name, path) in files {
         if name.is_empty()
@@ -94,19 +115,31 @@ pub fn pack_named_files(
         if !path.is_file() {
             return Err(Error::InputNotFound(path.clone()));
         }
-        if std::path::absolute(path)? == std::path::absolute(output)? {
+        if std::path::absolute(path)? == absolute_output {
             return Err(Error::msg("archive output cannot be an input member"));
         }
     }
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    fs::create_dir_all(parent)?;
-    let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+    Ok(())
+}
+
+/// Create the temporary archive inside `dir`. tempfile creates files with
+/// mode 0600 and `persist` keeps that mode. Ask for 0666 instead so the
+/// process umask decides, as it does for any other new file.
+pub(crate) fn temp_archive(dir: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    builder.tempfile_in(dir)
+}
+
+/// Write a stored ZIP with `tileset.json` first and the 3TZ index last.
+pub(crate) fn write_archive(files: &[(String, PathBuf)], file: &mut File) -> Result<(), Error> {
     let position = Arc::new(AtomicU64::new(0));
     let mut zip = zip::ZipWriter::new(Tracked {
-        writer: temp.as_file_mut(),
+        writer: file,
         position: position.clone(),
     });
     let mut index = Vec::with_capacity(files.len());
@@ -151,13 +184,6 @@ pub fn pack_named_files(
         zip.write_all(&offset.to_le_bytes())?;
     }
     zip.finish()?.flush()?;
-    temp.as_file().sync_all()?;
-    let persist = if opts.force {
-        temp.persist(output)
-    } else {
-        temp.persist_noclobber(output)
-    };
-    persist.map_err(|e| Error::Io(e.error))?;
     Ok(())
 }
 fn tileset_root(input: &Path) -> Result<PathBuf, Error> {
@@ -239,7 +265,7 @@ pub fn validate_3tz(path: &Path) -> Result<(), Error> {
     }
     let mut previous = None;
     let mut f = File::open(path)?;
-    for rec in index.chunks_exact(24) {
+    for rec in index.as_chunks::<24>().0 {
         let key = (
             u64::from_le_bytes(rec[..8].try_into().unwrap()),
             u64::from_le_bytes(rec[8..16].try_into().unwrap()),
@@ -277,6 +303,7 @@ pub fn validate_3tz(path: &Path) -> Result<(), Error> {
 #[cfg(test)]
 mod reproducibility_tests {
     use super::*;
+    use std::fs;
     #[test]
     fn packing_is_independent_of_caller_entry_order() {
         let work = tempfile::tempdir().unwrap();
