@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use image::imageops::{self, FilterType};
 use image::{DynamicImage, RgbImage, RgbaImage};
+use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
@@ -24,6 +25,10 @@ pub const CHART_GUTTER_PX: u32 = 4;
 /// Parent atlas: how far baked colour is dilated into uncovered texels.
 const PARENT_DILATE_PX: u32 = 16;
 const MIN_ATLAS: u32 = 64;
+/// Parent bake: triangles per parallel task, and per buffered window (bounds
+/// the texels held before they are written back in order).
+const RASTER_CHUNK_TRIS: usize = 64;
+const RASTER_WINDOW_TRIS: usize = 16_384;
 /// `--tileSize` is the *preferred* leaf atlas. Charts that would otherwise
 /// downscale grow up to this edge first (one 4096² atlas, not a crushed 1024).
 pub const MAX_LEAF_ATLAS: u32 = 4096;
@@ -850,58 +855,25 @@ pub fn bake_simplified(
     Timing::add(&TIMING.sampler, t0);
     let t0 = Instant::now();
     let mut atlas = RgbaImage::from_pixel(aw, ah, image::Rgba([128, 128, 128, 255]));
-    let denom_w = aw as f32;
-    let denom_h = ah as f32;
-
-    for tri in unwrapped.indices.as_chunks::<3>().0 {
-        let ia = tri[0] as usize;
-        let ib = tri[1] as usize;
-        let ic = tri[2] as usize;
-        let pa = unwrapped.positions[ia];
-        let pb = unwrapped.positions[ib];
-        let pc = unwrapped.positions[ic];
-        let ua = unwrapped.uvs[ia];
-        let ub = unwrapped.uvs[ib];
-        let uc = unwrapped.uvs[ic];
-        let (face_n, area) = grid::face_normal_area(pa, pb, pc);
-        if area <= 1e-15 {
-            continue;
-        }
-        let mut seed: Option<u32> = None;
-
-        let px = |t: [f32; 2]| -> (i32, i32) {
-            (
-                (t[0] * denom_w).floor() as i32,
-                (t[1] * denom_h).floor() as i32,
-            )
-        };
-        let (x0, y0) = px(ua);
-        let (x1, y1) = px(ub);
-        let (x2, y2) = px(uc);
-        let min_x = x0.min(x1).min(x2).max(0);
-        let max_x = (x0.max(x1).max(x2) + 1).min(aw as i32 - 1);
-        let min_y = y0.min(y1).min(y2).max(0);
-        let max_y = (y0.max(y1).max(y2) + 1).min(ah as i32 - 1);
-        if min_x > max_x || min_y > max_y {
-            continue;
-        }
-        for py in min_y..=max_y {
-            for px in min_x..=max_x {
-                let q = [(px as f32 + 0.5) / denom_w, (py as f32 + 0.5) / denom_h];
-                let (b0, b1, b2) = bary_uv(ua, ub, uc, q);
-                // Slightly generous so texel centres on shared edges get colour.
-                if b0 < -2e-3 || b1 < -2e-3 || b2 < -2e-3 {
-                    continue;
+    // Each triangle's texels depend only on that triangle (the sampler seed
+    // restarts per triangle), so triangles bake in parallel. Results are
+    // written back in triangle order, keeping later triangles' wins on shared
+    // edge texels (and the first error) exactly as a serial pass.
+    let tris = unwrapped.indices.as_chunks::<3>().0;
+    for window in tris.chunks(RASTER_WINDOW_TRIS) {
+        let baked = window
+            .par_chunks(RASTER_CHUNK_TRIS)
+            .map(|chunk| -> Result<Vec<(u32, u32, [u8; 4])>, Error> {
+                let mut texels = Vec::new();
+                for tri in chunk {
+                    raster_triangle(&unwrapped, tri, (aw, ah), &sampler, &mut texels)?;
                 }
-                let pos = [
-                    pa[0] * b0 + pb[0] * b1 + pc[0] * b2,
-                    pa[1] * b0 + pb[1] * b1 + pc[1] * b2,
-                    pa[2] * b0 + pb[2] * b1 + pc[2] * b2,
-                ];
-                // Match geometric orientation; authored shading normals may
-                // intentionally point away from the triangle's winding.
-                let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
-                atlas.put_pixel(px as u32, py as u32, image::Rgba(rgb));
+                Ok(texels)
+            })
+            .collect::<Vec<_>>();
+        for texels in baked {
+            for (x, y, rgba) in texels? {
+                atlas.put_pixel(x, y, image::Rgba(rgba));
             }
         }
     }
@@ -927,6 +899,70 @@ pub fn bake_simplified(
         },
         texel_m,
     ))
+}
+
+/// Bake one parent triangle's texels from the children, appending
+/// `(x, y, rgba)` in scan order.
+fn raster_triangle(
+    unwrapped: &TilePrimitive,
+    tri: &[u32; 3],
+    (aw, ah): (u32, u32),
+    sampler: &SceneSampler,
+    out: &mut Vec<(u32, u32, [u8; 4])>,
+) -> Result<(), Error> {
+    let denom_w = aw as f32;
+    let denom_h = ah as f32;
+    let ia = tri[0] as usize;
+    let ib = tri[1] as usize;
+    let ic = tri[2] as usize;
+    let pa = unwrapped.positions[ia];
+    let pb = unwrapped.positions[ib];
+    let pc = unwrapped.positions[ic];
+    let ua = unwrapped.uvs[ia];
+    let ub = unwrapped.uvs[ib];
+    let uc = unwrapped.uvs[ic];
+    let (face_n, area) = grid::face_normal_area(pa, pb, pc);
+    if area <= 1e-15 {
+        return Ok(());
+    }
+    let mut seed: Option<u32> = None;
+
+    let px = |t: [f32; 2]| -> (i32, i32) {
+        (
+            (t[0] * denom_w).floor() as i32,
+            (t[1] * denom_h).floor() as i32,
+        )
+    };
+    let (x0, y0) = px(ua);
+    let (x1, y1) = px(ub);
+    let (x2, y2) = px(uc);
+    let min_x = x0.min(x1).min(x2).max(0);
+    let max_x = (x0.max(x1).max(x2) + 1).min(aw as i32 - 1);
+    let min_y = y0.min(y1).min(y2).max(0);
+    let max_y = (y0.max(y1).max(y2) + 1).min(ah as i32 - 1);
+    if min_x > max_x || min_y > max_y {
+        return Ok(());
+    }
+    for py in min_y..=max_y {
+        for px in min_x..=max_x {
+            let q = [(px as f32 + 0.5) / denom_w, (py as f32 + 0.5) / denom_h];
+            let (b0, b1, b2) = bary_uv(ua, ub, uc, q);
+            // Slightly generous so texel centres on shared edges get colour.
+            if b0 < -2e-3 || b1 < -2e-3 || b2 < -2e-3 {
+                continue;
+            }
+            let pos = [
+                pa[0] * b0 + pb[0] * b1 + pc[0] * b2,
+                pa[1] * b0 + pb[1] * b1 + pc[1] * b2,
+                pa[2] * b0 + pb[2] * b1 + pc[2] * b2,
+            ];
+            // Match geometric orientation; authored shading normals may
+            // intentionally point away from the triangle's winding.
+            let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
+            out.push((px as u32, py as u32, rgb));
+        }
+    }
+    Ok(())
 }
 
 /// Grow charts by connectivity + normal, fold tiny charts into a neighbour,
