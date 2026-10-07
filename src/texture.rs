@@ -1403,63 +1403,80 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
         }
     }
 
+    // Breadth-first dilation. Every covered texel is a distance-0 seed, and
+    // seeds are expanded in scan order before any texel they reach, which is
+    // the FIFO order of a queue pre-filled with them, so the seeds need not
+    // be queued. A texel takes the colour of whichever neighbour reaches it
+    // first and is never rewritten. Work on a copy with a one-texel border
+    // marked as reached, so neighbour steps need no bounds tests.
+    let (wu, hu) = (w as usize, h as usize);
+    let pw = wu + 2;
+    let mut colour = vec![[0u8; 4]; pw * (hu + 2)];
+    let mut dist = vec![0u32; pw * (hu + 2)];
     let mut sum = [0u64; 4];
     let mut n = 0u64;
-    let mut dist = vec![u32::MAX; (w * h) as usize];
-    let mut q = VecDeque::new();
-    for y in 0..h {
-        for x in 0..w {
-            let i = (y * w + x) as usize;
-            if cover[i] {
-                let p = img.get_pixel(x, y).0;
-                sum[0] += p[0] as u64;
-                sum[1] += p[1] as u64;
-                sum[2] += p[2] as u64;
-                sum[3] += p[3] as u64;
+    for (y, row) in img.as_chunks::<4>().0.chunks_exact(wu).enumerate() {
+        let start = (y + 1) * pw + 1;
+        colour[start..start + wu].copy_from_slice(row);
+        for (x, px) in row.iter().enumerate() {
+            if cover[y * wu + x] {
+                for (s, &c) in sum.iter_mut().zip(px) {
+                    *s += c as u64;
+                }
                 n += 1;
-                dist[i] = 0;
-                q.push_back((x, y));
+            } else {
+                dist[start + x] = u32::MAX;
             }
         }
     }
-    while let Some((x, y)) = q.pop_front() {
-        let d = dist[(y * w + x) as usize];
+    // Same neighbour order as a dy-major, dx-minor scan of the 3×3 block.
+    let pw_i = pw as isize;
+    let steps = [-pw_i - 1, -pw_i, -pw_i + 1, -1, 1, pw_i - 1, pw_i, pw_i + 1];
+    let expand = |i: usize, colour: &mut [[u8; 4]], dist: &mut [u32], queue: &mut Vec<u32>| {
+        let d = dist[i];
         if d >= max_dist {
-            continue;
+            return;
         }
-        let src = *img.get_pixel(x, y);
-        for dy in -1i32..=1 {
-            for dx in -1i32..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
-                    continue;
-                }
-                let j = (ny as u32 * w + nx as u32) as usize;
-                if dist[j] != u32::MAX {
-                    continue;
-                }
-                dist[j] = d + 1;
-                img.put_pixel(nx as u32, ny as u32, src);
-                q.push_back((nx as u32, ny as u32));
+        let src = colour[i];
+        for step in steps {
+            let j = i.wrapping_add_signed(step);
+            if dist[j] != u32::MAX {
+                continue;
+            }
+            dist[j] = d + 1;
+            colour[j] = src;
+            queue.push(j as u32);
+        }
+    };
+    let mut queue: Vec<u32> = Vec::new();
+    for y in 0..hu {
+        for x in 0..wu {
+            if cover[y * wu + x] {
+                expand((y + 1) * pw + x + 1, &mut colour, &mut dist, &mut queue);
             }
         }
     }
-    if let Some(n) = std::num::NonZeroU64::new(n) {
-        let mean = image::Rgba([
+    let mut head = 0;
+    while head < queue.len() {
+        let i = queue[head] as usize;
+        head += 1;
+        expand(i, &mut colour, &mut dist, &mut queue);
+    }
+    let mean = std::num::NonZeroU64::new(n).map(|n| {
+        [
             (sum[0] / n) as u8,
             (sum[1] / n) as u8,
             (sum[2] / n) as u8,
             (sum[3] / n) as u8,
-        ]);
-        for y in 0..h {
-            for x in 0..w {
-                if dist[(y * w + x) as usize] == u32::MAX {
-                    img.put_pixel(x, y, mean);
-                }
+        ]
+    });
+    for (y, row) in img.as_chunks_mut::<4>().0.chunks_exact_mut(wu).enumerate() {
+        let start = (y + 1) * pw + 1;
+        for (x, px) in row.iter_mut().enumerate() {
+            match (dist[start + x], mean) {
+                (u32::MAX, Some(mean)) => *px = mean,
+                (u32::MAX, None) => {}
+                _ => *px = colour[start + x],
             }
         }
     }
