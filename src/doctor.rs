@@ -31,7 +31,8 @@ pub fn canonical(name: &str) -> Option<&'static str> {
         .map(|(canonical, _)| *canonical)
 }
 
-/// Readiness of `selected` commands (all when empty). `cesium` is the preview
+/// Readiness of `selected` commands (all when empty). Only the selected
+/// commands appear under `commands`. `cesium` is the preview
 /// runtime directory to look for; it defaults to [`DEFAULT_CESIUM`].
 pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error> {
     let geospatial = geospatial_readiness();
@@ -61,6 +62,10 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
         if !names.iter().any(|selected| selected == name) {
             names.push(name.to_owned());
         }
+    }
+    if !selected.is_empty() {
+        let commands = report["commands"].as_object_mut().unwrap();
+        commands.retain(|name, _| names.contains(name));
     }
     report["ready"] = names
         .iter()
