@@ -1,4 +1,4 @@
-# Known-good vector/raster runtime and terrain development-oracle profile: Python >=3.12.
+# Known-good vector runtime and raster/terrain development-oracle profile: Python >=3.12.
 # Native GDAL headers/libraries must match this binding version.
 GDAL==3.13.3
 numpy==2.5.3

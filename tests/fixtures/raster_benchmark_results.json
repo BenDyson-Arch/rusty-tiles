@@ -1,0 +1,535 @@
+{
+  "environment": {
+    "recordedAtUtc": "2026-10-07T02:20:19.013136+00:00",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "logicalCpus": 20,
+    "python": "3.14.7",
+    "numpy": "2.5.3",
+    "gdal": "GDAL 3.13.3 \"Iowa City\", released 2026/08/13",
+    "proj": [
+      9,
+      8,
+      1
+    ],
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "baselineRevision": "9a95862",
+    "nativeRevision": "3f0026cbfca8977faaf06d3c2ae8dd7dd1216bdf (working tree)",
+    "nativeSourceSha256": {
+      "src/raster.rs": "76b3cd55a63a68d10a1707d98dbb1184f7ddee3b5b9e5f753b7e51361d632372",
+      "src/raster/native.rs": "0f9f0fce3259606a72dd0d6a7ec78896b5864bb7b93b14965b81c823c1218f7e"
+    },
+    "oldBinarySha256": "ff86251813b37341fa2556b6ee0d816cc25541b2e041bf06a9bb5c176154924e",
+    "newBinarySha256": "bec7e061a4b0abc92b08e7f2f8d3e0013b3494d80d7732352e5b64909bb58a40",
+    "repeats": 3,
+    "build": "cargo build --release --locked --features native-geospatial",
+    "methodology": "Full release CLI conversions including COG, styling, tiling, startup and safe publication. One warmup per method, then three measured repetitions in rotated order; warm filesystem cache, conversions sequential. Linux wait4 CPU includes waited descendants; peak RSS is largest process, not summed simultaneous process-tree memory. Fixture generation and decoded-output checks excluded.",
+    "configurations": {
+      "python-default": "Original Python path; default GDAL cache, native GDAL tile ALL_CPUS.",
+      "rust-native": "New Rust path; 64 MiB raster cache, 64 MiB explicit display warp budget, up to four native GDAL tile/COG workers, uncompressed temporary TIFFs; no executable PATH.",
+      "python-one-worker": "Original path except gdal raster tile explicitly receives --num-threads=1 via an exec-only shell shim; default GDAL cache retained."
+    }
+  },
+  "cases": [
+    {
+      "name": "small-rgba",
+      "pixels": 256,
+      "crs": 4326,
+      "transform": [
+        12.5,
+        1e-05,
+        0,
+        41.9,
+        0,
+        -1e-05
+      ],
+      "display": "image",
+      "minZoom": 15,
+      "maxZoom": 16,
+      "sourceBytes": 263197,
+      "sourceSha256": "96e86fe6b4d9fb5471464637db454f62ef7397b2e1e1a25e1528dc575565106d",
+      "methods": {
+        "python-default": {
+          "samples": [
+            {
+              "wallSeconds": 0.1990172160003567,
+              "cpuSeconds": 0.190408,
+              "peakRssMiB": 80.08984375
+            },
+            {
+              "wallSeconds": 0.18541012199784745,
+              "cpuSeconds": 0.176955,
+              "peakRssMiB": 81.2265625
+            },
+            {
+              "wallSeconds": 0.18339647500033607,
+              "cpuSeconds": 0.175033,
+              "peakRssMiB": 81.765625
+            }
+          ],
+          "medianWallSeconds": 0.18541012199784745,
+          "medianCpuSeconds": 0.176955,
+          "medianPeakRssMiB": 81.2265625,
+          "output": {
+            "tiles": 6,
+            "pngBytes": 62551,
+            "cogBytes": 206763,
+            "totalBytes": 269593
+          }
+        },
+        "rust-native": {
+          "samples": [
+            {
+              "wallSeconds": 0.06948268600172014,
+              "cpuSeconds": 0.06214,
+              "peakRssMiB": 58.46875
+            },
+            {
+              "wallSeconds": 0.07134146200041869,
+              "cpuSeconds": 0.064025,
+              "peakRssMiB": 56.953125
+            },
+            {
+              "wallSeconds": 0.06941868600188172,
+              "cpuSeconds": 0.062144,
+              "peakRssMiB": 58.49609375
+            }
+          ],
+          "medianWallSeconds": 0.06948268600172014,
+          "medianCpuSeconds": 0.062144,
+          "medianPeakRssMiB": 58.46875,
+          "output": {
+            "tiles": 6,
+            "pngBytes": 62551,
+            "cogBytes": 206763,
+            "totalBytes": 269566
+          }
+        },
+        "python-one-worker": {
+          "samples": [
+            {
+              "wallSeconds": 0.18457919399952516,
+              "cpuSeconds": 0.17630600000000002,
+              "peakRssMiB": 81.59375
+            },
+            {
+              "wallSeconds": 0.185340255000483,
+              "cpuSeconds": 0.175716,
+              "peakRssMiB": 81.453125
+            },
+            {
+              "wallSeconds": 0.18116232000102173,
+              "cpuSeconds": 0.17279599999999998,
+              "peakRssMiB": 80.8984375
+            }
+          ],
+          "medianWallSeconds": 0.18457919399952516,
+          "medianCpuSeconds": 0.175716,
+          "medianPeakRssMiB": 81.453125,
+          "output": {
+            "tiles": 6,
+            "pngBytes": 62551,
+            "cogBytes": 206763,
+            "totalBytes": 269593
+          }
+        }
+      },
+      "comparison": {
+        "sourceValuesMasksAndMetadataPreserved": true,
+        "manifestsAndRecipesMatch": true,
+        "tilePathsMatch": true,
+        "decodedPixelDifferences": {
+          "rust-native": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          },
+          "python-one-worker": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          }
+        },
+        "pngBytesMatch": {
+          "rust-native": true,
+          "python-one-worker": true
+        }
+      }
+    },
+    {
+      "name": "regional-rgba",
+      "pixels": 4096,
+      "crs": 4326,
+      "transform": [
+        12,
+        0.00048828125,
+        0,
+        42,
+        0,
+        -0.00048828125
+      ],
+      "display": "image",
+      "minZoom": 9,
+      "maxZoom": 12,
+      "sourceBytes": 67122020,
+      "sourceSha256": "f9e1e0035234644471eb53401fff01e2cf4a063330d0241810e435fb482e1f43",
+      "methods": {
+        "python-default": {
+          "samples": [
+            {
+              "wallSeconds": 8.671801328000583,
+              "cpuSeconds": 11.665047,
+              "peakRssMiB": 313.48046875
+            },
+            {
+              "wallSeconds": 9.11599134700009,
+              "cpuSeconds": 11.606417,
+              "peakRssMiB": 313.09375
+            },
+            {
+              "wallSeconds": 9.123386579001817,
+              "cpuSeconds": 11.679243,
+              "peakRssMiB": 313.078125
+            }
+          ],
+          "medianWallSeconds": 9.11599134700009,
+          "medianCpuSeconds": 11.665047,
+          "medianPeakRssMiB": 313.09375,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 69410536,
+            "cogBytes": 58363773,
+            "totalBytes": 127774579
+          }
+        },
+        "rust-native": {
+          "samples": [
+            {
+              "wallSeconds": 5.669656114998361,
+              "cpuSeconds": 9.276105000000001,
+              "peakRssMiB": 293.61328125
+            },
+            {
+              "wallSeconds": 5.681293437999557,
+              "cpuSeconds": 9.213085999999999,
+              "peakRssMiB": 292.44921875
+            },
+            {
+              "wallSeconds": 5.76490874099909,
+              "cpuSeconds": 9.300084,
+              "peakRssMiB": 301.4140625
+            }
+          ],
+          "medianWallSeconds": 5.681293437999557,
+          "medianCpuSeconds": 9.276105000000001,
+          "medianPeakRssMiB": 293.61328125,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 69410536,
+            "cogBytes": 58363773,
+            "totalBytes": 127774552
+          }
+        },
+        "python-one-worker": {
+          "samples": [
+            {
+              "wallSeconds": 12.285764896001638,
+              "cpuSeconds": 11.326374,
+              "peakRssMiB": 280.74609375
+            },
+            {
+              "wallSeconds": 12.448289407002449,
+              "cpuSeconds": 11.454935,
+              "peakRssMiB": 280.96484375
+            },
+            {
+              "wallSeconds": 12.407830310003192,
+              "cpuSeconds": 11.472245000000001,
+              "peakRssMiB": 280.44921875
+            }
+          ],
+          "medianWallSeconds": 12.407830310003192,
+          "medianCpuSeconds": 11.454935,
+          "medianPeakRssMiB": 280.74609375,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 69410536,
+            "cogBytes": 58363773,
+            "totalBytes": 127774579
+          }
+        }
+      },
+      "comparison": {
+        "sourceValuesMasksAndMetadataPreserved": true,
+        "manifestsAndRecipesMatch": true,
+        "tilePathsMatch": true,
+        "decodedPixelDifferences": {
+          "rust-native": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          },
+          "python-one-worker": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          }
+        },
+        "pngBytesMatch": {
+          "rust-native": true,
+          "python-one-worker": true
+        }
+      }
+    },
+    {
+      "name": "regional-gray",
+      "pixels": 4096,
+      "crs": 4326,
+      "transform": [
+        12,
+        0.00048828125,
+        0,
+        42,
+        0,
+        -0.00048828125
+      ],
+      "display": "gray",
+      "minZoom": 9,
+      "maxZoom": 12,
+      "sourceBytes": 67121836,
+      "sourceSha256": "d713a0ba4f3b9b6f39219fdbfcb059951f482ca7d15a96674c19a691c9c0d4f6",
+      "methods": {
+        "python-default": {
+          "samples": [
+            {
+              "wallSeconds": 11.998944073999155,
+              "cpuSeconds": 9.683847,
+              "peakRssMiB": 288.85546875
+            },
+            {
+              "wallSeconds": 7.6107575349997205,
+              "cpuSeconds": 9.585564000000002,
+              "peakRssMiB": 289.32421875
+            },
+            {
+              "wallSeconds": 7.7652652930009936,
+              "cpuSeconds": 9.716734,
+              "peakRssMiB": 289.609375
+            }
+          ],
+          "medianWallSeconds": 7.7652652930009936,
+          "medianCpuSeconds": 9.683847,
+          "medianPeakRssMiB": 289.32421875,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 17494704,
+            "cogBytes": 75870285,
+            "totalBytes": 93365261
+          }
+        },
+        "rust-native": {
+          "samples": [
+            {
+              "wallSeconds": 8.222868056000152,
+              "cpuSeconds": 7.112283000000001,
+              "peakRssMiB": 261.05859375
+            },
+            {
+              "wallSeconds": 4.354673493002338,
+              "cpuSeconds": 7.021649,
+              "peakRssMiB": 303.0625
+            },
+            {
+              "wallSeconds": 4.470343058001163,
+              "cpuSeconds": 6.975088,
+              "peakRssMiB": 282.109375
+            }
+          ],
+          "medianWallSeconds": 4.470343058001163,
+          "medianCpuSeconds": 7.021649,
+          "medianPeakRssMiB": 282.109375,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 17494704,
+            "cogBytes": 75870285,
+            "totalBytes": 93365234
+          }
+        },
+        "python-one-worker": {
+          "samples": [
+            {
+              "wallSeconds": 14.006511765997857,
+              "cpuSeconds": 9.545513999999999,
+              "peakRssMiB": 281.5078125
+            },
+            {
+              "wallSeconds": 10.593776818997867,
+              "cpuSeconds": 9.606207,
+              "peakRssMiB": 280.953125
+            },
+            {
+              "wallSeconds": 10.464241096000478,
+              "cpuSeconds": 9.520209999999999,
+              "peakRssMiB": 280.61328125
+            }
+          ],
+          "medianWallSeconds": 10.593776818997867,
+          "medianCpuSeconds": 9.545513999999999,
+          "medianPeakRssMiB": 280.953125,
+          "output": {
+            "tiles": 996,
+            "pngBytes": 17494704,
+            "cogBytes": 75870285,
+            "totalBytes": 93365261
+          }
+        }
+      },
+      "comparison": {
+        "sourceValuesMasksAndMetadataPreserved": true,
+        "manifestsAndRecipesMatch": true,
+        "tilePathsMatch": true,
+        "decodedPixelDifferences": {
+          "rust-native": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          },
+          "python-one-worker": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          }
+        },
+        "pngBytesMatch": {
+          "rust-native": true,
+          "python-one-worker": true
+        }
+      }
+    },
+    {
+      "name": "projected-rgba",
+      "pixels": 2048,
+      "crs": 32633,
+      "transform": [
+        500000,
+        100,
+        0,
+        4650000,
+        0,
+        -100
+      ],
+      "display": "image",
+      "minZoom": 8,
+      "maxZoom": 11,
+      "sourceBytes": 16781278,
+      "sourceSha256": "2f1f2642ea3ff68d07d1fce66f03a920d06fa03a5128e209c3c761aa5780b4a8",
+      "methods": {
+        "python-default": {
+          "samples": [
+            {
+              "wallSeconds": 3.448490804003086,
+              "cpuSeconds": 3.810349,
+              "peakRssMiB": 170.37109375
+            },
+            {
+              "wallSeconds": 3.539772731000994,
+              "cpuSeconds": 3.8296099999999997,
+              "peakRssMiB": 168.875
+            },
+            {
+              "wallSeconds": 3.6010122389998287,
+              "cpuSeconds": 3.829938,
+              "peakRssMiB": 167.3671875
+            }
+          ],
+          "medianWallSeconds": 3.539772731000994,
+          "medianCpuSeconds": 3.8296099999999997,
+          "medianPeakRssMiB": 168.875,
+          "output": {
+            "tiles": 311,
+            "pngBytes": 21511913,
+            "cogBytes": 15650337,
+            "totalBytes": 37162538
+          }
+        },
+        "rust-native": {
+          "samples": [
+            {
+              "wallSeconds": 2.2862324439993245,
+              "cpuSeconds": 3.07015,
+              "peakRssMiB": 209.82421875
+            },
+            {
+              "wallSeconds": 2.2806878260016674,
+              "cpuSeconds": 3.0537520000000002,
+              "peakRssMiB": 209.9765625
+            },
+            {
+              "wallSeconds": 2.4957054419974156,
+              "cpuSeconds": 3.097511,
+              "peakRssMiB": 210.0
+            }
+          ],
+          "medianWallSeconds": 2.2862324439993245,
+          "medianCpuSeconds": 3.07015,
+          "medianPeakRssMiB": 209.9765625,
+          "output": {
+            "tiles": 311,
+            "pngBytes": 21511913,
+            "cogBytes": 15650337,
+            "totalBytes": 37162511
+          }
+        },
+        "python-one-worker": {
+          "samples": [
+            {
+              "wallSeconds": 3.9206686739998986,
+              "cpuSeconds": 3.747604,
+              "peakRssMiB": 168.859375
+            },
+            {
+              "wallSeconds": 4.09125617799873,
+              "cpuSeconds": 3.772458,
+              "peakRssMiB": 169.7265625
+            },
+            {
+              "wallSeconds": 4.14212428600149,
+              "cpuSeconds": 3.794325,
+              "peakRssMiB": 169.6875
+            }
+          ],
+          "medianWallSeconds": 4.09125617799873,
+          "medianCpuSeconds": 3.772458,
+          "medianPeakRssMiB": 169.6875,
+          "output": {
+            "tiles": 311,
+            "pngBytes": 21511913,
+            "cogBytes": 15650337,
+            "totalBytes": 37162538
+          }
+        }
+      },
+      "comparison": {
+        "sourceValuesMasksAndMetadataPreserved": true,
+        "manifestsAndRecipesMatch": true,
+        "tilePathsMatch": true,
+        "decodedPixelDifferences": {
+          "rust-native": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          },
+          "python-one-worker": {
+            "tiles": 0,
+            "samples": 0,
+            "maxChannelDifference": 0
+          }
+        },
+        "pngBytesMatch": {
+          "rust-native": true,
+          "python-one-worker": true
+        }
+      }
+    }
+  ]
+}

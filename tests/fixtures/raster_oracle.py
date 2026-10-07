@@ -1,4 +1,4 @@
-"""Source-preserving raster conversion with an explicit display recipe."""
+"""Frozen pre-migration raster implementation; development comparison only."""
 import argparse
 import json
 import math

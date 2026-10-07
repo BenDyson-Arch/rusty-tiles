@@ -6,8 +6,8 @@ import os
 import pathlib
 import sys
 
-NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert','point-cloud','terrain']
-PYTHON=['vector','raster']
+NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert','point-cloud','terrain','raster']
+PYTHON=['vector']
 
 
 def report(selected=()):
@@ -51,7 +51,7 @@ def report(selected=()):
         if root.is_dir():
             for suffix in ('*.gtx','*.gsb','*.tif','*.bin'):
                 grids.extend(str(p) for p in root.glob(suffix) if p.is_file())
-    groups={'vector':['numpy','gdal','ogr','osr'], 'raster':['numpy','gdal']}
+    groups={'vector':['numpy','gdal','ogr','osr']}
     commands={name:dict(ready=True,requires=[]) for name in NATIVE}
     for name,requires in groups.items():
         missing=[m for m in requires if not modules[m]['available']]

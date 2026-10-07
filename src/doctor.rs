@@ -6,7 +6,7 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     let mut report = if !selected.is_empty()
         && selected
             .iter()
-            .all(|name| matches!(name.as_str(), "point-cloud" | "terrain"))
+            .all(|name| matches!(name.as_str(), "point-cloud" | "terrain" | "raster"))
     {
         json!({"commands":{}})
     } else {
@@ -14,6 +14,7 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     };
     report["commands"]["point-cloud"] = point_cloud_readiness();
     report["commands"]["terrain"] = terrain_readiness();
+    report["commands"]["raster"] = raster_readiness();
     let names: Vec<_> = if selected.is_empty() {
         report["commands"]
             .as_object()
@@ -36,6 +37,21 @@ fn terrain_readiness() -> Value {
     let geospatial = geospatial_readiness();
     json!({"ready":geospatial["ready"],"requires":["native GDAL >= 3.11", "PROJ >= 9.2", "local PROJ database/grids"],
         "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
+}
+
+fn raster_readiness() -> Value {
+    let geospatial = geospatial_readiness();
+    #[cfg(feature = "native-geospatial")]
+    let tiling = match crate::raster::tile_available() {
+        Ok(()) => json!({"ready":true}),
+        Err(error) => json!({"ready":false,"error":error.to_string()}),
+    };
+    #[cfg(not(feature = "native-geospatial"))]
+    let tiling = json!({"ready":false});
+    json!({"ready":geospatial["ready"] == true && tiling["ready"] == true,
+        "requires":["native GDAL >= 3.11 with raster tile algorithm", "PROJ >= 9.2", "local PROJ database/grids"],
+        "backend":"native GDAL", "geospatial":geospatial, "tiling":tiling,
+        "note":"Native COG, display and tiling APIs; no Python or GDAL executable required."})
 }
 
 fn geospatial_readiness() -> Value {

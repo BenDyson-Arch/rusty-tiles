@@ -55,7 +55,7 @@ cargo install --path . --locked --features native-geospatial
 
 This feature requires GDAL >= 3.11 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
 
-The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain sampling and quantized-mesh encoding also run natively with this feature. Raster, vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
+The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain sampling/encoding and raster COG/display/tiling also run natively with this feature. Vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
 
 ### 2. Install the dependencies for your data
 
@@ -65,13 +65,13 @@ The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feat
 | `point-cloud --sourceCrs local` | No Python or GDAL required |
 | Geospatial `point-cloud` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `terrain` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
-| `raster` | Python 3, NumPy, GDAL |
+| `raster` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `vector` | Python 3, NumPy, GDAL with GEOS |
 | Local preview | Python 3; Node/npm to install the Cesium runtime |
 
-The CLI embeds the remaining raster/vector conversion scripts; their Python libraries must be installed in the environment used by `python3`.
+The CLI embeds the remaining vector conversion scripts; their Python libraries must be installed in the environment used by `python3`.
 
-For the Python raster/vector commands, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
+For the Python vector command, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
 
 ```sh
 conda create -n rusty-tiles -c conda-forge python=3.12 gdal=3.12 numpy=2 pip
@@ -195,6 +195,8 @@ rusty-tiles raster -i measurements.tif -o output/measurements \
   --minZoom 10 --maxZoom 18 --display gray --band 1 \
   --displayMin -10 --displayMax 10
 ```
+
+Raster requires the `native-geospatial` build and uses GDAL's native COG, display and raster tile APIs; neither Python nor a `gdal` executable is needed. Display masks and alpha are intersected in 256 × 256 source windows before resampling. The raster block cache and explicit display warp budget are 64 MiB each. COG compression and tiling each use up to four workers, capped by available CPUs. Temporary display TIFFs are uncompressed to reduce conversion time, so allow scratch space for source-resolution and reprojected display bands in addition to the published output. Polar and antimeridian coverage requires preprocessing.
 
 Output includes `source.cog.tif`, `tilejson.json`, and `tiles/{z}/{x}/{y}.png`. Display tiles are a reprojected derivative; original values, bands, masks, and NoData are retained in the COG. Use `--alphaBand` only for an image band containing transparency; display alpha is combined with source coverage so masked pixels remain transparent. Jobs exceeding 100,000 imagery tiles fail with guidance to reduce the zoom range.
 
