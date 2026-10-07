@@ -34,9 +34,9 @@
       <path d="M0 30H120 M0 60H120 M30 0V90 M60 0V90 M90 0V90" stroke="#111c2b" stroke-width="2"/>
     </g>
     <g transform="translate(860 67)" stroke="#dfcc84" stroke-width="1.7" fill="none" stroke-linejoin="round">
-      <path d="M0 76 20 52 37 58 70 7 95 45 120 62 78 94Z" fill="#dfcc84" fill-opacity=".13"/>
-      <path d="M9 80 29 66 47 70 75 27 101 67 M24 85 42 79 58 81 78 47 91 74 M39 89 65 86 80 65 83 80"/>
-      <path d="M20 52 44 60 70 7 M37 58 66 63 95 45 M0 76 60 76 120 62"/>
+      <path d="M0 70 45 16 120 40 75 94Z" fill="#dfcc84" fill-opacity=".13"/>
+      <path d="M15 52 40 52 65 58 90 76 M30 34 55 26 80 38 105 58"/>
+      <path d="M25 78 40 52 55 26 70 24 M50 86 65 58 80 38 95 32"/>
     </g>
     <g text-anchor="middle" font-size="19">
       <text x="136" y="188">Meshes</text><text x="332" y="188">Point clouds</text>
