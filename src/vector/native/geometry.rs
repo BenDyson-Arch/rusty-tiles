@@ -452,11 +452,14 @@ pub(super) fn simplify_path(
     (result, error)
 }
 
+/// Simplified rings, the measured error, and why simplification was skipped.
+type SimplifiedPolygon = (Vec<Vec<Point>>, f64, Option<&'static str>);
+
 fn simplify_polygon(
     rings: &[Vec<Point>],
     tolerance: f64,
     locked: &BTreeSet<PointKey>,
-) -> Result<(Vec<Vec<Point>>, f64, Option<&'static str>), Error> {
+) -> Result<SimplifiedPolygon, Error> {
     let original = rings.to_vec();
     let opened: Vec<_> = rings.iter().map(|r| opened(r).to_vec()).collect();
     let plane = Plane::fit(&opened[0])?;
@@ -626,7 +629,9 @@ mod tests {
             .all(|p| rings.iter().flatten().any(|s| s == p)));
         let area: f64 = mesh
             .indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|t| {
                 let a = mesh.positions[t[0] as usize];
                 let b = mesh.positions[t[1] as usize];

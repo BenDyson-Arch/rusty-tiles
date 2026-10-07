@@ -2,7 +2,6 @@
 //! proxies** (never the raw scene), bake a new atlas from the children's
 //! atlases, and measure a two-sided sampled surface error for `geometricError`.
 
-use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -10,10 +9,11 @@ use std::time::Instant;
 use meshopt::optimize::optimize_vertex_fetch;
 use meshopt::simplify::{simplify, simplify_with_attributes_and_locks, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
+use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
-use crate::grid::TriGrid;
+use crate::grid::{IdMap, TriGrid};
 
 const ERROR_SAMPLE_CAP: usize = 4_096;
 const MIN_PARENT_ATLAS: u32 = 256;
@@ -139,10 +139,10 @@ pub fn build_parent(
         .iter()
         .any(|p| p.jpeg.is_some() && p.uvs.len() == p.positions.len());
     let t0 = Instant::now();
-    let (prims, texel_m) = if textured {
+    let (prims, texel_m, sampler_grid) = if textured {
         let atlas = parent_atlas_size(children, tile_size);
         match crate::texture::bake_simplified(&simplified, children, atlas) {
-            Ok((p, texel_m)) => (vec![p], texel_m),
+            Ok((p, texel_m, grid)) => (vec![p], texel_m, Some(grid)),
             Err(e @ Error::TextureProjection { .. }) => {
                 // Some non-manifold inputs cannot be safely reprojected after
                 // simplification. Retain the textured child surfaces rather
@@ -166,11 +166,18 @@ pub fn build_parent(
             Err(e) => return Err(e),
         }
     } else {
-        (vec![simplified], 0.0)
+        (vec![simplified], 0.0, None)
     };
     Timing::add(&TIMING.bake, t0);
     let t0 = Instant::now();
-    let error_m = two_sided_error(&prims, children);
+    // The sampler grid is exactly the children's soup grid when every child
+    // with triangles was sampled; reuse it rather than rebuild.
+    let child_grid = sampler_grid.filter(|_| {
+        children
+            .iter()
+            .all(|p| p.indices.len() < 3 || crate::texture::sampled_child(p))
+    });
+    let error_m = two_sided_error_with(&prims, children, child_grid);
     Timing::add(&TIMING.error, t0);
     Ok(ParentResult {
         prims,
@@ -256,7 +263,7 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
     let has_n = prim.normals.len() == prim.positions.len();
     let has_uv = prim.uvs.len() == prim.positions.len();
 
-    let mut map: HashMap<[i64; 3], u32> = HashMap::new();
+    let mut map: IdMap<[i64; 3], u32> = IdMap::default();
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
@@ -292,7 +299,7 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
         *n = crate::grid::normalize(*n);
     }
     let mut out_idx = Vec::with_capacity(prim.indices.len());
-    for tri in prim.indices.chunks_exact(3) {
+    for tri in prim.indices.as_chunks::<3>().0 {
         let t = [
             remap[tri[0] as usize],
             remap[tri[1] as usize],
@@ -379,33 +386,39 @@ pub(crate) fn simplify_border_locked(
 /// Two-sided sampled surface distance in model metres: child vertices → parent
 /// surface, and parent vertices + face centroids → child surface.
 pub fn two_sided_error(parent: &[TilePrimitive], children: &[TilePrimitive]) -> f64 {
+    two_sided_error_with(parent, children, None)
+}
+
+/// [`two_sided_error`], given `child_grid` built over exactly `soup(children)`.
+fn two_sided_error_with(
+    parent: &[TilePrimitive],
+    children: &[TilePrimitive],
+    child_grid: Option<TriGrid>,
+) -> f64 {
     let p_tris = soup(parent);
-    let c_tris = soup(children);
-    if p_tris.is_empty() || c_tris.is_empty() {
+    let c_grid = child_grid.unwrap_or_else(|| TriGrid::new(soup(children)));
+    if p_tris.is_empty() || c_grid.is_empty() {
         return 0.0;
     }
-    let p_samples = sample_points(parent);
-    let c_samples = sample_points(children);
-    let p_grid = TriGrid::new(p_tris);
-    let c_grid = TriGrid::new(c_tris);
-    let mut d2 = 0.0f32;
-    for q in c_samples {
-        if let Some(d) = p_grid.nearest_dist2(q) {
-            d2 = d2.max(d);
-        }
-    }
-    for q in p_samples {
-        if let Some(d) = c_grid.nearest_dist2(q) {
-            d2 = d2.max(d);
-        }
-    }
-    d2.sqrt() as f64
+    // `f32::max` is order-independent, so both directions and their samples
+    // can be measured in parallel with the same result.
+    let directed = |samples: Vec<[f32; 3]>, grid: &TriGrid| {
+        samples
+            .par_iter()
+            .filter_map(|&q| grid.nearest_dist2(q))
+            .reduce(|| 0.0f32, f32::max)
+    };
+    let (to_parent, to_children) = rayon::join(
+        || directed(sample_points(children), &TriGrid::new(p_tris)),
+        || directed(sample_points(parent), &c_grid),
+    );
+    to_parent.max(to_children).sqrt() as f64
 }
 
 fn soup(prims: &[TilePrimitive]) -> Vec<[[f32; 3]; 3]> {
     let mut out = Vec::new();
     for p in prims {
-        for t in p.indices.chunks_exact(3) {
+        for t in p.indices.as_chunks::<3>().0 {
             out.push([
                 p.positions[t[0] as usize],
                 p.positions[t[1] as usize],
@@ -421,7 +434,7 @@ fn sample_points(prims: &[TilePrimitive]) -> Vec<[f32; 3]> {
     let mut pts = Vec::new();
     for p in prims {
         pts.extend_from_slice(&p.positions);
-        for t in p.indices.chunks_exact(3) {
+        for t in p.indices.as_chunks::<3>().0 {
             let a = p.positions[t[0] as usize];
             let b = p.positions[t[1] as usize];
             let c = p.positions[t[2] as usize];
@@ -507,7 +520,7 @@ mod tests {
         );
         let boundary = |mesh: &TilePrimitive| {
             let mut counts = std::collections::BTreeMap::new();
-            for t in mesh.indices.chunks_exact(3) {
+            for t in mesh.indices.as_chunks::<3>().0 {
                 for i in 0..3 {
                     let a = mesh.positions[t[i] as usize].map(f32::to_bits);
                     let b = mesh.positions[t[(i + 1) % 3] as usize].map(f32::to_bits);
@@ -539,7 +552,7 @@ mod tests {
             "should reduce {src_tris} → got {out_tris}"
         );
         assert!(out_tris >= 3);
-        for t in out.indices.chunks_exact(3) {
+        for t in out.indices.as_chunks::<3>().0 {
             assert!(t[0] != t[1] && t[1] != t[2] && t[2] != t[0]);
             assert!((t[0] as usize) < out.positions.len());
         }
