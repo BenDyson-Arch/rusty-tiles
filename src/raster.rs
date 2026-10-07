@@ -1,5 +1,8 @@
 //! GDAL-backed source COG and explicitly styled imagery derivatives.
-use crate::Error;
+use crate::{
+    report::{ConversionResult, Reporter},
+    Error,
+};
 use std::path::Path;
 #[cfg(feature = "native-geospatial")]
 mod native;
@@ -47,12 +50,19 @@ pub fn raster_with_options(
     output: &Path,
     options: &RasterOptions,
 ) -> Result<(), Error> {
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
-    }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
-    }
+    raster_reported(input, output, options, &Reporter::default()).map(drop)
+}
+
+/// [`raster_with_options`] with `cog`, `display` and `tiling` progress sent
+/// to `reporter`, returning the published directory and its report.
+pub fn raster_reported(
+    input: &Path,
+    output: &Path,
+    options: &RasterOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
     if options.max_zoom > 24 {
         return Err(Error::Data(format!(
             "--maxZoom must be between 0 and 24, got {}",
@@ -103,20 +113,16 @@ pub fn raster_with_options(
     }
     #[cfg(not(feature = "native-geospatial"))]
     {
+        let _ = reporter;
         Err(Error::Environment(
             "raster requires native GDAL/PROJ; rebuild with --features native-geospatial".into(),
         ))
     }
     #[cfg(feature = "native-geospatial")]
     {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let work = tempfile::tempdir_in(parent)?;
-        native::convert(input, work.path(), options)?;
-        crate::output::publish_directory(work.path(), output, options.force)?;
-        Ok(())
+        let job = crate::output::Job::begin(output, options.force)?;
+        let staging = job.staging("raster")?;
+        let report = native::convert(input, &staging, options, reporter)?;
+        job.publish_dir(&staging, Some(report))
     }
 }

@@ -9,6 +9,8 @@ use walkdir::WalkDir;
 use crate::bbox::{aabb_to_box, bounding_box_from_gltf_path, box_to_aabb, union_aabb, BoundingBox};
 use crate::error::Error;
 use crate::georef::{root_transform, Cartographic, RotationDegrees};
+use crate::output::Job;
+use crate::report::ConversionResult;
 
 /// Leaf geometric error from 3d-tiles-tools TilesetJsonCreator.
 pub const LEAF_GEOMETRIC_ERROR: f64 = 512.0;
@@ -27,9 +29,7 @@ pub fn create_tileset_json(
     output: &Path,
     opts: &CreateTilesetOptions,
 ) -> Result<Value, Error> {
-    if output.exists() && !opts.force {
-        return Err(Error::OutputExists(output.to_path_buf()));
-    }
+    crate::output::check_output(output, opts.force)?;
     let contents = collect_contents(input)?;
     if contents.is_empty() {
         return Err(Error::NoContent(input.to_path_buf()));
@@ -134,30 +134,67 @@ fn file_name(p: &Path) -> Result<String, Error> {
 
 /// Write tileset.json next to the source GLB URI, pack a 3TZ without copying the GLB.
 pub fn glb_to_3tz(input: &Path, output: &Path, opts: &CreateTilesetOptions) -> Result<(), Error> {
+    glb_to_3tz_reported(input, output, opts).map(drop)
+}
+
+/// [`glb_to_3tz`] returning the published result.
+pub fn glb_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    opts: &CreateTilesetOptions,
+) -> Result<ConversionResult, Error> {
     if !input.is_file() || !is_gltf(input) {
         return Err(Error::NoContent(input.to_path_buf()));
     }
-    if output.exists() && !opts.force {
-        return Err(Error::OutputExists(output.to_path_buf()));
+    glb_job(input, Job::begin(output, opts.force)?, opts)
+}
+
+/// Wrap one GLB in an already-begun job: the manifest is staged in the job and
+/// the GLB is packed from its source path.
+pub(crate) fn glb_job(
+    input: &Path,
+    job: Job,
+    opts: &CreateTilesetOptions,
+) -> Result<ConversionResult, Error> {
+    let json_path = job.path().join("tileset.json");
+    create_tileset_json(input, &json_path, opts)?;
+    let files = [
+        ("tileset.json".to_string(), json_path),
+        (file_name(input)?, input.to_path_buf()),
+    ];
+    job.publish_3tz(&files, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glb_to_3tz_stages_privately_and_never_clobbers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let input = tmp.path().join("model.glb");
+        fs::write(&input, crate::fixtures::triangle_glb()).unwrap();
+        let output = tmp.path().join("model.3tz");
+        // A user folder that the old fixed staging name would have deleted.
+        let sibling = output.with_extension("tileset-work");
+        fs::create_dir(&sibling).unwrap();
+        fs::write(sibling.join("keep"), b"mine").unwrap();
+        let opts = CreateTilesetOptions::default();
+        let result = glb_to_3tz_reported(&input, &output, &opts).unwrap();
+        assert!(result.archive && result.report.is_none());
+        crate::validate_3tz(&output).unwrap();
+        assert_eq!(fs::read(sibling.join("keep")).unwrap(), b"mine");
+        let before = fs::read(&output).unwrap();
+        assert!(matches!(
+            glb_to_3tz(&input, &output, &opts),
+            Err(Error::OutputExists(_))
+        ));
+        assert_eq!(fs::read(&output).unwrap(), before);
+        let mut names: Vec<_> = fs::read_dir(tmp.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["model.3tz", "model.glb", "model.tileset-work"]);
     }
-    let tmp = output.with_extension("tileset-work");
-    if tmp.exists() {
-        fs::remove_dir_all(&tmp)?;
-    }
-    fs::create_dir_all(&tmp)?;
-    let name = file_name(input)?;
-    let json_path = tmp.join("tileset.json");
-    let result = (|| {
-        create_tileset_json(input, &json_path, opts)?;
-        crate::pack::pack_named_files(
-            &[
-                ("tileset.json".to_string(), json_path.clone()),
-                (name, input.to_path_buf()),
-            ],
-            output,
-            &crate::pack::PackOptions { force: true },
-        )
-    })();
-    let _ = fs::remove_dir_all(&tmp);
-    result
 }

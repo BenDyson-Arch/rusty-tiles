@@ -1,5 +1,8 @@
 //! Native GDAL sampling and regular-grid quantized-mesh terrain prototype.
-use crate::Error;
+use crate::{
+    report::{ConversionResult, Reporter},
+    Error,
+};
 use std::path::Path;
 #[cfg(feature = "native-geospatial")]
 mod quantized;
@@ -19,12 +22,19 @@ pub struct TerrainOptions {
 }
 
 pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), Error> {
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
-    }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
-    }
+    dem_to_terrain_reported(input, output, options, &Reporter::default()).map(drop)
+}
+
+/// [`dem_to_terrain`] with `terrain` tile progress sent to `reporter`,
+/// returning the published directory and its report.
+pub fn dem_to_terrain_reported(
+    input: &Path,
+    output: &Path,
+    options: &TerrainOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
     if options.max_zoom > 24 {
         return Err(Error::Data(format!(
             "--maxZoom must be between 0 and 24, got {}",
@@ -57,26 +67,27 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
     }
     #[cfg(not(feature = "native-geospatial"))]
     {
+        let _ = reporter;
         Err(Error::Environment(
             "terrain requires native GDAL/PROJ; rebuild with --features native-geospatial".into(),
         ))
     }
     #[cfg(feature = "native-geospatial")]
     {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let work = tempfile::tempdir_in(parent)?;
-        convert(input, work.path(), options)?;
-        crate::output::publish_directory(work.path(), output, options.force)?;
-        Ok(())
+        let job = crate::output::Job::begin(output, options.force)?;
+        let staging = job.staging("terrain")?;
+        let report = convert(input, &staging, options, reporter)?;
+        job.publish_dir(&staging, Some(report))
     }
 }
 
 #[cfg(feature = "native-geospatial")]
-fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), Error> {
+fn convert(
+    input: &Path,
+    output: &Path,
+    options: &TerrainOptions,
+    reporter: &Reporter,
+) -> Result<serde_json::Value, Error> {
     use serde_json::json;
     let source = raster::Dataset::open(input)?;
     let (source_crs, range) = source.inspect()?;
@@ -155,7 +166,7 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
         rayon::current_num_threads().clamp(1, 4)
     };
     let mut batch = Vec::with_capacity(batch_size);
-    progress(tiles, total);
+    reporter.progress("terrain", tiles, total);
     for (z, &(size, x0, x1, y0, y1)) in levels.iter().enumerate() {
         available.push(json!([{"startX":x0,"startY":y0,"endX":x1,"endY":y1}]));
         for x in x0..=x1 {
@@ -197,9 +208,11 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
                     .collect();
                 std::fs::write(
                     folder.join(format!("{y}.heights.json")),
-                    serde_json::to_vec(
-                        &json!({"width":options.grid,"height":options.grid,"heights":overlay}),
-                    )?,
+                    serde_json::to_vec(&HeightOverlay {
+                        height: options.grid,
+                        heights: &overlay,
+                        width: options.grid,
+                    })?,
                 )?;
                 batch.push(SampledTile {
                     path: folder.join(format!("{y}.terrain")),
@@ -216,6 +229,7 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
                         &mut optimization,
                         &mut tiles,
                         total,
+                        reporter,
                     )?;
                 }
             }
@@ -227,6 +241,7 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
             &mut optimization,
             &mut tiles,
             total,
+            reporter,
         )?;
     }
     std::fs::write(
@@ -236,16 +251,27 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
         "minzoom":0,"maxzoom":options.max_zoom,"bounds":bounds,"tiles":["{z}/{x}/{y}.terrain"],"available":available,
         "heightOverlay":{"version":1,"tiles":["{z}/{x}/{y}.heights.json"],"grid":options.grid,"rowOrder":"south-to-north"}}))?,
     )?;
-    std::fs::write(
-        output.join("conversion.json"),
-        serde_json::to_vec_pretty(&json!({
+    crate::output::write_report(
+        output,
+        json!({
         "sourceCrs":source_crs,"heightOffset":options.height_offset,"fillHeight":options.fill_height,"grid":options.grid,"tiles":tiles,
         "heightRange":[low,high],"heightQuantizationStep":(high-low)/32767.,"sourcePixelDegrees":pixel,
         "finestGridDegrees":180./f64::from(1_u32<<options.max_zoom)/f64::from(options.grid-1),
         "simplification":optimization.report(options.max_error),
-        "limitations":"Regular-grid sampling prototype with border-locked simplification. NoData/outside filled explicitly. Height datum supplied by caller. Simplification errors are measured against the quantized grid, not a certified bound on the source DEM surface."}))?,
-    )?;
-    Ok(())
+        "limitations":"Regular-grid sampling prototype with border-locked simplification. NoData/outside filled explicitly. Height datum supplied by caller. Simplification errors are measured against the quantized grid, not a certified bound on the source DEM surface."}),
+        true,
+    )
+}
+
+/// One `{z}/{x}/{y}.heights.json` sidecar. Fields stay in the sorted key order
+/// the former `json!` map produced, so the bytes are unchanged; serialising
+/// directly avoids building a `Value` per height sample.
+#[cfg(feature = "native-geospatial")]
+#[derive(serde::Serialize)]
+struct HeightOverlay<'a> {
+    height: u16,
+    heights: &'a [Option<f64>],
+    width: u16,
 }
 
 #[cfg(feature = "native-geospatial")]
@@ -265,6 +291,7 @@ fn flush_batch(
     optimization: &mut quantized::Statistics,
     tiles: &mut u64,
     total: u64,
+    reporter: &Reporter,
 ) -> Result<(), Error> {
     use rayon::prelude::*;
     let encode = |tile: &SampledTile| {
@@ -290,18 +317,8 @@ fn flush_batch(
         std::fs::write(&tile.path, encoded.bytes)?;
         optimization.add(&encoded.statistics);
         *tiles += 1;
-        progress(*tiles, total);
+        reporter.progress("terrain", *tiles, total);
     }
     batch.clear();
     Ok(())
-}
-
-#[cfg(feature = "native-geospatial")]
-fn progress(done: u64, total: u64) {
-    if std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_some() {
-        eprintln!(
-            "{}",
-            serde_json::json!({"event":"progress","phase":"terrain","done":done,"total":total})
-        );
-    }
 }

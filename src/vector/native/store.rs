@@ -1,5 +1,6 @@
 //! Disk-backed feature/lock indexing, deterministic spatial partitions and LOD.
 use super::*;
+use crate::report::Reporter;
 use encoding::Candidate;
 use rayon::prelude::*;
 use reuse::{Cut, Reuse};
@@ -45,14 +46,6 @@ impl Reports {
             self.first.push(value);
         }
         Ok(())
-    }
-}
-fn progress(phase: &str, done: usize, total: Option<usize>) {
-    if std::env::var("RUSTY_TILES_PROGRESS_JSON").as_deref() == Ok("1") {
-        eprintln!(
-            "{}",
-            json!({"event":"progress","phase":phase,"done":done,"total":total})
-        );
     }
 }
 
@@ -109,11 +102,7 @@ fn split(
         }
         Geometry::Polygon(rings) => {
             let polygon = geometry::polygon(rings, repair)?;
-            let triangles: Vec<_> = polygon
-                .indices
-                .chunks_exact(3)
-                .map(|v| <[u32; 3]>::try_from(v).unwrap())
-                .collect();
+            let triangles = polygon.indices.as_chunks::<3>().0.to_vec();
             if triangles.len() <= 1 {
                 return Err(data("one triangle or its metadata exceeds tile budget"));
             }
@@ -179,32 +168,47 @@ fn split(
     }
     Ok(parts)
 }
-fn insert(
-    db: &Connection,
-    feature: Feature,
-    path: &str,
-    hint: bool,
+/// Spool writer: features enter the disk index, oversized ones split first.
+#[derive(Clone, Copy)]
+struct Spool<'a> {
+    db: &'a Connection,
     repair: bool,
-    options: &VectorOptions,
-    counters: &mut Counters,
-    reports: &mut Reports,
-) -> Result<(), Error> {
-    if hint
-        && (feature.geometry.size() > options.max_vertices
-            || feature.estimate() > options.max_bytes)
-    {
-        for (index, mut part) in split(&feature, repair, counters, reports)?
-            .into_iter()
-            .enumerate()
+    options: &'a VectorOptions,
+}
+impl Spool<'_> {
+    fn insert(
+        self,
+        feature: Feature,
+        path: &str,
+        hint: bool,
+        counters: &mut Counters,
+        reports: &mut Reports,
+    ) -> Result<(), Error> {
+        let Self {
+            db,
+            repair,
+            options,
+        } = self;
+        if hint
+            && (feature.geometry.size() > options.max_vertices
+                || feature.estimate() > options.max_bytes)
         {
-            part.fragment_path = format!("{}{index}", feature.fragment_path);
-            insert(db, part, path, true, repair, options, counters, reports)?;
+            for (index, mut part) in split(&feature, repair, counters, reports)?
+                .into_iter()
+                .enumerate()
+            {
+                part.fragment_path = format!("{}{index}", feature.fragment_path);
+                self.insert(part, path, true, counters, reports)?;
+            }
+            return Ok(());
         }
-        return Ok(());
+        insert_row(db, &feature, path)
     }
+}
+fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Error> {
     let (lo, hi) = bounds(feature.geometry.points())?;
     let center = mul(add(lo, hi), 0.5);
-    let bytes = canonical(&feature)?;
+    let bytes = canonical(feature)?;
     let data = String::from_utf8(bytes).unwrap();
     db.execute("INSERT INTO features(path,data,n,estimate,x,y,z,lx,ly,lz,hx,hy,hz,sortkey) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
         params![path,data,feature.geometry.size() as i64,feature.estimate() as i64,center[0],center[1],center[2],lo[0],lo[1],lo[2],hi[0],hi[1],hi[2],format!("{}\0{}\0{}",feature.layer(),feature.source_id().as_str().unwrap(),feature.fragment_path)]).map_err(sql)?;
@@ -252,6 +256,7 @@ struct Stats {
     hi: Point,
 }
 struct Build<'a> {
+    reporter: &'a Reporter,
     db: &'a Connection,
     spool: &'a Path,
     output: &'a Path,
@@ -276,30 +281,18 @@ impl Build<'_> {
         center: Point,
         levels: &[u32],
     ) -> Result<Vec<Candidate>, Error> {
-        let (spool, max_features, repair, options, schemas, output) = (
-            self.spool,
-            self.max_features,
-            self.repair,
-            self.options,
-            self.schemas,
-            self.output,
-        );
+        let encoder = encoding::Encoder {
+            spool: self.spool,
+            max_features: self.max_features,
+            repair: self.repair,
+            options: self.options,
+            schemas: self.schemas,
+            output: self.output,
+        };
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
             levels
                 .par_iter()
-                .map(|level| {
-                    encoding::encode(
-                        spool,
-                        prefix,
-                        center,
-                        *level,
-                        max_features,
-                        repair,
-                        options,
-                        schemas,
-                        output,
-                    )
-                })
+                .map(|level| encoding::encode(encoder, prefix, center, *level))
                 .collect()
         });
         values.into_iter().collect()
@@ -358,7 +351,8 @@ impl Build<'_> {
             value["children"] = Value::Array(children.into_iter().map(|n| n.value).collect());
         }
         self.counters.tiles += 1;
-        progress("encoding", self.counters.tiles, None);
+        self.reporter
+            .progress("encoding", self.counters.tiles as u64, None);
         if self.counters.tiles > self.options.max_tiles {
             return Err(data(
                 "hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly",
@@ -447,13 +441,15 @@ impl Build<'_> {
             let n = parts.len();
             for (index, mut part) in parts.into_iter().enumerate() {
                 part.fragment_path = format!("{}{index}", feature.fragment_path);
-                insert(
-                    self.db,
+                Spool {
+                    db: self.db,
+                    repair: self.repair,
+                    options: self.options,
+                }
+                .insert(
                     part,
                     prefix,
                     false,
-                    self.repair,
-                    self.options,
                     &mut self.counters,
                     &mut self.reports,
                 )?;
@@ -561,10 +557,11 @@ pub(super) fn convert(
     repair: bool,
     ambiguous: bool,
     options: &VectorOptions,
-) -> Result<(), Error> {
+    reporter: &Reporter,
+) -> Result<Value, Error> {
     super::available()?;
     let started = Instant::now();
-    progress("ingestion", 0, None);
+    reporter.progress("ingestion", 0, None);
     std::fs::create_dir_all(output.join("t"))?;
     let reuse = Reuse::new(output, options)?;
     let mut reader = Reader::new(input, options, reuse.frame.clone())?;
@@ -590,13 +587,15 @@ pub(super) fn convert(
             db.execute_batch("SAVEPOINT feature;").map_err(sql)?;
             let result = (|| {
                 let geometry_reports = geometry::validate(&mut feature, repair, ambiguous)?;
-                insert(
-                    &db,
+                Spool {
+                    db: &db,
+                    repair,
+                    options,
+                }
+                .insert(
                     feature,
                     "",
                     true,
-                    repair,
-                    options,
                     &mut counters.borrow_mut(),
                     &mut reports.borrow_mut(),
                 )?;
@@ -628,18 +627,13 @@ pub(super) fn convert(
                 } else {
                     "invalid"
                 });
-                if std::env::var("RUSTY_TILES_PROGRESS_JSON").as_deref() == Ok("1") {
-                    let mut warning = value.clone();
-                    warning["event"] = json!("warning");
-                    eprintln!("{warning}");
-                } else {
-                    eprintln!(
-                        "layer '{}', feature {}: {}",
-                        value["sourceLayer"].as_str().unwrap_or(""),
-                        value["sourceId"].as_str().unwrap_or(""),
-                        value["reason"].as_str().unwrap_or("")
-                    );
-                }
+                let message = format!(
+                    "layer '{}', feature {}: {}",
+                    value["sourceLayer"].as_str().unwrap_or(""),
+                    value["sourceId"].as_str().unwrap_or(""),
+                    value["reason"].as_str().unwrap_or("")
+                );
+                reporter.warn(&message, Some(&value));
             }
             reports.borrow_mut().write(value)
         },
@@ -648,11 +642,8 @@ pub(super) fn convert(
         return Err(data(format!("{} unconvertible feature(s); first failure: {}. No tileset published. Fix the reported features or explicitly use --skipInvalid.",failures.get(),first_failure.borrow().as_deref().unwrap())));
     }
     let ingestion_seconds = started.elapsed().as_secs_f64();
-    progress(
-        "ingestion",
-        counters.borrow().features,
-        Some(counters.borrow().features),
-    );
+    let ingested = counters.borrow().features as u64;
+    reporter.progress("ingestion", ingested, ingested);
     db.execute_batch("COMMIT;").map_err(sql)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
@@ -689,6 +680,7 @@ pub(super) fn convert(
         .build()
         .map_err(|e| Error::Environment(format!("cannot start vector workers: {e}")))?;
     let mut build = Build {
+        reporter,
         db: &db,
         spool: &spool,
         output,
@@ -803,16 +795,11 @@ pub(super) fn convert(
         "pointAggregation":{"enabled":options.aggregate_points,"contentTiles":list.iter().filter(|n| n["extras"].get("pointAggregation").is_some()).count()},
         "polygonFragmentPolicy":"standard glTF fills plus vector source boundaries; no internal fragment outlines",
         "errorPolicy":"direct original-to-parent distance plus float32 rounding; all source bounds retained"});
-    report
-        .as_object_mut()
-        .unwrap()
-        .extend(values.as_object().unwrap().clone());
+    if let (Value::Object(report), Value::Object(values)) = (&mut report, values) {
+        report.extend(values);
+    }
     if options.reproducible {
         report.as_object_mut().unwrap().remove("performance");
     }
-    std::fs::write(
-        output.join("conversion.json"),
-        serde_json::to_vec_pretty(&report)?,
-    )?;
-    Ok(())
+    crate::output::write_report(output, report, true)
 }

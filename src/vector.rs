@@ -13,7 +13,10 @@ pub(crate) fn native_available() -> Result<(), Error> {
     native::available()
 }
 
-use crate::error::Error;
+use crate::{
+    error::Error,
+    report::{ConversionResult, Reporter},
+};
 
 pub const SPEC_ISSUE: &str = "https://github.com/CesiumGS/3d-tiles/issues/825";
 pub const SPEC_PR: &str = "https://github.com/CesiumGS/3d-tiles/pull/838";
@@ -154,6 +157,30 @@ pub fn vector_to_3tz_with_options(
     ambiguous_outlines: bool,
     options: &VectorOptions,
 ) -> Result<(), Error> {
+    vector_to_3tz_reported(
+        input,
+        output,
+        max_features,
+        repair,
+        ambiguous_outlines,
+        options,
+        &Reporter::default(),
+    )
+    .map(drop)
+}
+
+/// [`vector_to_3tz_with_options`] with `ingestion`/`encoding` progress and
+/// per-feature warnings sent to `reporter`, returning the published archive
+/// and its report.
+pub fn vector_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    max_features: usize,
+    repair: bool,
+    ambiguous_outlines: bool,
+    options: &VectorOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
     let lod = &options.lod;
     if options
         .where_clause
@@ -220,44 +247,30 @@ pub fn vector_to_3tz_with_options(
             return Err(Error::InputNotFound(previous.clone()));
         }
     }
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
-    }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
-    }
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
     #[cfg(not(feature = "native-geospatial"))]
     {
-        let _ = (repair, ambiguous_outlines);
+        let _ = (repair, ambiguous_outlines, reporter);
         Err(Error::Environment(
             "vector conversion requires a build with native-geospatial".into(),
         ))
     }
     #[cfg(feature = "native-geospatial")]
     {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let work = tempfile::tempdir_in(parent)?;
-        #[cfg(feature = "native-geospatial")]
-        native::convert(
+        let job = crate::output::Job::begin(output, options.force)?;
+        // The tileset tree is staged apart from the job's scratch space.
+        let staging = job.staging("tiles")?;
+        let report = native::convert(
             input,
-            work.path(),
+            &staging,
             max_features,
             repair,
             ambiguous_outlines,
             options,
+            reporter,
         )?;
-        #[cfg(feature = "native-geospatial")]
-        crate::pack::convert_to_3tz(
-            work.path(),
-            output,
-            &crate::pack::PackOptions {
-                force: options.force,
-            },
-        )
+        job.publish_tree_3tz(&staging, Some(report))
     }
 }
 

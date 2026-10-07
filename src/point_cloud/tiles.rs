@@ -1,7 +1,8 @@
 //! Disk-backed spatial partitioning; only an input chunk or a tile's bounded
 //! representatives/full-detail records are held in memory at a time.
 use super::source::{position, Layout, RAW};
-use super::{progress, PointCloudOptions};
+use super::PointCloudOptions;
+use crate::report::Reporter;
 use crate::{
     glb_write::MetadataGlb,
     tileset_node::{
@@ -60,6 +61,7 @@ impl Records {
 }
 
 pub(super) struct Tree<'a> {
+    pub reporter: &'a Reporter,
     pub layout: &'a Layout,
     pub options: &'a PointCloudOptions,
     pub output: &'a Path,
@@ -128,7 +130,8 @@ impl Tree<'_> {
         if leaf {
             std::fs::remove_file(path)?;
             self.leaf_points += count;
-            progress("tiling", self.leaf_points, self.total_points);
+            self.reporter
+                .progress("tiling", self.leaf_points, self.total_points);
             return Ok(node);
         }
         if depth >= 64 {
