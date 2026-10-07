@@ -10,7 +10,7 @@ use rusty_tiles::mesh;
 use rusty_tiles::pack::list_zip_names;
 use rusty_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
 use rusty_tiles::tileset::{glb_to_3tz, CreateTilesetOptions};
-use rusty_tiles::{validate_3tz, write_glb_compressed, Cartographic, SourceCrs, SourceOffset};
+use rusty_tiles::{validate_3tz, Cartographic, SourceCrs, SourceOffset};
 use serde_json::Value;
 
 fn zip_bytes(tz: &Path, name: &str) -> Vec<u8> {
@@ -409,58 +409,6 @@ fn texture_crop_shrinks_shared_atlas() {
         let jpeg_len = glb_jpeg_len(&bytes);
         assert!(jpeg_len > 32, "leaf image too small: {jpeg_len}");
     }
-}
-
-#[test]
-fn compressed_glb_smaller_than_uncompressed() {
-    let prim = grid_prim(80, 80, |_, _| 0.0);
-    let raw = write_glb(std::slice::from_ref(&prim)).unwrap();
-    let packed = write_glb_compressed(std::slice::from_ref(&prim)).unwrap();
-    assert!(
-        packed.len() < raw.len(),
-        "compressed {} >= uncompressed {}",
-        packed.len(),
-        raw.len()
-    );
-    let j = glb_json(&packed);
-    assert!(j["extensionsRequired"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "EXT_meshopt_compression"));
-    let buffers = j["buffers"].as_array().unwrap();
-    assert_eq!(
-        buffers.len(),
-        1,
-        "required-extension meshopt must not declare an empty fallback buffer"
-    );
-    assert!(buffers[0].get("extensions").is_none());
-}
-
-#[test]
-fn compressed_glb_recenters_for_quant_precision() {
-    let mut prim = grid_prim(40, 40, |_, _| 0.0);
-    for p in &mut prim.positions {
-        p[0] += 600.0;
-        p[1] += 50.0;
-        p[2] -= 200.0;
-    }
-    let packed = write_glb_compressed(std::slice::from_ref(&prim)).unwrap();
-    let j = glb_json(&packed);
-    let t = &j["nodes"][0]["translation"];
-    let tx = t[0].as_f64().unwrap();
-    let ty = t[1].as_f64().unwrap();
-    let tz = t[2].as_f64().unwrap();
-    assert!(
-        (tx - 620.0).abs() < 2.0 && (ty - 70.0).abs() < 2.0 && (tz + 200.0).abs() < 2.0,
-        "expected tile-center translation, got {t}"
-    );
-    let scale = j["nodes"][0]["scale"][0].as_f64().unwrap();
-    // 40-unit half-extent / 32767 ≈ 0.0012, not 600/32767 ≈ 0.018.
-    assert!(
-        scale < 0.003,
-        "quant scale should follow tile extent, got {scale}"
-    );
 }
 
 #[test]

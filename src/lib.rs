@@ -4,7 +4,6 @@
 //! Raster, quantized-mesh terrain and draft glTF vector paths are GDAL-backed lab tools.
 
 pub mod bbox;
-pub mod compress;
 pub mod error;
 pub mod fixtures;
 pub mod georef;
@@ -21,14 +20,12 @@ mod output;
 pub mod pack;
 pub mod point_cloud;
 mod point_sampling;
-pub mod split;
 pub mod terrain;
 pub mod texture;
 pub mod tile;
 pub mod tileset;
 pub mod vector;
 
-pub use compress::write_glb_compressed;
 pub use error::Error;
 pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
