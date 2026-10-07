@@ -174,7 +174,7 @@ class ReuseTests(unittest.TestCase):
 
 
 class CliReuseTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN for embedded reuse acceptance')
+    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN for native reuse acceptance')
     def test_cli_reuses_archive_and_failed_update_does_not_publish(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=ReuseTests().make_source(tmp,8);baseline=root/'baseline.3tz';updated=root/'updated.3tz'

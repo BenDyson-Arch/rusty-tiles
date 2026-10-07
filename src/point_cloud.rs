@@ -91,7 +91,7 @@ impl Coordinates {
         #[cfg(not(feature = "native-geospatial"))]
         {
             let _ = definition;
-            Err(Error::Environment("geospatial point clouds require a build with --features native-geospatial (GDAL >= 3.11, PROJ >= 9.2); local XYZ needs no GDAL or Python".into()))
+            Err(Error::Environment("geospatial point clouds require a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2); local XYZ needs no GDAL or Python".into()))
         }
     }
 

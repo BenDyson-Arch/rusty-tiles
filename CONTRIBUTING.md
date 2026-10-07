@@ -41,7 +41,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 
-For native geospatial work, install GDAL >= 3.11, PROJ >= 9.2, their headers and `pkg-config` files, and libclang, then run `cargo test --locked --features native-geospatial`. CI tests the minimum GDAL 3.11 and the GDAL 3.13 stack separately from the existing Rust and Python jobs. Native CRS tests use independent coordinate references and synthetic local grids; they require no Python or grid downloads. Create native handles within each worker: spatial references and transformations deliberately cannot be sent or shared between threads. Native CRS operations use GDAL's process-wide offline policy; do not re-enable PROJ networking while they are running.
+For native geospatial work, install GDAL >= 3.12, PROJ >= 9.2, their headers and `pkg-config` files, SQLite development files, and libclang, then run `cargo test --locked --features native-geospatial`. CI tests the minimum GDAL 3.12 and the GDAL 3.13 stack separately from the existing Rust and Python jobs. Native CRS tests use independent coordinate references and synthetic local grids; they require no Python or grid downloads. Create native handles within each worker: spatial references and transformations deliberately cannot be sent or shared between threads. Native CRS operations use GDAL's process-wide offline policy; do not re-enable PROJ networking while they are running.
 
 `cargo clippy --all-targets` is useful during review. Existing style warnings are not a required CI gate; avoid adding new warnings. Optional external-oracle and user-supplied-model tests are ignored by default and must be invoked explicitly. See the README for their dependencies and inputs.
 
@@ -153,11 +153,11 @@ missing a required capability. Native point-cloud/mesh/packing commands can be c
 Python. It does not install dependencies or fetch grids; an inventory is not proof
 that every requested CRS/height operation is supported.
 
-`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. `doctor --command raster` checks the linked GDAL/PROJ versions, database, COG/GTiff/PNG drivers and native raster tile algorithm without Python or a GDAL executable. A default build reports the missing native feature. An all-command doctor still inventories Python dependencies for the converters that have not yet migrated.
+`doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. `doctor --command raster` checks the linked GDAL/PROJ versions, database, COG/GTiff/PNG drivers and native raster tile algorithm without Python or a GDAL executable. A default build reports the missing native feature. `doctor --command vector` checks native GDAL/GEOS triangulation and CRS readiness without Python. The all-command doctor still provides its legacy Python development inventory until #61 migrates that inventory.
 
 Known-good, exact Python profiles tested on 2026-10-05 are in
-`scripts/gdal-requirements.txt` (vector runtime and development raster/terrain oracles) and
-`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud, terrain and raster conversion themselves have no Python dependency.
+`scripts/gdal-requirements.txt` (development vector/raster/terrain oracles) and
+`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud, terrain, raster and vector conversion themselves have no Python dependency.
 The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
 build supporting constrained triangulation; a pip binding cannot replace those
 system libraries. Install a profile into a suitable environment explicitly:
@@ -327,7 +327,7 @@ The optimized run is recorded in [`tests/fixtures/terrain_performance_results.js
 
 ## Native raster validation
 
-Native raster acceptance runs the real CLI with an empty executable `PATH`, checks decoded PNG pixels and source COG bands/masks/NoData/metadata, and verifies successful replacement, rollback, categorized JSON errors, progress and repeatability. `tests/fixtures/raster_oracle.py` preserves the former Python implementation for development comparisons on the same GDAL stack. RGB with explicit alpha, numeric grayscale, projected grayscale and byte grayscale fixtures compare every decoded tile and recipe/TileJSON output. Native GDAL 3.11/3.13 CI also creates and converts an invented raster without Python bindings. Display resampling follows the installed GDAL tile algorithm defaults, as before; native output baselines require the same GDAL/PROJ/codec versions.
+Native raster acceptance runs the real CLI with an empty executable `PATH`, checks decoded PNG pixels and source COG bands/masks/NoData/metadata, and verifies successful replacement, rollback, categorized JSON errors, progress and repeatability. `tests/fixtures/raster_oracle.py` preserves the former Python implementation for development comparisons on the same GDAL stack. RGB with explicit alpha, numeric grayscale, projected grayscale and byte grayscale fixtures compare every decoded tile and recipe/TileJSON output. Native GDAL 3.12/3.13 CI also creates and converts an invented raster without Python bindings. Display resampling follows the installed GDAL tile algorithm defaults, as before; native output baselines require the same GDAL/PROJ/codec versions.
 
 For release performance comparisons, build the original Python CLI from `9a95862` (its raster path is unchanged through `3f0026c`) and the current native CLI against the same GDAL/PROJ stack. The development Python environment needs NumPy, GDAL bindings and the `gdal` executable for the baseline. Then run:
 
@@ -352,3 +352,59 @@ On the recorded i7-12700KF/GDAL 3.13.3 stack, median warm release times were:
 Every PNG byte matched, and source samples/masks/metadata and TileJSON/recipes were preserved. Python defaults used all 20 logical CPUs for tiling; the native pools were capped at four. The one-worker Python control is included in the raw results. These synthetic, warm-cache measurements do not predict throughput on cold storage or larger inputs.
 
 Native COG compression and tiling use at most four workers in separate stages. The GDAL block cache and explicit display warp budget remain 64 MiB each. Temporary TIFFs are uncompressed and deleted before publication; reserve scratch space for their full bands, including any reprojected display raster. This trades disk capacity for less repeated compression while retaining DEFLATE on the published COG and identical PNG output on the tested dependency stack.
+
+## Native vector validation and comparison
+
+Build with `native-geospatial` and run the real CLI acceptance tests:
+
+```sh
+cargo test --locked --features native-geospatial
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p 'test_vector*.py'
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p 'test_native_vector.py'
+```
+
+The original Python modules live unchanged in `tests/fixtures/vector_oracle/`. Integration tests select the native CLI through `RUSTY_TILES_BIN`; oracle math helpers remain independent reference checks. Native tests exercise conversion and readiness with an empty PATH, exact scalar/list/noData metadata, projected and three-axis placement, shared locks, holes, fragment coverage, budgets, repair policies, decoded quantization bounds, deterministic worker output and reuse. The migration rejects Python reuse baselines explicitly. External C++ geodiff 2.3.1 and the local Go driver passed indexed/unindexed cross-apply checks. The vector browser probes passed Cesium 1.143.0 and 1.144.0 rendering, refinement, styling and picking before and after cache-disabled reloads; see `docs/VECTOR.md` to reproduce.
+
+The opt-in `--aggregatePoints` checks independently decode counts and metre error,
+retain boolean/INT64 source properties in leaves, separate layers, preserve every
+oversized MultiPoint coordinate, exercise tolerance/budget fallbacks, and compare
+workers and edited-source reuse. The shared voxel grid also runs through the
+existing point-cloud acceptance tests. The browser aggregate case renders and
+picks seven count aggregates at distance, then all 64 source points with original
+properties at close range on Cesium 1.143.0 and 1.144.0, including quantized meshopt
+content and cache-disabled reloads. Top-level error exceeds root error so large
+aggregate tolerances still leave a distance interval for coarsest content.
+
+Build the Python baseline at `fada1d1` and the new CLI in separate release target directories against the same GDAL/PROJ/GEOS stack, then run:
+
+```sh
+python3 tests/fixtures/benchmark_vector.py \
+  --old-bin /path/to/python-release/rusty-tiles \
+  --new-bin target/release/rusty-tiles \
+  --output target/vector-benchmark --repeats 3
+```
+
+The baseline needs development Python GDAL/NumPy on PATH; native measured runs use an empty PATH. `tests/fixtures/vector_benchmark_results.json` records raw samples, binary/source identities, decoded checks and output sizes. On the i7-12700KF/GDAL 3.13.3 stack, warm release medians were:
+
+| Invented input | Python, 1 worker | Rust, 1 worker | Python, 4 workers | Rust, 4 workers | Speedup, 4 workers |
+| --- | --- | --- | --- | --- | --- |
+| small-lines | 0.213 s | 0.039 s | 0.319 s | 0.036 s | 8.8× |
+| regional-lines | 9.740 s | 2.291 s | 7.908 s | 1.810 s | 4.4× |
+| polygons-with-holes | 5.922 s | 0.739 s | 3.982 s | 0.512 s | 7.8× |
+| projected-lines | 2.625 s | 0.530 s | 2.118 s | 0.408 s | 5.2× |
+| dense-points | 1.558 s | 0.458 s | 1.381 s | 0.384 s | 3.6× |
+
+All full-detail world positions and properties matched; maximum coordinate difference was 9.4e-10 metres. With aggregation off, tile counts matched, and native manifests, reports and payloads other than performance diagnostics were identical across worker counts. Peak RSS fell on four cases; for regional lines at four workers it was 118.2 MiB natively versus 112.1 MiB for the largest Python process. Python worker memory is not summed, so this is not an aggregate memory comparison. Native tile data and each worker's SQLite cache are bounded by the existing budgets and 32 MiB cache.
+
+The invented dense fixture has 8,192 semantic points. At four workers,
+`--aggregatePoints` took 0.520 s versus 0.384 s for native retention/routing and
+1.381 s for Python retention/routing. Aggregation is 2.7× faster than the Python
+baseline but adds 35% native conversion time and 48% archive bytes (1.565 MB versus
+1.057 MB) to provide extra coarse content. It publishes 383 nodes instead of 255,
+with 16 count aggregates at the root and every original point/property in leaves.
+Peak largest-process RSS was 60.6 MiB, versus 56.5 MiB for native routing and
+86.1 MiB for Python routing. These are conversion/output measurements; reduced
+distant geometry is verified by decoded counts and browser refinement, without
+a frame-rate claim. Use `--case dense-points` to repeat this comparison alone.
+
+These are full CLI conversions including packing, after one warmup per method and three serial repetitions with rotated method order. Inputs are invented, content is uncompressed, filesystem caches are warm, and the workstation had unrelated background jobs. CPU and largest-process RSS come from Linux `wait4`. Fixture generation and decoded checks are untimed; these measurements do not establish cold-storage or rendering throughput.

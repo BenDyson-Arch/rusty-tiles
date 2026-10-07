@@ -614,7 +614,7 @@ options!(
 );
 
 // gdal-sys 0.12 does not include gdalalgorithm.h in its bindgen wrapper. These
-// declarations match the stable GDAL 3.11 C API (opaque handles, C bool), and use
+// declarations match the stable GDAL 3.12 C API (opaque handles, C bool), and use
 // the same GDAL library already linked by gdal-sys. Avoid the 3.12-only FromPath API.
 unsafe extern "C" {
     fn GDALGetGlobalAlgorithmRegistry() -> *mut c_void;
@@ -694,15 +694,10 @@ impl TileAlgorithm {
             format!("--min-zoom={}", options.min_zoom),
             format!("--max-zoom={}", options.max_zoom),
         ];
-        // GDAL 3.11's tiler uses threads. From 3.12, explicitly select threads
+        // Explicitly select threads on the supported GDAL 3.12+ runtime
         // so library conversion never starts a GDAL executable or forks a host
         // that may already have other threads running.
-        // SAFETY: GDAL owns the static terminated version string.
-        let version =
-            unsafe { geospatial::string(gdal_sys::GDALVersionInfo(c"VERSION_NUM".as_ptr())) };
-        if version.parse::<u32>().unwrap_or(0) >= 3_120_000 {
-            arguments.push("--parallel-method=thread".into());
-        }
+        arguments.push("--parallel-method=thread".into());
         let mut strings = arguments
             .iter()
             .map(|a: &String| CString::new(a.as_str()).unwrap())

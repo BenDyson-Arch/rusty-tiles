@@ -15,7 +15,7 @@ import numpy as np
 from osgeo import ogr, osr
 from test_vector_lod import vector, read, parts
 
-sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'fixtures/vector_oracle'))
 from vector_source import Reader, transformation
 
 
@@ -257,8 +257,8 @@ class GeoPackageTests(unittest.TestCase):
 
 
 class CliGeoPackageTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN to exercise embedded Python and archive publication')
-    def test_cli_embedded_reader_and_atomic_failure(self):
+    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN to exercise native ingestion and archive publication')
+    def test_cli_native_reader_and_atomic_failure(self):
         import zipfile
         with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(tmp)/'source.gpkg'

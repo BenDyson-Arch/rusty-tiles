@@ -4,10 +4,12 @@ use serde_json::{json, Value};
 
 pub fn report(selected: &[String]) -> Result<Value, Error> {
     let mut report = if !selected.is_empty()
-        && selected
-            .iter()
-            .all(|name| matches!(name.as_str(), "point-cloud" | "terrain" | "raster"))
-    {
+        && selected.iter().all(|name| {
+            matches!(
+                name.as_str(),
+                "point-cloud" | "terrain" | "raster" | "vector"
+            )
+        }) {
         json!({"commands":{}})
     } else {
         python_report(selected)?
@@ -15,6 +17,7 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     report["commands"]["point-cloud"] = point_cloud_readiness();
     report["commands"]["terrain"] = terrain_readiness();
     report["commands"]["raster"] = raster_readiness();
+    report["commands"]["vector"] = vector_readiness();
     let names: Vec<_> = if selected.is_empty() {
         report["commands"]
             .as_object()
@@ -35,7 +38,7 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
 
 fn terrain_readiness() -> Value {
     let geospatial = geospatial_readiness();
-    json!({"ready":geospatial["ready"],"requires":["native GDAL >= 3.11", "PROJ >= 9.2", "local PROJ database/grids"],
+    json!({"ready":geospatial["ready"],"requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
         "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
 }
 
@@ -49,9 +52,24 @@ fn raster_readiness() -> Value {
     #[cfg(not(feature = "native-geospatial"))]
     let tiling = json!({"ready":false});
     json!({"ready":geospatial["ready"] == true && tiling["ready"] == true,
-        "requires":["native GDAL >= 3.11 with raster tile algorithm", "PROJ >= 9.2", "local PROJ database/grids"],
+        "requires":["native GDAL >= 3.12 with raster tile algorithm", "PROJ >= 9.2", "local PROJ database/grids"],
         "backend":"native GDAL", "geospatial":geospatial, "tiling":tiling,
         "note":"Native COG, display and tiling APIs; no Python or GDAL executable required."})
+}
+
+fn vector_readiness() -> Value {
+    let geospatial = geospatial_readiness();
+    #[cfg(feature = "native-geospatial")]
+    let geometry = match crate::vector::native_available() {
+        Ok(()) => json!({"ready":true}),
+        Err(error) => json!({"ready":false,"error":error.to_string()}),
+    };
+    #[cfg(not(feature = "native-geospatial"))]
+    let geometry = json!({"ready":false});
+    json!({"ready":geospatial["ready"] == true && geometry["ready"] == true,
+        "requires":["native GDAL >= 3.12", "GEOS >= 3.10", "SQLite", "PROJ >= 9.2"],
+        "backend":"native GDAL/GEOS", "geospatial":geospatial, "geometry":geometry,
+        "note":"Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required."})
 }
 
 fn geospatial_readiness() -> Value {

@@ -11,9 +11,7 @@ import numpy as np
 from osgeo import ogr
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('vector_lod', ROOT/'scripts/vector.py')
-vector = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vector)
+from vector_test_support import vector
 
 
 def distance(points, path):

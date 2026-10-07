@@ -12,7 +12,15 @@ const { chromium } = require('playwright');
     const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
     const browserErrors = [];
     page.on('pageerror', error => browserErrors.push(String(error)));
-    await page.goto(process.argv[2] || 'http://127.0.0.1:9250');
+    const network = await page.context().newCDPSession(page);
+    await network.send('Network.enable');
+    for (const load of ['initial', 'hard-refresh']) {
+      if (load === 'hard-refresh') {
+        await network.send('Network.setCacheDisabled', {cacheDisabled: true});
+        await page.reload({waitUntil: 'load'});
+      } else {
+        await page.goto(process.argv[2] || 'http://127.0.0.1:9250');
+      }
     await page.waitForFunction(() => window.annotations || window.failures?.length,
       { timeout: 30000 });
     const results = await page.evaluate(async () => {
@@ -117,7 +125,9 @@ const { chromium } = require('playwright');
             }
             await wait(400);
           }
-          frame(Math.max(tiles.boundingSphere.radius * 30, 60));
+          frame(entry.name === 'point-aggregates' ?
+            Math.max(tiles.boundingSphere.radius * 600, 1000) :
+            Math.max(tiles.boundingSphere.radius * 30, 60));
           await settle();
           const coarse = await inspect(tiles, entry);
           tiles.maximumScreenSpaceError = 1e-7;
@@ -132,12 +142,14 @@ const { chromium } = require('playwright');
       }
       return { version: C.VERSION, cases: output };
     });
+    results.load = load;
     results.browserErrors = browserErrors;
     process.stdout.write(JSON.stringify(results, null, 2) + '\n');
     if (process.argv.includes('--require-native')) {
       const picked = result => result?.rendered && result.properties?._source_id &&
         result.properties?._source_layer && result.properties?.name;
-      const passed = !browserErrors.length && results.cases.length === 5 &&
+      const expectedCases = process.argv.includes('--require-aggregates') ? 6 : 5;
+      const passed = !browserErrors.length && results.cases.length === expectedCases &&
         results.cases.every(entry => {
           const fine = entry.fine;
           return !entry.error && fine && !entry.coarse.failures.length &&
@@ -149,6 +161,12 @@ const { chromium } = require('playwright');
                 fine.decoders[0].collections.length === 1 &&
                 fine.decoders[0].collections[0].primitives === 2)) &&
             fine.decoders.some(decoder => decoder.nativeVector) &&
+            (entry.case !== 'point-aggregates' ||
+              (entry.coarse.pick.rendered && entry.coarse.pick.properties.aggregation === 'voxel' &&
+                Number(entry.coarse.pick.properties.pointCount) > 1 &&
+                !entry.coarse.pick.properties._source_id &&
+                fine.vertices > entry.coarse.vertices &&
+                !fine.pick.properties.aggregation)) &&
             (!fine.hole || !fine.hole.rendered) &&
             (!fine.wideLine || picked(fine.wideLine.negative) || picked(fine.wideLine.positive)) &&
             (!fine.boundary || picked(fine.boundary)) &&
@@ -158,6 +176,7 @@ const { chromium } = require('playwright');
         console.error('Native vector load/render/LOD/picking check failed; see JSON report.');
         process.exitCode = 1;
       }
+    }
     }
   } finally {
     await browser.close();

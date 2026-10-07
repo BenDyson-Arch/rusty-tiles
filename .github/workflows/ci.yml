@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gdal: ['3.11', '3.13']
+        gdal: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -55,7 +55,7 @@ jobs:
       - name: Install binding build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libclang-dev
+          sudo apt-get install -y build-essential pkg-config libclang-dev libsqlite3-dev
       - uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462 # v2
         with:
           environment-name: native-geospatial
@@ -94,7 +94,7 @@ jobs:
       - name: Install binding build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libclang-dev
+          sudo apt-get install -y pkg-config libclang-dev libsqlite3-dev
       - name: Build CLI for derivative acceptance
         shell: bash -el {0}
         run: |

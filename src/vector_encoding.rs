@@ -14,7 +14,13 @@ fn encode<const N: usize>(bytes: &[u8]) -> Result<Vec<u8>, Error> {
 
 pub fn compress_file(path: &Path) -> Result<Value, Error> {
     let input = std::fs::read(path)?;
-    let glb = gltf::binary::Glb::from_slice(&input)?;
+    let output = compress_bytes(&input)?;
+    std::fs::write(path, &output)?;
+    Ok(json!({"beforeBytes":input.len(),"afterBytes":output.len()}))
+}
+
+pub(crate) fn compress_bytes(input: &[u8]) -> Result<Vec<u8>, Error> {
+    let glb = gltf::binary::Glb::from_slice(input)?;
     let mut doc: Value = serde_json::from_slice(&glb.json)?;
     let source = glb
         .bin
@@ -113,8 +119,7 @@ pub fn compress_file(path: &Path) -> Result<Value, Error> {
         bin: Some(std::borrow::Cow::Owned(binary)),
     }
     .to_vec()?;
-    std::fs::write(path, &output)?;
-    Ok(json!({"beforeBytes":input.len(),"afterBytes":output.len()}))
+    Ok(output)
 }
 
 #[cfg(test)]

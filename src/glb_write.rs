@@ -10,6 +10,7 @@ use crate::error::Error;
 
 /// Small GLB builder for feature attributes and structural metadata. Views are
 /// eight-byte aligned so numeric property tables can retain 64-bit source values.
+#[derive(Clone)]
 pub(crate) struct MetadataGlb {
     pub document: serde_json::Value,
     binary: Vec<u8>,
@@ -43,6 +44,28 @@ impl MetadataGlb {
         let index = accessors.len();
         accessors.push(description);
         index
+    }
+
+    /// Replace a generated view while retaining accessor/metadata identities.
+    #[cfg(feature = "native-geospatial")]
+    pub fn replace_view(&mut self, index: usize, bytes: &[u8]) {
+        self.binary.resize(self.binary.len().next_multiple_of(8), 0);
+        self.document["bufferViews"][index]["byteOffset"] = self.binary.len().into();
+        self.document["bufferViews"][index]["byteLength"] = bytes.len().into();
+        self.binary.extend_from_slice(bytes);
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    pub fn compact_views(&mut self) {
+        let mut binary = Vec::new();
+        for view in self.document["bufferViews"].as_array_mut().unwrap() {
+            binary.resize(binary.len().next_multiple_of(8), 0);
+            let offset = view["byteOffset"].as_u64().unwrap() as usize;
+            let length = view["byteLength"].as_u64().unwrap() as usize;
+            view["byteOffset"] = binary.len().into();
+            binary.extend_from_slice(&self.binary[offset..offset + length]);
+        }
+        self.binary = binary;
     }
 
     pub fn finish(mut self) -> Result<Vec<u8>, Error> {

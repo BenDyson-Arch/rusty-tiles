@@ -198,11 +198,7 @@ impl Tree<'_> {
     }
 
     fn sample(&self, path: &Path, lo: [f64; 3], extent: [f64; 3]) -> Result<(Vec<u8>, f64), Error> {
-        let budget = self.options.max_points;
-        let mut side = ((budget as f64).cbrt().round() as usize).max(1);
-        while side.checked_pow(3).is_none_or(|n| n > budget) {
-            side -= 1;
-        }
+        let grid = crate::point_sampling::VoxelGrid::new(lo, extent, self.options.max_points);
         let mut representatives = BTreeMap::new();
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         loop {
@@ -211,22 +207,14 @@ impl Tree<'_> {
                 break;
             }
             for row in batch.chunks_exact(self.layout.record_len) {
-                let p = position(row);
-                let cell: [usize; 3] = std::array::from_fn(|i| {
-                    if extent[i] == 0. {
-                        0
-                    } else {
-                        (((p[i] - lo[i]) / extent[i] * side as f64) as usize).min(side - 1)
-                    }
-                });
-                let key = (cell[0] * side + cell[1]) * side + cell[2];
+                let key = grid.key(position(row));
                 representatives.entry(key).or_insert_with(|| row.to_vec());
             }
         }
         // First source record in each voxel, sorted by voxel key for stable output.
         Ok((
             representatives.into_values().flatten().collect(),
-            norm(extent.map(|v| v / side as f64)),
+            grid.error_bound(),
         ))
     }
 }

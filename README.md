@@ -53,9 +53,9 @@ The Python-to-Rust migration is tracked in [issues #56–63](https://github.com/
 cargo install --path . --locked --features native-geospatial
 ```
 
-This feature requires GDAL >= 3.11 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
+This feature requires GDAL >= 3.12 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, libsqlite3 development files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
 
-The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain sampling/encoding and raster COG/display/tiling also run natively with this feature. Vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
+The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain, raster and vector conversion also run natively with this feature. Vector ingestion and triangulation require GDAL built with GEOS >= 3.10. Local preview uses Python 3. CI exercises native builds with GDAL 3.12 and 3.13.
 
 ### 2. Install the dependencies for your data
 
@@ -66,20 +66,10 @@ The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feat
 | Geospatial `point-cloud` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `terrain` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `raster` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
-| `vector` | Python 3, NumPy, GDAL with GEOS |
+| `vector` | Build with `native-geospatial`; native GDAL/GEOS/PROJ, SQLite and local CRS data |
 | Local preview | Python 3; Node/npm to install the Cesium runtime |
 
-The CLI embeds the remaining vector conversion scripts; their Python libraries must be installed in the environment used by `python3`.
-
-For the Python vector command, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
-
-```sh
-conda create -n rusty-tiles -c conda-forge python=3.12 gdal=3.12 numpy=2 pip
-conda activate rusty-tiles
-python3 -c "from osgeo import gdal; import numpy; print(gdal.VersionInfo('--version'))"
-```
-
-The point-cloud Python requirements are for development fixtures and independent audits, rather than conversion.
+Python GDAL, NumPy and the point-cloud Python requirements are used for development fixtures, benchmarks and independent output audits. Conversion runs without Python. The preview server still needs Python 3.
 
 ### 3. Try the included example
 
@@ -95,7 +85,7 @@ python3 -m zipfile -e output/example.3tz output/example
 You now have an archive and an extracted tileset. Continue to [preview your results](#preview-your-results) to view it.
 
 Check the installed environment with `rusty-tiles doctor --command vector` (or
-select `point-cloud`, `raster`, or `terrain`). See the [dependency profiles](CONTRIBUTING.md#check-and-reproduce-the-python-environment)
+select `point-cloud`, `raster`, `terrain`, or `vector`). See the [dependency profiles](CONTRIBUTING.md#check-and-reproduce-the-python-environment)
 for exact tested versions and `doctor --json` output.
 
 ## Convert your data

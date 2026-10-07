@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 import weakref
 import zipfile
-sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'fixtures/vector_oracle'))
 import vector_parallel
 
 BIN=os.environ.get('RUSTY_TILES_BIN')

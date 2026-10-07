@@ -5,6 +5,14 @@
 
 use std::path::Path;
 
+#[cfg(feature = "native-geospatial")]
+mod native;
+
+#[cfg(feature = "native-geospatial")]
+pub(crate) fn native_available() -> Result<(), Error> {
+    native::available()
+}
+
 use crate::error::Error;
 
 pub const SPEC_ISSUE: &str = "https://github.com/CesiumGS/3d-tiles/issues/825";
@@ -44,9 +52,11 @@ pub struct VectorOptions {
     pub jobs: usize,
     pub quantize: bool,
     pub meshopt: bool,
-    /// Library callers supply the rusty-tiles executable used for native compression.
+    /// Retained for API compatibility; native compression runs in process.
     pub meshopt_encoder: Option<std::path::PathBuf>,
     pub parent_repair: bool,
+    /// Explicit count aggregates in point-only parents; leaves retain source metadata.
+    pub aggregate_points: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
     pub force: bool,
@@ -75,6 +85,7 @@ impl Default for VectorOptions {
             meshopt: false,
             meshopt_encoder: None,
             parent_repair: false,
+            aggregate_points: false,
             max_parent_features: 4096,
             where_clause: None,
             force: false,
@@ -189,121 +200,39 @@ pub fn vector_to_3tz_with_options(
     if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let work = tempfile::tempdir_in(parent)?;
-    let mut script = String::from("import sys,types\n");
-    for (name, source) in [
-        ("vector_source", include_str!("../scripts/vector_source.py")),
-        ("vector_reuse", include_str!("../scripts/vector_reuse.py")),
-        (
-            "vector_parallel",
-            include_str!("../scripts/vector_parallel.py"),
-        ),
-        (
-            "vector_pipeline",
-            include_str!("../scripts/vector_pipeline.py"),
-        ),
-    ] {
-        script.push_str(&format!(
-            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={}\nexec(compile(m.__source__, '<rusty-tiles/{name}.py>', 'exec'),m.__dict__)\n",
-            serde_json::to_string(source)?
-        ));
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        let _ = (repair, ambiguous_outlines);
+        Err(Error::Environment(
+            "vector conversion requires a build with native-geospatial".into(),
+        ))
     }
-    script.push_str(&format!(
-        "__source__={}\nexec(compile(__source__, '<rusty-tiles/vector.py>', 'exec'),globals())",
-        serde_json::to_string(include_str!("../scripts/vector.py"))?
-    ));
-    let mut command = std::process::Command::new("python3");
-    command
-        .arg("-c")
-        .arg(crate::python::script(
-            &script,
-            "vector",
-            "Python GDAL/GEOS and NumPy",
-        )?)
-        .arg(input)
-        .arg(work.path())
-        .arg("--jobs")
-        .arg(options.jobs.to_string())
-        .arg("--max-parent-features")
-        .arg(options.max_parent_features.to_string())
-        .arg("--max-features")
-        .arg(max_features.to_string())
-        .arg("--lod-tolerance")
-        .arg(lod.tolerance_metres.to_string())
-        .arg("--lod-levels")
-        .arg(lod.levels.to_string())
-        .arg("--max-vertices")
-        .arg(options.max_vertices.to_string())
-        .arg("--max-bytes")
-        .arg(options.max_bytes.to_string())
-        .arg("--max-tiles")
-        .arg(options.max_tiles.to_string())
-        .arg("--max-source-vertices")
-        .arg(options.max_source_vertices.to_string());
-    if let Some(previous) = &options.reuse_tileset {
-        command.arg("--reuse-tileset").arg(previous);
+    #[cfg(feature = "native-geospatial")]
+    {
+        let parent = output
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let work = tempfile::tempdir_in(parent)?;
+        #[cfg(feature = "native-geospatial")]
+        native::convert(
+            input,
+            work.path(),
+            max_features,
+            repair,
+            ambiguous_outlines,
+            options,
+        )?;
+        #[cfg(feature = "native-geospatial")]
+        crate::pack::convert_to_3tz(
+            work.path(),
+            output,
+            &crate::pack::PackOptions {
+                force: options.force,
+            },
+        )
     }
-    for layer in &options.layers {
-        command.arg("--layer").arg(layer);
-    }
-    if options.all_layers {
-        command.arg("--all-layers");
-    }
-    if let Some(crs) = &options.source_crs {
-        command.arg("--source-crs").arg(crs);
-    }
-    if let Some(offset) = options.height_offset {
-        command.arg("--height-offset").arg(offset.to_string());
-    }
-    if let Some(expression) = &options.where_clause {
-        command.arg("--where").arg(expression);
-    }
-    command.arg("--list-fields").arg(&options.list_fields);
-    for field in &options.fields {
-        command.arg("--field").arg(field);
-    }
-    for field in &options.drop_fields {
-        command.arg("--drop-field").arg(field);
-    }
-    if options.skip_invalid {
-        command.arg("--skip-invalid");
-    }
-    if options.reproducible {
-        command.arg("--reproducible");
-    }
-    if options.quantize {
-        command.arg("--quantize");
-    }
-    if options.meshopt {
-        command.arg("--meshopt-helper").arg(
-            options
-                .meshopt_encoder
-                .as_ref()
-                .ok_or_else(|| Error::msg("meshopt_encoder executable is required"))?,
-        );
-    }
-    if options.parent_repair {
-        command.arg("--parent-repair");
-    }
-    if repair {
-        command.arg("--repair");
-    }
-    if ambiguous_outlines {
-        command.arg("--ambiguous-outlines");
-    }
-    crate::python::run(&mut command, "vector")?;
-    crate::pack::convert_to_3tz(
-        work.path(),
-        output,
-        &crate::pack::PackOptions {
-            force: options.force,
-        },
-    )
 }
 
 #[cfg(test)]

@@ -218,6 +218,9 @@ struct VectorArgs {
     /// Allow explicitly reported outline stand-ins for unsimplifiable parent polygons
     #[arg(long = "parentRepair")]
     parent_repair: bool,
+    /// Aggregate point-only parents into per-layer voxel counts; keep original leaves
+    #[arg(long = "aggregatePoints")]
+    aggregate_points: bool,
     /// Maximum feature fragments in parent content; leaves use maxFeatures
     #[arg(long = "maxParentFeatures", default_value_t = 4096)]
     max_parent_features: usize,
@@ -462,12 +465,9 @@ fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
                 jobs: a.jobs,
                 quantize: a.quantize,
                 meshopt: a.meshopt,
-                meshopt_encoder: if a.meshopt {
-                    Some(std::env::current_exe()?)
-                } else {
-                    None
-                },
+                meshopt_encoder: None,
                 parent_repair: a.parent_repair,
+                aggregate_points: a.aggregate_points,
                 max_parent_features: a.max_parent_features,
                 where_clause: a.where_clause,
                 force: a.force,

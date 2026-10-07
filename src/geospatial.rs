@@ -9,7 +9,7 @@ use crate::Error;
 use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut, NonNull};
 
-const MIN_GDAL_VERSION: u32 = 3_110_000;
+const MIN_GDAL_VERSION: u32 = 3_120_000;
 
 /// Actual linked library versions, rather than the build machine's versions.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -26,7 +26,7 @@ pub fn versions() -> Result<Versions, Error> {
         let number = string(gdal_sys::GDALVersionInfo(c"VERSION_NUM".as_ptr()));
         if number.parse::<u32>().unwrap_or(0) < MIN_GDAL_VERSION {
             return Err(Error::Environment(format!(
-                "native geospatial operations require GDAL >= 3.11 (found {number})"
+                "native geospatial operations require GDAL >= 3.12 (found {number})"
             )));
         }
         let mut proj = [0; 3];
@@ -104,6 +104,34 @@ pub(crate) fn diagnostic(context: &str) -> String {
 pub struct Crs(NonNull<c_void>);
 
 impl Crs {
+    /// Clone a dataset-owned SRS, retaining its coordinate epoch and datum.
+    /// Caller must keep the borrowed native handle live for this call.
+    pub(crate) unsafe fn clone_native(raw: gdal_sys::OGRSpatialReferenceH) -> Result<Self, Error> {
+        let owned = NonNull::new(unsafe { gdal_sys::OSRClone(raw) })
+            .ok_or_else(|| Error::Data("cannot clone source CRS".into()))?;
+        unsafe {
+            gdal_sys::OSRSetAxisMappingStrategy(
+                owned.as_ptr(),
+                gdal_sys::OSRAxisMappingStrategy::OAMS_TRADITIONAL_GIS_ORDER,
+            )
+        };
+        Ok(Self(owned.cast()))
+    }
+
+    pub(crate) fn wkt(&self) -> Result<String, Error> {
+        let _errors = QuietErrors::new();
+        let mut raw = null_mut();
+        // SAFETY: The SRS is live; the exported string is freed exactly once.
+        unsafe {
+            if gdal_sys::OSRExportToWkt(self.0.as_ptr(), &mut raw) != 0 {
+                return Err(Error::Data(diagnostic("cannot export source CRS")));
+            }
+            let value = string(raw);
+            gdal_sys::VSIFree(raw.cast());
+            Ok(value)
+        }
+    }
+
     fn empty() -> Result<Self, Error> {
         // SAFETY: A null definition requests an empty, independently owned SRS.
         NonNull::new(unsafe { gdal_sys::OSRNewSpatialReference(null()) })
