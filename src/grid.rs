@@ -58,12 +58,18 @@ impl TriGrid {
         let mean_area = area / tris.len().max(1) as f32;
         let by_area = (2.0 * mean_area).sqrt();
         let by_vol = (ext[0] * ext[1] * ext[2] / MAX_CELLS).cbrt();
-        let cell = by_area.max(by_vol).max(longest / 2048.0).max(1e-6);
-        let dims = [
-            ((ext[0] / cell).floor() as usize + 1).max(1),
-            ((ext[1] / cell).floor() as usize + 1).max(1),
-            ((ext[2] / cell).floor() as usize + 1).max(1),
-        ];
+        let (cell, dims) = if tris.is_empty() {
+            // Nothing to bin: one cell, not MAX_CELLS of empty ones.
+            (1.0, [1; 3])
+        } else {
+            let cell = by_area.max(by_vol).max(longest / 2048.0).max(1e-6);
+            let dims = [
+                ((ext[0] / cell).floor() as usize + 1).max(1),
+                ((ext[1] / cell).floor() as usize + 1).max(1),
+                ((ext[2] / cell).floor() as usize + 1).max(1),
+            ];
+            (cell, dims)
+        };
         let ncell = dims[0] * dims[1] * dims[2];
         let mut counts = vec![0u32; ncell + 1];
         let mut spans = Vec::with_capacity(tris.len());
@@ -218,6 +224,9 @@ impl TriGrid {
         seed: Option<u32>,
         mut score: impl FnMut(u32, f32, [f32; 3]) -> Option<f32>,
     ) -> Option<Hit> {
+        if self.tris.is_empty() {
+            return None;
+        }
         let c = self.cell_of(p);
         let mut best: Option<(f32, Hit)> = None;
         if let Some(ti) = seed.filter(|&ti| (ti as usize) < self.tris.len()) {
@@ -458,6 +467,11 @@ mod tests {
     #[test]
     fn empty_grid_returns_none() {
         let g = TriGrid::new(Vec::new());
+        assert!(g.is_empty());
         assert!(g.nearest_dist2([0.0, 0.0, 0.0]).is_none());
+        assert!(g.nearest_dist2([1e6, -1e6, 3.0]).is_none());
+        assert!(g
+            .nearest_by_seeded([0.5; 3], i64::MAX, Some(0), |_, d2, _| Some(d2))
+            .is_none());
     }
 }
