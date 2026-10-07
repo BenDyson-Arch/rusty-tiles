@@ -118,6 +118,37 @@ fn usage_error_has_its_own_code() {
     assert_eq!(report["error"]["code"], "usage");
 }
 
+#[test]
+fn failed_conversion_emits_ndjson_without_completion() {
+    let root = tempfile::tempdir().unwrap();
+    let missing = root.path().join("missing");
+    let out = root.path().join("out.3tz");
+    let result = support::rusty_tiles()
+        .args(["--json", "convert", "-i"])
+        .arg(&missing)
+        .arg("-o")
+        .arg(&out)
+        .args(["--progress", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(3));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["code"], "data");
+    let events: Vec<Value> = String::from_utf8(result.stderr)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        events.last().unwrap(),
+        &json!({"event":"failed","phase":"conversion","code":"data"})
+    );
+    assert!(!events
+        .iter()
+        .any(|e| e["event"] == "progress" && e["phase"] == "conversion" && e["done"] == 1));
+    assert!(!out.exists());
+}
+
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn data_and_environment_errors_have_distinct_codes() {
