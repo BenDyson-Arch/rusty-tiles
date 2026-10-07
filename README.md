@@ -23,28 +23,33 @@ Every option for every command is in the [command reference](docs/CLI.md).
 
 ## Install
 
-### Download a binary
+The downloads support mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo).
 
-For Linux and macOS, on Intel/AMD or ARM64:
+### macOS / Linux
+
+Run in a terminal:
 
 ```sh
-curl -fsSLo install-rusty-tiles.sh https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/main/scripts/install.sh
-sh install-rusty-tiles.sh
+curl -fsSL https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/main/scripts/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 rusty-tiles --version
 ```
 
-The installer downloads the latest stable release, verifies its SHA-256 checksum and installs into `~/.local/bin`. Use `--version 0.3.0` to pin a release or `--prefix /your/bin` to change the destination. It needs `curl`, `tar` and `sha256sum` or `shasum`; it needs neither Rust nor administrator privileges.
+This installs the latest release into `~/.local/bin` and verifies its checksum. No Rust or administrator privileges are needed. Add the `export PATH` line to your shell's startup file to keep it in new terminals.
 
-For Windows x64, download `rusty-tiles-VERSION-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases), extract `rusty-tiles.exe` and add its folder to `PATH`. Manual archives and `SHA256SUMS` are available for every platform. Linux binaries require glibc 2.35+ and libstdc++; macOS binaries require macOS 15+.
+Supports Intel/AMD and ARM64. Requires macOS 15+, or Linux with glibc 2.35+ and libstdc++.
 
-With `cargo-binstall` already installed, you can also use the manifest from a source checkout:
+### Windows
 
-```sh
-cargo binstall --manifest-path Cargo.toml rusty-tiles
-```
+1. Open [the latest release](https://github.com/BenDyson-Arch/rusty-tiles/releases/latest) and download `rusty-tiles-VERSION-x86_64-pc-windows-msvc.zip` under **Assets**.
+2. Extract the ZIP, then open PowerShell in the extracted folder.
+3. Check the executable:
 
-Prebuilt binaries use the **default build**: mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the container or a native geospatial build.
+   ```powershell
+   .\rusty-tiles.exe --version
+   ```
+
+To run `rusty-tiles` from any folder, add the extracted folder to your user `PATH` and reopen PowerShell. The Windows download is for x64.
 
 ### Run the full toolset in a container
 
@@ -78,6 +83,8 @@ Add `--features native-geospatial` to enable every converter. This build needs G
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
 If `pkg-config` finds libjpeg-turbo at build time, it is also needed at run time. Set `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` while building to use the portable Rust encoder, as the release binaries do.
+
+If you already have `cargo-binstall`, run `cargo binstall --manifest-path Cargo.toml rusty-tiles` from a source checkout to download the prebuilt binary instead.
 
 ### Build the container
 
