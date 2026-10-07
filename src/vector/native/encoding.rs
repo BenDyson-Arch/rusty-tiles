@@ -71,8 +71,11 @@ fn metadata(
                 && present.iter().any(|v| v.is_f64()));
         if real {
             for v in &present {
-                if (v.is_i64() || v.is_u64())
-                    && v.as_f64().is_some_and(|v| v.abs() > 9007199254740992.)
+                // Check the original integer: converting first rounds 2^53+1
+                // down to the boundary and would silently accept a lossy value.
+                if v.as_i64()
+                    .is_some_and(|n| !(-(1i64 << 53)..=(1i64 << 53)).contains(&n))
+                    || v.as_u64().is_some_and(|n| n > (1u64 << 53))
                 {
                     return Err(data(format!(
                         "property {key:?} cannot represent large integers as float64 without loss"
@@ -666,4 +669,64 @@ pub(super) fn encode(
     }
     result.node = Some(node);
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn float64_metadata_checks_original_signed_and_unsigned_integer_bounds() {
+        let feature = |value| Feature {
+            properties: BTreeMap::from([
+                ("_source_id".into(), json!("0")),
+                ("value".into(), value),
+            ]),
+            geometry: Geometry::Point([0.; 3]),
+            surface_fragment: false,
+            triangle_boundaries: Vec::new(),
+            fragment_path: String::new(),
+        };
+        for schemas in [
+            BTreeMap::new(),
+            BTreeMap::from([("value".into(), "real".into())]),
+        ] {
+            let real = feature(json!(1.5));
+            for integer in [
+                json!((1i64 << 53) + 1),
+                json!(-((1i64 << 53) + 1)),
+                json!(i64::MIN),
+                json!(i64::MAX),
+                json!(u64::MAX),
+            ] {
+                let source = feature(integer);
+                let mut glb = MetadataGlb::new("test");
+                let error = metadata(&mut glb, &[&source, &real], &schemas).unwrap_err();
+                assert!(error
+                    .to_string()
+                    .contains("large integers as float64 without loss"));
+            }
+            for integer in [
+                -(1i64 << 53),
+                -(1i64 << 53) + 1,
+                (1i64 << 53) - 1,
+                1i64 << 53,
+            ] {
+                let source = feature(json!(integer));
+                let mut glb = MetadataGlb::new("test");
+                metadata(&mut glb, &[&source, &real], &schemas).unwrap();
+                let column = &glb.document["extensions"]["EXT_structural_metadata"]
+                    ["propertyTables"][0]["properties"]["value"];
+                let view =
+                    &glb.document["bufferViews"][column["values"].as_u64().unwrap() as usize];
+                let offset = view["byteOffset"].as_u64().unwrap() as usize;
+                let bytes = glb.finish().unwrap();
+                let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+                let start = 28 + json_length + offset;
+                let decoded = f64::from_le_bytes(bytes[start..start + 8].try_into().unwrap());
+                assert_eq!(decoded, integer as f64);
+                assert_eq!(decoded as i64, integer);
+            }
+        }
+    }
 }

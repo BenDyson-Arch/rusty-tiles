@@ -16,6 +16,41 @@ from test_vector_reuse import archive, details
 
 @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'), 'select the native CLI')
 class NativeVectorTests(unittest.TestCase):
+    def test_mixed_numeric_columns_reject_integers_outside_exact_float64_bounds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = root/'mixed.geojson'
+            for number in (2**53+1, -(2**53+1), 2**63-1, -(2**63), 2**64-1):
+                with self.subTest(number=number):
+                    case = root/str(number)
+                    case.mkdir()
+                    source.write_text(json.dumps(dict(type='FeatureCollection', features=[
+                        dict(type='Feature', id=i, properties=dict(value=value),
+                             geometry=dict(type='Point', coordinates=[i, 0, 0]))
+                        for i, value in enumerate((number, 1.5))])))
+                    for name, run in (('native', native_run), ('python', python_run)):
+                        args = types.SimpleNamespace(input=str(source), output=str(case/name),
+                            source_crs='local', max_features=64)
+                        with self.assertRaisesRegex(ValueError, 'large integers as float64 without loss'):
+                            run(args)
+                    self.assertFalse((case/'native').exists())
+
+    def test_mixed_numeric_columns_keep_exact_float64_integer_boundaries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp); source = root/'mixed.geojson'; output = root/'native'
+            numbers = (2**53, -(2**53), 2**53-1, -(2**53-1), 1.5)
+            source.write_text(json.dumps(dict(type='FeatureCollection', features=[
+                dict(type='Feature', id=i, properties=dict(value=value),
+                     geometry=dict(type='Point', coordinates=[i, 0, 0]))
+                for i, value in enumerate(numbers)])))
+            native_run(types.SimpleNamespace(input=str(source), output=str(output), source_crs='local'))
+            decoded = {key[1]:fragments[0][0]['value'] for key,fragments in details(output).items()}
+            self.assertEqual(decoded, {str(i):float(v) for i,v in enumerate(numbers)})
+            data = next((output/'t').glob('*.glb')).read_bytes()
+            length = struct.unpack_from('<I', data, 12)[0]; doc = json.loads(data[20:20+length])
+            schema = doc['extensions']['EXT_structural_metadata']['schema']['classes']['feature']['properties']
+            self.assertEqual(schema['value']['componentType'], 'FLOAT64')
+
     def test_python_archives_require_a_fresh_native_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
