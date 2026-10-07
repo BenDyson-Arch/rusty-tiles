@@ -9,8 +9,8 @@ import pathlib
 import sys
 import types
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'scripts'))
-import vector
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from vector_test_support import vector
 
 
 def pos(x, y, z=100):

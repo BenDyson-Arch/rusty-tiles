@@ -3,10 +3,10 @@ fn main() {
     #[cfg(feature = "native-geospatial")]
     {
         pkg_config::Config::new()
-            .atleast_version("3.11")
+            .atleast_version("3.12")
             .cargo_metadata(false)
             .probe("gdal")
-            .expect("native-geospatial requires GDAL >= 3.11 headers/libraries and pkg-config");
+            .expect("native-geospatial requires GDAL >= 3.12 headers/libraries and pkg-config");
         pkg_config::Config::new()
             .atleast_version("9.2")
             .cargo_metadata(false)

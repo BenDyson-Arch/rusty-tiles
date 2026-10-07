@@ -2,7 +2,9 @@
 
 The standalone `vector` command reads OGR spatial layers, including GeoPackage,
 GeoJSON and Shapefile, into draft `3DTILES_content_gltf_vector` content in a
-3D Tiles 1.1 `.3tz` archive. GDAL/GEOS and NumPy are required. No source datasets,
+3D Tiles 1.1 `.3tz` archive. Build with `native-geospatial`; GDAL >= 3.12,
+GEOS >= 3.10, PROJ >= 9.2 and SQLite are required. Python is used only for
+development fixtures and independent audits. No source datasets,
 credentials or hosted services are bundled.
 
 ```sh
@@ -38,7 +40,7 @@ reported rounding still depends on the spatial extent of its contents.
 
 The input features and shared-coordinate index are spooled to a temporary SQLite
 store beside the output. Median spatial partitioning uses disk-backed SQL sorts.
-The converter does not collect the entire dataset in a Python list. Memory still
+The Rust converter streams features into disk-backed storage. Memory still
 depends on one source feature, bounded by `--maxSourceVertices` (default 1,000,000),
 one candidate tile, the hierarchy and the OGR driver's own buffering. Parent
 candidates are read and simplified one feature at a time; workers stop retaining
@@ -331,7 +333,7 @@ property-based cyan/orange colours, visibility filtering, source identity, exact
 fills/boundaries, repaired outlines and points:
 
 ```sh
-python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
 python3 scripts/preview.py --port 9257 \
   --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
   --annotations target/vector-metadata-cases
@@ -341,19 +343,21 @@ NODE_PATH=target/browser-probe/node_modules \
 ```
 
 The probe downloads nothing and exits unsuccessfully if any assertion fails.
+Both probes repeat their checks after a cache-disabled hard refresh.
 Repeat it when changing the runtime version; the nullable INT64 observation above
 is specific to the checked 1.143 release.
 
 ### Repeat the browser check
 
 This check is optional and separate from the default test suite. It uses invented
-geometry and downloads no datasets. Install the normal vector Python dependencies,
+geometry and downloads no datasets. Build the native CLI and install the
+development Python fixture dependencies,
 Node.js, a Chromium executable, Playwright and one explicitly pinned Cesium release:
 
 ```sh
-python3 tests/fixtures/vector_compat.py /tmp/rusty-tiles-vector-compat
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_compat.py /tmp/rusty-tiles-vector-compat
 npm install --prefix target/vector-browser --no-save --package-lock=false playwright
-npm install --prefix target/vector-runtime --no-save --package-lock=false cesium@1.142.0
+npm install --prefix target/vector-runtime --no-save --package-lock=false cesium@1.143.0
 python3 scripts/preview.py \
   --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
   --annotations /tmp/rusty-tiles-vector-compat --port 9250
@@ -414,8 +418,10 @@ rusty-tiles vector -i updated.gpkg -o updated.3tz --layer roads \
 ```
 
 Use the same selection, height policy, budgets and LOD options as the baseline.
-The baseline must have been created by the same encoder revision and GDAL/NumPy
-versions. Incompatible settings/schema/CRS or missing build state fail explicitly;
+The baseline must have been created by the same native encoder revision and GDAL/GEOS/PROJ
+versions. Python archives require a fresh native baseline: their encoder identity
+is incompatible, even when source geometry and options match. Incompatible
+settings/schema/CRS or missing build state fail explicitly;
 run a fresh conversion without `--reuseTileset` in that case. Initial archives
 include `vector-build.json`; it stores partition decisions, signatures and the
 original local frame. Deleting the original anchor feature therefore does not
@@ -520,15 +526,15 @@ reused contents. A filter matching no records publishes an empty tileset.
 Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
 identities and reasons remain in the diagnostics and geometry reports; actual
 GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
-native warnings as well as Python tracebacks for debugging.
+native warnings for debugging; this historical variable name remains supported.
 
 ### Parallel encoding
 
-`vector --jobs N` limits the number of encoding processes; the CLI defaults to
-available cores. Use `--jobs 1` for a small-memory machine or embedding without
-worker processes. Workers read bounded candidates and shared-vertex masks from
-the SQLite spool through independent read-only connections. Leaf candidates and
-LOD candidates can run concurrently; source reading, partition decisions and
+`vector --jobs N` limits the number of Rayon encoding threads; the CLI defaults to
+available cores. Use `--jobs 1` for a small-memory machine or serial embedding.
+Workers read bounded candidates and shared-vertex masks from the SQLite spool
+through independent read-only connections. LOD candidates for the same leaf can
+run concurrently; source reading, partition decisions and
 manifest assembly remain ordered in the coordinator. Unchanged reusable
 subtrees launch no encoding jobs. Worker errors prevent archive publication.
 
@@ -538,7 +544,7 @@ geometry reports and build-state signatures do not depend on completion order or
 worker count. `conversion.json.performance` records requested jobs, the number of
 workers that produced consumed candidates, and wall times for ingestion,
 partitioning, encoding and publication. Partitioning includes spool preparation;
-encoding includes coordinator overhead and process startup, and publication stops
+encoding includes coordinator overhead, and publication stops
 before Rust archive packing. Timings are diagnostic, not part of content identity.
 
 For a cacheable, byte-identical archive, add `--reproducible`; performance diagnostics

@@ -17,26 +17,30 @@ class DoctorTests(unittest.TestCase):
     def test_installed_vector_profile_reports_versions_and_capabilities(self):
         result,report=self.run_doctor('--command','vector')
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertTrue(report['ready']);self.assertTrue(report['vectorTriangulation'])
-        self.assertTrue(report['geos']['available'])
-        self.assertTrue(report['python']['executable']);self.assertTrue(report['modules']['gdal']['version'])
-        self.assertIn('availableGrids',report['proj']);self.assertTrue(report['proj']['dataDirectories'])
+        self.assertTrue(report['ready'])
+        vector = report['commands']['vector']
+        self.assertTrue(vector['geometry']['ready'])
+        self.assertTrue(vector['geospatial']['ready'])
+        self.assertEqual(vector['backend'], 'native GDAL/GEOS')
+        self.assertTrue(vector['geospatial']['versions']['gdal'])
+        self.assertNotIn('python', report)
 
     def test_missing_module_is_reported_and_native_commands_remain_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);(root/'numpy.py').write_text("raise ImportError('doctor fixture: numpy missing')")
             env=dict(os.environ,PYTHONPATH=str(root))
             result,report=self.run_doctor('--command','vector',env=env)
-            self.assertNotEqual(result.returncode,0);self.assertFalse(report['ready'])
-            self.assertIn('numpy',report['commands']['vector']['missing'])
-            self.assertIn('doctor fixture',report['modules']['numpy']['error'])
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertTrue(report['ready'])
+            self.assertNotIn('modules', report)
             result,report=self.run_doctor('--command','mesh-to-3tz',env=env)
             self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(report['ready'])
 
     def test_missing_python_does_not_block_native_readiness(self):
         env=dict(os.environ,PATH='')
         result,report=self.run_doctor('--command','vector',env=env)
-        self.assertNotEqual(result.returncode,0);self.assertFalse(report['python']['available'])
+        self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(report['ready'])
+        self.assertNotIn('python', report)
         result,report=self.run_doctor('--command','convert',env=env)
         self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(report['ready'])
 

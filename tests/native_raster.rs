@@ -1,5 +1,5 @@
 //! Run the real converter without Python or a GDAL executable, also in the
-//! GDAL 3.11 CI job which does not install development Python bindings.
+//! GDAL 3.12 CI job which does not install development Python bindings.
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn raster_cli_preserves_source_and_coverage_without_executables() {

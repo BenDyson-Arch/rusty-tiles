@@ -23,7 +23,7 @@ def module(name):
 
 
 terrain = module('terrain')
-vector = module('vector')
+from vector_test_support import vector
 
 
 def decode_terrain(data):

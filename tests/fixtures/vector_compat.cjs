@@ -12,7 +12,15 @@ const { chromium } = require('playwright');
     const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
     const browserErrors = [];
     page.on('pageerror', error => browserErrors.push(String(error)));
-    await page.goto(process.argv[2] || 'http://127.0.0.1:9250');
+    const network = await page.context().newCDPSession(page);
+    await network.send('Network.enable');
+    for (const load of ['initial', 'hard-refresh']) {
+      if (load === 'hard-refresh') {
+        await network.send('Network.setCacheDisabled', {cacheDisabled: true});
+        await page.reload({waitUntil: 'load'});
+      } else {
+        await page.goto(process.argv[2] || 'http://127.0.0.1:9250');
+      }
     await page.waitForFunction(() => window.annotations || window.failures?.length,
       { timeout: 30000 });
     const results = await page.evaluate(async () => {
@@ -132,6 +140,7 @@ const { chromium } = require('playwright');
       }
       return { version: C.VERSION, cases: output };
     });
+    results.load = load;
     results.browserErrors = browserErrors;
     process.stdout.write(JSON.stringify(results, null, 2) + '\n');
     if (process.argv.includes('--require-native')) {
@@ -158,6 +167,7 @@ const { chromium } = require('playwright');
         console.error('Native vector load/render/LOD/picking check failed; see JSON report.');
         process.exitCode = 1;
       }
+    }
     }
   } finally {
     await browser.close();

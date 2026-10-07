@@ -468,7 +468,7 @@ fn norm(a: [f64; 3]) -> f64 {
 /// Eigenvectors of a symmetric 3×3 (cyclic Jacobi), rows sorted by
 /// descending eigenvalue, made right-handed.
 #[allow(clippy::needless_range_loop)]
-fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+pub(crate) fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let mut v = AXIS_ALIGNED;
     for _ in 0..32 {
         let off = a[0][1].abs() + a[0][2].abs() + a[1][2].abs();

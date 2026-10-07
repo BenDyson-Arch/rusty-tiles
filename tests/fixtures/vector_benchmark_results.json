@@ -1,0 +1,1169 @@
+{
+  "date": "2026-10-07T03:01:24.217052+00:00",
+  "oldRef": "fada1d1",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+  "gdal": "GDAL 3.13.3 \"Iowa City\", released 2026/08/13",
+  "python": "3.14.7",
+  "numpy": "2.5.3",
+  "sqlite": "3.53.4",
+  "nativeReadiness": {
+    "backend": "native GDAL/GEOS",
+    "geometry": {
+      "ready": true
+    },
+    "geospatial": {
+      "ready": true,
+      "versions": {
+        "gdal": "3.13.3",
+        "geos": [
+          3,
+          15,
+          0
+        ],
+        "proj": [
+          9,
+          8,
+          1
+        ]
+      }
+    },
+    "note": "Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required.",
+    "ready": true,
+    "requires": [
+      "native GDAL >= 3.12",
+      "GEOS >= 3.10",
+      "SQLite",
+      "PROJ >= 9.2"
+    ]
+  },
+  "nativeSourceSha256": {
+    "Cargo.toml": "7f01db0c0ce5094b26f3c538c71029e899d58ecb972c855d777f1105a1091c4a",
+    "Cargo.lock": "53af54bdb94ff7ee9bc32abdb791d6bd9bd90b2a35d3d756c7f75845ae5159a3",
+    "build.rs": "dddd6bdf372fc504d99d3f922551bcf83d12d3ea86b4fa56eea8a3a75ddd8ad1",
+    "src/vector.rs": "274fd01c55ec9413df9f16d8516852baf50d9d46e8868eaa977ea4f864826055",
+    "src/vector/native.rs": "6d312e5b5d3b13ad7b02d6da0795de4a85443ed9e133e57954a4ed8a12d07cbb",
+    "src/vector/native/encoding.rs": "1a20142aa031c5a679fc57b75c8678a74c2b5db7a6360578fb3670d959f9dfce",
+    "src/vector/native/geometry.rs": "03c867faa65667a5889e8b9b2042758a299d63af64f575d748c931613c4ea73b",
+    "src/vector/native/reuse.rs": "83f156c7039c3fc2906d6f950598bac2c615085c13bad7a1a35bbe0f8c4f1eaa",
+    "src/vector/native/source.rs": "8166c5c071a2093e19b75a52c09ee386a3469794d6f05a411fb0848a5a0078e7",
+    "src/vector/native/store.rs": "b96bf65e8b4cb834d57d29b1fb01ab9dc6914666c50f3f4b6cb13d80c3a37507",
+    "src/vector_encoding.rs": "21b0dda383b593b09947fef803cdd095d88bbfd97be9876179b39e9274dd7565",
+    "src/geospatial.rs": "ccb07e405c4cb8837789647056428186a3347e16e4bdf93bba439a5189dd23db",
+    "src/georef.rs": "bcbb1b573c9e5530078f95e8a6229a76e812c075f08dd105b1ddf47d7763edb6",
+    "src/bbox.rs": "1d9763e6e8d5a2da9b9bde28a509c19197e24e91b19d9a226f8ed602e1b34937",
+    "src/glb_write.rs": "8980899fe2f4c2d64655411c034007058b12053c11189cca3bb8e37ff50544a7",
+    "src/pack.rs": "707b653ae60f8448b689de1d96db90415495e88c031a3af3837c085e18ce5a11"
+  },
+  "oldBinarySha256": "bec7e061a4b0abc92b08e7f2f8d3e0013b3494d80d7732352e5b64909bb58a40",
+  "newBinarySha256": "89920aa8756cee3151f5b53ae2b9d05f066226965fa2741ff7cd83e61fff622c",
+  "build": "cargo build --release --locked --features native-geospatial",
+  "memory": "wait4 peak RSS is the largest process; Python worker memory is not summed",
+  "limitations": "invented fixtures, warm cache, uncompressed content; shared workstation with unrelated background jobs",
+  "methods": [
+    "python-1",
+    "rust-1",
+    "python-4",
+    "rust-4"
+  ],
+  "repeats": 3,
+  "sampling": "one warmup; rotated serial runs; warm filesystem cache",
+  "cases": [
+    {
+      "name": "small-lines",
+      "features": 24,
+      "sourceVertices": 3072,
+      "commands": {
+        "python-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/small-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/python-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/small-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/rust-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "python-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/small-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/python-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/small-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/small-lines/rust-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ]
+      },
+      "samples": {
+        "python-1": [
+          {
+            "wallSeconds": 0.20210030000089318,
+            "cpuSeconds": 0.197043,
+            "peakRssMiB": 86.24609375
+          },
+          {
+            "wallSeconds": 0.20699939599944628,
+            "cpuSeconds": 0.20087999999999998,
+            "peakRssMiB": 86.6015625
+          },
+          {
+            "wallSeconds": 0.2361326120008016,
+            "cpuSeconds": 0.229932,
+            "peakRssMiB": 86.5078125
+          }
+        ],
+        "rust-1": [
+          {
+            "wallSeconds": 0.03978497400021297,
+            "cpuSeconds": 0.035455,
+            "peakRssMiB": 48.6171875
+          },
+          {
+            "wallSeconds": 0.042451182001968846,
+            "cpuSeconds": 0.038092,
+            "peakRssMiB": 48.25390625
+          },
+          {
+            "wallSeconds": 0.04306776499652187,
+            "cpuSeconds": 0.038629,
+            "peakRssMiB": 48.9453125
+          }
+        ],
+        "python-4": [
+          {
+            "wallSeconds": 0.30532983699959004,
+            "cpuSeconds": 0.6959019999999999,
+            "peakRssMiB": 82.69921875
+          },
+          {
+            "wallSeconds": 0.299370793003618,
+            "cpuSeconds": 0.686268,
+            "peakRssMiB": 82.828125
+          },
+          {
+            "wallSeconds": 0.3007347060010943,
+            "cpuSeconds": 0.687022,
+            "peakRssMiB": 82.828125
+          }
+        ],
+        "rust-4": [
+          {
+            "wallSeconds": 0.03473144800227601,
+            "cpuSeconds": 0.038012,
+            "peakRssMiB": 50.390625
+          },
+          {
+            "wallSeconds": 0.03585047800152097,
+            "cpuSeconds": 0.040013,
+            "peakRssMiB": 50.53125
+          },
+          {
+            "wallSeconds": 0.03605378700012807,
+            "cpuSeconds": 0.038333,
+            "peakRssMiB": 50.2265625
+          }
+        ]
+      },
+      "medians": {
+        "python-1": {
+          "wallSeconds": 0.20699939599944628,
+          "cpuSeconds": 0.20087999999999998,
+          "peakRssMiB": 86.5078125
+        },
+        "rust-1": {
+          "wallSeconds": 0.042451182001968846,
+          "cpuSeconds": 0.038092,
+          "peakRssMiB": 48.6171875
+        },
+        "python-4": {
+          "wallSeconds": 0.3007347060010943,
+          "cpuSeconds": 0.687022,
+          "peakRssMiB": 82.828125
+        },
+        "rust-4": {
+          "wallSeconds": 0.03585047800152097,
+          "cpuSeconds": 0.038333,
+          "peakRssMiB": 50.390625
+        }
+      },
+      "checks": {
+        "fullDetailWorldGeometryAndPropertiesMatch": true,
+        "nativeWorkerContentIdentical": true,
+        "maxWorldPositionDifferenceMetres": 0.0,
+        "outputs": {
+          "python-1": {
+            "tiles": 2,
+            "archiveBytes": 75419,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 2,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 69252,
+              "encodedTileBytes": 69252
+            },
+            "performance": {
+              "jobs": 1,
+              "workersUsed": 1,
+              "phaseSeconds": {
+                "ingestion": 0.026326606999646174,
+                "partitioning": 0.00527247699938016,
+                "encoding": 0.058356800000183284,
+                "publication": 0.0006060940031602513
+              }
+            }
+          },
+          "rust-1": {
+            "tiles": 2,
+            "archiveBytes": 75300,
+            "encoding": {
+              "encodedTileBytes": 69236,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 2,
+              "quantize": false,
+              "uncompressedTileBytes": 69236
+            },
+            "performance": {
+              "jobs": 1,
+              "phaseSeconds": {
+                "encoding": 0.009582182,
+                "ingestion": 0.009699172,
+                "partitioning": 0.001798461999999999,
+                "publication": 0.000162552
+              },
+              "workersUsed": 1
+            }
+          },
+          "python-4": {
+            "tiles": 2,
+            "archiveBytes": 75419,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 2,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 69252,
+              "encodedTileBytes": 69252
+            },
+            "performance": {
+              "jobs": 4,
+              "workersUsed": 4,
+              "phaseSeconds": {
+                "ingestion": 0.021802465002110694,
+                "partitioning": 0.0051234899983683135,
+                "encoding": 0.12151897399962763,
+                "publication": 0.025126386997726513
+              }
+            }
+          },
+          "rust-4": {
+            "tiles": 2,
+            "archiveBytes": 75301,
+            "encoding": {
+              "encodedTileBytes": 69236,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 2,
+              "quantize": false,
+              "uncompressedTileBytes": 69236
+            },
+            "performance": {
+              "jobs": 4,
+              "phaseSeconds": {
+                "encoding": 0.003638598,
+                "ingestion": 0.008841027,
+                "partitioning": 0.0016676010000000012,
+                "publication": 0.000139066
+              },
+              "workersUsed": 4
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "regional-lines",
+      "features": 2048,
+      "sourceVertices": 262144,
+      "commands": {
+        "python-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/regional-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/python-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/regional-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/rust-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "python-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/regional-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/python-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/regional-lines.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/regional-lines/rust-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ]
+      },
+      "samples": {
+        "python-1": [
+          {
+            "wallSeconds": 9.877313619999768,
+            "cpuSeconds": 9.843936000000001,
+            "peakRssMiB": 121.75
+          },
+          {
+            "wallSeconds": 9.773028585001157,
+            "cpuSeconds": 9.734197,
+            "peakRssMiB": 121.140625
+          },
+          {
+            "wallSeconds": 9.765825998001674,
+            "cpuSeconds": 9.733875,
+            "peakRssMiB": 121.16796875
+          }
+        ],
+        "rust-1": [
+          {
+            "wallSeconds": 2.3300103309993574,
+            "cpuSeconds": 2.315814,
+            "peakRssMiB": 111.125
+          },
+          {
+            "wallSeconds": 2.2996608769972227,
+            "cpuSeconds": 2.284561,
+            "peakRssMiB": 110.765625
+          },
+          {
+            "wallSeconds": 2.3285288650004077,
+            "cpuSeconds": 2.314227,
+            "peakRssMiB": 110.6484375
+          }
+        ],
+        "python-4": [
+          {
+            "wallSeconds": 7.974176633000752,
+            "cpuSeconds": 10.447602,
+            "peakRssMiB": 111.1796875
+          },
+          {
+            "wallSeconds": 7.98233445599908,
+            "cpuSeconds": 10.413754,
+            "peakRssMiB": 111.05859375
+          },
+          {
+            "wallSeconds": 8.040823037001246,
+            "cpuSeconds": 10.5617,
+            "peakRssMiB": 111.23046875
+          }
+        ],
+        "rust-4": [
+          {
+            "wallSeconds": 1.9085604239990062,
+            "cpuSeconds": 2.5352259999999998,
+            "peakRssMiB": 116.2421875
+          },
+          {
+            "wallSeconds": 1.840941770999052,
+            "cpuSeconds": 2.4447560000000004,
+            "peakRssMiB": 117.97265625
+          },
+          {
+            "wallSeconds": 1.8227792299985595,
+            "cpuSeconds": 2.453444,
+            "peakRssMiB": 117.6484375
+          }
+        ]
+      },
+      "medians": {
+        "python-1": {
+          "wallSeconds": 9.773028585001157,
+          "cpuSeconds": 9.734197,
+          "peakRssMiB": 121.16796875
+        },
+        "rust-1": {
+          "wallSeconds": 2.3285288650004077,
+          "cpuSeconds": 2.314227,
+          "peakRssMiB": 110.765625
+        },
+        "python-4": {
+          "wallSeconds": 7.98233445599908,
+          "cpuSeconds": 10.447602,
+          "peakRssMiB": 111.1796875
+        },
+        "rust-4": {
+          "wallSeconds": 1.840941770999052,
+          "cpuSeconds": 2.453444,
+          "peakRssMiB": 117.6484375
+        }
+      },
+      "checks": {
+        "fullDetailWorldGeometryAndPropertiesMatch": true,
+        "nativeWorkerContentIdentical": true,
+        "maxWorldPositionDifferenceMetres": 0.0,
+        "outputs": {
+          "python-1": {
+            "tiles": 95,
+            "archiveBytes": 6917834,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 95,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 6809516,
+              "encodedTileBytes": 6809516
+            },
+            "performance": {
+              "jobs": 1,
+              "workersUsed": 1,
+              "phaseSeconds": {
+                "ingestion": 1.6344661530019948,
+                "partitioning": 0.5339564190144301,
+                "encoding": 7.453999727986229,
+                "publication": 0.008638409999548458
+              }
+            }
+          },
+          "rust-1": {
+            "tiles": 95,
+            "archiveBytes": 6911336,
+            "encoding": {
+              "encodedTileBytes": 6808756,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 95,
+              "quantize": false,
+              "uncompressedTileBytes": 6808756
+            },
+            "performance": {
+              "jobs": 1,
+              "phaseSeconds": {
+                "encoding": 1.639370378,
+                "ingestion": 0.424008259,
+                "partitioning": 0.22746832100000003,
+                "publication": 0.005558974
+              },
+              "workersUsed": 1
+            }
+          },
+          "python-4": {
+            "tiles": 95,
+            "archiveBytes": 6917834,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 95,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 6809516,
+              "encodedTileBytes": 6809516
+            },
+            "performance": {
+              "jobs": 4,
+              "workersUsed": 4,
+              "phaseSeconds": {
+                "ingestion": 1.6221482090004429,
+                "partitioning": 0.5299746669843444,
+                "encoding": 5.722520047016587,
+                "publication": 0.034514379000029294
+              }
+            }
+          },
+          "rust-4": {
+            "tiles": 95,
+            "archiveBytes": 6911335,
+            "encoding": {
+              "encodedTileBytes": 6808756,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 95,
+              "quantize": false,
+              "uncompressedTileBytes": 6808756
+            },
+            "performance": {
+              "jobs": 4,
+              "phaseSeconds": {
+                "encoding": 1.1431361599999998,
+                "ingestion": 0.422348402,
+                "partitioning": 0.212114085,
+                "publication": 0.005532909
+              },
+              "workersUsed": 4
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "polygons-with-holes",
+      "features": 512,
+      "sourceVertices": 41984,
+      "commands": {
+        "python-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/polygons-with-holes.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/python-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/polygons-with-holes.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/rust-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "python-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/polygons-with-holes.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/python-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ],
+        "rust-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/polygons-with-holes.geojson",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/polygons-with-holes/rust-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--sourceCrs",
+          "local"
+        ]
+      },
+      "samples": {
+        "python-1": [
+          {
+            "wallSeconds": 6.022320899999613,
+            "cpuSeconds": 5.997238,
+            "peakRssMiB": 97.12109375
+          },
+          {
+            "wallSeconds": 6.039239246998477,
+            "cpuSeconds": 6.013779,
+            "peakRssMiB": 96.80859375
+          },
+          {
+            "wallSeconds": 6.04421354599981,
+            "cpuSeconds": 6.0189449999999995,
+            "peakRssMiB": 96.7734375
+          }
+        ],
+        "rust-1": [
+          {
+            "wallSeconds": 0.7469288669999514,
+            "cpuSeconds": 0.7383489999999999,
+            "peakRssMiB": 55.74609375
+          },
+          {
+            "wallSeconds": 0.7369050080014858,
+            "cpuSeconds": 0.7289599999999999,
+            "peakRssMiB": 55.58984375
+          },
+          {
+            "wallSeconds": 0.7444435160032299,
+            "cpuSeconds": 0.735927,
+            "peakRssMiB": 56.109375
+          }
+        ],
+        "python-4": [
+          {
+            "wallSeconds": 4.049157863999426,
+            "cpuSeconds": 6.64128,
+            "peakRssMiB": 88.765625
+          },
+          {
+            "wallSeconds": 4.041409277000639,
+            "cpuSeconds": 6.627416,
+            "peakRssMiB": 88.50390625
+          },
+          {
+            "wallSeconds": 4.094545097999799,
+            "cpuSeconds": 6.885193,
+            "peakRssMiB": 88.5546875
+          }
+        ],
+        "rust-4": [
+          {
+            "wallSeconds": 0.5315751909984101,
+            "cpuSeconds": 0.810431,
+            "peakRssMiB": 62.953125
+          },
+          {
+            "wallSeconds": 0.5170638839990715,
+            "cpuSeconds": 0.766251,
+            "peakRssMiB": 62.96484375
+          },
+          {
+            "wallSeconds": 0.5103125119967444,
+            "cpuSeconds": 0.757447,
+            "peakRssMiB": 60.125
+          }
+        ]
+      },
+      "medians": {
+        "python-1": {
+          "wallSeconds": 6.039239246998477,
+          "cpuSeconds": 6.013779,
+          "peakRssMiB": 96.80859375
+        },
+        "rust-1": {
+          "wallSeconds": 0.7444435160032299,
+          "cpuSeconds": 0.735927,
+          "peakRssMiB": 55.74609375
+        },
+        "python-4": {
+          "wallSeconds": 4.049157863999426,
+          "cpuSeconds": 6.64128,
+          "peakRssMiB": 88.5546875
+        },
+        "rust-4": {
+          "wallSeconds": 0.5170638839990715,
+          "cpuSeconds": 0.766251,
+          "peakRssMiB": 62.953125
+        }
+      },
+      "checks": {
+        "fullDetailWorldGeometryAndPropertiesMatch": true,
+        "nativeWorkerContentIdentical": true,
+        "maxWorldPositionDifferenceMetres": 0.0,
+        "outputs": {
+          "python-1": {
+            "tiles": 31,
+            "archiveBytes": 3751186,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 31,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 3588176,
+              "encodedTileBytes": 3588176
+            },
+            "performance": {
+              "jobs": 1,
+              "workersUsed": 1,
+              "phaseSeconds": {
+                "ingestion": 0.865675105000264,
+                "partitioning": 0.07904710900038481,
+                "encoding": 4.956708333000279,
+                "publication": 0.002144718000636203
+              }
+            }
+          },
+          "rust-1": {
+            "tiles": 31,
+            "archiveBytes": 3742449,
+            "encoding": {
+              "encodedTileBytes": 3587928,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 31,
+              "quantize": false,
+              "uncompressedTileBytes": 3587928
+            },
+            "performance": {
+              "jobs": 1,
+              "phaseSeconds": {
+                "encoding": 0.5255807779999999,
+                "ingestion": 0.164150577,
+                "partitioning": 0.026688654000000006,
+                "publication": 0.001075219
+              },
+              "workersUsed": 1
+            }
+          },
+          "python-4": {
+            "tiles": 31,
+            "archiveBytes": 3751187,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 31,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 3588176,
+              "encodedTileBytes": 3588176
+            },
+            "performance": {
+              "jobs": 4,
+              "workersUsed": 4,
+              "phaseSeconds": {
+                "ingestion": 0.8576978849996522,
+                "partitioning": 0.08365439800400054,
+                "encoding": 2.9957873769963044,
+                "publication": 0.02785302000120282
+              }
+            }
+          },
+          "rust-4": {
+            "tiles": 31,
+            "archiveBytes": 3742442,
+            "encoding": {
+              "encodedTileBytes": 3587928,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 31,
+              "quantize": false,
+              "uncompressedTileBytes": 3587928
+            },
+            "performance": {
+              "jobs": 4,
+              "phaseSeconds": {
+                "encoding": 0.294426472,
+                "ingestion": 0.162537658,
+                "partitioning": 0.026450659000000005,
+                "publication": 0.001181819
+              },
+              "workersUsed": 4
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "projected-lines",
+      "features": 1024,
+      "sourceVertices": 65536,
+      "commands": {
+        "python-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/projected-lines.gpkg",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/python-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--heightOffset",
+          "0"
+        ],
+        "rust-1": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/projected-lines.gpkg",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/rust-1.3tz",
+          "--jobs",
+          "1",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--heightOffset",
+          "0"
+        ],
+        "python-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-old-build/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/projected-lines.gpkg",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/python-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--heightOffset",
+          "0"
+        ],
+        "rust-4": [
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/release/rusty-tiles",
+          "vector",
+          "-i",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/projected-lines.gpkg",
+          "-o",
+          "/home/bend/Documents/tinyowl/rusty-tiles/target/vector-benchmark-verified/projected-lines/rust-4.3tz",
+          "--jobs",
+          "4",
+          "--maxFeatures",
+          "64",
+          "--lodTolerance",
+          ".2",
+          "--lodLevels",
+          "3",
+          "--force",
+          "--heightOffset",
+          "0"
+        ]
+      },
+      "samples": {
+        "python-1": [
+          {
+            "wallSeconds": 2.695844494999619,
+            "cpuSeconds": 2.683778,
+            "peakRssMiB": 107.5
+          },
+          {
+            "wallSeconds": 2.649345257003006,
+            "cpuSeconds": 2.637366,
+            "peakRssMiB": 106.58203125
+          },
+          {
+            "wallSeconds": 2.6457304659998044,
+            "cpuSeconds": 2.632895,
+            "peakRssMiB": 106.953125
+          }
+        ],
+        "rust-1": [
+          {
+            "wallSeconds": 0.534629550002137,
+            "cpuSeconds": 0.525179,
+            "peakRssMiB": 75.23828125
+          },
+          {
+            "wallSeconds": 0.5289894269990327,
+            "cpuSeconds": 0.521369,
+            "peakRssMiB": 75.2734375
+          },
+          {
+            "wallSeconds": 0.532387793999078,
+            "cpuSeconds": 0.524081,
+            "peakRssMiB": 74.91015625
+          }
+        ],
+        "python-4": [
+          {
+            "wallSeconds": 2.145632718998968,
+            "cpuSeconds": 3.213095,
+            "peakRssMiB": 100.20703125
+          },
+          {
+            "wallSeconds": 2.186130302998208,
+            "cpuSeconds": 3.2992600000000003,
+            "peakRssMiB": 100.1171875
+          },
+          {
+            "wallSeconds": 2.1935865669984196,
+            "cpuSeconds": 3.339115,
+            "peakRssMiB": 99.39453125
+          }
+        ],
+        "rust-4": [
+          {
+            "wallSeconds": 0.44045168600132456,
+            "cpuSeconds": 0.5930759999999999,
+            "peakRssMiB": 79.1875
+          },
+          {
+            "wallSeconds": 0.4114645730005577,
+            "cpuSeconds": 0.5614509999999999,
+            "peakRssMiB": 79.01953125
+          },
+          {
+            "wallSeconds": 0.40386543400018127,
+            "cpuSeconds": 0.550856,
+            "peakRssMiB": 79.29296875
+          }
+        ]
+      },
+      "medians": {
+        "python-1": {
+          "wallSeconds": 2.649345257003006,
+          "cpuSeconds": 2.637366,
+          "peakRssMiB": 106.953125
+        },
+        "rust-1": {
+          "wallSeconds": 0.532387793999078,
+          "cpuSeconds": 0.524081,
+          "peakRssMiB": 75.23828125
+        },
+        "python-4": {
+          "wallSeconds": 2.186130302998208,
+          "cpuSeconds": 3.2992600000000003,
+          "peakRssMiB": 100.1171875
+        },
+        "rust-4": {
+          "wallSeconds": 0.4114645730005577,
+          "cpuSeconds": 0.5614509999999999,
+          "peakRssMiB": 79.1875
+        }
+      },
+      "checks": {
+        "fullDetailWorldGeometryAndPropertiesMatch": true,
+        "nativeWorkerContentIdentical": true,
+        "maxWorldPositionDifferenceMetres": 9.313225746154785e-10,
+        "outputs": {
+          "python-1": {
+            "tiles": 63,
+            "archiveBytes": 2165164,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 63,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 2089688,
+              "encodedTileBytes": 2089688
+            },
+            "performance": {
+              "jobs": 1,
+              "workersUsed": 1,
+              "phaseSeconds": {
+                "ingestion": 0.36714640200079884,
+                "partitioning": 0.1420047249957861,
+                "encoding": 2.0023543250026705,
+                "publication": 0.003361263999977382
+              }
+            }
+          },
+          "rust-1": {
+            "tiles": 63,
+            "archiveBytes": 2158389,
+            "encoding": {
+              "encodedTileBytes": 2089184,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 63,
+              "quantize": false,
+              "uncompressedTileBytes": 2089184
+            },
+            "performance": {
+              "jobs": 1,
+              "phaseSeconds": {
+                "encoding": 0.371071917,
+                "ingestion": 0.076458534,
+                "partitioning": 0.055883076999999996,
+                "publication": 0.001733836
+              },
+              "workersUsed": 1
+            }
+          },
+          "python-4": {
+            "tiles": 63,
+            "archiveBytes": 2165164,
+            "encoding": {
+              "quantize": false,
+              "meshopt": false,
+              "primitiveReferences": 63,
+              "maximumTilePrimitives": 1,
+              "maximumQuantizationErrorMetres": 0.0,
+              "uncompressedTileBytes": 2089688,
+              "encodedTileBytes": 2089688
+            },
+            "performance": {
+              "jobs": 4,
+              "workersUsed": 4,
+              "phaseSeconds": {
+                "ingestion": 0.36612445900027524,
+                "partitioning": 0.13695067699882202,
+                "encoding": 1.536749509999936,
+                "publication": 0.026184988997556502
+              }
+            }
+          },
+          "rust-4": {
+            "tiles": 63,
+            "archiveBytes": 2158379,
+            "encoding": {
+              "encodedTileBytes": 2089184,
+              "maximumQuantizationErrorMetres": 0.0,
+              "maximumTilePrimitives": 1,
+              "meshopt": false,
+              "primitiveReferences": 63,
+              "quantize": false,
+              "uncompressedTileBytes": 2089184
+            },
+            "performance": {
+              "jobs": 4,
+              "phaseSeconds": {
+                "encoding": 0.242189976,
+                "ingestion": 0.07608693,
+                "partitioning": 0.057839415,
+                "publication": 0.001726189
+              },
+              "workersUsed": 4
+            }
+          }
+        }
+      }
+    }
+  ]
+}

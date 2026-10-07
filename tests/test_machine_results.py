@@ -49,14 +49,15 @@ class MachineResultTests(unittest.TestCase):
             self.assertEqual(result.returncode,3,result.stderr);self.assertEqual(report['error']['code'],'data')
             self.assertFalse(out.exists())
             source=self.source(root)
-            result,report=self.call(*args,env=dict(os.environ,PATH=''))
+            missing_database = root/'missing-proj-data';missing_database.mkdir()
+            args=['vector','-i',str(source),'-o',str(out),'--sourceCrs','EPSG:4326']
+            result,report=self.call(*args,env=dict(os.environ,PROJ_DATA=str(missing_database),PROJ_LIB=str(missing_database)))
             self.assertEqual(result.returncode,4);self.assertEqual(report['error']['code'],'environment')
-            (root/'numpy.py').write_text("raise ImportError('missing fixture module')")
-            result,report=self.call(*args,env=dict(os.environ,PYTHONPATH=str(root)))
-            self.assertEqual(result.returncode,4);self.assertIn('missing fixture module',report['error']['message'])
+            self.assertIn('PROJ database',report['error']['message'])
             self.assertFalse(out.exists())
 
     def test_doctor_failure_keeps_inventory_in_single_result(self):
-        result,report=self.call('doctor','--command','vector',env=dict(os.environ,PATH=''))
+        with tempfile.TemporaryDirectory() as tmp:
+            result,report=self.call('doctor','--command','vector',env=dict(os.environ,PROJ_DATA=tmp,PROJ_LIB=tmp))
         self.assertEqual(result.returncode,4);self.assertFalse(report['ok'])
         self.assertEqual(report['error']['code'],'environment');self.assertIn('commands',report)
