@@ -1,26 +1,31 @@
 //! Native GDAL utility APIs, with datasets confined to the calling thread.
 use super::RasterOptions;
 use crate::{
-    geospatial::{self, QuietErrors},
+    geospatial::{
+        self,
+        native::{
+            self, c_path, c_str, Arguments, Dataset, DemOptions, InfoOptions, TranslateOptions,
+            WarpOptions,
+        },
+        QuietErrors,
+    },
     Error,
 };
 use serde_json::{json, Value};
 use std::{
-    ffi::{c_char, c_void, CString},
-    marker::PhantomData,
+    ffi::{c_char, c_void},
     path::Path,
-    ptr::{null, null_mut, NonNull},
-    sync::Once,
+    ptr::{null_mut, NonNull},
 };
 
 // GDAL renamed GDT_Byte to GDT_UInt8 in 3.13; its stable C enum value is 1.
 const BYTE: gdal_sys::GDALDataType::Type = 1;
+const FINISH: &str = "cannot finish raster derivative";
 
 pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> Result<(), Error> {
-    let source = Dataset::open(input)?;
+    let source = Dataset::open_raster(input, "cannot open raster")?;
     let count = source.band_count();
-    // SAFETY: Copy the projection string borrowed from the live source dataset.
-    let projection = unsafe { geospatial::string(gdal_sys::GDALGetProjectionRef(source.raw())) };
+    let projection = source.projection();
     if projection.is_empty() || count == 0 {
         return Err(Error::Data(
             "raster requires a declared CRS and at least one band".into(),
@@ -58,7 +63,7 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
             }
         }
     }
-    let bounds = source.bounds(&source_crs)?;
+    let bounds = coverage_bounds(&source, &source_crs)?;
     preflight(bounds, options.min_zoom, options.max_zoom)?;
     // Instantiate before producing derivatives so stripped GDAL builds report an
     // environment error without starting expensive COG generation.
@@ -67,7 +72,8 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
     // Compression and tiling run in separate stages, so their pools do not overlap.
     let workers = std::thread::available_parallelism().map_or(1, |count| count.get().min(4));
     let compression_workers = format!("NUM_THREADS={workers}");
-    let cog = source.translate(
+    let cog = translate(
+        &source,
         &output.join("source.cog.tif"),
         &[
             "-of",
@@ -78,11 +84,11 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
             &compression_workers,
         ],
     )?;
-    cog.finish()?;
+    cog.finish(FINISH)?;
     let display_path = output.join("display.tif");
     if options.display == "gray" {
         let band = options.band.to_string();
-        let selected = source.translate(Path::new(""), &["-of", "VRT", "-b", &band])?;
+        let selected = translate(&source, Path::new(""), &["-of", "VRT", "-b", &band])?;
         let colors = output.join("colors.txt");
         std::fs::write(
             &colors,
@@ -92,9 +98,9 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
                 options.display_max.unwrap()
             ),
         )?;
-        let display = selected.color_relief(&display_path, &colors)?;
-        display.apply_coverage(&selected, 4)?;
-        display.finish()?;
+        let display = color_relief(&selected, &display_path, &colors)?;
+        apply_coverage(&display, &selected, 4)?;
+        display.finish(FINISH)?;
         std::fs::remove_file(colors)?;
     } else {
         let mut arguments = vec![
@@ -126,13 +132,11 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
             }
             .into(),
         ]);
-        let selected = source.translate(
-            Path::new(""),
-            &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
-        )?;
+        let selected = translate(&source, Path::new(""), &arguments)?;
         if options.alpha_band != 0 {
             let combined_path = output.join("image-alpha.tif");
-            let combined = selected.translate(
+            let combined = translate(
+                &selected,
                 &combined_path,
                 &[
                     "-of",
@@ -147,14 +151,14 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
                     "COMPRESS=NONE",
                 ],
             )?;
-            combined.apply_coverage(&selected, bands.len() as i32)?;
-            let warped = combined.warp(&display_path, true)?;
-            warped.finish()?;
-            combined.finish()?;
+            apply_coverage(&combined, &selected, bands.len() as i32)?;
+            let warped = display_warp(&combined, &display_path, true)?;
+            warped.finish(FINISH)?;
+            combined.finish(FINISH)?;
             std::fs::remove_file(combined_path)?;
         } else {
-            let warped = selected.warp(&display_path, false)?;
-            warped.finish()?;
+            let warped = display_warp(&selected, &display_path, false)?;
+            warped.finish(FINISH)?;
         }
     }
     tile.run(&display_path, &output.join("tiles"), options, workers)?;
@@ -217,175 +221,104 @@ fn preflight(bounds: [f64; 4], min_zoom: u8, max_zoom: u8) -> Result<(), Error> 
     Ok(())
 }
 
-struct Dataset<'a> {
-    handle: NonNull<c_void>,
-    source: PhantomData<&'a Dataset<'a>>,
+fn translate<'a, S: AsRef<str>>(
+    source: &'a Dataset<'_>,
+    path: &Path,
+    arguments: &[S],
+) -> Result<Dataset<'a>, Error> {
+    let options = TranslateOptions::new(
+        &mut Arguments::new(arguments)?,
+        "invalid raster translate options",
+    )?;
+    source.translate(path, &options, "raster translation failed")
 }
-impl Dataset<'static> {
-    fn open(path: &Path) -> Result<Self, Error> {
-        geospatial::offline()?;
-        static REGISTER: Once = Once::new();
-        // SAFETY: Register drivers and bound the process-wide raster cache once.
-        REGISTER.call_once(|| unsafe {
-            gdal_sys::GDALAllRegister();
-            gdal_sys::GDALSetCacheMax64(64 * 1024 * 1024);
-        });
-        let _errors = QuietErrors::new();
-        let path = filename(path)?;
-        // SAFETY: A live terminated filename; read-only raster flags and default lists.
-        Self::from_raw(
-            unsafe { gdal_sys::GDALOpenEx(path.as_ptr(), 0x02, null(), null(), null()) },
-            "cannot open raster",
-        )
+fn coverage_bounds(source: &Dataset<'_>, source_crs: &geospatial::Crs) -> Result<[f64; 4], Error> {
+    let _errors = QuietErrors::new();
+    let options = InfoOptions::new(
+        &mut Arguments::new(&["-json", "-nomd", "-noct"])?,
+        "invalid raster inspection options",
+    )?;
+    // SAFETY: Live dataset and options; the returned text is a GDAL allocation.
+    let text = unsafe { gdal_sys::GDALInfo(source.raw(), options.as_ptr()) };
+    if text.is_null() {
+        return Err(Error::Data(geospatial::diagnostic(
+            "cannot inspect raster extent",
+        )));
     }
-}
-impl Dataset<'_> {
-    fn from_raw(handle: *mut c_void, context: &str) -> Result<Self, Error> {
-        NonNull::new(handle)
-            .map(|handle| Self {
-                handle,
-                source: PhantomData,
-            })
-            .ok_or_else(|| Error::Data(geospatial::diagnostic(context)))
-    }
-    fn raw(&self) -> gdal_sys::GDALDatasetH {
-        self.handle.as_ptr()
-    }
-    fn finish(self) -> Result<(), Error> {
-        let _errors = QuietErrors::new();
-        let owned = std::mem::ManuallyDrop::new(self);
-        // SAFETY: Consume the uniquely owned dataset, reporting final write/close
-        // failures before publication. ManuallyDrop prevents a second close.
-        if unsafe { gdal_sys::GDALClose(owned.raw()) } != 0 {
-            return Err(Error::Data(geospatial::diagnostic(
-                "cannot finish raster derivative",
-            )));
-        }
-        Ok(())
-    }
-    fn band_count(&self) -> i32 {
-        // SAFETY: This dataset is live.
-        unsafe { gdal_sys::GDALGetRasterCount(self.raw()) }
-    }
-    fn band(&self, index: i32) -> Result<gdal_sys::GDALRasterBandH, Error> {
-        if index < 1 || index > self.band_count() {
-            return Err(Error::Data("selected band does not exist".into()));
-        }
-        // SAFETY: Validated index into a live dataset; band ownership stays with it.
-        Ok(unsafe { gdal_sys::GDALGetRasterBand(self.raw(), index) })
-    }
-    fn translate<'a>(&'a self, path: &Path, arguments: &[&str]) -> Result<Dataset<'a>, Error> {
-        let _errors = QuietErrors::new();
-        let path = filename(path)?;
-        let mut args = Arguments::new(arguments)?;
-        // SAFETY: Owned null-terminated argv stays live during option parsing.
-        let opts = TranslateOptions(
-            NonNull::new(unsafe { gdal_sys::GDALTranslateOptionsNew(args.mutable(), null_mut()) })
-                .ok_or_else(|| {
-                    Error::Data(geospatial::diagnostic("invalid raster translate options"))
-                })?,
-        );
-        let mut usage = 0;
-        // SAFETY: Source, filename and RAII options stay live through translation.
-        Dataset::from_raw(
-            unsafe {
-                gdal_sys::GDALTranslate(path.as_ptr(), self.raw(), opts.0.as_ptr(), &mut usage)
-            },
-            "raster translation failed",
-        )
-    }
-    fn bounds(&self, source_crs: &geospatial::Crs) -> Result<[f64; 4], Error> {
-        let _errors = QuietErrors::new();
-        let mut args = Arguments::new(&["-json", "-nomd", "-noct"])?;
-        // SAFETY: Live argv and dataset; returned info text is allocated by GDAL.
-        let opts = InfoOptions(
-            NonNull::new(unsafe { gdal_sys::GDALInfoOptionsNew(args.mutable(), null_mut()) })
-                .ok_or_else(|| {
-                    Error::Data(geospatial::diagnostic("invalid raster inspection options"))
-                })?,
-        );
-        let text = unsafe { gdal_sys::GDALInfo(self.raw(), opts.0.as_ptr()) };
-        if text.is_null() {
-            return Err(Error::Data(geospatial::diagnostic(
-                "cannot inspect raster extent",
-            )));
-        }
-        let result = serde_json::from_str::<Value>(&unsafe { geospatial::string(text) });
-        // SAFETY: Exactly one matching free of GDALInfo's allocated string.
-        unsafe { gdal_sys::VSIFree(text.cast()) };
-        let info = result?;
-        let ring = info["wgs84Extent"]["coordinates"][0]
-            .as_array()
-            .ok_or_else(|| Error::Data("raster requires a finite geographic extent".into()))?;
-        let mut bounds = [
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            f64::NEG_INFINITY,
-        ];
-        for point in ring {
-            let x = point[0].as_f64().filter(|v| v.is_finite());
-            let y = point[1].as_f64().filter(|v| v.is_finite());
-            let (Some(x), Some(y)) = (x, y) else {
-                return Err(Error::Data(
-                    "raster requires a finite geographic extent".into(),
-                ));
-            };
-            bounds[0] = bounds[0].min(x);
-            bounds[1] = bounds[1].min(y);
-            bounds[2] = bounds[2].max(x);
-            bounds[3] = bounds[3].max(y);
-        }
-        validate_bounds(bounds)?;
-        // A min/max envelope alone cannot distinguish a legitimate wide raster
-        // from projected coverage wrapping across the antimeridian. Sample each
-        // source edge in order, using the shared offline, only-best transform.
-        let target = geospatial::Crs::from_definition("EPSG:4326")?;
-        let mut transform = geospatial::StrictTransform::new(source_crs, &target)?;
-        let mut gt = [0.; 6];
-        // SAFETY: A live dataset and six-element geotransform output buffer.
-        if unsafe { gdal_sys::GDALGetGeoTransform(self.raw(), gt.as_mut_ptr()) } != 0 {
+    // SAFETY: GDALInfo returned a live null-terminated string, copied here.
+    let result = serde_json::from_str::<Value>(&unsafe { geospatial::string(text) });
+    // SAFETY: Exactly one matching free of GDALInfo's allocated string.
+    unsafe { gdal_sys::VSIFree(text.cast()) };
+    let info = result?;
+    let ring = info["wgs84Extent"]["coordinates"][0]
+        .as_array()
+        .ok_or_else(|| Error::Data("raster requires a finite geographic extent".into()))?;
+    let mut bounds = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for point in ring {
+        let x = point[0].as_f64().filter(|v| v.is_finite());
+        let y = point[1].as_f64().filter(|v| v.is_finite());
+        let (Some(x), Some(y)) = (x, y) else {
             return Err(Error::Data(
-                "raster requires a geotransform for imagery tiling".into(),
+                "raster requires a finite geographic extent".into(),
+            ));
+        };
+        bounds[0] = bounds[0].min(x);
+        bounds[1] = bounds[1].min(y);
+        bounds[2] = bounds[2].max(x);
+        bounds[3] = bounds[3].max(y);
+    }
+    validate_bounds(bounds)?;
+    // A min/max envelope alone cannot distinguish a legitimate wide raster
+    // from projected coverage wrapping across the antimeridian. Sample each
+    // source edge in order, using the shared offline, only-best transform.
+    let target = geospatial::Crs::from_definition("EPSG:4326")?;
+    let mut transform = geospatial::StrictTransform::new(source_crs, &target)?;
+    let gt = source
+        .geo_transform()
+        .ok_or_else(|| Error::Data("raster requires a geotransform for imagery tiling".into()))?;
+    let [width, height] = source.size().map(f64::from);
+    for (start, end) in [
+        ([0., 0.], [width, 0.]),
+        ([width, 0.], [width, height]),
+        ([width, height], [0., height]),
+        ([0., height], [0., 0.]),
+    ] {
+        let points: Vec<_> = (0..=32)
+            .map(|i| {
+                let t = i as f64 / 32.;
+                let x = start[0] + t * (end[0] - start[0]);
+                let y = start[1] + t * (end[1] - start[1]);
+                [
+                    gt[0] + x * gt[1] + y * gt[2],
+                    gt[3] + x * gt[4] + y * gt[5],
+                    0.,
+                ]
+            })
+            .collect();
+        let geographic = transform.transform(&points)?;
+        if geographic
+            .windows(2)
+            .any(|p| (p[1][0] - p[0][0]).abs() > 180.)
+        {
+            return Err(Error::Data(
+                "split antimeridian rasters before imagery tiling".into(),
             ));
         }
-        let width = unsafe { gdal_sys::GDALGetRasterXSize(self.raw()) } as f64;
-        let height = unsafe { gdal_sys::GDALGetRasterYSize(self.raw()) } as f64;
-        for (start, end) in [
-            ([0., 0.], [width, 0.]),
-            ([width, 0.], [width, height]),
-            ([width, height], [0., height]),
-            ([0., height], [0., 0.]),
-        ] {
-            let points: Vec<_> = (0..=32)
-                .map(|i| {
-                    let t = i as f64 / 32.;
-                    let x = start[0] + t * (end[0] - start[0]);
-                    let y = start[1] + t * (end[1] - start[1]);
-                    [
-                        gt[0] + x * gt[1] + y * gt[2],
-                        gt[3] + x * gt[4] + y * gt[5],
-                        0.,
-                    ]
-                })
-                .collect();
-            let geographic = transform.transform(&points)?;
-            if geographic
-                .windows(2)
-                .any(|p| (p[1][0] - p[0][0]).abs() > 180.)
-            {
-                return Err(Error::Data(
-                    "split antimeridian rasters before imagery tiling".into(),
-                ));
-            }
-        }
-        Ok(bounds)
     }
-    fn color_relief<'a>(&'a self, path: &Path, colors: &Path) -> Result<Dataset<'a>, Error> {
-        let _errors = QuietErrors::new();
-        let path = filename(path)?;
-        let colors = filename(colors)?;
-        let mut args = Arguments::new(&[
+    Ok(bounds)
+}
+fn color_relief<'a>(
+    source: &'a Dataset<'_>,
+    path: &Path,
+    colors: &Path,
+) -> Result<Dataset<'a>, Error> {
+    let options = DemOptions::new(
+        &mut Arguments::new(&[
             "-of",
             "GTiff",
             "-alpha",
@@ -393,115 +326,94 @@ impl Dataset<'_> {
             "TILED=YES",
             "-co",
             "COMPRESS=NONE",
-        ])?;
-        // SAFETY: Owned argv, filenames and source stay live; options have RAII ownership.
-        let opts = DemOptions(
-            NonNull::new(unsafe {
-                gdal_sys::GDALDEMProcessingOptionsNew(args.mutable(), null_mut())
-            })
-            .ok_or_else(|| Error::Data(geospatial::diagnostic("invalid color relief options")))?,
+        ])?,
+        "invalid color relief options",
+    )?;
+    let _errors = QuietErrors::new();
+    let path = c_path(path)?;
+    let colors = c_path(colors)?;
+    let mut usage = 0;
+    // SAFETY: Filenames, source and options stay live through processing; the
+    // result is a new owned dataset adopted with the source's lifetime.
+    unsafe {
+        let raw = gdal_sys::GDALDEMProcessing(
+            path.as_ptr(),
+            source.raw(),
+            c"color-relief".as_ptr(),
+            colors.as_ptr(),
+            options.as_ptr(),
+            &mut usage,
         );
-        let mut usage = 0;
-        Dataset::from_raw(
-            unsafe {
-                gdal_sys::GDALDEMProcessing(
-                    path.as_ptr(),
-                    self.raw(),
-                    c"color-relief".as_ptr(),
-                    colors.as_ptr(),
-                    opts.0.as_ptr(),
-                    &mut usage,
-                )
-            },
-            "raster color relief failed",
-        )
+        Dataset::adopt(raw, "raster color relief failed")
     }
-    fn warp<'a>(&'a self, path: &Path, alpha: bool) -> Result<Dataset<'a>, Error> {
-        let _errors = QuietErrors::new();
-        let path = filename(path)?;
-        let mut argv = vec![
-            "-of",
-            "GTiff",
-            "-t_srs",
-            "EPSG:3857",
-            "-dstalpha",
-            "-wm",
-            "64",
-            "-novshift",
-            "-to",
-            "ALLOW_BALLPARK=NO",
-            "-to",
-            "ONLY_BEST=YES",
-            "-co",
-            "TILED=YES",
-            "-co",
-            "COMPRESS=NONE",
-        ];
-        if alpha {
-            argv.push("-srcalpha");
-        }
-        let mut args = Arguments::new(&argv)?;
-        // SAFETY: Owned argv for parsing; options/source/path remain live during warp.
-        let opts = WarpOptions(
-            NonNull::new(unsafe { gdal_sys::GDALWarpAppOptionsNew(args.mutable(), null_mut()) })
-                .ok_or_else(|| {
-                    Error::Data(geospatial::diagnostic("invalid imagery warp options"))
-                })?,
-        );
-        let mut source = self.raw();
-        let mut usage = 0;
-        unsafe { gdal_sys::GDALWarpAppOptionsSetQuiet(opts.0.as_ptr(), 1) };
-        Dataset::from_raw(
-            unsafe {
-                gdal_sys::GDALWarp(
-                    path.as_ptr(),
-                    null_mut(),
-                    1,
-                    &mut source,
-                    opts.0.as_ptr(),
-                    &mut usage,
-                )
-            },
-            "imagery warp failed",
-        )
+}
+fn display_warp<'a>(
+    source: &'a Dataset<'_>,
+    path: &Path,
+    alpha: bool,
+) -> Result<Dataset<'a>, Error> {
+    let mut argv = vec![
+        "-of",
+        "GTiff",
+        "-t_srs",
+        "EPSG:3857",
+        "-dstalpha",
+        "-wm",
+        "64",
+        "-novshift",
+        "-to",
+        "ALLOW_BALLPARK=NO",
+        "-to",
+        "ONLY_BEST=YES",
+        "-co",
+        "TILED=YES",
+        "-co",
+        "COMPRESS=NONE",
+    ];
+    if alpha {
+        argv.push("-srcalpha");
     }
-    fn apply_coverage(&self, source: &Dataset<'_>, alpha_index: i32) -> Result<(), Error> {
-        let _errors = QuietErrors::new();
-        let alpha = self.band(alpha_index)?;
-        // SAFETY: Band and mask are borrowed from a live source. Both datasets have
-        // identical dimensions because this precedes any display warp/resampling.
-        let mask = unsafe { gdal_sys::GDALGetMaskBand(source.band(1)?) };
-        let width = unsafe { gdal_sys::GDALGetRasterXSize(self.raw()) };
-        let height = unsafe { gdal_sys::GDALGetRasterYSize(self.raw()) };
-        if width != unsafe { gdal_sys::GDALGetRasterXSize(source.raw()) }
-            || height != unsafe { gdal_sys::GDALGetRasterYSize(source.raw()) }
-        {
-            return Err(Error::Data(
-                "display coverage dimensions differ from source".into(),
-            ));
-        }
-        let mut values = vec![0u8; 256 * 256];
-        let mut coverage = vec![0u8; 256 * 256];
-        for y in (0..height).step_by(256) {
-            for x in (0..width).step_by(256) {
-                let w = (width - x).min(256);
-                let h = (height - y).min(256);
-                raster_io(alpha, false, x, y, w, h, &mut values)?;
-                raster_io(mask, false, x, y, w, h, &mut coverage)?;
-                for (v, c) in values.iter_mut().zip(&coverage).take((w * h) as usize) {
-                    *v = (*v).min(*c);
-                }
-                raster_io(alpha, true, x, y, w, h, &mut values)?;
+    let options = WarpOptions::new(&mut Arguments::new(&argv)?, "invalid imagery warp options")?;
+    source.warp(path, &options, "imagery warp failed")
+}
+fn apply_coverage(
+    display: &Dataset<'_>,
+    source: &Dataset<'_>,
+    alpha_index: i32,
+) -> Result<(), Error> {
+    let _errors = QuietErrors::new();
+    let alpha = display.band(alpha_index)?;
+    // SAFETY: The band and its mask are borrowed from the live source.
+    let mask = unsafe { gdal_sys::GDALGetMaskBand(source.band(1)?) };
+    // Both datasets have identical dimensions because this precedes any display
+    // warp/resampling; checked so every window below is in bounds for both.
+    let [width, height] = display.size();
+    if [width, height] != source.size() {
+        return Err(Error::Data(
+            "display coverage dimensions differ from source".into(),
+        ));
+    }
+    let mut values = vec![0u8; 256 * 256];
+    let mut coverage = vec![0u8; 256 * 256];
+    for y in (0..height).step_by(256) {
+        for x in (0..width).step_by(256) {
+            let w = (width - x).min(256);
+            let h = (height - y).min(256);
+            raster_io(alpha, false, x, y, w, h, &mut values)?;
+            raster_io(mask, false, x, y, w, h, &mut coverage)?;
+            for (v, c) in values.iter_mut().zip(&coverage).take((w * h) as usize) {
+                *v = (*v).min(*c);
             }
+            raster_io(alpha, true, x, y, w, h, &mut values)?;
         }
-        // SAFETY: Flush a live writable display dataset before downstream reads.
-        if unsafe { gdal_sys::GDALFlushCache(self.raw()) } != 0 {
-            return Err(Error::Data(geospatial::diagnostic(
-                "cannot flush display coverage",
-            )));
-        }
-        Ok(())
     }
+    // SAFETY: Flush a live writable display dataset before downstream reads.
+    if unsafe { gdal_sys::GDALFlushCache(display.raw()) } != 0 {
+        return Err(Error::Data(geospatial::diagnostic(
+            "cannot flush display coverage",
+        )));
+    }
+    Ok(())
 }
 fn raster_io(
     band: gdal_sys::GDALRasterBandH,
@@ -541,78 +453,6 @@ fn raster_io(
     }
     Ok(())
 }
-impl Drop for Dataset<'_> {
-    fn drop(&mut self) {
-        // SAFETY: Unique ownership; borrowed derived datasets drop first.
-        unsafe {
-            gdal_sys::GDALClose(self.raw());
-        }
-    }
-}
-fn filename(path: &Path) -> Result<CString, Error> {
-    CString::new(path.as_os_str().as_encoded_bytes())
-        .map_err(|_| Error::Data("raster filename contains a NUL byte".into()))
-}
-struct Arguments {
-    _strings: Vec<CString>,
-    pointers: Vec<*mut c_char>,
-}
-impl Arguments {
-    fn new(arguments: &[&str]) -> Result<Self, Error> {
-        let strings = arguments
-            .iter()
-            .map(|a| CString::new(*a))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| Error::Data("raster option contains a NUL byte".into()))?;
-        Ok(Self::owned(strings))
-    }
-    fn owned(strings: Vec<CString>) -> Self {
-        let mut pointers = strings
-            .iter()
-            .map(|s| s.as_ptr().cast_mut())
-            .collect::<Vec<_>>();
-        pointers.push(null_mut());
-        Self {
-            _strings: strings,
-            pointers,
-        }
-    }
-    fn mutable(&mut self) -> *mut *mut c_char {
-        self.pointers.as_mut_ptr()
-    }
-}
-macro_rules! options {
-    ($name:ident, $ty:ty, $free:path) => {
-        struct $name(NonNull<$ty>);
-        impl Drop for $name {
-            fn drop(&mut self) {
-                // SAFETY: One matching free for the owned allocation.
-                unsafe { $free(self.0.as_ptr()) };
-            }
-        }
-    };
-}
-options!(
-    TranslateOptions,
-    gdal_sys::GDALTranslateOptions,
-    gdal_sys::GDALTranslateOptionsFree
-);
-options!(
-    InfoOptions,
-    gdal_sys::GDALInfoOptions,
-    gdal_sys::GDALInfoOptionsFree
-);
-options!(
-    DemOptions,
-    gdal_sys::GDALDEMProcessingOptions,
-    gdal_sys::GDALDEMProcessingOptionsFree
-);
-options!(
-    WarpOptions,
-    gdal_sys::GDALWarpAppOptions,
-    gdal_sys::GDALWarpAppOptionsFree
-);
-
 // gdal-sys 0.12 does not include gdalalgorithm.h in its bindgen wrapper. These
 // declarations match the stable GDAL 3.12 C API (opaque handles, C bool), and use
 // the same GDAL library already linked by gdal-sys. Avoid the 3.12-only FromPath API.
@@ -642,11 +482,11 @@ unsafe extern "C" {
 struct TileAlgorithm(NonNull<c_void>);
 impl TileAlgorithm {
     fn new() -> Result<Self, Error> {
+        native::init()?;
         let _errors = QuietErrors::new();
         // SAFETY: Registry, parent and child are separate owned C API handles;
         // releasing the registry/parent leaves the instantiated child valid.
         unsafe {
-            gdal_sys::GDALAllRegister();
             for name in [c"COG", c"GTiff", c"PNG"] {
                 if gdal_sys::GDALGetDriverByName(name.as_ptr()).is_null() {
                     return Err(Error::Environment(format!(
@@ -700,17 +540,14 @@ impl TileAlgorithm {
         arguments.push("--parallel-method=thread".into());
         let mut strings = arguments
             .iter()
-            .map(|a: &String| CString::new(a.as_str()).unwrap())
-            .collect::<Vec<_>>();
-        strings.extend([filename(input)?, filename(output)?]);
+            .map(|a| c_str(a))
+            .collect::<Result<Vec<_>, _>>()?;
+        strings.extend([c_path(input)?, c_path(output)?]);
         let args = Arguments::owned(strings);
         // SAFETY: Owned null-terminated argv lives through parsing; the owned
         // algorithm runs exactly once. No terminal callback or native stdout.
         unsafe {
-            if !GDALAlgorithmParseCommandLineArguments(
-                self.0.as_ptr(),
-                args.pointers.as_ptr().cast(),
-            ) {
+            if !GDALAlgorithmParseCommandLineArguments(self.0.as_ptr(), args.as_ptr()) {
                 return Err(Error::Data(geospatial::diagnostic(
                     "invalid native raster tiling arguments",
                 )));
@@ -736,7 +573,6 @@ impl Drop for TileAlgorithm {
     }
 }
 pub(crate) fn tile_available() -> Result<(), Error> {
-    geospatial::offline()?;
     TileAlgorithm::new().map(drop)
 }
 

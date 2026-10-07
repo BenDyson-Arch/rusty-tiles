@@ -168,10 +168,10 @@ pub(crate) fn available() -> Result<(), Error> {
             "native vector requires GDAL with GEOS >= 3.10".into(),
         ));
     }
-    // SAFETY: Registration is GDAL-managed; these lookups return borrowed
+    crate::geospatial::native::init()?;
+    // SAFETY: Drivers are registered; these lookups return borrowed
     // process-lifetime drivers and do not open or alter any datasets.
     unsafe {
-        gdal_sys::GDALAllRegister();
         for driver in [c"GeoJSON", c"GPKG", c"ESRI Shapefile"] {
             if gdal_sys::GDALGetDriverByName(driver.as_ptr()).is_null() {
                 return Err(Error::Environment(format!(
