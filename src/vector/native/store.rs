@@ -339,29 +339,23 @@ impl Build<'_> {
             padding = padding.max(child.padding);
         }
         half = half.map(|v| v + padding);
-        let mut error = value["geometricError"].as_f64().unwrap_or(0.);
+        let mut deltas = Vec::with_capacity(children.len());
         for child in &mut children {
             let delta = sub(child.center, zcenter);
-            child.value["transform"] =
-                json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, delta[0], delta[1], delta[2], 1]);
-            let box_ = child.value["boundingVolume"]["box"]
-                .as_array()
-                .ok_or_else(|| data("invalid child bounds"))?;
-            for i in 0..3 {
-                half[i] = half[i].max(
-                    delta[i].abs()
-                        + box_[3 + i * 4]
-                            .as_f64()
-                            .ok_or_else(|| data("invalid child bounds"))?,
-                );
-            }
-            error = error.max(child.value["geometricError"].as_f64().unwrap_or(0.));
+            child.value["transform"] = crate::tileset_node::translation(delta);
+            deltas.push(delta);
         }
-        value["boundingVolume"] = json!({"box":[0,0,0,half[0],0,0,0,half[1],0,0,0,half[2]]});
+        let error = crate::tileset_node::enclose_children(
+            &mut half,
+            value["geometricError"].as_f64().unwrap_or(0.),
+            deltas.into_iter().zip(children.iter().map(|n| &n.value)),
+        )?;
+        value["boundingVolume"] = json!({"box":crate::tileset_node::box_json(0, half)});
         value["refine"] = json!("REPLACE");
         value["geometricError"] = json!(error);
         if !children.is_empty() {
-            value["children"] = json!(children.into_iter().map(|n| n.value).collect::<Vec<_>>());
+            // Move, rather than re-serialise, each finished subtree into its parent.
+            value["children"] = Value::Array(children.into_iter().map(|n| n.value).collect());
         }
         self.counters.tiles += 1;
         progress("encoding", self.counters.tiles, None);
@@ -755,18 +749,16 @@ pub(super) fn convert(
         anchor[2],
         1
     ]);
-    let box_ = root["boundingVolume"]["box"].as_array().unwrap();
-    let diagonal = norm([
-        box_[3].as_f64().unwrap(),
-        box_[7].as_f64().unwrap(),
-        box_[11].as_f64().unwrap(),
-    ]) * 2.;
-    // Leave an SSE interval in which the root itself can render. Cesium skips
-    // the whole tileset below its top-level error, so equality with the root
-    // error made large-tolerance/coincident aggregate roots unreachable.
-    let top_error = 1f64
-        .max(root["geometricError"].as_f64().unwrap() * 2.)
-        .max(diagonal);
+    let diagonal = norm(crate::tileset_node::box_half(
+        &root["boundingVolume"]["box"],
+    )?) * 2.;
+    let root_error = root["geometricError"]
+        .as_f64()
+        .ok_or_else(|| data("invalid root geometric error"))?;
+    // Leave an SSE interval in which the root itself can render (margin 2).
+    // Cesium skips the whole tileset below its top-level error, so equality
+    // with the root error made large-tolerance/coincident aggregate roots unreachable.
+    let top_error = crate::tileset_node::top_level_error(diagonal, root_error, 2.);
     if !top_error.is_finite() {
         return Err(data("vector LOD error overflows; reduce lodTolerance"));
     }
