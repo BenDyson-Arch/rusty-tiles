@@ -76,3 +76,28 @@ fn missing_database_keeps_versions_and_environment_category() {
         .unwrap()
         .contains("database"));
 }
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_grid_path_keeps_selected_readiness_and_valid_json() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = tempfile::tempdir().unwrap();
+    let grid = root
+        .path()
+        .join(std::ffi::OsString::from_vec(b"grid-\xff.gtx".to_vec()));
+    std::fs::write(&grid, b"inventory marker").unwrap();
+    let (output, report) = doctor(&["--command", "convert"], Some(root.path()));
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["ready"], true);
+    assert!(report["proj"]["availableGrids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path.as_str() == Some(grid.to_string_lossy().as_ref())));
+    assert!(report["proj"]["inventoryErrors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|error| error.as_str().unwrap().contains("not UTF-8")));
+    assert_eq!(std::fs::read(&grid).unwrap(), b"inventory marker");
+}

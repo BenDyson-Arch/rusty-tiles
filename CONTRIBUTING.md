@@ -206,7 +206,7 @@ returns the dependency inventory with `ok`; failures retain that inventory.
 
 Failures include `error.code`, `error.message` and `exitCode`. Stable exit codes
 are 0 (success), 1 (I/O or subprocess failure), 2 (usage), 3 (input/data), 4
-(environment: Python, dependencies or unavailable strict CRS operation), and 5
+(environment: native dependencies or unavailable strict CRS operation), and 5
 (existing output without `--force`). Help and version requests exit successfully
 with their ordinary text. Programs should inspect the code rather than parse the
 message. An unexpected subprocess termination is a data failure unless the
@@ -270,7 +270,7 @@ does not implement. Runtime verification remains necessary for those extensions.
 For byte-identical vector archives, add `vector --reproducible`. This omits the
 entire diagnostic `conversion.json.performance` section (timings and worker
 utilization). With the same input, conversion options, encoder binary and
-GDAL/GEOS/NumPy/codec dependencies, repeated conversions produce the same archive
+GDAL/GEOS/PROJ/codec dependencies, repeated conversions produce the same archive
 bytes. Worker count can change without changing those bytes. Point-cloud and
 plain archive packing have no timing section and are reproducible by default.
 Source filesystem timestamps and the caller's archive-member order do not affect

@@ -128,6 +128,24 @@ fn proj_inventory(database: &Value) -> Value {
             Err(error) => inventory_errors.push(format!("{}: {error}", path.display())),
         }
     }
+    // JSON paths are text; retain the inventory instead of panicking on Unix
+    // filenames that are not UTF-8, and report any lossy representation.
+    let mut text_paths = |paths: std::collections::BTreeSet<std::path::PathBuf>| {
+        paths
+            .into_iter()
+            .map(|path| {
+                if path.to_str().is_none() {
+                    inventory_errors.push(format!(
+                        "{}: path is not UTF-8; displayed with replacement characters",
+                        path.display()
+                    ));
+                }
+                path.to_string_lossy().into_owned()
+            })
+            .collect::<Vec<_>>()
+    };
+    let paths = text_paths(paths);
+    let grids = text_paths(grids);
     json!({"database":database,"dataDirectories":paths,"availableGrids":grids,
         "inventoryErrors":inventory_errors,"networkEnabled":false,
         "note":"Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."})
