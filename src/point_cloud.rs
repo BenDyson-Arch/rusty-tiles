@@ -238,14 +238,6 @@ fn convert(input: &Path, output: &Path, options: &PointCloudOptions) -> Result<(
         output.join("conversion.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
-    if std::env::var_os("RUSTY_TILES_JSON_STDOUT").is_none()
-        && std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_none()
-    {
-        eprintln!(
-            "point cloud: {count} points, {} tiles; max local float32 rounding {:.6} m",
-            tree.tiles, tree.max_rounding
-        );
-    }
     Ok(())
 }
 

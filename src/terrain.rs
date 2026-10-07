@@ -228,12 +228,6 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
             &mut tiles,
             total,
         )?;
-        if std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_none() {
-            eprintln!(
-                "terrain level {z}: {} tiles",
-                u64::from(x1 - x0 + 1) * u64::from(y1 - y0 + 1)
-            );
-        }
     }
     std::fs::write(
         output.join("layer.json"),
