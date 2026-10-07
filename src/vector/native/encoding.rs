@@ -354,8 +354,13 @@ fn emit(
         .map(|p| norm(sub(*p, p.map(|v| v as f32 as f64))))
         .fold(0., f64::max);
     let mut quantization: f64 = 0.;
-    // Uncompressed, unquantized GLB size: measured, not serialised.
-    let before_bytes = glb.encoded_len()?;
+    // Uncompressed, unquantized GLB size. Measured without serialising when
+    // quantization or meshopt will change the bytes that are written.
+    let measured = if options.quantize || options.meshopt {
+        Some(glb.encoded_len()?)
+    } else {
+        None
+    };
     if options.quantize {
         let (lo, hi) = bounds(position_accessors.iter().flat_map(|(_, _, p)| p.iter()))?;
         let extent = sub(hi, lo);
@@ -405,6 +410,7 @@ fn emit(
     } else {
         glb.finish()?
     };
+    let before_bytes = measured.unwrap_or(bytes.len());
     Ok(Encoded {
         bytes,
         vertices: all_positions.len(),
