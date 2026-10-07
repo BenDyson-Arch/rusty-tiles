@@ -8,6 +8,7 @@
 
 use std::collections::VecDeque;
 use std::io::Cursor;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use image::imageops::{self, FilterType};
@@ -859,20 +860,46 @@ pub fn bake_simplified(
     // Each triangle's texels depend only on that triangle (the sampler seed
     // restarts per triangle), so triangles bake in parallel. Results are
     // written back in triangle order, keeping later triangles' wins on shared
-    // edge texels (and the first error) exactly as a serial pass.
+    // edge texels (and the first error) exactly as a serial pass. A failed
+    // chunk cancels only later chunks: a serial pass would stop there, and
+    // every earlier chunk still completes, so the first error is unchanged.
     let tris = unwrapped.indices.as_chunks::<3>().0;
-    for window in tris.chunks(RASTER_WINDOW_TRIS) {
+    let first_failed = AtomicUsize::new(usize::MAX);
+    for (w, window) in tris.chunks(RASTER_WINDOW_TRIS).enumerate() {
+        let base = w * RASTER_WINDOW_TRIS.div_ceil(RASTER_CHUNK_TRIS);
         let baked = window
             .par_chunks(RASTER_CHUNK_TRIS)
-            .map(|chunk| -> Result<Vec<(u32, u32, [u8; 4])>, Error> {
+            .enumerate()
+            .map(|(c, chunk)| -> Option<Result<BakedTexels, Error>> {
+                let id = base + c;
+                let cancelled = || first_failed.load(Ordering::Relaxed) < id;
                 let mut texels = Vec::new();
                 for tri in chunk {
-                    raster_triangle(&unwrapped, tri, (aw, ah), &sampler, &mut texels)?;
+                    let raster = raster_triangle(
+                        &unwrapped,
+                        tri,
+                        (aw, ah),
+                        &sampler,
+                        &cancelled,
+                        &mut texels,
+                    );
+                    match raster {
+                        Ok(true) => {}
+                        Ok(false) => return None,
+                        Err(e) => {
+                            first_failed.fetch_min(id, Ordering::Relaxed);
+                            return Some(Err(e));
+                        }
+                    }
                 }
-                Ok(texels)
+                Some(Ok(texels))
             })
             .collect::<Vec<_>>();
         for texels in baked {
+            // Cancelled chunks all follow the failed chunk returned here.
+            let Some(texels) = texels else {
+                unreachable!("raster chunk cancelled without an earlier failure")
+            };
             for (x, y, rgba) in texels? {
                 atlas.put_pixel(x, y, image::Rgba(rgba));
             }
@@ -903,15 +930,19 @@ pub fn bake_simplified(
     ))
 }
 
+/// Baked parent texels `(x, y, rgba)`, in rasterisation order.
+type BakedTexels = Vec<(u32, u32, [u8; 4])>;
+
 /// Bake one parent triangle's texels from the children, appending
-/// `(x, y, rgba)` in scan order.
+/// `(x, y, rgba)` in scan order. Returns `Ok(false)` if `cancelled` fired.
 fn raster_triangle(
     unwrapped: &TilePrimitive,
     tri: &[u32; 3],
     (aw, ah): (u32, u32),
     sampler: &SceneSampler,
-    out: &mut Vec<(u32, u32, [u8; 4])>,
-) -> Result<(), Error> {
+    cancelled: &dyn Fn() -> bool,
+    out: &mut BakedTexels,
+) -> Result<bool, Error> {
     let denom_w = aw as f32;
     let denom_h = ah as f32;
     let ia = tri[0] as usize;
@@ -925,7 +956,7 @@ fn raster_triangle(
     let uc = unwrapped.uvs[ic];
     let (face_n, area) = grid::face_normal_area(pa, pb, pc);
     if area <= 1e-15 {
-        return Ok(());
+        return Ok(true);
     }
     let mut seed: Option<u32> = None;
 
@@ -943,7 +974,7 @@ fn raster_triangle(
     let min_y = y0.min(y1).min(y2).max(0);
     let max_y = (y0.max(y1).max(y2) + 1).min(ah as i32 - 1);
     if min_x > max_x || min_y > max_y {
-        return Ok(());
+        return Ok(true);
     }
     for py in min_y..=max_y {
         for px in min_x..=max_x {
@@ -960,11 +991,14 @@ fn raster_triangle(
             ];
             // Match geometric orientation; authored shading normals may
             // intentionally point away from the triangle's winding.
+            if cancelled() {
+                return Ok(false);
+            }
             let rgb = sampler.sample_seeded(pos, face_n, &mut seed)?;
             out.push((px as u32, py as u32, rgb));
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Grow charts by connectivity + normal, fold tiny charts into a neighbour,
