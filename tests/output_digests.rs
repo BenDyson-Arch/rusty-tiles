@@ -18,6 +18,30 @@ use support::{digests, enabled_recipes, recipes, run, write_inputs};
 
 type Digests = BTreeMap<String, BTreeMap<String, String>>;
 
+#[test]
+fn fingerprint_normalisation_keeps_other_metadata() {
+    let input = json!({
+        "asset":{"extras":{"vectorBuildStateSha256":"volatile", "encoder":"user metadata"}},
+        "config":{"encoder":"volatile", "signature":"setting"},
+        "records":{"0":{"signature":"volatile", "encoder":"record metadata"}},
+        "properties":{"signature":"feature attribute", "vectorBuildStateSha256":"feature attribute"}
+    });
+    let output: Value = serde_json::from_slice(&support::normalise_vector_json(
+        &serde_json::to_vec(&input).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(output["properties"], input["properties"]);
+    assert_eq!(output["asset"]["extras"]["encoder"], "user metadata");
+    assert_eq!(output["config"]["signature"], "setting");
+    assert_eq!(output["records"]["0"]["encoder"], "record metadata");
+    assert_eq!(
+        output["asset"]["extras"]["vectorBuildStateSha256"],
+        "<fingerprint>"
+    );
+    assert_eq!(output["config"]["encoder"], "<fingerprint>");
+    assert_eq!(output["records"]["0"]["signature"], "<fingerprint>");
+}
+
 fn committed_path() -> std::path::PathBuf {
     support::repo_root().join("tests/fixtures/output_digests.json")
 }

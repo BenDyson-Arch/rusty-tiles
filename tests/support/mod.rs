@@ -411,23 +411,22 @@ fn sha256(bytes: &[u8]) -> String {
 /// Vector `tileset.json` / `vector-build.json` carry a hash of the vector
 /// encoder source; blank those fields so digests track output, not code.
 pub fn normalise_vector_json(bytes: &[u8]) -> Vec<u8> {
-    fn strip(value: &mut serde_json::Value) {
-        match value {
-            serde_json::Value::Object(map) => {
-                for (key, v) in map.iter_mut() {
-                    if ["encoder", "signature", "vectorBuildStateSha256"].contains(&key.as_str()) {
-                        *v = serde_json::Value::String("<fingerprint>".into());
-                    } else {
-                        strip(v);
-                    }
-                }
-            }
-            serde_json::Value::Array(items) => items.iter_mut().for_each(strip),
-            _ => {}
+    fn blank(value: Option<&mut serde_json::Value>) {
+        if let Some(value) = value {
+            *value = serde_json::Value::String("<fingerprint>".into());
         }
     }
     let mut value: serde_json::Value = serde_json::from_slice(bytes).unwrap();
-    strip(&mut value);
+    blank(value.pointer_mut("/asset/extras/vectorBuildStateSha256"));
+    blank(value.pointer_mut("/config/encoder"));
+    if let Some(records) = value
+        .get_mut("records")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for record in records.values_mut() {
+            blank(record.get_mut("signature"));
+        }
+    }
     serde_json::to_vec(&value).unwrap()
 }
 

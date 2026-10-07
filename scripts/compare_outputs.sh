@@ -78,12 +78,12 @@ INPUTS=$WORK/export/inputs
 DIGEST_PY='
 import hashlib, json, os, sys, zipfile
 path, vector = sys.argv[1], sys.argv[2] == "1"
-FP = {"encoder", "signature", "vectorBuildStateSha256"}
 def strip(v):
-    if isinstance(v, dict):
-        return {k: "<fingerprint>" if k in FP else strip(x) for k, x in v.items()}
-    if isinstance(v, list):
-        return [strip(x) for x in v]
+    for obj, key in [(v.get("asset", {}).get("extras", {}), "vectorBuildStateSha256"),
+                     (v.get("config", {}), "encoder"),
+                     *((r, "signature") for r in v.get("records", {}).values())]:
+        if key in obj:
+            obj[key] = "<fingerprint>"
     return v
 def emit(name, data):
     if vector and name.rsplit("/", 1)[-1] in ("tileset.json", "vector-build.json"):
