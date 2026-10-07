@@ -280,6 +280,61 @@ impl TriGrid {
     }
 }
 
+/// Multiply-rotate hasher for the small integer keys (vertex ids, edges,
+/// quantised cells) of the mesh pipeline's lookup tables, where SipHash
+/// dominated. Not DoS-resistant; keys come from local geometry. Only use it
+/// where the result does not depend on map iteration order.
+#[derive(Clone, Copy, Default)]
+pub struct IdHasher(u64);
+
+impl IdHasher {
+    #[inline]
+    fn add(&mut self, word: u64) {
+        self.0 = self
+            .0
+            .wrapping_add(word)
+            .wrapping_mul(0xf135_7aea_2e62_a9c5);
+    }
+}
+
+impl std::hash::Hasher for IdHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let (words, rest) = bytes.as_chunks::<8>();
+        for w in words {
+            self.add(u64::from_le_bytes(*w));
+        }
+        if !rest.is_empty() {
+            let mut last = [0u8; 8];
+            last[..rest.len()].copy_from_slice(rest);
+            self.add(u64::from_le_bytes(last) ^ ((rest.len() as u64) << 59));
+        }
+    }
+    #[inline]
+    fn write_u32(&mut self, i: u32) {
+        self.add(i as u64);
+    }
+    #[inline]
+    fn write_u64(&mut self, i: u64) {
+        self.add(i);
+    }
+    #[inline]
+    fn write_i64(&mut self, i: i64) {
+        self.add(i as u64);
+    }
+    #[inline]
+    fn write_usize(&mut self, i: usize) {
+        self.add(i as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0.rotate_left(26)
+    }
+}
+
+/// `HashMap` keyed through [`IdHasher`].
+pub type IdMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<IdHasher>>;
+
 /// Closest point on a triangle: squared distance + barycentrics (Ericson).
 pub fn point_tri_dist2_bary(p: [f32; 3], a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> (f32, [f32; 3]) {
     let ab = sub(b, a);

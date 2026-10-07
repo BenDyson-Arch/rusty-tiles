@@ -6,7 +6,7 @@
 //! the children's atlases through a dense-grid nearest-surface sampler,
 //! after downsampling each child atlas to the parent's texel density.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::Cursor;
 use std::time::Instant;
 
@@ -16,7 +16,7 @@ use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
-use crate::grid::{self, TriGrid};
+use crate::grid::{self, IdMap, TriGrid};
 use crate::hlod::{Timing, TIMING};
 use crate::mesh::EncodedImage;
 
@@ -233,7 +233,7 @@ pub fn plan_leaf_atlas_limit(
     let mut tri_chart: Vec<Vec<u32>> = Vec::with_capacity(textured.len());
     for (img, prim) in &textured {
         let (w, h) = image_dims[*img as usize];
-        let mut cell_chart: HashMap<(i64, i64), u32> = HashMap::new();
+        let mut cell_chart: IdMap<(i64, i64), u32> = IdMap::default();
         let mut per_tri = Vec::with_capacity(prim.indices.len() / 3);
         for t in prim.indices.as_chunks::<3>().0 {
             let uv = [
@@ -401,7 +401,7 @@ pub fn plan_leaf_atlas_limit(
 
     // Blits + UV remap.
     let mut blits = Vec::with_capacity(live.len());
-    let mut chart_dst: HashMap<u32, (usize, [f32; 4])> = HashMap::new();
+    let mut chart_dst: IdMap<u32, (usize, [f32; 4])> = IdMap::default();
     for (k, &ci) in live.iter().enumerate() {
         let c = &charts[ci];
         let (w, h) = image_dims[c.image as usize];
@@ -425,7 +425,7 @@ pub fn plan_leaf_atlas_limit(
     for (gi, (_, prim)) in textured.iter().enumerate() {
         let has_n = prim.normals.len() == prim.positions.len();
         any_n |= has_n;
-        let mut weld: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut weld: IdMap<(u32, u32), u32> = IdMap::default();
         for (ti, t) in prim.indices.as_chunks::<3>().0.iter().enumerate() {
             let ci = tri_chart[gi][ti];
             let Some(&(k, src)) = chart_dst.get(&ci) else {
@@ -988,7 +988,7 @@ fn chart_unwrap(
         face_area[fi] = a;
     }
 
-    let mut edge_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+    let mut edge_faces: IdMap<(u32, u32), Vec<usize>> = IdMap::default();
     for (fi, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         for k in 0..3 {
             let a = tri[k];
@@ -1127,7 +1127,7 @@ fn chart_unwrap(
 
     struct Layout {
         faces: Vec<usize>,
-        xy: HashMap<u32, [f32; 2]>,
+        xy: IdMap<u32, [f32; 2]>,
         wm: f32,
         hm: f32,
     }
@@ -1137,7 +1137,7 @@ fn chart_unwrap(
             continue;
         }
         let (tangent, bitangent) = plane_basis(ch.normal);
-        let mut xy: HashMap<u32, [f32; 2]> = HashMap::new();
+        let mut xy: IdMap<u32, [f32; 2]> = IdMap::default();
         let mut min = [f32::INFINITY; 2];
         let mut max = [f32::NEG_INFINITY; 2];
         for &fi in &ch.faces {
@@ -1271,7 +1271,7 @@ fn chart_unwrap(
         let ih = bh.saturating_sub(pad * 2).max(1);
         let ox = x + pad;
         let oy = y + pad;
-        let mut remap: HashMap<u32, u32> = HashMap::new();
+        let mut remap: IdMap<u32, u32> = IdMap::default();
         let mut verts: Vec<(&u32, &[f32; 2])> = layout.xy.iter().collect();
         verts.sort_by_key(|(vi, _)| **vi);
         for (&vi, &pxy) in verts {

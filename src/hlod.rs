@@ -2,7 +2,6 @@
 //! proxies** (never the raw scene), bake a new atlas from the children's
 //! atlases, and measure a two-sided sampled surface error for `geometricError`.
 
-use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -14,7 +13,7 @@ use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
-use crate::grid::TriGrid;
+use crate::grid::{IdMap, TriGrid};
 
 const ERROR_SAMPLE_CAP: usize = 4_096;
 const MIN_PARENT_ATLAS: u32 = 256;
@@ -257,7 +256,7 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
     let has_n = prim.normals.len() == prim.positions.len();
     let has_uv = prim.uvs.len() == prim.positions.len();
 
-    let mut map: HashMap<[i64; 3], u32> = HashMap::new();
+    let mut map: IdMap<[i64; 3], u32> = IdMap::default();
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
