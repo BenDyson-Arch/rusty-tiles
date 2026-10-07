@@ -3,12 +3,16 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 
 BIN=os.environ.get('RUSTY_TILES_BIN')
+if not BIN:
+    print('WARNING: RUSTY_TILES_BIN is not set; doctor CLI tests will be SKIPPED. '
+          'Build target/debug/rusty-tiles and set RUSTY_TILES_BIN to its absolute path.', file=sys.stderr)
 
-@unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for doctor acceptance')
+@unittest.skipUnless(BIN,'RUSTY_TILES_BIN is not set; set it to the rusty-tiles binary for doctor acceptance')
 class DoctorTests(unittest.TestCase):
     def run_doctor(self,*args,env=None):
         result=subprocess.run([BIN,'doctor','--json',*args],capture_output=True,text=True,env=env)
@@ -67,6 +71,18 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertTrue(report['ready'])
             self.assertFalse(report['proj']['database']['ready'])
+
+    def test_aliases_and_informational_cesium_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            result,report=self.run_doctor('--command','meshTo3tz','--command','create-tileset-json','--command','preview','--cesium',str(root))
+            self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(report['ready'])
+            self.assertEqual(report['selectedCommands'],['mesh-to-3tz','createTilesetJson','preview'])
+            self.assertEqual(report['commands']['preview']['cesium']['found'],False)
+            (root/'Cesium.js').write_text('// invented runtime')
+            result,report=self.run_doctor('--command','preview','--cesium',str(root))
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(report['commands']['preview']['cesium'],dict(report['commands']['preview']['cesium'],path=str(root),found=True))
 
     def test_local_grid_inventory_is_read_only(self):
         with tempfile.TemporaryDirectory() as tmp:

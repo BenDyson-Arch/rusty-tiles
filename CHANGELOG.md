@@ -1,9 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- Every multi-word camelCase option now also accepts a kebab-case alias
+  (`--sourceCrs`/`--source-crs`, `--maxPoints`/`--max-points`, …); camelCase stays
+  the primary spelling. The `create-tileset-json`, `glbTo3tz` and `meshTo3tz`
+  subcommand aliases are now shown in help. Converter help lists `-i`, `-o` and
+  `-f` first.
+- `doctor --command` accepts aliased subcommand spellings and takes its list from
+  the same table as the readiness report. `doctor` reports whether a Cesium
+  runtime is present at the README location or `doctor --cesium DIR`
+  (informational only).
+- `--json` conversion results add a `settings` object; `counts` now holds only
+  genuine counts (for example `points`, `tiles`, `features`), and settings such as
+  `heightOffset`, `grid` or `lodLevels` moved from `counts` to `settings`.
+- Without `--json`, every converter prints a one-to-three-line stderr summary
+  (output, counts, warnings, next command). The previous ad hoc point-cloud
+  summary and per-level terrain lines are replaced by it.
+- Option errors name the offending `--flag` and its valid range instead of
+  grouping several rules in one message.
+- `validate` explains that it checks `.3tz` archives only when given a directory
+  or non-archive file, instead of reporting an OS error.
+- `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` enables raw GDAL/GEOS warnings. The old
+  `RUSTY_TILES_PYTHON_TRACEBACK` name is deprecated but still honoured.
+
 ## 0.3.0 — unreleased
 
 - Readiness and local preview now run entirely in Rust. Preview embeds its HTML
   and serves only explicitly selected outputs and a locally installed Cesium IIFE.
+- `preview --host`/`--port` choose the listen address (default `127.0.0.1:9227`);
+  `preview --json` emits one startup object with the bound URL and layers.
+- `doctor --command` also accepts `validate` and `preview`.
+- A Dockerfile builds a Python-free runtime image linked against GDAL 3.12.4 and
+  PROJ 9.8.1 built from source.
 - Native geospatial builds require GDAL >= 3.12, PROJ >= 9.2 and GEOS >= 3.10
   for vectors. Default builds retain mesh/archive and local LAS/LAZ conversion.
 - Python remains for independent development fixtures/audits. CI runs the native

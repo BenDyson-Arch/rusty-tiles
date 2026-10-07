@@ -30,7 +30,7 @@ class GeometryWarningTests(unittest.TestCase):
                 (['--skipInvalid'], False), (['--repair'], False), (['--repair'], True),
             ]):
                 output = root/f'out-{index}.3tz'
-                env = dict(os.environ, RUSTY_TILES_PYTHON_TRACEBACK='1' if debug else '0')
+                env = dict(os.environ, RUSTY_TILES_NATIVE_DIAGNOSTICS='1' if debug else '0')
                 result = subprocess.run([BIN,'vector','-i',str(source),'-o',str(output),
                     '--sourceCrs','local',*flags],capture_output=True,text=True,env=env)
                 self.assertEqual(result.returncode,0,result.stderr)

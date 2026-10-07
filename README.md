@@ -92,6 +92,8 @@ for exact tested versions and `doctor --json` output.
 
 Every command uses `-i` for input and `-o` for output. Paths below are examples; replace them with your files. Run `rusty-tiles COMMAND --help` for all options.
 
+Options are shown in their camelCase spelling (`--sourceCrs`, `--maxZoom`). Every multi-word option also accepts a kebab-case alias (`--source-crs`, `--max-zoom`), as do the `createTilesetJson`, `glb-to-3tz` and `mesh-to-3tz` subcommands (`create-tileset-json`, `glbTo3tz`, `meshTo3tz`). Each successful conversion ends with a short summary on stderr naming the output, key counts and a suggested next command.
+
 ### Textured meshes
 
 ```sh
@@ -285,7 +287,12 @@ rusty-tiles createTilesetJson -i model.glb -o output/tileset.json
 
 # Package an existing tileset directory or manifest.
 rusty-tiles convert -i tileset-directory -o output/packed.3tz
+
+# Check a finished archive before publishing it.
+rusty-tiles validate output/packed.3tz
 ```
+
+`validate` checks `.3tz` archives only; raster and terrain output directories are not validated yet.
 
 ## Contributing and validation
 
@@ -294,7 +301,8 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, dependencies, che
 ```sh
 cargo fmt --check
 cargo test --locked
-python3 -m unittest discover -s tests -p 'test_*.py'
+cargo build --locked --features native-geospatial
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 For CLI acceptance tests, build the executable and set `RUSTY_TILES_BIN` to its path. Public dataset and diff compatibility audits are documented in the contributor guide. Core tests use invented fixtures; private source data and credentials are not bundled.

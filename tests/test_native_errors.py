@@ -15,9 +15,11 @@ class NativeErrorTests(unittest.TestCase):
             root=pathlib.Path(tmp);p=root/'invalid.geojson';out=root/'out.3tz'
             p.write_text(json.dumps(dict(type='FeatureCollection',features=[dict(type='Feature',id=2,properties={},geometry=dict(type='Polygon',coordinates=[[[0,0,0],[2,2,0],[2,0,0],[0,2,0],[0,0,0]]]))])))
             argv=[BIN,'vector','-i',str(p),'-o',str(out),'--sourceCrs','local']
-            for debug in (False,True):
-                env=dict(os.environ);env.pop('RUSTY_TILES_PYTHON_TRACEBACK',None)
-                if debug:env['RUSTY_TILES_PYTHON_TRACEBACK']='1'
+            # The deprecated RUSTY_TILES_PYTHON_TRACEBACK name remains a fallback.
+            for debug,name in ((False,None),(True,'RUSTY_TILES_NATIVE_DIAGNOSTICS'),(True,'RUSTY_TILES_PYTHON_TRACEBACK')):
+                env=dict(os.environ)
+                for variable in ('RUSTY_TILES_NATIVE_DIAGNOSTICS','RUSTY_TILES_PYTHON_TRACEBACK'):env.pop(variable,None)
+                if name:env[name]='1'
                 r=subprocess.run(argv,env=env,capture_output=True)
                 self.assertNotEqual(r.returncode,0);self.assertFalse(out.exists())
                 self.assertIn(b'invalid polygon topology',r.stderr)

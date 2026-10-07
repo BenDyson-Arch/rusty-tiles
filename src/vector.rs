@@ -160,34 +160,60 @@ pub fn vector_to_3tz_with_options(
         .as_ref()
         .is_some_and(|value| value.trim().is_empty())
     {
-        return Err(Error::msg("where filter must not be empty"));
-    }
-    if !matches!(options.list_fields.as_str(), "error" | "json")
-        || (!options.fields.is_empty() && !options.drop_fields.is_empty())
-    {
         return Err(Error::msg(
-            "invalid vector field selection or listFields setting",
+            "--where must not be empty; omit it to convert every feature",
         ));
     }
-    if options.jobs == 0
-        || options.max_parent_features == 0
-        || options.max_vertices < 4
-        || options.max_bytes < 4096
-        || options.max_tiles == 0
-        || options.max_source_vertices == 0
-        || options.height_offset.is_some_and(|v| !v.is_finite())
-        || (options.all_layers && !options.layers.is_empty())
-    {
+    if !matches!(options.list_fields.as_str(), "error" | "json") {
+        return Err(Error::msg(format!(
+            "--listFields must be error or json, got {:?}",
+            options.list_fields
+        )));
+    }
+    if !options.fields.is_empty() && !options.drop_fields.is_empty() {
         return Err(Error::msg(
-            "invalid vector input selection or content budgets",
+            "--fields and --dropFields cannot be combined; choose one field selection",
         ));
     }
-    if max_features == 0
-        || !lod.tolerance_metres.is_finite()
-        || lod.tolerance_metres <= 0.0
-        || !(1..=16).contains(&lod.levels)
+    if options.all_layers && !options.layers.is_empty() {
+        return Err(Error::msg(
+            "--allLayers cannot be combined with --layer; choose one layer selection",
+        ));
+    }
+    if options
+        .height_offset
+        .is_some_and(|value| !value.is_finite())
     {
-        return Err(Error::msg("invalid vector LOD budgets: positive finite tolerance, positive feature budget and 1..16 levels required"));
+        return Err(Error::msg(
+            "--heightOffset must be a finite number of metres",
+        ));
+    }
+    for (flag, value, minimum) in [
+        ("--jobs", options.jobs, 1),
+        ("--maxFeatures", max_features, 1),
+        ("--maxParentFeatures", options.max_parent_features, 1),
+        ("--maxVertices", options.max_vertices, 4),
+        ("--maxBytes", options.max_bytes, 4096),
+        ("--maxTiles", options.max_tiles, 1),
+        ("--maxSourceVertices", options.max_source_vertices, 1),
+    ] {
+        if value < minimum {
+            return Err(Error::msg(format!(
+                "{flag} must be at least {minimum}, got {value}"
+            )));
+        }
+    }
+    if !lod.tolerance_metres.is_finite() || lod.tolerance_metres <= 0.0 {
+        return Err(Error::msg(format!(
+            "--lodTolerance must be a positive finite number of metres, got {}",
+            lod.tolerance_metres
+        )));
+    }
+    if !(1..=16).contains(&lod.levels) {
+        return Err(Error::msg(format!(
+            "--lodLevels must be between 1 and 16, got {}",
+            lod.levels
+        )));
     }
     if let Some(previous) = &options.reuse_tileset {
         if !previous.is_file() {

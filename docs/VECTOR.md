@@ -572,8 +572,9 @@ reused contents. A filter matching no records publishes an empty tileset.
 
 Native GDAL/GEOS validity and repair warnings are quiet by default. Feature
 identities and reasons remain in the diagnostics and geometry reports; actual
-GDAL failures still propagate. Set `RUSTY_TILES_PYTHON_TRACEBACK=1` to retain raw
-native warnings for debugging; this historical variable name remains supported.
+GDAL failures still propagate. Set `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` to retain raw
+native warnings for debugging. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` is
+still honoured when `RUSTY_TILES_NATIVE_DIAGNOSTICS` is unset.
 
 ### Parallel encoding
 
