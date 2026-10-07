@@ -25,20 +25,34 @@ pub fn dem_to_terrain(input: &Path, output: &Path, options: &TerrainOptions) -> 
     if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
-    if options.max_zoom > 24 || ![17, 33, 65, 129].contains(&options.grid) {
+    if options.max_zoom > 24 {
+        return Err(Error::Data(format!(
+            "--maxZoom must be between 0 and 24, got {}",
+            options.max_zoom
+        )));
+    }
+    if ![17, 33, 65, 129].contains(&options.grid) {
+        return Err(Error::Data(format!(
+            "--grid must be 17, 33, 65 or 129, got {}",
+            options.grid
+        )));
+    }
+    if !options.height_offset.is_finite() {
         return Err(Error::Data(
-            "maxZoom must be 0..24; grid must be 17, 33, 65 or 129".into(),
+            "--heightOffset must be a finite number of metres".into(),
         ));
     }
-    if !options.height_offset.is_finite() || !options.fill_height.is_finite() {
-        return Err(Error::Data("heights must be finite".into()));
+    if !options.fill_height.is_finite() {
+        return Err(Error::Data(
+            "--fillHeight must be a finite number of metres".into(),
+        ));
     }
     if !options.max_error.is_finite()
         || options.max_error < 0.
         || options.max_error > f64::from(f32::MAX)
     {
         return Err(Error::Data(
-            "maxError must be finite, non-negative and fit float32 metres".into(),
+            "--maxError must be a finite, non-negative number of metres within float32 range (0 keeps the full grid)".into(),
         ));
     }
     #[cfg(not(feature = "native-geospatial"))]

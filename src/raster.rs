@@ -53,31 +53,53 @@ pub fn raster_with_options(
     if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
-    if options.min_zoom > options.max_zoom || options.max_zoom > 24 {
-        return Err(Error::Data("require 0 <= minZoom <= maxZoom <= 24".into()));
+    if options.max_zoom > 24 {
+        return Err(Error::Data(format!(
+            "--maxZoom must be between 0 and 24, got {}",
+            options.max_zoom
+        )));
+    }
+    if options.min_zoom > options.max_zoom {
+        return Err(Error::Data(format!(
+            "--minZoom ({}) must not exceed --maxZoom ({})",
+            options.min_zoom, options.max_zoom
+        )));
     }
     match options.display.as_str() {
         "gray" => {
             if options.alpha_band != 0 {
-                return Err(Error::Data("gray display uses the selected band mask/NoData; alphaBand is for image display".into()));
+                return Err(Error::Data(
+                    "--alphaBand applies only to --display image; gray display uses the selected band's mask/NoData".into(),
+                ));
             }
-            match (options.display_min, options.display_max) {
-                (Some(low), Some(high)) if low.is_finite() && high.is_finite() && low < high => {}
-                _ => {
-                    return Err(Error::Data(
-                        "numeric display requires a finite increasing range".into(),
-                    ))
-                }
+            let (Some(low), Some(high)) = (options.display_min, options.display_max) else {
+                return Err(Error::Data(
+                    "--display gray requires both --displayMin and --displayMax".into(),
+                ));
+            };
+            if !low.is_finite() || !high.is_finite() {
+                return Err(Error::Data(
+                    "--displayMin and --displayMax must be finite numbers".into(),
+                ));
+            }
+            if low >= high {
+                return Err(Error::Data(format!(
+                    "--displayMin ({low}) must be less than --displayMax ({high})"
+                )));
             }
         }
         "image" => {
             if options.display_min.is_some() || options.display_max.is_some() {
                 return Err(Error::Data(
-                    "displayMin/displayMax require gray display".into(),
+                    "--displayMin/--displayMax require --display gray".into(),
                 ));
             }
         }
-        _ => return Err(Error::Data("display must be image or gray".into())),
+        other => {
+            return Err(Error::Data(format!(
+                "--display must be image or gray, got {other:?}"
+            )))
+        }
     }
     #[cfg(not(feature = "native-geospatial"))]
     {

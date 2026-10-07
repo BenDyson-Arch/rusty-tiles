@@ -83,6 +83,18 @@ class ArchiveValidationTests(unittest.TestCase):
                                 accessor=doc['accessors'][primitive['attributes']['_FEATURE_ID_0']]
                                 self.assertIn(accessor['componentType'],(5123,5126))
 
+    def test_directories_and_non_archives_get_actionable_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);text=root/'notes.3tz';text.write_text('not an archive')
+            for path,message in [(root,'is a directory'),(text,'is not a ZIP/.3tz archive')]:
+                with self.subTest(path=path):
+                    result=self.call('validate',str(path),'--json')
+                    self.assertEqual(result.returncode,3,result.stdout)
+                    error=json.loads(result.stdout)['error']
+                    self.assertEqual(error['code'],'data');self.assertIn(message,error['message'])
+                    self.assertIn('raster and terrain output directories are not validated yet',error['message'])
+                    self.assertNotIn('os error',error['message'])
+
     def test_index_and_external_validator_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);original=self.fixture(root)

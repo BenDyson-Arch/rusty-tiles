@@ -32,8 +32,11 @@ pub fn point_cloud_to_3tz(
     if output.exists() && !options.force {
         return Err(Error::OutputExists(output.into()));
     }
-    if options.max_points == 0 || options.chunk_points == 0 {
-        return Err(Error::msg("point budgets must be positive"));
+    if options.max_points == 0 {
+        return Err(Error::msg("--maxPoints must be at least 1"));
+    }
+    if options.chunk_points == 0 {
+        return Err(Error::msg("--chunkPoints must be at least 1"));
     }
     let parent = output
         .parent()

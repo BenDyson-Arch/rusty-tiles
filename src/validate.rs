@@ -474,7 +474,34 @@ impl Check<'_> {
         Ok(())
     }
 }
+/// Reject inputs that are not 3TZ (ZIP) archives before opening them, so a
+/// directory or other file gets an actionable message instead of an OS error.
+fn require_archive(path: &Path) -> Result<(), Error> {
+    const HINT: &str = "validate currently checks .3tz archives only; raster and terrain \
+        output directories are not validated yet. Pass a .3tz written by vector, \
+        point-cloud, mesh-to-3tz, glb-to-3tz or convert";
+    if path.is_dir() {
+        return Err(invalid(format!(
+            "{} is a directory: {HINT}",
+            path.display()
+        )));
+    }
+    if !path.exists() {
+        return Err(Error::InputNotFound(path.into()));
+    }
+    let mut magic = [0u8; 4];
+    let read = File::open(path)?.read(&mut magic)?;
+    if read < 4 || !matches!(&magic, b"PK\x03\x04" | b"PK\x05\x06") {
+        return Err(invalid(format!(
+            "{} is not a ZIP/.3tz archive: {HINT}",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
 pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
+    require_archive(path)?;
     crate::pack::validate_3tz(path)?;
     let mut zip = Archive::new(File::open(path)?)?;
     let mut names = HashSet::new();
