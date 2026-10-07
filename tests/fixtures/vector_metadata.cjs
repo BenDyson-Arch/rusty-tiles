@@ -6,7 +6,15 @@ const { chromium } = require('playwright');
   try {
     const page=await browser.newPage({viewport:{width:1100,height:800}});
     const errors=[];page.on('pageerror',error=>errors.push(String(error)));
-    await page.goto(process.argv[2] || 'http://127.0.0.1:9257');
+    const network = await page.context().newCDPSession(page);
+    await network.send('Network.enable');
+    for (const load of ['initial', 'hard-refresh']) {
+      if (load === 'hard-refresh') {
+        await network.send('Network.setCacheDisabled', {cacheDisabled: true});
+        await page.reload({waitUntil: 'load'});
+      } else {
+        await page.goto(process.argv[2] || 'http://127.0.0.1:9257');
+      }
     await page.waitForFunction(()=>window.annotations || window.failures?.length,{timeout:30000});
     const report=await page.evaluate(async()=>{
       const C=Cesium,v=window.viewer,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -56,7 +64,7 @@ const { chromium } = require('playwright');
       }
       return {version:C.VERSION,cases:results};
     });
-    console.log(JSON.stringify({...report,browserErrors:errors},null,2));
+    console.log(JSON.stringify({...report,load,browserErrors:errors},null,2));
     const passed=!errors.length && report.cases.length===5 && report.cases.every(entry=>
       !entry.failures.length && entry.activeAfterFilter && !entry.missingAfterFilter &&
       entry.active?._source_id && entry.active?._source_layer &&
@@ -68,5 +76,6 @@ const { chromium } = require('playwright');
       entry.missing?.optional_integer?.value==='-9007199254740992' &&
       ['optional_text','optional_number','name'].every(key=>entry.missing?.[key]?.type==='undefined'));
     if(!passed){console.error('Metadata styling/picking/noData acceptance failed.');process.exitCode=1;}
+    }
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

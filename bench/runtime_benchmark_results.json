@@ -1,0 +1,303 @@
+{
+  "environment": {
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "python": "3.14.7",
+    "binarySha256": "c6c50644cbb6ec423fe59e8f7ba316745282becc7aec3782955fc61369ae2e0f",
+    "version": "rusty-tiles 0.3.0",
+    "doctor": {
+      "commands": {
+        "convert": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "createTilesetJson": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "glb-to-3tz": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "mesh-to-3tz": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "point-cloud": {
+          "geospatial": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "local": {
+            "ready": true
+          },
+          "note": "Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it.",
+          "reader": "native LAS/LAZ",
+          "ready": true,
+          "requires": []
+        },
+        "preview": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "raster": {
+          "backend": "native GDAL",
+          "geospatial": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "note": "Native COG, display and tiling APIs; no Python or GDAL executable required.",
+          "ready": true,
+          "requires": [
+            "native GDAL >= 3.12 with raster tile algorithm",
+            "PROJ >= 9.2",
+            "local PROJ database/grids"
+          ],
+          "tiling": {
+            "ready": true
+          }
+        },
+        "terrain": {
+          "backend": "native GDAL/Rust",
+          "geospatial": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "note": "Native terrain sampling and encoding; conversion validates the source-specific CRS operation.",
+          "ready": true,
+          "requires": [
+            "native GDAL >= 3.12",
+            "PROJ >= 9.2",
+            "local PROJ database/grids"
+          ]
+        },
+        "validate": {
+          "backend": "native Rust",
+          "ready": true,
+          "requires": []
+        },
+        "vector": {
+          "backend": "native GDAL/GEOS",
+          "geometry": {
+            "ready": true
+          },
+          "geospatial": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "note": "Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required.",
+          "ready": true,
+          "requires": [
+            "native GDAL >= 3.12",
+            "GEOS >= 3.10",
+            "SQLite",
+            "PROJ >= 9.2"
+          ]
+        }
+      },
+      "nativeGeospatial": {
+        "ready": true,
+        "versions": {
+          "gdal": "3.13.3",
+          "geos": [
+            3,
+            15,
+            0
+          ],
+          "proj": [
+            9,
+            8,
+            1
+          ]
+        }
+      },
+      "ok": true,
+      "proj": {
+        "availableGrids": [],
+        "dataDirectories": [
+          "/home/bend/.local/share/proj",
+          "/usr/share/proj"
+        ],
+        "database": {
+          "ready": true,
+          "versions": {
+            "gdal": "3.13.3",
+            "geos": [
+              3,
+              15,
+              0
+            ],
+            "proj": [
+              9,
+              8,
+              1
+            ]
+          }
+        },
+        "inventoryErrors": [],
+        "networkEnabled": false,
+        "note": "Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."
+      },
+      "ready": true,
+      "selectedCommands": [
+        "convert",
+        "createTilesetJson",
+        "glb-to-3tz",
+        "mesh-to-3tz",
+        "point-cloud",
+        "preview",
+        "raster",
+        "terrain",
+        "validate",
+        "vector"
+      ]
+    },
+    "baselineCommit": "bf3346c4808d54df52548badabde7dc0d65c0723",
+    "repeats": 7
+  },
+  "samples": {
+    "python": {
+      "doctorSeconds": [
+        0.10523681600170676,
+        0.1010400560007838,
+        0.09949399999823072,
+        0.12690862700037542,
+        0.17810005399951478,
+        0.1567910949997895,
+        0.12892100600220147
+      ],
+      "previewStartupSeconds": [
+        0.0446923470008187,
+        0.04844606800179463,
+        0.0439321599988034,
+        0.07060490499861771,
+        0.08736708500146051,
+        0.06971145800343947,
+        0.051743032003287226
+      ],
+      "previewRssKiB": [
+        24700,
+        24668,
+        24736,
+        24720,
+        24736,
+        24752,
+        24664
+      ],
+      "sequential32RequestsSeconds": [
+        0.026017747000878444,
+        0.028285563999816077,
+        0.022489727998618037,
+        0.09301584900094895,
+        0.11546301899943501,
+        0.028459426001063548,
+        0.026769607000460383
+      ]
+    },
+    "rust": {
+      "doctorSeconds": [
+        0.02324922399930074,
+        0.02208022400009213,
+        0.021960534999379888,
+        0.02392386599967722,
+        0.03565758400145569,
+        0.04214092999973218,
+        0.028169744000479113
+      ],
+      "previewStartupSeconds": [
+        0.012519413001427893,
+        0.022947437999391695,
+        0.012722406998364022,
+        0.01362973499999498,
+        0.021347066001908388,
+        0.025007389001984848,
+        0.015745973996672546
+      ],
+      "previewRssKiB": [
+        27668,
+        27604,
+        27708,
+        27580,
+        27884,
+        27536,
+        27912
+      ],
+      "sequential32RequestsSeconds": [
+        0.04165105599895469,
+        0.04376842500278144,
+        0.1288274239996099,
+        0.03638467600103468,
+        0.12799721700139344,
+        0.06264166300024954,
+        0.051834960002452135
+      ]
+    }
+  },
+  "medians": {
+    "python": {
+      "doctorSeconds": 0.12690862700037542,
+      "previewStartupSeconds": 0.051743032003287226,
+      "previewRssKiB": 24720,
+      "sequential32RequestsSeconds": 0.028285563999816077
+    },
+    "rust": {
+      "doctorSeconds": 0.02392386599967722,
+      "previewStartupSeconds": 0.015745973996672546,
+      "previewRssKiB": 27668,
+      "sequential32RequestsSeconds": 0.051834960002452135
+    }
+  },
+  "scope": "Warm local process startup/readiness and loopback HTTP, same invented 1 MiB bytes, rotated order, one warmup. Largest sampled server RSS, not browser memory or rendering throughput."
+}

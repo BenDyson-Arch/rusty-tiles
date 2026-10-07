@@ -11,9 +11,7 @@ import numpy as np
 from osgeo import ogr
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('vector_lod', ROOT/'scripts/vector.py')
-vector = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vector)
+from vector_test_support import vector
 
 
 def distance(points, path):
@@ -87,63 +85,6 @@ def parts(path):
 
 
 class VectorLodTests(unittest.TestCase):
-    def test_3d_rdp_error_measured_independently_in_both_directions(self):
-        x=np.linspace(0,30,301)
-        source=np.column_stack([x,.1*np.sin(x),.07*np.cos(x)])
-        out,error=vector.simplify_path(source,.2,set())
-        self.assertLess(len(out),len(source)//10)
-        dense=np.concatenate([a+(b-a)*np.linspace(0,1,10)[:,None] for a,b in zip(source[:-1],source[1:])])
-        self.assertLessEqual(distance(dense,out).max(),error+1e-12)
-        out=np.asarray(out)
-        chord=np.concatenate([a+(b-a)*np.linspace(0,1,100)[:,None] for a,b in zip(out[:-1],out[1:])])
-        self.assertLessEqual(distance(chord,source).max(),error+1e-12)
-
-    def test_vertical_polygon_with_hole_simplifies_and_retains_topology(self):
-        def square(x0,y0,x1,y1):
-            points=[]
-            corners=np.array([[x0,0,y0],[x1,0,y0],[x1,0,y1],[x0,0,y1]])
-            for a,b in zip(corners,np.roll(corners,-1,axis=0)):
-                points.extend((a+(b-a)*np.linspace(0,1,11,endpoint=False)[:,None]).tolist())
-            return points+[points[0]]
-        rings=[square(0,0,20,20),square(5,5,10,10)]
-        out,error,reason=vector.simplify_polygon(rings,.01,set())
-        self.assertIsNone(reason)
-        self.assertEqual(len(out),2)
-        self.assertLess(sum(map(len,out)),sum(map(len,rings))//3)
-        p,i,loops,*_=vector.polygon(out)
-        tri=np.asarray(p)[np.asarray(i).reshape(-1,3)]
-        area=np.linalg.norm(np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0]),axis=1).sum()/2
-        self.assertAlmostEqual(area,375,places=8)
-        self.assertEqual(loops.count(0xffffffff),1)
-        for a,b in zip(rings,out):
-            self.assertLessEqual(distance(a,b).max(),error+1e-10)
-
-    def test_shared_vertices_and_nonplanar_polygons_stay_fixed(self):
-        source=[[0,0,0],[1,.1,0],[2,0,0],[3,0,0]]
-        out,_=vector.simplify_path(source,1,{tuple(source[1])})
-        self.assertIn(source[1],out)
-        nonplanar=[[[0,0,0],[1,0,0],[1,1,1],[0,1,0],[0,0,0]]]
-        out,error,reason=vector.simplify_polygon(nonplanar,.01,set())
-        self.assertEqual(out,nonplanar)
-        self.assertEqual(error,0)
-        self.assertIn('nonplanar',reason)
-
-    def test_wavy_polygon_with_hole_simplifies_within_3d_error_budget(self):
-        def ring(radius):
-            a=np.linspace(0,2*np.pi,200,endpoint=False)
-            p=np.column_stack([radius*np.cos(a),radius*np.sin(a),.005*np.sin(5*a)]).tolist()
-            return p+[p[0]]
-        source=[ring(.15),ring(.05)]
-        out,error,reason=vector.simplify_polygon(source,.03,set())
-        self.assertIsNone(reason);self.assertEqual(len(out),2)
-        self.assertLess(sum(map(len,out)),sum(map(len,source))//4)
-        self.assertLessEqual(error,.03+1e-12)
-        vector.polygon(out)  # filled topology and hole remain valid
-        for before,after in zip(source,out):
-            self.assertLessEqual(distance(before,after).max(),error+1e-12)
-            dense=np.concatenate([a+(b-a)*np.linspace(0,1,100)[:,None] for a,b in zip(np.asarray(after[:-1]),np.asarray(after[1:]))])
-            self.assertLessEqual(distance(dense,before).max(),error+1e-12)
-
     def test_nonplanar_layers_have_real_parent_content_and_exact_leaf_vertices(self):
         from test_vector_gpkg import gpkg,nodes
         from test_vector_reuse import details

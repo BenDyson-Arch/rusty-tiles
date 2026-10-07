@@ -134,6 +134,7 @@ fn derivative_missing_inputs_do_not_publish_output() {
             grid: 17,
             height_offset: 0.0,
             fill_height: 0.0,
+            max_error: 0.,
         },
     )
     .unwrap_err();

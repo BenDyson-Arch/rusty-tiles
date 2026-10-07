@@ -1,6 +1,5 @@
 """Position quantization has a measured bound; compression budgets final bytes."""
 import json
-import os
 import pathlib
 import struct
 import subprocess
@@ -9,8 +8,9 @@ import unittest
 import zipfile
 import numpy as np
 from test_vector_lod import vector, read
+from vector_test_support import to_source
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class VectorCompressionTests(unittest.TestCase):
     def test_quantized_positions_decode_within_reported_error_and_keep_metadata(self):
@@ -27,13 +27,13 @@ class VectorCompressionTests(unittest.TestCase):
             self.assertEqual(a['componentType'],5123);self.assertTrue(a['normalized'])
             view=doc['bufferViews'][a['bufferView']]
             raw=np.frombuffer(binary,dtype='<u2',count=a['count']*4,offset=view['byteOffset']).reshape(-1,4)[:,:3]
-            decoded=raw.astype(float)/65535*np.array(doc['nodes'][0]['scale'])+doc['nodes'][0]['translation']
+            decoded=to_source(out,raw,doc)
             self.assertLessEqual(np.linalg.norm(decoded-source,axis=1).max(),report['rounding']+report['quantizationError'])
             self.assertLess(out.stat().st_size,baseline.stat().st_size)
             self.assertIn('KHR_mesh_quantization',doc['extensionsRequired'])
             self.assertEqual(doc['extensions']['EXT_structural_metadata'],read(baseline)[0]['extensions']['EXT_structural_metadata'])
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for codec CLI acceptance')
+    @requires_bin('set RUSTY_TILES_BIN for codec CLI acceptance')
     def test_cli_combinations_report_encoded_sizes_and_respect_budgets(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);source=root/'lines.geojson'

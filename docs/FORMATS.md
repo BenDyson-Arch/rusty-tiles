@@ -1,0 +1,144 @@
+# Mesh, point cloud and imagery guide
+
+This page explains what `mesh-to-3tz`, `point-cloud` and `raster` produce, and where their limits are. It is for users choosing settings for their own data. Every option and default is in the [command reference](CLI.md). Vector and terrain have their own guides: [vector](VECTOR.md) and [terrain](TERRAIN.md).
+
+The commands below use placeholder file names. Replace them with your own data.
+
+## Meshes
+
+```sh
+rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg
+```
+
+Large meshes are split into full-detail leaves with simplified, textured parents. An input within both `--max-triangles` and `--max-bytes` is wrapped without splitting.
+
+### Texture formats
+
+| `--texture-format` | Choose it for |
+| --- | --- |
+| `jpeg`, the CLI default | Fast delivery with high-quality lossy colour. Quality 95 with full chroma resolution. |
+| `webp` | Smaller downloads, with lossless alpha |
+| `lossless` | Exact decoded leaf texels, stored as PNG |
+| `uastc` | GPU-compressed KTX2 textures. Needs a Basis Universal encoder. |
+
+Materials that need transparency use PNG. The library's `MeshTo3tzOptions::default()` uses `lossless`.
+
+For `uastc`, build the pinned encoder first. The helper script downloads and builds it, and needs CMake, curl and tar. Conversion itself never downloads it.
+
+```sh
+./scripts/build-basisu.sh
+rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format uastc --basisu target/tools/basisu
+```
+
+### Advanced options
+
+- `--max-triangles` sets the leaf split threshold. The default is 20,000 triangles.
+- `--tile-size` sets the leaf atlas edge. The default is 2048. A single oversized chart keeps its texels in a larger atlas.
+- `--no-meshopt` turns off lossless meshopt compression. Neither mode quantizes float32 leaf geometry.
+- `--max-texel-density` must stay 0, so leaf texels keep source resolution.
+- `RAYON_NUM_THREADS` limits conversion threads.
+
+Allow scratch disk beside the output for staged geometry and textures.
+
+### Fidelity and input limits
+
+Leaves keep their original triangles and source-resolution texture charts. JPEG and WebP delivery are lossy, and so is parent simplification. Choose `lossless` for exact leaf texels. Coarse levels may keep child surfaces when safe simplification is not possible. Refinement estimates are not a universal visual-error guarantee.
+
+Spatial splitting supports static triangle meshes with optional normals, UVs in `[0,1]` and supported base-colour images. These inputs are rejected:
+
+- Animation, skinning and morph targets.
+- Extra vertex attributes and additional PBR texture channels.
+- Unsupported source extensions.
+
+Use `glb-to-3tz` to wrap a richer model unchanged.
+
+### Mesh placement
+
+| Option | Use |
+| --- | --- |
+| `--source-crs auto` | The default. Detects the position convention from coordinate values. |
+| `--source-crs geographic` | Positions are longitude, height and negative latitude |
+| `--source-crs epsg:3857` | Positions are easting, height and negative northing |
+| `--source-offset E N [A]` | Restore a Metashape shifted export |
+| `--source-offset-file offset.txt` | Read that shift from a Metashape `offset.txt` |
+| `--cartographic-position-degrees lon lat [height]` | Place a local model on the globe |
+| `--rotation-degrees heading pitch roll` | Orient a placed model |
+
+Choose an explicit `--source-crs` when you know the export's reference. These adapters cover Metashape-style exports only. They do not read arbitrary CRS metadata. Float32 degree coordinates may already have lost precision that conversion cannot recover.
+
+## Point clouds
+
+Local metre XYZ data needs no globe placement and works in the default build:
+
+```sh
+rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz \
+  --source-crs local --max-points 50000 --chunk-points 100000
+```
+
+Georeferenced data needs the `native-geospatial` build, a CRS and a height offset:
+
+```sh
+rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0
+```
+
+`--source-crs header` reads the LAS CRS as WKT or GeoTIFF EPSG keys. A custom GeoTIFF definition needs an explicit CRS such as `EPSG:32632`. Only a 2D horizontal CRS is accepted. An offset of 0 is right only when source Z is already ellipsoidal metres.
+
+### What the output keeps
+
+- Points stream through disk-backed partitions, so memory stays bounded.
+- Parents hold voxel samples. Leaves keep every point, including coincident points.
+- Metadata keeps source coordinates, source record indices, original RGB and supported numeric LAS fields.
+- Rendered positions are float32, and their rounding is reported.
+- Scalar metadata keeps source values. Scaled extra dimensions are stored as decoded float64.
+
+Waveforms, array extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported.
+
+## Imagery
+
+`raster` needs the `native-geospatial` build. It uses GDAL's COG, display and tiling APIs directly, so no Python or `gdal` executable is involved.
+
+For byte imagery:
+
+```sh
+rusty-tiles raster -i orthophoto.tif -o output/imagery \
+  --min-zoom 10 --max-zoom 18 --display image
+```
+
+For numeric data, choose a band and an explicit display range:
+
+```sh
+rusty-tiles raster -i measurements.tif -o output/measurements \
+  --min-zoom 10 --max-zoom 18 --display gray --band 1 \
+  --display-min -10 --display-max 10
+```
+
+### What the output contains
+
+| Path | Contents |
+| --- | --- |
+| `source.cog.tif` | Original values, bands, masks and NoData in a DEFLATE COG |
+| `tiles/{z}/{x}/{y}.png` | Reprojected display tiles |
+| `tilejson.json` | TileJSON manifest for the display tiles |
+| `conversion.json` | Settings and source details |
+
+Display tiles are a derivative. The COG is the faithful copy.
+
+### Transparency
+
+Masks and alpha are intersected in 256 by 256 source windows before resampling. Use `--alpha-band` only for an image band that holds transparency. Display alpha is combined with source coverage, so masked pixels stay transparent.
+
+### Limits and resources
+
+- A job over 100,000 display tiles fails with advice to narrow the zoom range.
+- Polar and antimeridian coverage needs preprocessing.
+- The GDAL block cache and display warp budget are 64 MiB each.
+- COG compression and tiling each use up to four workers, capped by available CPUs.
+- Temporary display TIFFs are uncompressed for speed. Allow scratch space for source-resolution and reprojected bands.
+- Display resampling follows the installed GDAL defaults, so output can differ across GDAL versions.
+- There is no PMTiles writer.
+
+## Archives
+
+A `.3tz` is an indexed, stored ZIP or ZIP64 file. `tileset.json` comes first, other members are sorted, and the index is last. Members have fixed 1980-01-01 timestamps and 0644 permissions. Source timestamps and member order do not affect the bytes.
+
+Point-cloud and `convert` archives are reproducible by default. Vector archives need `--reproducible`. Mesh texture bytes depend on the selected codec build. See [byte-identity checking](../CONTRIBUTING.md#check-byte-identity).

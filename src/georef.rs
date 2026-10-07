@@ -42,7 +42,11 @@ pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 
     }
 }
 
-/// WGS84 geodetic → ECEF metres (same ellipsoid as [`east_north_up`]).
+/// WGS84 geodetic → ECEF metres; also the origin of [`east_north_up`].
+///
+/// The quantized-mesh terrain encoder keeps its own formula (e² from the
+/// semi-minor axis, a different evaluation order): its published `.terrain`
+/// bytes differ from this one in the last ulp.
 pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
     let lon = pos.lon_deg.to_radians();
     let lat = pos.lat_deg.to_radians();
@@ -404,16 +408,11 @@ pub fn geog_yup_to_enu_yup(pos: [f32; 3], origin: Cartographic) -> [f32; 3] {
 pub fn east_north_up(pos: Cartographic) -> [f64; 16] {
     let lon = pos.lon_deg.to_radians();
     let lat = pos.lat_deg.to_radians();
-    let height = pos.height_m;
-    let e2 = WGS84_F * (2.0 - WGS84_F);
     let sin_lat = lat.sin();
     let cos_lat = lat.cos();
     let sin_lon = lon.sin();
     let cos_lon = lon.cos();
-    let n = WGS84_A / (1.0 - e2 * sin_lat * sin_lat).sqrt();
-    let x = (n + height) * cos_lat * cos_lon;
-    let y = (n + height) * cos_lat * sin_lon;
-    let z = (n * (1.0 - e2) + height) * sin_lat;
+    let [x, y, z] = geodetic_to_ecef(pos);
 
     let east = [-sin_lon, cos_lon, 0.0];
     let north = [-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat];
@@ -486,6 +485,32 @@ mod tests {
                 got[i],
                 want[i]
             );
+        }
+    }
+
+    #[test]
+    fn east_north_up_origin_is_bitwise_geodetic_to_ecef() {
+        // The pre-refactor inline origin, kept to pin published transforms.
+        let inline = |pos: Cartographic| {
+            let (lon, lat) = (pos.lon_deg.to_radians(), pos.lat_deg.to_radians());
+            let e2 = WGS84_F * (2.0 - WGS84_F);
+            let (sin_lat, cos_lat) = (lat.sin(), lat.cos());
+            let n = WGS84_A / (1.0 - e2 * sin_lat * sin_lat).sqrt();
+            [
+                (n + pos.height_m) * cos_lat * lon.cos(),
+                (n + pos.height_m) * cos_lat * lon.sin(),
+                (n * (1.0 - e2) + pos.height_m) * sin_lat,
+            ]
+        };
+        for lon in (-180..=180).step_by(7) {
+            for lat in (-90..=90).step_by(3) {
+                let pos = Cartographic::new(lon as f64 + 0.123, lat as f64 * 0.999, 17.25);
+                let t = east_north_up(pos);
+                assert_eq!(
+                    [t[12], t[13], t[14]].map(f64::to_bits),
+                    inline(pos).map(f64::to_bits)
+                );
+            }
         }
     }
 

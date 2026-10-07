@@ -1,6 +1,11 @@
 //! GDAL-backed source COG and explicitly styled imagery derivatives.
-use crate::Error;
-use std::{path::Path, process::Command};
+use crate::{
+    report::{ConversionResult, Reporter},
+    Error,
+};
+use std::path::Path;
+#[cfg(feature = "native-geospatial")]
+mod native;
 
 pub struct RasterOptions {
     pub force: bool,
@@ -11,6 +16,11 @@ pub struct RasterOptions {
     pub alpha_band: u16,
     pub display_min: Option<f64>,
     pub display_max: Option<f64>,
+}
+
+#[cfg(feature = "native-geospatial")]
+pub(crate) fn tile_available() -> Result<(), Error> {
+    native::tile_available()
 }
 
 pub fn raster_to_directory(
@@ -40,44 +50,79 @@ pub fn raster_with_options(
     output: &Path,
     options: &RasterOptions,
 ) -> Result<(), Error> {
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
+    raster_reported(input, output, options, &Reporter::default()).map(drop)
+}
+
+/// [`raster_with_options`] with `cog`, `display` and `tiling` progress sent
+/// to `reporter`, returning the published directory and its report.
+pub fn raster_reported(
+    input: &Path,
+    output: &Path,
+    options: &RasterOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
+    if options.max_zoom > 24 {
+        return Err(Error::Data(format!(
+            "--maxZoom must be between 0 and 24, got {}",
+            options.max_zoom
+        )));
     }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
+    if options.min_zoom > options.max_zoom {
+        return Err(Error::Data(format!(
+            "--minZoom ({}) must not exceed --maxZoom ({})",
+            options.min_zoom, options.max_zoom
+        )));
     }
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let work = tempfile::tempdir_in(parent)?;
-    let mut cmd = Command::new("python3");
-    cmd.arg("-c")
-        .arg(crate::python::script(
-            include_str!("../scripts/raster.py"),
-            "raster",
-            "Python GDAL and NumPy",
-        )?)
-        .arg(input)
-        .arg(work.path())
-        .arg("--min-zoom")
-        .arg(options.min_zoom.to_string())
-        .arg("--max-zoom")
-        .arg(options.max_zoom.to_string())
-        .arg("--display")
-        .arg(&options.display)
-        .arg("--band")
-        .arg(options.band.to_string())
-        .arg("--alpha-band")
-        .arg(options.alpha_band.to_string());
-    if let Some(v) = options.display_min {
-        cmd.arg("--display-min").arg(v.to_string());
+    match options.display.as_str() {
+        "gray" => {
+            if options.alpha_band != 0 {
+                return Err(Error::Data(
+                    "--alphaBand applies only to --display image; gray display uses the selected band's mask/NoData".into(),
+                ));
+            }
+            let (Some(low), Some(high)) = (options.display_min, options.display_max) else {
+                return Err(Error::Data(
+                    "--display gray requires both --displayMin and --displayMax".into(),
+                ));
+            };
+            if !low.is_finite() || !high.is_finite() {
+                return Err(Error::Data(
+                    "--displayMin and --displayMax must be finite numbers".into(),
+                ));
+            }
+            if low >= high {
+                return Err(Error::Data(format!(
+                    "--displayMin ({low}) must be less than --displayMax ({high})"
+                )));
+            }
+        }
+        "image" => {
+            if options.display_min.is_some() || options.display_max.is_some() {
+                return Err(Error::Data(
+                    "--displayMin/--displayMax require --display gray".into(),
+                ));
+            }
+        }
+        other => {
+            return Err(Error::Data(format!(
+                "--display must be image or gray, got {other:?}"
+            )))
+        }
     }
-    if let Some(v) = options.display_max {
-        cmd.arg("--display-max").arg(v.to_string());
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        let _ = reporter;
+        Err(Error::Environment(
+            "raster requires native GDAL/PROJ; rebuild with --features native-geospatial".into(),
+        ))
     }
-    crate::python::run(&mut cmd, "raster")?;
-    crate::output::publish_directory(work.path(), output, options.force)?;
-    Ok(())
+    #[cfg(feature = "native-geospatial")]
+    {
+        let job = crate::output::Job::begin(output, options.force)?;
+        let staging = job.staging("raster")?;
+        let report = native::convert(input, &staging, options, reporter)?;
+        job.publish_dir(&staging, Some(report))
+    }
 }

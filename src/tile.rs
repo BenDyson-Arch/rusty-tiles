@@ -7,9 +7,10 @@ use crate::{
     georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset},
     glb_write::TilePrimitive,
     mesh::{self, Scene},
-    pack::{pack_named_files, PackOptions},
+    output::Job,
+    report::{ConversionResult, Reporter},
     texture::{self, LeafGroup, LeafPlan},
-    tileset::{glb_to_3tz, CreateTilesetOptions},
+    tileset::CreateTilesetOptions,
 };
 use image::{ImageEncoder, RgbaImage};
 use rayon::prelude::*;
@@ -83,6 +84,8 @@ pub enum TextureFormat {
     Uastc,
 }
 
+/// Material, textured, has-normals.
+type GroupKey = (usize, bool, bool);
 struct Planned {
     material: usize,
     plan: LeafPlan,
@@ -108,6 +111,17 @@ struct Proxy {
 }
 
 pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Result<(), Error> {
+    mesh_to_3tz_reported(input, output, opts, &Reporter::default()).map(drop)
+}
+
+/// [`mesh_to_3tz`] with stage timings sent to `reporter` as notes, returning
+/// the published result.
+pub fn mesh_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    opts: &MeshTo3tzOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
     if opts.max_triangles == 0
         || !opts.tile_size.is_power_of_two()
         || !(64..=4096).contains(&opts.tile_size)
@@ -119,18 +133,16 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     if !opts.max_texel_density.is_finite() || opts.max_texel_density != 0.0 {
         return Err(Error::msg("the fidelity-preserving pipeline requires maxTexelDensity=0; coarse LODs reduce resolution automatically"));
     }
-    if output.exists() && !opts.force {
-        return Err(Error::OutputExists(output.to_path_buf()));
-    }
+    let job = Job::begin(output, opts.force)?;
     if opts.texture_format == TextureFormat::Uastc {
         crate::gpu_texture::check(&opts.basisu)?;
     }
     let start = Instant::now();
     if opts.texture_format == TextureFormat::Jpeg {
-        eprintln!(
+        reporter.note(&format!(
             "mesh-to-3tz: {} (quality 95, full chroma)",
             crate::jpeg::backend()
-        );
+        ));
     }
     let mut scene = mesh::load(input)?;
     let baked = mesh::bake_to_enu(
@@ -142,7 +154,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         },
     );
     if baked.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        return glb_to_3tz(input, output, &CreateTilesetOptions::from(opts));
+        return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
     }
     validate_source(input)?;
     if scene.vertices.iter().any(|v| {
@@ -160,12 +172,12 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
         .iter()
         .map(texture::image_dimensions)
         .collect::<Result<Vec<_>, _>>()?;
-    eprintln!(
+    reporter.note(&format!(
         "mesh-to-3tz: load {:.2}s triangles={} images={}",
         start.elapsed().as_secs_f64(),
         scene.triangles.len(),
         dims.len()
-    );
+    ));
     let mut root = partition(
         &scene,
         &dims,
@@ -177,21 +189,14 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
     let mut nodes = Vec::new();
     flatten(&mut root, &mut nodes);
     let leaves = nodes.iter().filter(|n| n.children.is_empty()).count();
-    eprintln!(
+    reporter.note(&format!(
         "mesh-to-3tz: plan {:.2}s leaves={} nodes={}",
         start.elapsed().as_secs_f64(),
         leaves,
         nodes.len()
-    );
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    fs::create_dir_all(parent)?;
-    let work = tempfile::Builder::new()
-        .prefix(".tiles-work-")
-        .tempdir_in(parent)?;
-    fs::create_dir(work.path().join("t"))?;
+    ));
+    let work = job.path();
+    fs::create_dir(work.join("t"))?;
     let mut pieces: Vec<Vec<Piece>> = (0..nodes.len()).map(|_| Vec::new()).collect();
     // Decode a bounded batch in parallel, then spill each image's charts.
     // Writes to a leaf's spill file stay ordered and cannot interleave.
@@ -218,7 +223,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                     let mut file = fs::OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(work.path().join(format!("{ni}-{pi}.pixels")))?;
+                        .open(work.join(format!("{ni}-{pi}.pixels")))?;
                     for (bi, b) in p
                         .plan
                         .blits
@@ -254,10 +259,10 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                 })?;
         }
     }
-    eprintln!(
+    reporter.note(&format!(
         "mesh-to-3tz: chart extraction {:.2}s",
         start.elapsed().as_secs_f64()
-    );
+    ));
     drop(scene);
     nodes
         .par_iter_mut()
@@ -272,7 +277,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                 let mut delivery_image = None;
                 if !p.plan.blits.is_empty() {
                     let mut atlas = RgbaImage::new(p.plan.atlas_wh.0, p.plan.atlas_wh.1);
-                    let path = work.path().join(format!("{}-{pi}.pixels", node.id));
+                    let path = work.join(format!("{}-{pi}.pixels", node.id));
                     let mut file = fs::File::open(&path)?;
                     let mut seen = vec![false; p.plan.blits.len()];
                     for _ in 0..p.plan.blits.len() {
@@ -295,7 +300,7 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                     );
                     delivery_image = Some(encode_delivery(
                         &atlas,
-                        work.path(),
+                        work,
                         &format!("gpu-{}-{pi}", node.id),
                         &materials[p.material],
                         opts,
@@ -329,12 +334,15 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                 });
             }
             if node.children.is_empty() {
-                write_node(work.path(), node.id, out, &materials, opts)?;
-                spill_images(work.path(), node.id, out)?;
+                write_node(work, node.id, out, &materials, opts)?;
+                spill_images(work, node.id, out)?;
             }
             Ok(())
         })?;
-    eprintln!("mesh-to-3tz: leaves {:.2}s", start.elapsed().as_secs_f64());
+    reporter.note(&format!(
+        "mesh-to-3tz: leaves {:.2}s",
+        start.elapsed().as_secs_f64()
+    ));
     let mut proxies: Vec<Option<Proxy>> = pieces
         .into_iter()
         .enumerate()
@@ -378,12 +386,12 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
                 jobs.into_par_iter()
                     .map(|(id, mut children)| -> Result<_, Error> {
                         for (child_id, proxy) in &mut children {
-                            restore_images(work.path(), *child_id, &mut proxy.pieces)?;
+                            restore_images(work, *child_id, &mut proxy.pieces)?;
                         }
                         let mut proxy =
                             parent_proxy(children.into_iter().map(|(_, p)| p).collect(), opts)?;
-                        write_node(work.path(), id, &proxy.pieces, &materials, opts)?;
-                        spill_images(work.path(), id, &mut proxy.pieces)?;
+                        write_node(work, id, &proxy.pieces, &materials, opts)?;
+                        spill_images(work, id, &mut proxy.pieces)?;
                         Ok((id, proxy))
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -395,9 +403,9 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             }
         }
     }
-    eprintln!("mesh-to-3tz: {}", crate::hlod::TIMING.summary());
+    reporter.note(&format!("mesh-to-3tz: {}", crate::hlod::TIMING.summary()));
     let root_proxy = proxies[0].as_ref().unwrap();
-    eprintln!(
+    reporter.note(&format!(
         "mesh-to-3tz: root triangles={} geometry_error={:.4} refinement_error={:.4}",
         root_proxy
             .pieces
@@ -406,24 +414,24 @@ pub fn mesh_to_3tz(input: &Path, output: &Path, opts: &MeshTo3tzOptions) -> Resu
             .sum::<usize>(),
         root_proxy.geometry_error,
         root_proxy.error
-    );
+    ));
     let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes)});
     if let Some(origin) = baked.map(|b| b.origin).or(opts.cartographic) {
         ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
     }
-    fs::write(work.path().join("tileset.json"), serde_json::to_vec(&ts)?)?;
-    let mut files = vec![("tileset.json".into(), work.path().join("tileset.json"))];
+    fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
+    let mut files = vec![("tileset.json".into(), work.join("tileset.json"))];
     for node in &nodes {
         let name = format!("t/{}.glb", node.id);
-        files.push((name.clone(), work.path().join(name)));
+        files.push((name.clone(), work.join(name)));
     }
-    pack_named_files(&files, output, &PackOptions { force: opts.force })?;
-    eprintln!(
+    let result = job.publish_3tz(&files, None)?;
+    reporter.note(&format!(
         "mesh-to-3tz: done {:.2}s bytes={}",
         start.elapsed().as_secs_f64(),
         fs::metadata(output)?.len()
-    );
-    Ok(())
+    ));
+    Ok(result)
 }
 
 fn wrap(v: i64, n: u32, mode: u32) -> u32 {
@@ -548,8 +556,7 @@ fn plan(
     ids: &[usize],
     edge: u32,
 ) -> Result<Vec<Planned>, Error> {
-    let mut groups: BTreeMap<(usize, bool, bool), BTreeMap<Option<u32>, Vec<usize>>> =
-        BTreeMap::new();
+    let mut groups: BTreeMap<GroupKey, BTreeMap<Option<u32>, Vec<usize>>> = BTreeMap::new();
     for &id in ids {
         let t = &scene.triangles[id];
         groups
@@ -988,7 +995,7 @@ pub(crate) fn colour_tables() -> (&'static [f32; 256], &'static [u8]) {
 }
 pub(crate) fn resize_colour(source: &RgbaImage, w: u32, h: u32) -> RgbaImage {
     let (linear, srgb) = colour_tables();
-    if source.width() % w == 0 && source.height() % h == 0 {
+    if source.width().is_multiple_of(w) && source.height().is_multiple_of(h) {
         let (sx, sy) = (source.width() / w, source.height() / h);
         return RgbaImage::from_fn(w, h, |x, y| {
             let mut sum = [0.0f32; 4];
@@ -1038,7 +1045,7 @@ pub(crate) fn resize_colour(source: &RgbaImage, w: u32, h: u32) -> RgbaImage {
 }
 pub(crate) fn max_texel_size(p: &TilePrimitive, w: u32, h: u32) -> f64 {
     let mut worst = 0.0f64;
-    for tri in p.indices.chunks_exact(3) {
+    for tri in p.indices.as_chunks::<3>().0 {
         let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
         let du1 = (p.uvs[b][0] - p.uvs[a][0]) as f64 * w as f64;
         let dv1 = (p.uvs[b][1] - p.uvs[a][1]) as f64 * h as f64;

@@ -198,20 +198,6 @@ pub(crate) fn y_up_to_z_up(p: [f32; 3]) -> [f32; 3] {
     [p[0], -p[2], p[1]]
 }
 
-pub(crate) fn z_up_to_y_up(p: [f64; 3]) -> [f64; 3] {
-    [p[0], p[2], -p[1]]
-}
-
-/// Z-up AABB → Y-up AABB (`yup.z = -zup.y` flips that axis).
-pub(crate) fn aabb_zup_to_yup(min: [f64; 3], max: [f64; 3]) -> ([f64; 3], [f64; 3]) {
-    let a = z_up_to_y_up(min);
-    let b = z_up_to_y_up(max);
-    (
-        [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
-        [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
-    )
-}
-
 pub fn aabb_center(min: [f64; 3], max: [f64; 3]) -> [f64; 3] {
     [
         (min[0] + max[0]) * 0.5,
@@ -468,7 +454,7 @@ fn norm(a: [f64; 3]) -> f64 {
 /// Eigenvectors of a symmetric 3×3 (cyclic Jacobi), rows sorted by
 /// descending eigenvalue, made right-handed.
 #[allow(clippy::needless_range_loop)]
-fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+pub(crate) fn jacobi_eigenvectors(mut a: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let mut v = AXIS_ALIGNED;
     for _ in 0..32 {
         let off = a[0][1].abs() + a[0][2].abs() + a[1][2].abs();

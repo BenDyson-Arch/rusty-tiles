@@ -1,22 +1,36 @@
 [package]
 name = "rusty-tiles"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain, LAS/LAZ point clouds and glTF vectors."
 license = "MIT"
+repository = "https://github.com/BenDyson-Arch/rusty-tiles"
 readme = "README.md"
-include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.py", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/support/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**", "/bench/**"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [[bin]]
 name = "rusty-tiles"
 path = "src/main.rs"
+
+[features]
+default = []
+native-geospatial = ["dep:gdal-sys", "dep:pkg-config", "dep:rusqlite"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names"] }
 gltf-json = { version = "=1.4.1", features = ["extensions"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"
 zip = { version = "2", default-features = false }
 walkdir = "2"
@@ -33,6 +47,14 @@ zenwebp = "0.4"
 tempfile = "3"
 sha2 = "0.10"
 jsonschema = { version = "0.33", default-features = false }
+gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
+las = { version = "0.11.1", features = ["laz"] }
+rusqlite = { version = "0.40", optional = true }
+tiny_http = "0.12.0"
+percent-encoding = "2.3.2"
+
+[build-dependencies]
+pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }

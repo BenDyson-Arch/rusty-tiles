@@ -82,11 +82,10 @@ fn assert_semantic(oracle: &serde_json::Value, ours: &serde_json::Value) {
     ];
     let extent = (0..3)
         .map(|i| {
-            let hx = (ub[3 + i * 3].as_f64().unwrap().powi(2)
+            (ub[3 + i * 3].as_f64().unwrap().powi(2)
                 + ub[4 + i * 3].as_f64().unwrap().powi(2)
                 + ub[5 + i * 3].as_f64().unwrap().powi(2))
-            .sqrt();
-            hx
+            .sqrt()
         })
         .fold(0.0_f64, f64::max)
         .max(1.0);

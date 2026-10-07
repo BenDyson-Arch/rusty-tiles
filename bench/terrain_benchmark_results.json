@@ -1,0 +1,448 @@
+{
+  "environment": {
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "logicalCpus": 20,
+    "gdal": "GDAL 3.13.3 \"Iowa City\", released 2026/08/13",
+    "numpy": "2.5.3",
+    "oldBinarySha256": "ff86251813b37341fa2556b6ee0d816cc25541b2e041bf06a9bb5c176154924e",
+    "newBinarySha256": "408f1ca61883213e0be5bf56eda35cd6e1d47abbedc43fccdca84a173089ddc5",
+    "methodology": "Release CLI, serial, warm filesystem cache, one warmup then rotated measured repetitions; Linux wait4 peak RSS is largest process, not process-tree sum; original default GDAL cache versus native 64 MiB cache.",
+    "recordedAtUtc": "2026-10-07T00:35:06.054188+00:00",
+    "python": "3.14.7",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "build": "cargo build --release --locked --features native-geospatial",
+    "baselineRevision": "9a95862aed715002e2d8290584350e583a785454"
+  },
+  "cases": [
+    {
+      "name": "small-flat",
+      "pixels": 32,
+      "crs": 4326,
+      "transform": [
+        12,
+        0.01,
+        0,
+        42,
+        0,
+        -0.01
+      ],
+      "surface": "flat",
+      "maxZoom": 9,
+      "grid": 65,
+      "heightOffset": 10.25,
+      "fillHeight": 0,
+      "sourceBytes": 262645,
+      "sourceSha256": "ed5cf2f9f7603cf87b0f46c62dbbfff5a1f48b261f5430df8f02883fb301d82f",
+      "methods": {
+        "python-original": {
+          "samples": [
+            {
+              "wallSeconds": 0.2147910089988727,
+              "cpuSeconds": 0.213622,
+              "peakRssMiB": 78.41796875
+            },
+            {
+              "wallSeconds": 0.2076390709989937,
+              "cpuSeconds": 0.20656599999999997,
+              "peakRssMiB": 78.5703125
+            },
+            {
+              "wallSeconds": 0.20759968099991966,
+              "cpuSeconds": 0.206478,
+              "peakRssMiB": 78.94921875
+            }
+          ],
+          "medianWallSeconds": 0.2076390709989937,
+          "medianCpuSeconds": 0.20656599999999997,
+          "medianPeakRssMiB": 78.5703125,
+          "output": {
+            "tiles": 14,
+            "vertices": 59150,
+            "triangles": 114688,
+            "terrainBytes": 1051876,
+            "sidecarBytes": 305350,
+            "totalBytes": 1359543,
+            "simplification": null
+          }
+        },
+        "rust-full-grid": {
+          "samples": [
+            {
+              "wallSeconds": 0.039092880999305635,
+              "cpuSeconds": 0.038544999999999996,
+              "peakRssMiB": 50.484375
+            },
+            {
+              "wallSeconds": 0.03985518799890997,
+              "cpuSeconds": 0.03932,
+              "peakRssMiB": 50.65625
+            },
+            {
+              "wallSeconds": 0.03976507799961837,
+              "cpuSeconds": 0.039244,
+              "peakRssMiB": 50.0625
+            }
+          ],
+          "medianWallSeconds": 0.03976507799961837,
+          "medianCpuSeconds": 0.039244,
+          "medianPeakRssMiB": 50.484375,
+          "output": {
+            "tiles": 14,
+            "vertices": 59150,
+            "triangles": 114688,
+            "terrainBytes": 1051876,
+            "sidecarBytes": 305350,
+            "totalBytes": 1360109,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 114688,
+              "inputVertices": 59150,
+              "maxAddedHeightErrorMetres": 0.0,
+              "maxAddedSurfaceErrorMetres": 0.0,
+              "maxErrorMetres": 0.0,
+              "maxMeshoptEstimateMetres": 0.0,
+              "outputTriangles": 114688,
+              "outputVertices": 59150,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        },
+        "rust-simplified": {
+          "samples": [
+            {
+              "wallSeconds": 0.12072301899934246,
+              "cpuSeconds": 0.11989399999999999,
+              "peakRssMiB": 50.9453125
+            },
+            {
+              "wallSeconds": 0.11749951300043904,
+              "cpuSeconds": 0.116695,
+              "peakRssMiB": 50.9609375
+            },
+            {
+              "wallSeconds": 0.11931419400025334,
+              "cpuSeconds": 0.11852499999999999,
+              "peakRssMiB": 51.5625
+            }
+          ],
+          "medianWallSeconds": 0.11931419400025334,
+          "medianCpuSeconds": 0.11852499999999999,
+          "medianPeakRssMiB": 50.9609375,
+          "output": {
+            "tiles": 14,
+            "vertices": 40243,
+            "triangles": 76874,
+            "terrainBytes": 711550,
+            "sidecarBytes": 305350,
+            "totalBytes": 1019830,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 114688,
+              "inputVertices": 59150,
+              "maxAddedHeightErrorMetres": 4.603402700553611e-13,
+              "maxAddedSurfaceErrorMetres": 0.8196330855712327,
+              "maxErrorMetres": 1.0,
+              "maxMeshoptEstimateMetres": 0.5810458742912685,
+              "outputTriangles": 76874,
+              "outputVertices": 40243,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        }
+      },
+      "comparison": {
+        "fullGridGeometryMatches": true,
+        "manifestsMatch": true,
+        "coverageSidecarsMatch": true,
+        "simplifiedEdgesMatch": true
+      }
+    },
+    {
+      "name": "regional-smooth",
+      "pixels": 4096,
+      "crs": 4326,
+      "transform": [
+        12,
+        0.00048828125,
+        0,
+        42,
+        0,
+        -0.00048828125
+      ],
+      "surface": "smooth",
+      "maxZoom": 11,
+      "grid": 65,
+      "heightOffset": 10.25,
+      "fillHeight": 0,
+      "sourceBytes": 67111413,
+      "sourceSha256": "7e27e7d4ce45bfdbb3114bfe740e9c73fbe9caef80e22620b4880b12f3969ca8",
+      "methods": {
+        "python-original": {
+          "samples": [
+            {
+              "wallSeconds": 10.153513252000266,
+              "cpuSeconds": 10.11469,
+              "peakRssMiB": 251.796875
+            },
+            {
+              "wallSeconds": 9.698835595001583,
+              "cpuSeconds": 9.673773,
+              "peakRssMiB": 251.3828125
+            },
+            {
+              "wallSeconds": 9.901041682000141,
+              "cpuSeconds": 9.872470999999999,
+              "peakRssMiB": 251.70703125
+            }
+          ],
+          "medianWallSeconds": 9.901041682000141,
+          "medianCpuSeconds": 9.872470999999999,
+          "medianPeakRssMiB": 251.70703125,
+          "output": {
+            "tiles": 762,
+            "vertices": 3219450,
+            "triangles": 6242304,
+            "terrainBytes": 57252108,
+            "sidecarBytes": 54261195,
+            "totalBytes": 111515888,
+            "simplification": null
+          }
+        },
+        "rust-full-grid": {
+          "samples": [
+            {
+              "wallSeconds": 4.768456702000549,
+              "cpuSeconds": 4.7262830000000005,
+              "peakRssMiB": 223.09375
+            },
+            {
+              "wallSeconds": 4.598138817998915,
+              "cpuSeconds": 4.586487999999999,
+              "peakRssMiB": 223.7734375
+            },
+            {
+              "wallSeconds": 4.708215358999951,
+              "cpuSeconds": 4.6936860000000005,
+              "peakRssMiB": 223.4375
+            }
+          ],
+          "medianWallSeconds": 4.708215358999951,
+          "medianCpuSeconds": 4.6936860000000005,
+          "medianPeakRssMiB": 223.4375,
+          "output": {
+            "tiles": 762,
+            "vertices": 3219450,
+            "triangles": 6242304,
+            "terrainBytes": 57252108,
+            "sidecarBytes": 54261195,
+            "totalBytes": 111516460,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 6242304,
+              "inputVertices": 3219450,
+              "maxAddedHeightErrorMetres": 0.0,
+              "maxAddedSurfaceErrorMetres": 0.0,
+              "maxErrorMetres": 0.0,
+              "maxMeshoptEstimateMetres": 0.0,
+              "outputTriangles": 6242304,
+              "outputVertices": 3219450,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        },
+        "rust-simplified": {
+          "samples": [
+            {
+              "wallSeconds": 7.254938308999044,
+              "cpuSeconds": 7.235294,
+              "peakRssMiB": 223.79296875
+            },
+            {
+              "wallSeconds": 7.151434026000061,
+              "cpuSeconds": 7.134008,
+              "peakRssMiB": 223.41796875
+            },
+            {
+              "wallSeconds": 7.16792973200063,
+              "cpuSeconds": 7.150562,
+              "peakRssMiB": 223.01953125
+            }
+          ],
+          "medianWallSeconds": 7.16792973200063,
+          "medianCpuSeconds": 7.150562,
+          "medianPeakRssMiB": 223.41796875,
+          "output": {
+            "tiles": 762,
+            "vertices": 284704,
+            "triangles": 372812,
+            "terrainBytes": 4426680,
+            "sidecarBytes": 54261195,
+            "totalBytes": 58691075,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 6242304,
+              "inputVertices": 3219450,
+              "maxAddedHeightErrorMetres": 0.9271962713271965,
+              "maxAddedSurfaceErrorMetres": 0.9994128624223969,
+              "maxErrorMetres": 1.0,
+              "maxMeshoptEstimateMetres": 0.9999612557645879,
+              "outputTriangles": 372812,
+              "outputVertices": 284704,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        }
+      },
+      "comparison": {
+        "fullGridGeometryMatches": true,
+        "manifestsMatch": true,
+        "coverageSidecarsMatch": true,
+        "simplifiedEdgesMatch": true
+      }
+    },
+    {
+      "name": "projected-rugged",
+      "pixels": 2048,
+      "crs": 32633,
+      "transform": [
+        500000,
+        100,
+        0,
+        4650000,
+        0,
+        -100
+      ],
+      "surface": "rugged",
+      "maxZoom": 11,
+      "grid": 65,
+      "heightOffset": 10.25,
+      "fillHeight": 0,
+      "sourceBytes": 16778223,
+      "sourceSha256": "d1cd182ebe61d0af8df98219ee257df94cc45f6c55ad03d73c0b3c058474df3e",
+      "methods": {
+        "python-original": {
+          "samples": [
+            {
+              "wallSeconds": 7.804005492000215,
+              "cpuSeconds": 7.728715,
+              "peakRssMiB": 126.79296875
+            },
+            {
+              "wallSeconds": 7.8543476769991685,
+              "cpuSeconds": 7.79692,
+              "peakRssMiB": 126.58984375
+            },
+            {
+              "wallSeconds": 7.751989397000216,
+              "cpuSeconds": 7.722153,
+              "peakRssMiB": 127.171875
+            }
+          ],
+          "medianWallSeconds": 7.804005492000215,
+          "medianCpuSeconds": 7.728715,
+          "medianPeakRssMiB": 126.79296875,
+          "output": {
+            "tiles": 879,
+            "vertices": 3713775,
+            "triangles": 7200768,
+            "terrainBytes": 66042786,
+            "sidecarBytes": 62033888,
+            "totalBytes": 128079666,
+            "simplification": null
+          }
+        },
+        "rust-full-grid": {
+          "samples": [
+            {
+              "wallSeconds": 1.7702053640005033,
+              "cpuSeconds": 1.765134,
+              "peakRssMiB": 99.1796875
+            },
+            {
+              "wallSeconds": 1.7875558359992283,
+              "cpuSeconds": 1.759483,
+              "peakRssMiB": 98.4375
+            },
+            {
+              "wallSeconds": 1.761655853000775,
+              "cpuSeconds": 1.755683,
+              "peakRssMiB": 98.90625
+            }
+          ],
+          "medianWallSeconds": 1.7702053640005033,
+          "medianCpuSeconds": 1.759483,
+          "medianPeakRssMiB": 98.90625,
+          "output": {
+            "tiles": 879,
+            "vertices": 3713775,
+            "triangles": 7200768,
+            "terrainBytes": 66042786,
+            "sidecarBytes": 62033889,
+            "totalBytes": 128080239,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 7200768,
+              "inputVertices": 3713775,
+              "maxAddedHeightErrorMetres": 0.0,
+              "maxAddedSurfaceErrorMetres": 0.0,
+              "maxErrorMetres": 0.0,
+              "maxMeshoptEstimateMetres": 0.0,
+              "outputTriangles": 7200768,
+              "outputVertices": 3713775,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        },
+        "rust-simplified": {
+          "samples": [
+            {
+              "wallSeconds": 27.22625954600153,
+              "cpuSeconds": 27.161251,
+              "peakRssMiB": 99.3828125
+            },
+            {
+              "wallSeconds": 26.918883078000363,
+              "cpuSeconds": 26.860581,
+              "peakRssMiB": 99.1640625
+            },
+            {
+              "wallSeconds": 27.356973556999947,
+              "cpuSeconds": 27.293039,
+              "peakRssMiB": 98.703125
+            }
+          ],
+          "medianWallSeconds": 27.22625954600153,
+          "medianCpuSeconds": 27.161251,
+          "medianPeakRssMiB": 99.1640625,
+          "output": {
+            "tiles": 879,
+            "vertices": 3293627,
+            "triangles": 6360472,
+            "terrainBytes": 58480122,
+            "sidecarBytes": 62033889,
+            "totalBytes": 120517620,
+            "simplification": {
+              "boundaryPolicy": "retain every original tile-edge vertex",
+              "inputTriangles": 7200768,
+              "inputVertices": 3713775,
+              "maxAddedHeightErrorMetres": 0.9956096821819168,
+              "maxAddedSurfaceErrorMetres": 0.9977520264679907,
+              "maxErrorMetres": 1.0,
+              "maxMeshoptEstimateMetres": 0.8965763424232926,
+              "outputTriangles": 6360472,
+              "outputVertices": 3293627,
+              "reference": "quantized regular grid; source sampling and height quantization errors are separate"
+            }
+          }
+        }
+      },
+      "comparison": {
+        "fullGridGeometryMatches": true,
+        "manifestsMatch": true,
+        "coverageSidecarsMatch": true,
+        "simplifiedEdgesMatch": true
+      }
+    }
+  ]
+}

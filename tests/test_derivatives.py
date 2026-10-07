@@ -15,14 +15,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def module(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT/'scripts'/f'{name}.py')
+    path = ROOT/'tests/fixtures/terrain_oracle.py' if name == 'terrain' else ROOT/'scripts'/f'{name}.py'
+    spec = importlib.util.spec_from_file_location(name, path)
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
 
 
 terrain = module('terrain')
-vector = module('vector')
+from vector_test_support import vector, to_source
 
 
 def decode_terrain(data):
@@ -52,45 +53,7 @@ def decode_terrain(data):
     return header, np.array(attributes).T, np.asarray(indices).reshape(-1, 3), edges
 
 
-class TerrainTests(unittest.TestCase):
-    def test_root_horizon_point_is_not_earth_center(self):
-        data=terrain.encode(0,-90,180,np.zeros((17,17)),0,100)
-        header,*_=decode_terrain(data)
-        self.assertGreater(np.linalg.norm(header[9:12]),1e12)
-
-    def test_edges_winding_quantization_and_bounds(self):
-        a = np.add.outer(np.arange(17), np.arange(17)).astype(float)
-        b = a+16
-        left = decode_terrain(terrain.encode(133, -13, .01, a, 0, 100))
-        right = decode_terrain(terrain.encode(133.01, -13, .01, b, 0, 100))
-        header, attrs, tris, edges = left
-        self.assertTrue(np.all((tris >= 0) & (tris < len(attrs))))
-        xy = attrs[tris, :2]
-        cross = (xy[:, 1, 0]-xy[:, 0, 0])*(xy[:, 2, 1]-xy[:, 0, 1])-(xy[:, 1, 1]-xy[:, 0, 1])*(xy[:, 2, 0]-xy[:, 0, 0])
-        self.assertTrue(np.all(cross > 0))
-        np.testing.assert_array_equal(attrs[edges[2], 2], right[1][right[3][0], 2])
-        heights = attrs[:, 2]/32767*100
-        expected = (attrs[:, 0]+attrs[:, 1])/32767*16
-        self.assertLess(np.max(np.abs(heights-expected)), .002)
-        xyz = terrain.ecef(133+attrs[:, 0]/32767*.01, -13+attrs[:, 1]/32767*.01, heights)
-        self.assertLessEqual(np.linalg.norm(xyz-np.asarray(header[5:8]), axis=1).max(), header[8]+1e-6)
-
-
 class VectorTests(unittest.TestCase):
-    def test_hole_and_vertical_polygon_triangulation(self):
-        outer = [[0,0,0],[10,0,0],[10,10,0],[0,10,0],[0,0,0]]
-        hole = [[3,3,0],[3,7,0],[7,7,0],[7,3,0],[3,3,0]]
-        for vertical in (False, True):
-            rings = [outer,hole]
-            if vertical:
-                rings = [[[p[0],p[2],p[1]] for p in r] for r in rings]
-            pos, indices, loops, _, _ = vector.polygon(rings)
-            p = np.asarray(pos)[np.asarray(indices).reshape(-1,3)]
-            area = np.linalg.norm(np.cross(p[:,1]-p[:,0],p[:,2]-p[:,0]),axis=1).sum()/2
-            self.assertAlmostEqual(area,84,places=8)
-            self.assertEqual(loops.count(0xffffffff),1)
-            self.assertEqual(set(indices),set(range(8)))
-
     def test_archive_content_has_typed_properties_and_polygon_topology(self):
         with tempfile.TemporaryDirectory() as tmp:
             vector.run(types.SimpleNamespace(input=str(ROOT/'tests/fixtures/vector.geojson'),output=tmp,max_features=2))
@@ -140,7 +103,7 @@ class VectorTests(unittest.TestCase):
             accessor=doc['accessors'][primitive['attributes']['POSITION']]
             view=doc['bufferViews'][accessor['bufferView']]
             positions=np.frombuffer(binary,'<f4',accessor['count']*3,view.get('byteOffset',0)).reshape(-1,3)
-            np.testing.assert_array_equal(positions,ring)
+            np.testing.assert_array_equal(to_source(path,positions),ring)
 
     def test_missing_string_properties_use_explicit_nodata(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -153,24 +116,6 @@ class VectorTests(unittest.TestCase):
             self.assertEqual(prop['type'],'STRING')
             self.assertIn('noData',prop)
 
-    def test_invalid_coordinates_rejected_and_nonplanar_vertices_retained(self):
-        with self.assertRaises(ValueError):
-            vector.coordinates(dict(coordinates=[[200,0]]))
-        source=[[0,0,0],[1,0,0],[1,1,1],[0,1,0]]
-        positions,*_=vector.polygon([source+[source[0]]])
-        self.assertEqual({tuple(p) for p in positions},{tuple(p) for p in source})
-
-    def test_explicit_repair_preserves_bowtie_as_two_polygons(self):
-        ring=[[0,0,0],[2,2,0],[0,2,0],[2,0,0],[0,0,0]]
-        with self.assertRaises(ValueError):
-            vector.polygon([ring])
-        report={}
-        p,i,loops,offsets,loop_offsets=vector.polygon([ring],True,report)
-        self.assertTrue(report['topologyRepaired'])
-        self.assertEqual(len(offsets),2)
-        self.assertEqual(len(loop_offsets),2)
-        triangles=np.asarray(p)[np.asarray(i).reshape(-1,3)]
-        self.assertAlmostEqual(np.linalg.norm(np.cross(triangles[:,1]-triangles[:,0],triangles[:,2]-triangles[:,0]),axis=1).sum()/2,2)
 
 
 if __name__ == '__main__':

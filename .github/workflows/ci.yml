@@ -35,15 +35,57 @@ jobs:
         run: cargo fmt --check
       - name: Test native build
         run: cargo test --locked
+      - name: Check source packaging
+        run: cargo package --locked --no-verify
       - name: Test portable JPEG
         env:
           RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
         run: cargo test --locked --lib jpeg::tests
 
+  native-geospatial:
+    name: Native geospatial (GDAL ${{ matrix.gdal }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        gdal: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install binding build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libclang-dev libsqlite3-dev
+      - uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462 # v2
+        with:
+          environment-name: native-geospatial
+          create-args: >-
+            libgdal-core=${{ matrix.gdal }}
+            proj>=9.2
+            -c conda-forge
+          init-shell: bash
+      - name: Test native geospatial build
+        shell: bash -el {0}
+        run: |
+          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          cargo test --locked --features native-geospatial
+      - name: Check native geospatial lint
+        shell: bash -el {0}
+        run: |
+          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          rustup component add clippy
+          cargo clippy --locked --all-targets --features native-geospatial -- -D warnings
+
   python:
     name: Python
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      RUSTY_TILES_REQUIRE_BIN: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -60,11 +102,66 @@ jobs:
             pyproj>=3.7,<4
             -c conda-forge
           init-shell: bash
+      - name: Install binding build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libclang-dev libsqlite3-dev
       - name: Build CLI for derivative acceptance
         shell: bash -el {0}
-        run: cargo build --locked
+        run: |
+          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          cargo build --locked --features native-geospatial
       - name: Test derivative encoding and preview isolation
         shell: bash -el {0}
         run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+
+  python-free-runtime:
+    name: Python-free runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test installed native suite in a runtime image without Python
+        run: docker build --target acceptance -t rusty-tiles:native-acceptance .
+      - name: Build and check packaged runtime
+        run: |
+          docker build --target runtime -t rusty-tiles:native .
+          docker run --rm --network none rusty-tiles:native doctor --json
+
+  release-acceptance:
+    name: Release acceptance
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install binding build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libclang-dev libsqlite3-dev curl
+      - uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462 # v2
+        with:
+          environment-name: release-acceptance
+          create-args: >-
+            python=3.12
+            gdal=3.12
+            numpy=2
+            laspy>=2.6,<3
+            lazrs-python
+            pyproj>=3.7,<4
+            -c conda-forge
+          init-shell: bash
+      - name: Check the release CLI route
+        shell: bash -el {0}
+        run: |
+          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          scripts/release_acceptance.sh

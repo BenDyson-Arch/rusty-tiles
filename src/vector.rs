@@ -5,7 +5,18 @@
 
 use std::path::Path;
 
-use crate::error::Error;
+#[cfg(feature = "native-geospatial")]
+mod native;
+
+#[cfg(feature = "native-geospatial")]
+pub(crate) fn native_available() -> Result<(), Error> {
+    native::available()
+}
+
+use crate::{
+    error::Error,
+    report::{ConversionResult, Reporter},
+};
 
 pub const SPEC_ISSUE: &str = "https://github.com/CesiumGS/3d-tiles/issues/825";
 pub const SPEC_PR: &str = "https://github.com/CesiumGS/3d-tiles/pull/838";
@@ -44,9 +55,11 @@ pub struct VectorOptions {
     pub jobs: usize,
     pub quantize: bool,
     pub meshopt: bool,
-    /// Library callers supply the rusty-tiles executable used for native compression.
+    /// Retained for API compatibility; native compression runs in process.
     pub meshopt_encoder: Option<std::path::PathBuf>,
     pub parent_repair: bool,
+    /// Explicit count aggregates in point-only parents; leaves retain source metadata.
+    pub aggregate_points: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
     pub force: bool,
@@ -75,6 +88,7 @@ impl Default for VectorOptions {
             meshopt: false,
             meshopt_encoder: None,
             parent_repair: false,
+            aggregate_points: false,
             max_parent_features: 4096,
             where_clause: None,
             force: false,
@@ -143,167 +157,121 @@ pub fn vector_to_3tz_with_options(
     ambiguous_outlines: bool,
     options: &VectorOptions,
 ) -> Result<(), Error> {
+    vector_to_3tz_reported(
+        input,
+        output,
+        max_features,
+        repair,
+        ambiguous_outlines,
+        options,
+        &Reporter::default(),
+    )
+    .map(drop)
+}
+
+/// [`vector_to_3tz_with_options`] with `ingestion`/`encoding` progress and
+/// per-feature warnings sent to `reporter`, returning the published archive
+/// and its report.
+pub fn vector_to_3tz_reported(
+    input: &Path,
+    output: &Path,
+    max_features: usize,
+    repair: bool,
+    ambiguous_outlines: bool,
+    options: &VectorOptions,
+    reporter: &Reporter,
+) -> Result<ConversionResult, Error> {
     let lod = &options.lod;
     if options
         .where_clause
         .as_ref()
         .is_some_and(|value| value.trim().is_empty())
     {
-        return Err(Error::msg("where filter must not be empty"));
-    }
-    if !matches!(options.list_fields.as_str(), "error" | "json")
-        || (!options.fields.is_empty() && !options.drop_fields.is_empty())
-    {
         return Err(Error::msg(
-            "invalid vector field selection or listFields setting",
+            "--where must not be empty; omit it to convert every feature",
         ));
     }
-    if options.jobs == 0
-        || options.max_parent_features == 0
-        || options.max_vertices < 4
-        || options.max_bytes < 4096
-        || options.max_tiles == 0
-        || options.max_source_vertices == 0
-        || options.height_offset.is_some_and(|v| !v.is_finite())
-        || (options.all_layers && !options.layers.is_empty())
-    {
+    if !matches!(options.list_fields.as_str(), "error" | "json") {
+        return Err(Error::msg(format!(
+            "--listFields must be error or json, got {:?}",
+            options.list_fields
+        )));
+    }
+    if !options.fields.is_empty() && !options.drop_fields.is_empty() {
         return Err(Error::msg(
-            "invalid vector input selection or content budgets",
+            "--fields and --dropFields cannot be combined; choose one field selection",
         ));
     }
-    if max_features == 0
-        || !lod.tolerance_metres.is_finite()
-        || lod.tolerance_metres <= 0.0
-        || !(1..=16).contains(&lod.levels)
+    if options.all_layers && !options.layers.is_empty() {
+        return Err(Error::msg(
+            "--allLayers cannot be combined with --layer; choose one layer selection",
+        ));
+    }
+    if options
+        .height_offset
+        .is_some_and(|value| !value.is_finite())
     {
-        return Err(Error::msg("invalid vector LOD budgets: positive finite tolerance, positive feature budget and 1..16 levels required"));
+        return Err(Error::msg(
+            "--heightOffset must be a finite number of metres",
+        ));
+    }
+    for (flag, value, minimum) in [
+        ("--jobs", options.jobs, 1),
+        ("--maxFeatures", max_features, 1),
+        ("--maxParentFeatures", options.max_parent_features, 1),
+        ("--maxVertices", options.max_vertices, 4),
+        ("--maxBytes", options.max_bytes, 4096),
+        ("--maxTiles", options.max_tiles, 1),
+        ("--maxSourceVertices", options.max_source_vertices, 1),
+    ] {
+        if value < minimum {
+            return Err(Error::msg(format!(
+                "{flag} must be at least {minimum}, got {value}"
+            )));
+        }
+    }
+    if !lod.tolerance_metres.is_finite() || lod.tolerance_metres <= 0.0 {
+        return Err(Error::msg(format!(
+            "--lodTolerance must be a positive finite number of metres, got {}",
+            lod.tolerance_metres
+        )));
+    }
+    if !(1..=16).contains(&lod.levels) {
+        return Err(Error::msg(format!(
+            "--lodLevels must be between 1 and 16, got {}",
+            lod.levels
+        )));
     }
     if let Some(previous) = &options.reuse_tileset {
         if !previous.is_file() {
             return Err(Error::InputNotFound(previous.clone()));
         }
     }
-    if !input.is_file() {
-        return Err(Error::InputNotFound(input.into()));
+    crate::output::require_file(input)?;
+    crate::output::check_output(output, options.force)?;
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        let _ = (repair, ambiguous_outlines, reporter);
+        Err(Error::Environment(
+            "vector conversion requires a build with native-geospatial".into(),
+        ))
     }
-    if output.exists() && !options.force {
-        return Err(Error::OutputExists(output.into()));
+    #[cfg(feature = "native-geospatial")]
+    {
+        let job = crate::output::Job::begin(output, options.force)?;
+        // The tileset tree is staged apart from the job's scratch space.
+        let staging = job.staging("tiles")?;
+        let report = native::convert(
+            input,
+            &staging,
+            max_features,
+            repair,
+            ambiguous_outlines,
+            options,
+            reporter,
+        )?;
+        job.publish_tree_3tz(&staging, Some(report))
     }
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let work = tempfile::tempdir_in(parent)?;
-    let mut script = String::from("import sys,types\n");
-    for (name, source) in [
-        ("vector_source", include_str!("../scripts/vector_source.py")),
-        ("vector_reuse", include_str!("../scripts/vector_reuse.py")),
-        (
-            "vector_parallel",
-            include_str!("../scripts/vector_parallel.py"),
-        ),
-        (
-            "vector_pipeline",
-            include_str!("../scripts/vector_pipeline.py"),
-        ),
-    ] {
-        script.push_str(&format!(
-            "m=types.ModuleType({name:?});sys.modules[{name:?}]=m;m.__source__={}\nexec(compile(m.__source__, '<rusty-tiles/{name}.py>', 'exec'),m.__dict__)\n",
-            serde_json::to_string(source)?
-        ));
-    }
-    script.push_str(&format!(
-        "__source__={}\nexec(compile(__source__, '<rusty-tiles/vector.py>', 'exec'),globals())",
-        serde_json::to_string(include_str!("../scripts/vector.py"))?
-    ));
-    let mut command = std::process::Command::new("python3");
-    command
-        .arg("-c")
-        .arg(crate::python::script(
-            &script,
-            "vector",
-            "Python GDAL/GEOS and NumPy",
-        )?)
-        .arg(input)
-        .arg(work.path())
-        .arg("--jobs")
-        .arg(options.jobs.to_string())
-        .arg("--max-parent-features")
-        .arg(options.max_parent_features.to_string())
-        .arg("--max-features")
-        .arg(max_features.to_string())
-        .arg("--lod-tolerance")
-        .arg(lod.tolerance_metres.to_string())
-        .arg("--lod-levels")
-        .arg(lod.levels.to_string())
-        .arg("--max-vertices")
-        .arg(options.max_vertices.to_string())
-        .arg("--max-bytes")
-        .arg(options.max_bytes.to_string())
-        .arg("--max-tiles")
-        .arg(options.max_tiles.to_string())
-        .arg("--max-source-vertices")
-        .arg(options.max_source_vertices.to_string());
-    if let Some(previous) = &options.reuse_tileset {
-        command.arg("--reuse-tileset").arg(previous);
-    }
-    for layer in &options.layers {
-        command.arg("--layer").arg(layer);
-    }
-    if options.all_layers {
-        command.arg("--all-layers");
-    }
-    if let Some(crs) = &options.source_crs {
-        command.arg("--source-crs").arg(crs);
-    }
-    if let Some(offset) = options.height_offset {
-        command.arg("--height-offset").arg(offset.to_string());
-    }
-    if let Some(expression) = &options.where_clause {
-        command.arg("--where").arg(expression);
-    }
-    command.arg("--list-fields").arg(&options.list_fields);
-    for field in &options.fields {
-        command.arg("--field").arg(field);
-    }
-    for field in &options.drop_fields {
-        command.arg("--drop-field").arg(field);
-    }
-    if options.skip_invalid {
-        command.arg("--skip-invalid");
-    }
-    if options.reproducible {
-        command.arg("--reproducible");
-    }
-    if options.quantize {
-        command.arg("--quantize");
-    }
-    if options.meshopt {
-        command.arg("--meshopt-helper").arg(
-            options
-                .meshopt_encoder
-                .as_ref()
-                .ok_or_else(|| Error::msg("meshopt_encoder executable is required"))?,
-        );
-    }
-    if options.parent_repair {
-        command.arg("--parent-repair");
-    }
-    if repair {
-        command.arg("--repair");
-    }
-    if ambiguous_outlines {
-        command.arg("--ambiguous-outlines");
-    }
-    crate::python::run(&mut command, "vector")?;
-    crate::pack::convert_to_3tz(
-        work.path(),
-        output,
-        &crate::pack::PackOptions {
-            force: options.force,
-        },
-    )
 }
 
 #[cfg(test)]

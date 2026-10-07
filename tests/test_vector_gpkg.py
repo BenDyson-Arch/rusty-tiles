@@ -8,15 +8,18 @@ import sys
 import tempfile
 import types
 import unittest
-from unittest import mock
 import zipfile
 
 import numpy as np
 from osgeo import ogr, osr
 from test_vector_lod import vector, read, parts
+from cli_bin import requires_bin
 
-sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
-from vector_source import Reader, transformation
+
+
+def details(path):
+    from test_vector_reuse import details as decode
+    return decode(path)
 
 
 def nodes(node):
@@ -41,27 +44,6 @@ def gpkg(path, layers, spatial_index=True):
 
 
 class GeoPackageTests(unittest.TestCase):
-    def test_missing_coordinate_epoch_does_not_become_year_zero(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p=pathlib.Path(tmp)/'epoch.gpkg'
-            gpkg(p,[('sites',4979,[(1,dict(type='Point',coordinates=[0,0,120]),None)])])
-            # Force a time-dependent operation independently of which datum
-            # paths this installation's PROJ database happens to select.
-            def operation(source,target):
-                if source.GetAuthorityCode(None)=='4979' and target.GetAuthorityCode(None)=='4978':
-                    options=osr.CoordinateTransformationOptions()
-                    options.SetOperation('+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad '
-                        '+step +proj=cart +ellps=WGS84 +step +proj=helmert +x=0 +y=0 +z=0 '
-                        '+dx=1 +dy=0 +dz=0 +t_epoch=2020 +convention=position_vector')
-                    return osr.CreateCoordinateTransformation(source,target,options)
-                return transformation(source,target)
-            with mock.patch('vector_source.transformation',side_effect=operation):
-                for epoch,shift in [(None,0),(2021.,1)]:
-                    reader=Reader(types.SimpleNamespace(input=str(p)))
-                    if epoch is not None:reader.layers[0].GetSpatialRef().SetCoordinateEpoch(epoch)
-                    list(reader)
-                    np.testing.assert_allclose(reader.anchor,[6378137+120+shift,0,0],atol=1e-7,rtol=0)
-
     def test_declared_three_axis_crs_preserves_ellipsoidal_height(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)
@@ -70,9 +52,11 @@ class GeoPackageTests(unittest.TestCase):
                     p=root/f'{epsg}.gpkg';coordinates=[12.,50.,120.] if epsg==4937 else [153.,-27.,120.]
                     gpkg(p,[('sites',epsg,[(1,dict(type='Point',coordinates=coordinates),None)])])
                     args=types.SimpleNamespace(input=str(p),output=str(root/f'out-{epsg}'),max_features=1)
-                    reader=Reader(args);features=list(reader)
-                    self.assertEqual(len(features),1)
-                    self.assertEqual(reader.layer_reports[0]['heightMode'],'declared CRS')
+                    vector.run(args)
+                    decoded=details(args.output)
+                    self.assertEqual(len(decoded),1)
+                    report=json.loads((pathlib.Path(args.output)/'conversion.json').read_text())
+                    self.assertEqual(report['layers'][0]['heightMode'],'declared CRS')
                     # Independent ellipsoidal-to-ECEF formula for the CRS ellipsoid.
                     srs=osr.SpatialReference();srs.ImportFromEPSG(epsg)
                     a=srs.GetSemiMajor();inverse=srs.GetInvFlattening();f=1/inverse;e2=f*(2-f)
@@ -80,11 +64,11 @@ class GeoPackageTests(unittest.TestCase):
                     radius=a/np.sqrt(1-e2*np.sin(lat)**2)
                     expected=[(radius+height)*np.cos(lat)*np.cos(lon),
                               (radius+height)*np.cos(lat)*np.sin(lon),(radius*(1-e2)+height)*np.sin(lat)]
-                    np.testing.assert_allclose(reader.anchor,expected,atol=.01,rtol=0)
-                    vector.run(args)
+                    np.testing.assert_allclose(next(iter(decoded.values()))[0][1][0],expected,atol=.01,rtol=0)
                     self.assertTrue((pathlib.Path(args.output)/'tileset.json').is_file())
                     args.height_offset=0
-                    with self.assertRaisesRegex(ValueError,'already defines heights'):list(Reader(args))
+                    args.output += '-offset'
+                    with self.assertRaisesRegex(ValueError,'already defines heights'):vector.run(args)
 
     def test_coincident_duplicate_source_ids_partition_and_retain_every_feature(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,16 +110,17 @@ class GeoPackageTests(unittest.TestCase):
             g=lambda x:dict(type='Point',coordinates=[x,5000000])
             gpkg(p,[('roads',3857,[(7,g(1000000),2**60+3),(8,g(1000010),None)]),('sites',3857,[(7,g(1000020),11)])])
             with self.assertRaisesRegex(ValueError,'select --layer'):
-                Reader(types.SimpleNamespace(input=str(p)))
+                vector.run(types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'invalid')))
             args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=64,layers=['roads'])
-            reader=Reader(args);features=list(reader)
-            self.assertEqual([f['properties']['_source_id'] for f in features],['7','8'])
-            self.assertEqual(reader.layer_reports[0]['heightMode'],'2D ellipsoid zero')
+            vector.run(args)
+            decoded=details(args.output)
+            self.assertEqual({key[1] for key in decoded},{'7','8'})
+            report=json.loads((pathlib.Path(args.output)/'conversion.json').read_text())
+            self.assertEqual(report['layers'][0]['heightMode'],'2D ellipsoid zero')
             target=osr.SpatialReference();target.ImportFromEPSG(4978)
             source=osr.SpatialReference();source.ImportFromEPSG(3857);source.PromoteTo3D()
             expected=osr.CoordinateTransformation(source,target).TransformPoint(1000000,5000000,0)
-            np.testing.assert_allclose(reader.anchor,expected,atol=1e-7)
-            vector.run(args)
+            np.testing.assert_allclose(decoded[('roads','7',0)][0][1][0],expected,atol=1e-7)
             out=pathlib.Path(args.output);manifest=json.loads((out/'tileset.json').read_text())
             file=out/manifest['root']['content']['uri'];data=file.read_bytes();n=struct.unpack_from('<I',data,12)[0]
             doc=json.loads(data[20:20+n]);binary=data[28+n:]
@@ -152,14 +137,15 @@ class GeoPackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(tmp)/'z.gpkg'
             gpkg(p,[('sites',3857,[(1,dict(type='Point',coordinates=[1000000,5000000,20]),None)])])
-            args=types.SimpleNamespace(input=str(p))
+            args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'))
             with self.assertRaisesRegex(ValueError,'height-offset'):
-                list(Reader(args))
+                vector.run(args)
             args.height_offset=5
-            r=Reader(args);list(r)
+            vector.run(args)
+            actual=details(args.output)[('sites','1',0)][0][1][0]
             target=osr.SpatialReference();target.ImportFromEPSG(4979);target.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
             source=osr.SpatialReference();source.ImportFromEPSG(4978)
-            self.assertAlmostEqual(osr.CoordinateTransformation(source,target).TransformPoint(*r.anchor)[2],25,places=6)
+            self.assertAlmostEqual(osr.CoordinateTransformation(source,target).TransformPoint(*actual)[2],25,places=6)
 
     def test_fragmented_line_covers_every_source_segment_and_caps_every_glb(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -235,18 +221,6 @@ class GeoPackageTests(unittest.TestCase):
             r=json.loads((out/'conversion.json').read_text());self.assertEqual(r['fragmentedPolygons'],1)
             self.assertIn('no internal',r['polygonFragmentPolicy'])
 
-    def test_nonplanar_fragment_fills_retain_source_surface(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ring=[[0,0,0],[10,0,0],[10,10,3],[0,10,0],[0,0,0]]
-            # Independently exercise filled encoding for the nonplanar fragment path.
-            output=pathlib.Path(tmp)/'fill.glb'
-            vector.emit([dict(properties=dict(_source_id='12'),geometry=dict(type='Polygon',coordinates=[ring]))],
-                        output,lambda p:np.asarray(p),fill_only=True)
-            doc,positions,_=read(output)
-            self.assertNotIn('EXT_mesh_polygon',doc['extensionsUsed'])
-            self.assertTrue(doc['materials'][0]['doubleSided'])
-            self.assertEqual({tuple(p) for p in positions[0]},{tuple(p) for p in ring[:-1]})
-
     def test_irreducible_metadata_fails_instead_of_violating_budget(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(tmp)/'huge.geojson'
@@ -257,8 +231,8 @@ class GeoPackageTests(unittest.TestCase):
 
 
 class CliGeoPackageTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN to exercise embedded Python and archive publication')
-    def test_cli_embedded_reader_and_atomic_failure(self):
+    @requires_bin('set RUSTY_TILES_BIN to exercise native ingestion and archive publication')
+    def test_cli_native_reader_and_atomic_failure(self):
         import zipfile
         with tempfile.TemporaryDirectory() as tmp:
             p=pathlib.Path(tmp)/'source.gpkg'

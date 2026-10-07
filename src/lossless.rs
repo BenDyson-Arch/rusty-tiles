@@ -1,20 +1,32 @@
 //! Tile serialization. Meshopt is a byte codec here, never a quantizer.
 use crate::{
     error::Error,
-    glb_write::{write_glb, TilePrimitive},
+    glb::{self, FallbackOffsets, MeshoptLayout, MeshoptStream},
+    glb_write::{self, TilePrimitive},
 };
 use serde_json::{json, Value};
+
+/// Mesh tiles keep four-byte views, source fallback offsets and an explicit
+/// `NONE` filter on every compressed view.
+const MESH_MESHOPT: MeshoptLayout = MeshoptLayout {
+    align: 4,
+    fallback: FallbackOffsets::Source,
+    explicit_filter: true,
+};
 
 pub fn write(
     prims: &[TilePrimitive],
     materials: &[Value],
     compressed: bool,
 ) -> Result<Vec<u8>, Error> {
-    let bytes = write_glb(prims)?;
-    let glb = gltf::Glb::from_slice(&bytes)?;
-    let mut doc: Value = serde_json::from_slice(&glb.json)?;
+    let (root, bin) = glb_write::build(prims)?;
+    // The typed root carries f32 material factors. serde_json::to_value would
+    // widen them (0.22 -> 0.2199999988079071), so convert through JSON text to
+    // keep the shortest f32 spelling the tiles have always carried. Only the
+    // small JSON document takes this path; the binary is never copied.
+    let mut doc: Value = serde_json::from_slice(&serde_json::to_vec(&root)?)?;
     for (i, template) in materials.iter().enumerate() {
-        let texture = doc["materials"][i]["pbrMetallicRoughness"]["baseColorTexture"].clone();
+        let texture = doc["materials"][i]["pbrMetallicRoughness"]["baseColorTexture"].take();
         doc["materials"][i] = template.clone();
         if !texture.is_null() {
             if doc["materials"][i]["pbrMetallicRoughness"].is_null() {
@@ -23,8 +35,8 @@ pub fn write(
             doc["materials"][i]["pbrMetallicRoughness"]["baseColorTexture"] = texture;
         }
     }
-    let images = doc["images"].as_array().cloned().unwrap_or_default();
     let mut required = std::collections::BTreeSet::new();
+    let images = doc["images"].clone();
     for texture in doc
         .get_mut("textures")
         .and_then(Value::as_array_mut)
@@ -44,134 +56,129 @@ pub fn write(
         required.insert(extension);
     }
     for extension in required {
-        for key in ["extensionsUsed", "extensionsRequired"] {
-            if doc[key].is_null() {
-                doc[key] = json!([]);
-            }
-            let list = doc[key].as_array_mut().unwrap();
-            if !list.iter().any(|v| v == extension) {
-                list.push(json!(extension));
-            }
+        glb::add_extension(&mut doc, extension, true)?;
+    }
+    if !compressed {
+        return glb::encode_glb(&doc, &bin);
+    }
+    let vertex_count = prims.iter().map(|p| p.positions.len()).max().unwrap_or(0);
+    // First accessor per view decides its role: SCALAR views are triangle
+    // indices, everything else is a fixed-stride attribute stream.
+    let mut roles = vec![None; doc["bufferViews"].as_array().map_or(0, Vec::len)];
+    for accessor in doc["accessors"].as_array().into_iter().flatten() {
+        let Some(view) = accessor["bufferView"].as_u64() else {
+            continue;
+        };
+        if let Some(role @ None) = roles.get_mut(view as usize) {
+            let count = accessor["count"]
+                .as_u64()
+                .ok_or_else(|| Error::msg("missing accessor count"))?;
+            *role = Some((count as usize, accessor["type"] == "SCALAR"));
         }
     }
-    let raw = glb.bin.as_ref().unwrap();
-    let mut bin = Vec::new();
-    if compressed {
-        let accessors = doc["accessors"].as_array().unwrap().clone();
-        for (vi, view) in doc["bufferViews"]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .enumerate()
-        {
-            let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
-            let len = view["byteLength"].as_u64().unwrap() as usize;
-            let data = &raw[offset..offset + len];
-            while bin.len() % 4 != 0 {
-                bin.push(0);
-            }
-            let dst = bin.len();
-            if let Some(a) = accessors
-                .iter()
-                .find(|a| a["bufferView"].as_u64() == Some(vi as u64))
-            {
-                let count = a["count"].as_u64().unwrap() as usize;
-                let stride = len / count;
-                let indices = a["type"] == "SCALAR";
-                let encoded = if indices {
-                    let idx: Vec<u32> = match stride {
-                        2 => data
-                            .chunks_exact(2)
-                            .map(|v| u16::from_le_bytes(v.try_into().unwrap()) as u32)
-                            .collect(),
-                        4 => data
-                            .chunks_exact(4)
-                            .map(|v| u32::from_le_bytes(v.try_into().unwrap()))
-                            .collect(),
-                        _ => return Err(Error::msg("unsupported index width")),
-                    };
-                    meshopt::encoding::encode_index_buffer(
-                        &idx,
-                        prims.iter().map(|p| p.positions.len()).max().unwrap(),
-                    )
-                    .map_err(|e| Error::msg(format!("meshopt indices: {e}")))?
-                } else {
-                    if stride == 0 || stride > 256 || stride % 4 != 0 {
-                        return Err(Error::msg("invalid meshopt stride"));
-                    }
-                    // Source slices have count * stride initialized bytes. The codec
-                    // accepts byte data and does not require native float alignment.
-                    unsafe {
-                        let cap = meshopt::ffi::meshopt_encodeVertexBufferBound(count, stride);
-                        let mut out = vec![0u8; cap];
-                        let n = meshopt::ffi::meshopt_encodeVertexBuffer(
-                            out.as_mut_ptr(),
-                            cap,
-                            data.as_ptr().cast(),
-                            count,
-                            stride,
-                        );
-                        if n == 0 {
-                            return Err(Error::msg("meshopt vertex encoding failed"));
-                        }
-                        out.truncate(n);
-                        out
-                    }
-                };
-                bin.extend_from_slice(&encoded);
-                view["buffer"] = json!(1);
-                view["extensions"] = json!({"EXT_meshopt_compression": {
-                    "buffer":0,"byteOffset":dst,"byteLength":encoded.len(),
-                    "byteStride":stride,"count":count,"mode":if indices {"TRIANGLES"} else {"ATTRIBUTES"},"filter":"NONE"
-                }});
-            } else {
-                bin.extend_from_slice(data);
-                view["byteOffset"] = json!(dst);
-            }
+    let packed = glb::meshopt_compress(&mut doc, &bin, MESH_MESHOPT, |view, length| {
+        let Some((count, indices)) = roles[view] else {
+            return Ok(None);
+        };
+        if count == 0 {
+            return Err(Error::msg("invalid meshopt stride"));
         }
-        for key in ["extensionsUsed", "extensionsRequired"] {
-            if doc[key].is_null() {
-                doc[key] = json!([]);
+        let stride = length / count;
+        Ok(Some(if indices {
+            MeshoptStream::TriangleIndices {
+                count,
+                width: stride,
+                vertex_count,
             }
-            doc[key]
-                .as_array_mut()
-                .unwrap()
-                .push(json!("EXT_meshopt_compression"));
-        }
-        doc["buffers"] = json!([
-            {"byteLength":bin.len()},
-            {"byteLength":raw.len(),"extensions":{"EXT_meshopt_compression":{"fallback":true}}}
-        ]);
-    } else {
-        bin.extend_from_slice(raw);
-    }
-    encode_glb(doc, bin)
+        } else {
+            MeshoptStream::Attributes { count, stride }
+        }))
+    })?;
+    glb::encode_glb(&doc, &packed)
 }
 
-pub fn encode_glb(doc: Value, mut bin: Vec<u8>) -> Result<Vec<u8>, Error> {
-    let mut json = serde_json::to_vec(&doc)?;
-    while json.len() % 4 != 0 {
-        json.push(b' ');
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parts(glb: &[u8]) -> (Value, Vec<u8>) {
+        let glb = gltf::Glb::from_slice(glb).unwrap();
+        (
+            serde_json::from_slice(&glb.json).unwrap(),
+            glb.bin.unwrap().into_owned(),
+        )
     }
-    while bin.len() % 4 != 0 {
-        bin.push(0);
+
+    fn grid(n: u32) -> TilePrimitive {
+        let mut prim = TilePrimitive::default();
+        for y in 0..=n {
+            for x in 0..=n {
+                prim.positions
+                    .push([x as f32, y as f32, (x * y) as f32 * 0.01]);
+                prim.normals.push([0., 0., 1.]);
+            }
+        }
+        let w = n + 1;
+        for y in 0..n {
+            for x in 0..n {
+                let i = y * w + x;
+                prim.indices
+                    .extend_from_slice(&[i, i + 1, i + w + 1, i, i + w + 1, i + w]);
+            }
+        }
+        prim
     }
-    let len = 28usize
-        .checked_add(json.len())
-        .and_then(|n| n.checked_add(bin.len()))
-        .ok_or_else(|| Error::msg("GLB size overflow"))?;
-    if len > u32::MAX as usize {
-        return Err(Error::msg("individual GLB exceeds 4 GiB"));
+
+    /// Production meshopt output is smaller, declares the extension and its
+    /// fallback buffer, and every compressed view decodes to the raw bytes.
+    #[test]
+    fn meshopt_streams_decode_to_the_uncompressed_views() {
+        let prims = [grid(80)];
+        let raw = write(&prims, &[], false).unwrap();
+        let packed = write(&prims, &[], true).unwrap();
+        assert!(packed.len() < raw.len());
+        let (raw_doc, raw_bin) = parts(&raw);
+        let (doc, bin) = parts(&packed);
+        assert_eq!(
+            doc["extensionsRequired"],
+            json!(["EXT_meshopt_compression"])
+        );
+        assert_eq!(
+            doc["buffers"][1]["extensions"]["EXT_meshopt_compression"]["fallback"],
+            true
+        );
+        assert_eq!(doc["accessors"], raw_doc["accessors"]);
+        for (i, view) in doc["bufferViews"].as_array().unwrap().iter().enumerate() {
+            let original = &raw_doc["bufferViews"][i];
+            let offset = original["byteOffset"].as_u64().unwrap() as usize;
+            let length = original["byteLength"].as_u64().unwrap() as usize;
+            let expected = &raw_bin[offset..offset + length];
+            let e = &view["extensions"]["EXT_meshopt_compression"];
+            assert_eq!(e["filter"], "NONE");
+            let start = e["byteOffset"].as_u64().unwrap() as usize;
+            assert_eq!(start % 4, 0);
+            let data = &bin[start..start + e["byteLength"].as_u64().unwrap() as usize];
+            let count = e["count"].as_u64().unwrap() as usize;
+            if e["mode"] == "TRIANGLES" {
+                // The index codec may rotate a triangle's corners; winding
+                // and triangle order are preserved.
+                assert_eq!(e["byteStride"], 2);
+                let decoded = meshopt::encoding::decode_index_buffer::<u16>(data, count).unwrap();
+                let expected: Vec<u16> = expected
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|&v| u16::from_le_bytes(v))
+                    .collect();
+                for (a, b) in decoded.chunks(3).zip(expected.chunks(3)) {
+                    assert!((0..3).any(|r| (0..3).all(|k| a[(k + r) % 3] == b[k])));
+                }
+            } else {
+                assert_eq!(e["mode"], "ATTRIBUTES");
+                let decoded =
+                    meshopt::encoding::decode_vertex_buffer::<[u8; 12]>(data, count).unwrap();
+                assert_eq!(decoded.concat(), expected);
+            }
+        }
     }
-    let mut out = Vec::with_capacity(len);
-    out.extend_from_slice(b"glTF");
-    out.extend_from_slice(&2u32.to_le_bytes());
-    out.extend_from_slice(&(len as u32).to_le_bytes());
-    out.extend_from_slice(&(json.len() as u32).to_le_bytes());
-    out.extend_from_slice(b"JSON");
-    out.extend_from_slice(&json);
-    out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
-    out.extend_from_slice(b"BIN\0");
-    out.extend_from_slice(&bin);
-    Ok(out)
 }

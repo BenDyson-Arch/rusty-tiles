@@ -1,6 +1,5 @@
 """Attribute selection precedes validation and participates in reuse compatibility."""
 import json
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -10,7 +9,7 @@ from test_vector_reuse import archive,details
 from test_vector_lod import vector
 from test_vector_gpkg import gpkg
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class FilterTests(unittest.TestCase):
     args=field_tests.VectorFieldTests.args
@@ -45,7 +44,7 @@ class FilterTests(unittest.TestCase):
             out=root/'out';vector.run(self.args(p,out,all_layers=True,where='large = 1',drop_fields=['large']))
             self.assertEqual({(k[0],k[1]) for k in details(out)},{('a','1'),('b','3')})
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for filter argv')
+    @requires_bin('set RUSTY_TILES_BIN for filter argv')
     def test_cli_accepts_expression_as_one_argument(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=self.source(root);out=root/'out.3tz'

@@ -1,5 +1,18 @@
 use std::process::Command;
 fn main() {
+    #[cfg(feature = "native-geospatial")]
+    {
+        pkg_config::Config::new()
+            .atleast_version("3.12")
+            .cargo_metadata(false)
+            .probe("gdal")
+            .expect("native-geospatial requires GDAL >= 3.12 headers/libraries and pkg-config");
+        pkg_config::Config::new()
+            .atleast_version("9.2")
+            .cargo_metadata(false)
+            .probe("proj")
+            .expect("native-geospatial requires PROJ >= 9.2 for strict only-best transformations");
+    }
     println!("cargo:rustc-check-cfg=cfg(rusty_tiles_native_jpeg)");
     println!("cargo:rerun-if-env-changed=RUSTY_TILES_DISABLE_NATIVE_JPEG");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
