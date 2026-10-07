@@ -376,7 +376,7 @@ fills/boundaries, repaired outlines and points:
 
 ```sh
 RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_metadata.py target/vector-metadata-cases
-python3 scripts/preview.py --port 9257 \
+rusty-tiles preview --port 9257 \
   --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
   --annotations target/vector-metadata-cases
 # In another terminal, with Playwright available to Node:
@@ -405,7 +405,7 @@ Node.js, a Chromium executable, Playwright and one explicitly pinned Cesium rele
 RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_compat.py /tmp/rusty-tiles-vector-compat
 npm install --prefix target/vector-browser --no-save --package-lock=false playwright
 npm install --prefix target/vector-runtime --no-save --package-lock=false cesium@1.143.0
-python3 scripts/preview.py \
+rusty-tiles preview \
   --cesium target/vector-runtime/node_modules/cesium/Build/Cesium \
   --annotations /tmp/rusty-tiles-vector-compat --port 9250
 ```
@@ -501,7 +501,7 @@ Compatibility tests created byte-identical diffs using upstream geodiff 2.3.0
 (`e71dfe1`) and go-geodiff v0.4.3 (`ec6a8d3`), cross-applied them, and compared incremental
 world geometry/properties with a fresh conversion. For a 32-feature fixture with
 attribute, geometry, insert and delete changes, both paths reused 54 of 62
-published contents and encoded 8. Unchanged-input tests prohibit any encoder call.
+published contents and encoded 8. Unchanged-input tests check that the native report records zero rebuilt contents.
 
 The same producer/cross-apply checks pass with GDAL-generated spatial indexes.
 After geometry moves, inserts and deletes, both applied databases retain the

@@ -680,4 +680,114 @@ mod tests {
         ]];
         assert!(is_outline(&polygon(&collapsed, true).err().unwrap()));
     }
+    #[test]
+    fn native_polygon_lod_retains_holes_and_bounds_both_boundary_directions() {
+        fn ring(radius: f64) -> Vec<Point> {
+            let mut points: Vec<_> = (0..200)
+                .map(|i| {
+                    let a = i as f64 * std::f64::consts::TAU / 200.;
+                    [radius * a.cos(), radius * a.sin(), 0.005 * (5. * a).sin()]
+                })
+                .collect();
+            points.push(points[0]);
+            points
+        }
+        let original = vec![ring(0.15), ring(0.05)];
+        let (coarse, error, reason) = simplify_polygon(&original, 0.03, &BTreeSet::new()).unwrap();
+        assert!(reason.is_none());
+        assert_eq!(coarse.len(), 2);
+        assert!(
+            coarse.iter().map(Vec::len).sum::<usize>()
+                < original.iter().map(Vec::len).sum::<usize>() / 4
+        );
+        assert!(error <= 0.03);
+        assert!(!polygon(&coarse, false).unwrap().indices.is_empty());
+        let distance = |p: Point, path: &[Point]| {
+            path.windows(2)
+                .map(|ab| {
+                    let d = sub(ab[1], ab[0]);
+                    let t = (dot(sub(p, ab[0]), d) / dot(d, d).max(1e-30)).clamp(0., 1.);
+                    norm(sub(p, add(ab[0], mul(d, t))))
+                })
+                .fold(f64::INFINITY, f64::min)
+        };
+        for (before, after) in original.iter().zip(&coarse) {
+            for p in before {
+                assert!(distance(*p, after) <= error + 1e-12);
+            }
+            for edge in after.windows(2) {
+                for i in 0..100 {
+                    let p = add(edge[0], mul(sub(edge[1], edge[0]), i as f64 / 100.));
+                    assert!(distance(p, before) <= error + 1e-12);
+                }
+            }
+        }
+        let nonplanar = vec![vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [1., 1., 1.],
+            [0., 1., 0.],
+            [0., 0., 0.],
+        ]];
+        let (coarse, error, reason) = simplify_polygon(&nonplanar, 0.01, &BTreeSet::new()).unwrap();
+        assert_eq!(coarse, nonplanar);
+        assert_eq!(error, 0.);
+        assert!(reason.unwrap().contains("nonplanar"));
+    }
+
+    #[test]
+    fn bounded_native_parent_outlines_preserve_locked_vertices_and_properties() {
+        let corners = [
+            [0., 0., 0.],
+            [2., 2., 0.],
+            [2., 0., 0.],
+            [0., 2., 0.],
+            [0., 0., 0.],
+        ];
+        let mut ring = Vec::new();
+        for pair in corners.windows(2) {
+            for i in 0..25 {
+                ring.push(add(pair[0], mul(sub(pair[1], pair[0]), i as f64 / 25.)));
+            }
+        }
+        ring.push(ring[0]);
+        let feature: Feature=serde_json::from_value(json!({"properties":{"_source_id":"1","_source_layer":"bow","name":"source"},"geometry":{"type":"Polygon","coordinates":[ring]}})).unwrap();
+        let locked = BTreeSet::from([key(ring[20])]);
+        let (baseline, error) = simplify(&feature, 3., &locked, &mut Vec::new(), false).unwrap();
+        assert_eq!(baseline.geometry, feature.geometry);
+        assert_eq!(error, 0.);
+        let mut reports = Vec::new();
+        let (coarse, error) = simplify(&feature, 3., &locked, &mut reports, true).unwrap();
+        let Geometry::MultiLineString(lines) = coarse.geometry else {
+            panic!("expected parent outline")
+        };
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains(&ring[20]));
+        assert!(lines[0].len() < ring.len());
+        assert!(error <= 3.);
+        assert_eq!(coarse.properties, feature.properties);
+        assert_eq!(reports.last().unwrap()["substitution"], "parentOutline");
+        let (near, error) = simplify(&feature, 0.1, &locked, &mut Vec::new(), true).unwrap();
+        assert_eq!(near.geometry, feature.geometry);
+        assert_eq!(error, 0.);
+        let mut holes = feature.clone();
+        let circles = [2., 0.5].map(|radius| {
+            let mut ring: Vec<_> = (0..100)
+                .map(|i| {
+                    let a = i as f64 * std::f64::consts::TAU / 100.;
+                    [radius * a.cos(), radius * a.sin(), 0.]
+                })
+                .collect();
+            ring.push(ring[0]);
+            ring
+        });
+        holes.geometry = Geometry::Polygon(circles.to_vec());
+        let (coarse, error) =
+            simplify(&holes, 6., &BTreeSet::new(), &mut Vec::new(), true).unwrap();
+        let Geometry::MultiLineString(lines) = coarse.geometry else {
+            panic!("expected bounded hole outlines")
+        };
+        assert_eq!(lines.len(), 2);
+        assert!(error <= 6.);
+    }
 }

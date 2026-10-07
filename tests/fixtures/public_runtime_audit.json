@@ -1,0 +1,47 @@
+{
+  "version": "0.3.0",
+  "binarySha256": "c6c50644cbb6ec423fe59e8f7ba316745282becc7aec3782955fc61369ae2e0f",
+  "pointCloud": {
+    "sourcePoints": 10653336,
+    "leafRecords": 10653336,
+    "leaves": 307,
+    "allNumericFieldsMatch": true,
+    "everySourceIndexExactlyOnce": true
+  },
+  "vector": {
+    "features": 56600,
+    "leafSegments": 652521,
+    "leaves": 1024,
+    "allScalarPropertiesMatch": true,
+    "allSourceSegmentsExactlyOnce": true,
+    "maximumPositionErrorMetres": 0.10362499018959939,
+    "maximumGlbBytes": 85644,
+    "maximumGlbVertices": 2414
+  },
+  "provenance": {
+    "roads": {
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip",
+      "filename": "ne_10m_roads.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "licenseUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+      "downloadSha256": "880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9",
+      "prepared": "/home/bend/.cache/rusty-tiles-validation/natural-earth-roads.gpkg",
+      "preparation": "OGR Shapefile to GeoPackage, multi-line layer roads; source CRS and scalar fields retained",
+      "preparedSha256": "42bd9b11f8de48e82065035074023fa4305b05183aea9448f525e4e9deb025a8"
+    },
+    "autzen": {
+      "url": "https://media.githubusercontent.com/media/PDAL/data/main/autzen/autzen-classified.laz",
+      "filename": "autzen-classified.laz",
+      "license": "CC BY 4.0",
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "licenseUrl": "https://github.com/PDAL/data/blob/main/LICENSE",
+      "provenanceUrl": "https://github.com/PDAL/data/blob/main/autzen/README.md",
+      "downloadSha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51",
+      "prepared": "/home/bend/.cache/rusty-tiles-validation/autzen-local-metres.las",
+      "preparation": "Horizontal international feet and vertical US survey feet converted to local metre XYZ by header scales/offsets; raw point records unchanged; CRS VLRs removed. No vertical datum transformation or ellipsoidal placement.",
+      "preparedSha256": "86c4bfd33d3f70f9717c3f862e76e035dc8a2d246120b7f7ce567cac54a4a0cc"
+    }
+  },
+  "scope": "Complete native 0.3.0 output fidelity audit on cached openly licensed sources. Autzen is local metre XYZ, with no ellipsoidal datum claim; Natural Earth roads use EPSG:4326 and explicit ellipsoidal zero heights. Conversion ran with PATH empty; Python read the finished outputs independently."
+}

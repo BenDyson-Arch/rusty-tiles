@@ -1,11 +1,11 @@
 [package]
 name = "rusty-tiles"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain, LAS/LAZ point clouds and glTF vectors."
 license = "MIT"
 readme = "README.md"
-include = ["/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.py", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
 
 [[bin]]
 name = "rusty-tiles"
@@ -40,6 +40,8 @@ jsonschema = { version = "0.33", default-features = false }
 gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
 las = { version = "0.11.1", features = ["laz"] }
 rusqlite = { version = "0.40", optional = true }
+tiny_http = "0.12.0"
+percent-encoding = "2.3.2"
 
 [build-dependencies]
 pkg-config = { version = "0.3", optional = true }

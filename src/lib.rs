@@ -47,4 +47,6 @@ pub mod vector_encoding;
 
 pub mod doctor;
 
+pub mod preview;
+
 pub mod validate;

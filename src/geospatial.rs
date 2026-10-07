@@ -47,6 +47,25 @@ pub fn versions() -> Result<Versions, Error> {
     }
 }
 
+/// Copy GDAL's effective PROJ search paths; the API returns an owned CSL list.
+pub(crate) fn proj_search_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    // SAFETY: GDAL returns a null-terminated list owned by this call. Each
+    // live string is copied before the matching CSLDestroy frees the list.
+    unsafe {
+        let list = gdal_sys::OSRGetPROJSearchPaths();
+        if !list.is_null() {
+            let mut cursor = list;
+            while !(*cursor).is_null() {
+                paths.push(string(*cursor).into());
+                cursor = cursor.add(1);
+            }
+            gdal_sys::CSLDestroy(list);
+        }
+    }
+    paths
+}
+
 pub(crate) fn offline() -> Result<(), Error> {
     versions()?;
     // SAFETY: This GDAL API updates its mutex-protected network policy. All
@@ -538,5 +557,44 @@ mod tests {
         assert!(error.to_string().contains("grid"));
         // SAFETY: This query only reads GDAL's network setting.
         assert_eq!(unsafe { gdal_sys::OSRGetPROJEnableNetwork() }, 0);
+    }
+    #[test]
+    fn native_quiet_errors_restore_the_callers_thread_local_handler() {
+        use std::cell::Cell;
+        thread_local! { static WARNINGS: Cell<usize> = const { Cell::new(0) }; }
+        unsafe extern "C" fn count_warning(
+            _: gdal_sys::CPLErr::Type,
+            _: i32,
+            _: *const std::ffi::c_char,
+        ) {
+            WARNINGS.with(|count| count.set(count.get() + 1));
+        }
+        struct Pop;
+        impl Drop for Pop {
+            fn drop(&mut self) {
+                unsafe { gdal_sys::CPLPopErrorHandler() };
+            }
+        }
+        // SAFETY: ABI matches GDAL's thread-local handler, popped by the guard.
+        unsafe {
+            gdal_sys::CPLPushErrorHandler(Some(count_warning));
+        }
+        let _pop = Pop;
+        WARNINGS.with(|count| count.set(0));
+        {
+            let _quiet = QuietErrors::new();
+            // SAFETY: No format placeholders; static null-terminated string.
+            unsafe {
+                gdal_sys::CPLError(gdal_sys::CPLErr::CE_Warning, 1, c"scoped warning".as_ptr());
+            }
+        }
+        unsafe {
+            gdal_sys::CPLError(
+                gdal_sys::CPLErr::CE_Warning,
+                1,
+                c"restored handler".as_ptr(),
+            );
+        }
+        assert_eq!(WARNINGS.with(Cell::get), 1);
     }
 }

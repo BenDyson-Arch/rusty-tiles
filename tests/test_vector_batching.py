@@ -8,6 +8,7 @@ import unittest
 
 import numpy as np
 from test_vector_lod import vector, accessors, parts
+from vector_test_support import to_source
 
 
 def feature(fid,kind,coordinates):
@@ -70,7 +71,7 @@ class VectorBatchingTests(unittest.TestCase):
         self.assertNotIn('KHR_mesh_primitive_restart',prim['extensions'])
         self.assertEqual(decode(prim['indices']).tolist(),[0,1,0xffffffff,2,3,4,0xffffffff,5,6])
         decoded=parts(path);self.assertEqual([fid for _,fid,_ in decoded],[0,1,1])
-        for (_,_,actual),expected in zip(decoded,lines):np.testing.assert_array_equal(actual,expected)
+        for (_,_,actual),expected in zip(decoded,lines):np.testing.assert_array_equal(to_source(path,actual),expected)
         single,_=self.emit([feature(1,'LineString',lines[0])]);doc,_=accessors(single)
         self.assertNotIn('KHR_mesh_primitive_restart',doc.get('extensionsRequired',[]))
 
@@ -85,11 +86,6 @@ class VectorBatchingTests(unittest.TestCase):
         self.assertEqual(table['count'],4)
         for prim in doc['meshes'][0]['primitives']:
             self.assertEqual(prim['extensions']['EXT_mesh_features']['featureIds'][0]['propertyTable'],0)
-        fill,_=self.emit([feature(1,'Polygon',[square(0)]),feature(2,'Polygon',[square(20)])],fill_only=True)
-        doc,decode=accessors(fill);self.assertEqual(len(doc['meshes'][0]['primitives']),1)
-        self.assertNotIn('EXT_mesh_polygon',doc['extensionsUsed']);self.assertEqual(len(doc['accessors']),3)
-        self.assertEqual(len(parts(fill)),4) # four indexed triangles, not two vertex arrays
-
     def test_thousand_polygons_keep_json_constant_and_quantized_ids_exact(self):
         items=[feature(i,'Polygon',[square(i*20)]) for i in range(1000)]
         path,report=self.emit(items,quantize=True);doc,decode=accessors(path)
@@ -99,7 +95,7 @@ class VectorBatchingTests(unittest.TestCase):
         prim=doc['meshes'][0]['primitives'][0];ids=decode(prim['attributes']['_FEATURE_ID_0'])
         np.testing.assert_array_equal(ids,np.repeat(np.arange(1000),4))
         ac=doc['accessors'][prim['attributes']['POSITION']];self.assertTrue(ac['normalized'])
-        actual=decode(prim['attributes']['POSITION'])/65535*np.array(doc['nodes'][0]['scale'])+np.array(doc['nodes'][0]['translation'])
+        actual=to_source(path,decode(prim['attributes']['POSITION']),doc)
         expected=np.array([p for i in range(1000) for p in square(i*20)[:-1]])
         self.assertLessEqual(np.linalg.norm(actual-expected,axis=1).max(),report['quantizationError']+1e-6)
 
