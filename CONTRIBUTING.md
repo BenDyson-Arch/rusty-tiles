@@ -156,8 +156,8 @@ that every requested CRS/height operation is supported.
 `doctor --command point-cloud` runs entirely in Rust and reports local XYZ readiness separately from native geospatial placement. A mesh-only/default build supports local point clouds; enable `native-geospatial` for header/explicit CRS placement. An all-command doctor still inventories Python dependencies for the converters that have not yet migrated.
 
 Known-good, exact Python profiles tested on 2026-10-05 are in
-`scripts/gdal-requirements.txt` (vector/raster/terrain) and
-`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud conversion itself has no Python dependency.
+`scripts/gdal-requirements.txt` (vector/raster runtime and development terrain oracles) and
+`scripts/point-cloud-requirements.txt` (development LAS/LAZ fixtures and independent audits). Both require Python 3.12 or newer. Point-cloud and terrain conversion themselves have no Python dependency.
 The GDAL profile requires matching GDAL 3.13.3 native headers/libraries and a GEOS
 build supporting constrained triangulation; a pip binding cannot replace those
 system libraries. Install a profile into a suitable environment explicitly:
@@ -286,3 +286,41 @@ paths/layer identities, dependency versions, options or externally generated inp
 bytes can also change output. Mesh texture conversion depends on the selected
 external codec/build; byte equality here is exercised for vector, point-cloud and
 plain packing rather than promised across all external texture encoders.
+
+## Native terrain validation and benchmarking
+
+Native terrain acceptance compares every supported grid size with the original Python/GDAL development oracle in `tests/fixtures/terrain_oracle.py`, then independently decodes quantized-mesh triangles, shared edges, height endpoints and bounds. Simplification fixtures check elevation and ECEF displacement at grid nodes, edge midpoints and cell centres, preserved coverage sidecars, and reductions for flat/hill terrain. The runtime validates triangle intersections too, and falls back to the original grid when its added-error limit cannot be met. `maxMeshoptEstimateMetres` is the simplifier's estimate; the measured `maxAdded*ErrorMetres` fields come from decoded-surface validation. These limits exclude source sampling and height quantization error.
+
+`test_native_terrain.py` and `test_terrain_overlay.py` invoke the actual CLI with an empty PATH. After building with `native-geospatial`, run the independent audit with:
+
+```sh
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p 'test_native_terrain.py'
+```
+
+`tests/fixtures/terrain.cjs` exercises the real preview in Chromium using Cesium's public terrain loading and height-sampling APIs, then repeats after a cache-disabled reload. It expects a 32 × 32 EPSG:4326 DEM at `[12, .01, 0, 42, 0, -.01]`, constant 123.5 metre heights with NoData in rows/columns 12–19, converted through zoom 9 with `--heightOffset 10.25 --fillHeight -999.125`. Pass the local preview URL and set `NODE_PATH` to an installed Playwright module directory. Software rendering confirms compatibility rather than performance. The terrain runtime requires the `native-geospatial` feature, never Python.
+
+The repeatable conversion benchmark is `tests/fixtures/benchmark_terrain.py`. Build the original converter at `9a95862` in a separate worktree and this branch with `cargo build --release --locked --features native-geospatial`, using separate Cargo target directories. Put the development Python/GDAL environment on `PATH` for the original CLI, then run:
+
+```sh
+python3 tests/fixtures/benchmark_terrain.py \
+  --old-bin /path/to/original/release/rusty-tiles \
+  --new-bin target/release/rusty-tiles \
+  --work target/terrain-benchmark --repeats 3
+```
+
+The harness creates deterministic flat, smooth regional and projected rugged DEMs, compares old Python output with native full-grid and 1 metre simplified output, and writes raw samples plus geometry/coverage checks to `results.json`. It measures serial release CLI runs after a warmup, including publication, with rotated method order. Linux `wait4` peak RSS records the largest process, rather than summed simultaneous process-tree memory. The original uses its default GDAL cache; the native converter uses its 64 MiB cache. Fixtures are synthetic, and filesystem caches remain warm; these results do not establish cold-storage throughput or rendering speed.
+
+A recorded run of the initial native implementation at `62091ea`, including raw timing/RSS samples, input hashes, binary hashes, dependency versions and output checks, is in [`tests/fixtures/terrain_benchmark_results.json`](tests/fixtures/terrain_benchmark_results.json). That initial implementation substantially reduced smooth terrain, but incurred a large conversion-time cost on rugged terrain for a smaller size reduction. Use `--maxError 0` when preserving the original grid and conversion throughput matter more than reducing terrain payloads.
+
+To compare 1 metre simplification performance with the initial native converter at `62091ea`, use the same harness with `--mode performance`. Build that revision in a separate worktree and pass its release binary as `--old-bin`:
+
+```sh
+python3 tests/fixtures/benchmark_terrain.py --mode performance --old-ref 62091ea \
+  --old-bin /path/to/prior-native/release/rusty-tiles \
+  --new-bin target/release/rusty-tiles \
+  --work target/terrain-performance --repeats 3
+```
+
+This compares the prior native 1 metre path with the new single-worker and four-worker paths, and requires identical terrain payloads, coverage sidecars, manifests and geometry counts. Serial and parallel conversion reports must also match. Encoding batches hold at most four grids; native GDAL datasets and warps remain on the sampling thread. Retry pruning avoids identical meshopt candidates, and surface validation avoids rechecking unchanged source edges while still checking changed triangle intersections.
+
+The optimized run is recorded in [`tests/fixtures/terrain_performance_results.json`](tests/fixtures/terrain_performance_results.json). With four encoders, median warm release times improved from 0.118 to 0.064 seconds (small flat), 7.161 to 5.332 seconds (regional smooth), and 27.224 to 5.355 seconds (projected rugged), with byte-identical terrain payloads and unchanged geometry counts/coverage. The same rugged case improved to 14.968 seconds with one worker; peak RSS with four workers rose from 99.3 to 104.2 MiB. An additional run with the default Rayon configuration completed in 5.282 seconds at 113.9 MiB. Sampling remains serial, and memory measurements retain the largest-process `wait4` definition above.

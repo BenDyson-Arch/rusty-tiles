@@ -3,13 +3,17 @@ use crate::error::Error;
 use serde_json::{json, Value};
 
 pub fn report(selected: &[String]) -> Result<Value, Error> {
-    if !selected.is_empty() && selected.iter().all(|name| name == "point-cloud") {
-        return Ok(
-            json!({"ready":true,"commands":{"point-cloud":point_cloud_readiness()},"selectedCommands":selected}),
-        );
-    }
-    let mut report = python_report(selected)?;
+    let mut report = if !selected.is_empty()
+        && selected
+            .iter()
+            .all(|name| matches!(name.as_str(), "point-cloud" | "terrain"))
+    {
+        json!({"commands":{}})
+    } else {
+        python_report(selected)?
+    };
     report["commands"]["point-cloud"] = point_cloud_readiness();
+    report["commands"]["terrain"] = terrain_readiness();
     let names: Vec<_> = if selected.is_empty() {
         report["commands"]
             .as_object()
@@ -28,7 +32,13 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
     Ok(report)
 }
 
-fn point_cloud_readiness() -> Value {
+fn terrain_readiness() -> Value {
+    let geospatial = geospatial_readiness();
+    json!({"ready":geospatial["ready"],"requires":["native GDAL >= 3.11", "PROJ >= 9.2", "local PROJ database/grids"],
+        "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
+}
+
+fn geospatial_readiness() -> Value {
     #[cfg(feature = "native-geospatial")]
     let geospatial = match crate::geospatial::versions().and_then(|versions| {
         crate::geospatial::Crs::from_definition("EPSG:4326")?;
@@ -38,7 +48,12 @@ fn point_cloud_readiness() -> Value {
         Err(error) => json!({"ready":false,"error":error.to_string()}),
     };
     #[cfg(not(feature = "native-geospatial"))]
-    let geospatial = json!({"ready":false,"error":"rebuild with --features native-geospatial for geospatial placement"});
+    let geospatial = json!({"ready":false,"error":"rebuild with --features native-geospatial for native GDAL/PROJ operations"});
+    geospatial
+}
+
+fn point_cloud_readiness() -> Value {
+    let geospatial = geospatial_readiness();
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
         "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
 }
@@ -87,18 +102,25 @@ pub fn display(report: &Value, json_output: bool) {
         return;
     }
     if !report["python"].is_object() {
-        let cloud = &report["commands"]["point-cloud"];
-        println!("point-cloud: native LAS/LAZ ready (local XYZ)");
-        println!(
-            "geospatial placement: {}",
-            if cloud["geospatial"]["ready"] == true {
-                "ready; conversion validates source CRS/grids"
-            } else {
-                cloud["geospatial"]["error"]
-                    .as_str()
-                    .unwrap_or("unavailable")
+        if let Some(commands) = report["commands"].as_object() {
+            for (name, info) in commands {
+                println!(
+                    "{name}: {}",
+                    if info["ready"] == true {
+                        "ready"
+                    } else {
+                        "unavailable"
+                    }
+                );
+                let geospatial = &info["geospatial"];
+                if geospatial["ready"] == false {
+                    println!(
+                        "  native geospatial: {}",
+                        geospatial["error"].as_str().unwrap_or("unavailable")
+                    );
+                }
             }
-        );
+        }
         return;
     }
     println!(

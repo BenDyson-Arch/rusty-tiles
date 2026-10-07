@@ -1,4 +1,5 @@
-"""Quantized-mesh lab encoder. GDAL handles source CRS and windowed sampling.
+"""Development oracle retained from the Python encoder before issue #58.
+Never embedded or executed by the terrain runtime. GDAL handles source sampling.
 
 Regular shared grids keep adjacent tile edges deterministic. Outside coverage
 and NoData use an explicitly selected fill height. Source height datum is never

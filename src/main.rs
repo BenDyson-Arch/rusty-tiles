@@ -61,7 +61,7 @@ enum Command {
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
-    /// DEM → quantized-mesh directory (requires Python GDAL and NumPy)
+    /// DEM → native quantized-mesh directory (requires native-geospatial)
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
     Raster(RasterArgs),
@@ -93,6 +93,9 @@ struct TerrainArgs {
     /// Ellipsoidal height used outside coverage and for NoData
     #[arg(long = "fillHeight", allow_hyphen_values = true)]
     fill_height: f64,
+    /// Maximum added terrain simplification error in metres; 0 keeps the full grid
+    #[arg(long = "maxError", default_value_t = 1., allow_hyphen_values = true)]
+    max_error: f64,
 }
 
 #[derive(Args)]
@@ -496,6 +499,7 @@ fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
                 grid: a.grid,
                 height_offset: a.height_offset,
                 fill_height: a.fill_height,
+                max_error: a.max_error,
             },
         )?,
         Command::Raster(a) => rusty_tiles::raster::raster_with_options(

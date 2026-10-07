@@ -6,8 +6,8 @@ import os
 import pathlib
 import sys
 
-NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert','point-cloud']
-PYTHON=['vector','raster','terrain']
+NATIVE=['mesh-to-3tz','glb-to-3tz','createTilesetJson','convert','point-cloud','terrain']
+PYTHON=['vector','raster']
 
 
 def report(selected=()):
@@ -51,13 +51,12 @@ def report(selected=()):
         if root.is_dir():
             for suffix in ('*.gtx','*.gsb','*.tif','*.bin'):
                 grids.extend(str(p) for p in root.glob(suffix) if p.is_file())
-    groups={'vector':['numpy','gdal','ogr','osr'], 'raster':['numpy','gdal'],
-        'terrain':['numpy','gdal']}
+    groups={'vector':['numpy','gdal','ogr','osr'], 'raster':['numpy','gdal']}
     commands={name:dict(ready=True,requires=[]) for name in NATIVE}
     for name,requires in groups.items():
         missing=[m for m in requires if not modules[m]['available']]
         if name=='vector' and not triangulation:missing.append('GEOS constrained triangulation')
-        if name in ('vector','raster','terrain') and not database.get('gdalAvailable'):missing.append('PROJ database')
+        if name in ('vector','raster') and not database.get('gdalAvailable'):missing.append('PROJ database')
         commands[name]=dict(ready=not missing,requires=requires,missing=missing)
     selected=list(selected) or NATIVE+PYTHON
     return dict(ready=all(commands[name]['ready'] for name in selected),selectedCommands=selected,
