@@ -42,6 +42,42 @@ jobs:
           RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
         run: cargo test --locked --lib jpeg::tests
 
+  portable:
+    name: Portable CLI (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Test the portable release CLI
+        run: cargo test --locked --target "$RELEASE_TARGET"
+
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
     runs-on: ubuntu-24.04

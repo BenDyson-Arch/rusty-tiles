@@ -8,7 +8,10 @@ use support::{bin, enabled_recipes, recipes, run, write_inputs};
 
 /// The `next:` suggestion each converter prints for its output path.
 fn expected_next(command: &str, output: &Path) -> String {
-    let path = output.display();
+    // These fixtures deliberately use spaces, so the suggested shell argument
+    // must be quoted on Unix and Windows alike.
+    assert!(output.to_string_lossy().contains(' '));
+    let path = format!("'{}'", output.display());
     match command {
         "raster" => format!("next: rusty-tiles preview --cesium <Build/Cesium> --imagery {path}"),
         "terrain" => format!("next: rusty-tiles preview --cesium <Build/Cesium> --terrain {path}"),
@@ -33,7 +36,7 @@ fn summary(stderr: &[u8], command: &str, output: &Path) -> Vec<String> {
 fn every_converter_prints_wrote_reports_and_next_lines() {
     let work = tempfile::tempdir().unwrap();
     let inputs = work.path().join("inputs");
-    let outputs = work.path().join("outputs");
+    let outputs = work.path().join("outputs with spaces");
     std::fs::create_dir_all(&outputs).unwrap();
     write_inputs(&inputs);
     let mut covered = std::collections::BTreeSet::new();
@@ -120,7 +123,7 @@ fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
             "warnings: 1 feature without geometry, 5 geometry reports; see conversion.json and geometry-reports.jsonl",
         ),
     ] {
-        let output = work.path().join(format!("out{flag}.3tz"));
+        let output = work.path().join(format!("out {flag}.3tz"));
         let result = Command::new(bin())
             .args(["vector", "-i"])
             .arg(&source)
