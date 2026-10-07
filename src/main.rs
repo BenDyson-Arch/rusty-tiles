@@ -41,6 +41,8 @@ enum Command {
     },
     /// Check linked native capabilities and local PROJ database/grids
     Doctor(DoctorArgs),
+    /// Serve selected output directories with an installed Cesium IIFE runtime
+    Preview(PreviewArgs),
     #[command(hide = true)]
     EncodeVectorContent {
         #[arg(short, long)]
@@ -70,8 +72,29 @@ enum Command {
 #[derive(Args)]
 struct DoctorArgs {
     /// Check only these converters; repeat to select several
-    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert","validate"])]
+    #[arg(long="command",value_parser=["vector","raster","terrain","point-cloud","mesh-to-3tz","glb-to-3tz","createTilesetJson","convert","validate","preview"])]
     commands: Vec<String>,
+}
+
+#[derive(Args)]
+struct PreviewArgs {
+    /// Cesium 1.143.0 Build/Cesium directory containing Cesium.js (IIFE)
+    #[arg(long)]
+    cesium: PathBuf,
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+    #[arg(long, default_value_t = 9227)]
+    port: u16,
+    #[arg(long)]
+    point_cloud: Option<PathBuf>,
+    #[arg(long)]
+    mesh: Option<PathBuf>,
+    #[arg(long)]
+    annotations: Option<PathBuf>,
+    #[arg(long)]
+    imagery: Option<PathBuf>,
+    #[arg(long)]
+    terrain: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -424,6 +447,19 @@ fn run(cli: Cli) -> Result<Option<serde_json::Value>, Error> {
                     "selected converters have missing dependencies; see doctor report".into(),
                 ));
             }
+        }
+        Command::Preview(a) => {
+            let layers: Vec<_> = [
+                ("point-cloud", a.point_cloud),
+                ("mesh", a.mesh),
+                ("annotations", a.annotations),
+                ("imagery", a.imagery),
+                ("terrain", a.terrain),
+            ]
+            .into_iter()
+            .filter_map(|(name, path)| path.map(|path| (name.to_owned(), path)))
+            .collect();
+            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?.serve(&a.host, a.port, json)?;
         }
         Command::EncodeVectorContent { input } => {
             println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);

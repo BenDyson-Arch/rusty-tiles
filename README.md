@@ -55,7 +55,7 @@ cargo install --path . --locked --features native-geospatial
 
 This feature requires GDAL >= 3.12 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, libsqlite3 development files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
 
-The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain, raster and vector conversion also run natively with this feature. Vector ingestion and triangulation require GDAL built with GEOS >= 3.10. Local preview uses Python 3. CI exercises native builds with GDAL 3.12 and 3.13.
+The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain, raster and vector conversion also run natively with this feature. Vector ingestion and triangulation require GDAL built with GEOS >= 3.10. Local preview and readiness checks also run natively. CI exercises native builds with GDAL 3.12 and 3.13.
 
 ### 2. Install the dependencies for your data
 
@@ -67,9 +67,9 @@ The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feat
 | `terrain` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `raster` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
 | `vector` | Build with `native-geospatial`; native GDAL/GEOS/PROJ, SQLite and local CRS data |
-| Local preview | Python 3; Node/npm to install the Cesium runtime |
+| Local preview | An explicitly installed Cesium IIFE runtime (Node/npm can install it) |
 
-Python GDAL, NumPy and the point-cloud Python requirements are used for development fixtures, benchmarks and independent output audits. Conversion runs without Python. The preview server still needs Python 3.
+Python GDAL, NumPy and the point-cloud Python requirements are used for development fixtures, benchmarks and independent output audits. Conversion, readiness checks and the preview server run without Python.
 
 ### 3. Try the included example
 
@@ -79,7 +79,7 @@ This small, invented GeoJSON fixture contains points, a line, a polygon with a h
 mkdir -p output
 rusty-tiles vector -i tests/fixtures/vector.geojson \
   -o output/example.3tz --maxFeatures 2
-python3 -m zipfile -e output/example.3tz output/example
+unzip output/example.3tz -d output/example
 ```
 
 You now have an archive and an extracted tileset. Continue to [preview your results](#preview-your-results) to view it.
@@ -211,7 +211,7 @@ Install its runtime from the repository directory:
 
 ```sh
 npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.143.0
-python3 scripts/preview.py \
+rusty-tiles preview \
   --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
   --annotations output/example
 ```
@@ -221,16 +221,16 @@ Open **[127.0.0.1:9227](http://127.0.0.1:9227/)** to view the example converted 
 For your own scene, extract mesh, point-cloud, and vector archives first:
 
 ```sh
-python3 -m zipfile -e output/model.3tz output/model
-python3 -m zipfile -e output/cloud.3tz output/cloud
-python3 -m zipfile -e output/mapping.3tz output/mapping
-python3 scripts/preview.py \
+unzip output/model.3tz -d output/model
+unzip output/cloud.3tz -d output/cloud
+unzip output/mapping.3tz -d output/mapping
+rusty-tiles preview \
   --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
   --mesh output/model --point-cloud output/cloud --annotations output/mapping \
   --imagery output/imagery --terrain output/terrain
 ```
 
-Use only the flags for datasets you converted; select at least one. Layers must share compatible placement and height references to align. The preview serves the selected directories and their contents, so select generated output directories.
+The HTML is embedded in the binary. Serving starts on loopback (`127.0.0.1:9227`); `--host` and `--port` override it. `--port 0 --json` emits one startup object with the bound URL and selected layers. The server sends no-cache responses and never lists directories or downloads a runtime or dataset. Use only the flags for datasets you converted; select at least one. Layers must share compatible placement and height references to align. The preview serves the selected directories and their contents, so select generated output directories.
 
 **Using another viewer?** Serve an extracted `tileset.json` and its resources, or use a server that can expose archive members. Cesium does not open a `.3tz` file directly. Raster and terrain outputs use their own manifests rather than `tileset.json`.
 

@@ -67,7 +67,7 @@ target/debug/rusty-tiles point-cloud -i target/cloud-browser-case/cloud.laz \
   --maxPoints 16 --chunkPoints 11
 python3 -m zipfile -e target/cloud-browser-case/cloud.3tz target/cloud-browser-case/tiles
 npm install --prefix target/cloud-browser --no-save --package-lock=false cesium@1.143.0 playwright
-python3 scripts/preview.py --point-cloud target/cloud-browser-case/tiles \
+rusty-tiles preview --point-cloud target/cloud-browser-case/tiles \
   --cesium target/cloud-browser/node_modules/cesium/Build/Cesium --port 9271
 # In another terminal:
 NODE_PATH="$PWD/target/cloud-browser/node_modules" CHROMIUM=/usr/bin/chromium \

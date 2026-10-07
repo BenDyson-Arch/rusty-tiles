@@ -12,6 +12,7 @@ pub fn report(selected: &[String]) -> Result<Value, Error> {
         "createTilesetJson",
         "convert",
         "validate",
+        "preview",
     ] {
         report["commands"][name] = json!({"ready":true,"requires":[],"backend":"native Rust"});
     }
