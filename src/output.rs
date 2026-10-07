@@ -219,4 +219,94 @@ mod tests {
         assert_eq!(std::fs::read(&output).unwrap(), b"raced");
         assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
     }
+
+    /// Entry name → bytes of a published archive.
+    fn archive_entries(path: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+        (0..zip.len())
+            .map(|i| {
+                let mut entry = zip.by_index(i).unwrap();
+                let mut bytes = Vec::new();
+                std::io::Read::read_to_end(&mut entry, &mut bytes).unwrap();
+                (entry.name().to_string(), bytes)
+            })
+            .collect()
+    }
+
+    /// Names in `dir` other than the given ones (work dirs must not linger).
+    fn leftovers(dir: &Path, keep: &[&str]) -> Vec<String> {
+        fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| !keep.contains(&n.as_str()))
+            .collect()
+    }
+
+    /// A job whose staged tree holds `tileset.json` (when `manifest`) and a tile.
+    fn staged_tree(output: &Path, force: bool, manifest: bool) -> (Job, PathBuf) {
+        let job = Job::begin(output, force).unwrap();
+        let root = job.staging("tree").unwrap();
+        if manifest {
+            fs::write(root.join("tileset.json"), b"{\"new\":true}").unwrap();
+        }
+        fs::create_dir(root.join("tiles")).unwrap();
+        fs::write(root.join("tiles/0.glb"), b"tile").unwrap();
+        (job, root)
+    }
+
+    #[test]
+    fn tree_archive_publication_packs_every_staged_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let (job, root) = staged_tree(&output, false, true);
+        let report = serde_json::json!({"ok": true});
+        let result = job.publish_tree_3tz(&root, Some(report.clone())).unwrap();
+        assert!(result.archive);
+        assert_eq!(result.output, output);
+        assert_eq!(result.report, Some(report));
+        let entries = archive_entries(&output);
+        let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names.first(), Some(&"tileset.json"));
+        assert!(names.contains(&"tiles/0.glb"), "{names:?}");
+        assert!(entries.contains(&("tiles/0.glb".into(), b"tile".to_vec())));
+        assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn failed_tree_archive_publication_keeps_previous_output_and_no_work_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        fs::write(&output, b"previous").unwrap();
+        // No tileset.json: packing must fail before anything is published.
+        let (job, root) = staged_tree(&output, true, false);
+        let error = job.publish_tree_3tz(&root, None).unwrap_err();
+        assert!(matches!(error, Error::MissingTilesetJson), "{error}");
+        assert_eq!(fs::read(&output).unwrap(), b"previous");
+        assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn tree_archive_publication_does_not_clobber_without_force() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let (job, root) = staged_tree(&output, false, true);
+        // Another writer created the output while the job was running.
+        fs::write(&output, b"raced").unwrap();
+        let error = job.publish_tree_3tz(&root, None).unwrap_err();
+        assert!(matches!(error, Error::OutputExists(_)), "{error}");
+        assert_eq!(fs::read(&output).unwrap(), b"raced");
+        assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn tree_archive_publication_overwrites_with_force() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        fs::write(&output, b"previous").unwrap();
+        let (job, root) = staged_tree(&output, true, true);
+        job.publish_tree_3tz(&root, None).unwrap();
+        let entries = archive_entries(&output);
+        assert!(entries.contains(&("tileset.json".into(), b"{\"new\":true}".to_vec())));
+        assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
 }
