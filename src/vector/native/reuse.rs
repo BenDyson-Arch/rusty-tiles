@@ -44,6 +44,8 @@ fn encoder() -> String {
         include_str!("geometry.rs"),
         include_str!("source.rs"),
         include_str!("encoding.rs"),
+        include_str!("aggregation.rs"),
+        include_str!("../../point_sampling.rs"),
         include_str!("store.rs"),
         include_str!("reuse.rs"),
         include_str!("../../vector_encoding.rs"),
@@ -208,7 +210,7 @@ impl Reuse {
             .collect();
         self.config = json!({"encoder":encoder(),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
             "quantize":options.quantize,"meshopt":options.meshopt,"maxFeatures":max_features,"maxParentFeatures":options.max_parent_features,"maxVertices":options.max_vertices,"maxBytes":options.max_bytes,
-            "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
+            "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
         if self.previous.is_some() && self.config != self.old_config {
             return Err(data("previous encoder, schema, CRS or conversion settings differ; run a fresh conversion without reuseTileset"));

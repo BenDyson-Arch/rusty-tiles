@@ -100,8 +100,8 @@ because of extension JSON overhead. `conversion.json.encoding` records options,
 maximum quantization error, and uncompressed/encoded byte totals across tile
 content references; deduplicated archive size can differ. Per-tile extras record
 both sizes. Reuse requires matching encoding settings and, for compression, the
-same native encoder binary. Library callers enabling meshopt supply its executable
-through `VectorOptions.meshopt_encoder`.
+same native encoder revision. Compression runs in process; the compatibility
+field `VectorOptions.meshopt_encoder` is ignored.
 
 The combined format is checked with the invented browser cases on CesiumJS
 1.142.0, 1.143.0 and 1.146.0. Repeat the fixture generator with `--quantize` and
@@ -115,10 +115,12 @@ one detailed feature. Redundant levels with no vertex reduction are omitted.
 Parents simplify directly from original full-detail geometry with `REPLACE`
 refinement. If a parent cannot retain every feature within the budgets, it is a
 routing node without content; `extras.routingReason` identifies `parentFeatures`,
-`vertices`, `bytes`, or the conservative `estimatedBytes` memory guard. Parent
-feature counts are independent of the leaf partition budget. Semantic points and feature identities are never
-silently sampled away. Dense point-only collections therefore provide routing,
-not geometry reduction.
+`vertices`, `bytes`, or the conservative `estimatedBytes` memory guard. With
+aggregation enabled, `pointAggregationTolerance` and `pointAggregationBudget`
+also identify conservative fallbacks. Parent
+feature counts are independent of the leaf partition budget. The default retains
+all semantic points and feature identities; dense point collections route without
+geometry reduction unless aggregation is explicitly requested.
 
 Lines use iterative 3D Ramer–Douglas–Peucker with a conservative continuous path
 error bound. Polygon rings can simplify when twice their best-fit-plane deviation fits inside
@@ -151,6 +153,46 @@ bytes, `primitives`, geometry error, position rounding and requested tolerance.
 across a tile’s contents; `primitiveReferences` sums those counts across content
 references in the hierarchy, including reused tiles. These measure glTF primitives,
 not GPU draw calls or unique files.
+
+### Optional dense point aggregation
+
+`--aggregatePoints` permits count aggregates in **point-only parent tiles**.
+Point and MultiPoint coordinates are grouped by source layer and 3D voxel using
+the same budgeted grid as the Rust point-cloud sampler. Each aggregate is placed
+at the first original point in source-identity order, with picking properties
+`aggregation: "voxel"`, `sourceLayer` and integer `pointCount`. These use the
+metadata class `pointAggregate`, have no `_source_id`, and do not inherit an
+individual source feature's properties. Counts refer to point coordinates;
+a MultiPoint feature contributes once for each coordinate. Source properties and
+identities remain available in every full-detail leaf. Styles for distant
+aggregates must use aggregate properties, rather than assume original fields exist.
+
+```sh
+rusty-tiles vector -i observations.gpkg -o observations.3tz --layer observations \
+  --aggregatePoints --maxParentFeatures 64 --lodTolerance 5
+```
+
+Every parent is calculated directly from original coordinates, including on reuse
+after edits. Layers remain separate, even for coincident points. Workers retain
+at most the parent feature/vertex budget in aggregate records and apply the usual
+estimated-memory and actual encoded-byte guards. Mixed geometry parents use the
+existing retention/routing policy. If aggregation makes no reduction, exceeds the
+budgets, or its measured original-to-representative 3D distance (including a
+numerical cushion) exceeds the requested metre tolerance, original content is
+retained when it fits; otherwise the tile routes to children. Geometry and source
+bounds remain conservative through REPLACE refinement.
+
+Tile `extras.pointAggregation` records counts, grouping, grid cell diagonal and
+the maximum distance bound; `conversion.json.pointAggregation` reports whether
+the option is enabled and how many content tiles aggregate points. Geometry
+reports mark the substitution explicitly. Aggregated parents use the requested
+tolerance as their geometric error, plus encoding error, so even coincident
+aggregates refine to original identities at close range. This intentionally
+conservative error is promoted to be at least the child error. Full-detail leaves
+never aggregate. Reuse requires the same aggregation option as its baseline.
+
+Buffered spatial/grid clipping with coverage-wide edge reconciliation and
+implicit tiling remain open in #2. Point aggregation does not address either.
 
 ### Geometry batching
 
@@ -344,6 +386,11 @@ NODE_PATH=target/browser-probe/node_modules \
 
 The probe downloads nothing and exits unsuccessfully if any assertion fails.
 Both probes repeat their checks after a cache-disabled hard refresh.
+For the count-aggregate near/far case, add `--aggregate-points` to
+`vector_compat.py` and `--require-aggregates` alongside `--require-native` to
+`vector_compat.cjs`. The probe picks explicit aggregate counts at distance,
+then original source identities after refinement, including quantized/meshopt
+content when those generator options are selected.
 Repeat it when changing the runtime version; the nullable INT64 observation above
 is specific to the checked 1.143 release.
 

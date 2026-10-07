@@ -39,7 +39,7 @@ def native_run(args):
                 command.extend(['--' + flag, value])
         for key, flag in dict(all_layers='allLayers', skip_invalid='skipInvalid',
             reproducible='reproducible', quantize='quantize', parent_repair='parentRepair',
-            repair='repair', ambiguous_outlines='ambiguousOutlines').items():
+            repair='repair', ambiguous_outlines='ambiguousOutlines', aggregate_points='aggregatePoints').items():
             if getattr(args, key, False):
                 command.append('--' + flag)
         if getattr(args, 'meshopt_helper', None) or getattr(args, 'meshopt', False):

@@ -125,7 +125,9 @@ const { chromium } = require('playwright');
             }
             await wait(400);
           }
-          frame(Math.max(tiles.boundingSphere.radius * 30, 60));
+          frame(entry.name === 'point-aggregates' ?
+            Math.max(tiles.boundingSphere.radius * 600, 1000) :
+            Math.max(tiles.boundingSphere.radius * 30, 60));
           await settle();
           const coarse = await inspect(tiles, entry);
           tiles.maximumScreenSpaceError = 1e-7;
@@ -146,7 +148,8 @@ const { chromium } = require('playwright');
     if (process.argv.includes('--require-native')) {
       const picked = result => result?.rendered && result.properties?._source_id &&
         result.properties?._source_layer && result.properties?.name;
-      const passed = !browserErrors.length && results.cases.length === 5 &&
+      const expectedCases = process.argv.includes('--require-aggregates') ? 6 : 5;
+      const passed = !browserErrors.length && results.cases.length === expectedCases &&
         results.cases.every(entry => {
           const fine = entry.fine;
           return !entry.error && fine && !entry.coarse.failures.length &&
@@ -158,6 +161,12 @@ const { chromium } = require('playwright');
                 fine.decoders[0].collections.length === 1 &&
                 fine.decoders[0].collections[0].primitives === 2)) &&
             fine.decoders.some(decoder => decoder.nativeVector) &&
+            (entry.case !== 'point-aggregates' ||
+              (entry.coarse.pick.rendered && entry.coarse.pick.properties.aggregation === 'voxel' &&
+                Number(entry.coarse.pick.properties.pointCount) > 1 &&
+                !entry.coarse.pick.properties._source_id &&
+                fine.vertices > entry.coarse.vertices &&
+                !fine.pick.properties.aggregation)) &&
             (!fine.hole || !fine.hole.rendered) &&
             (!fine.wideLine || picked(fine.wideLine.negative) || picked(fine.wideLine.positive)) &&
             (!fine.boundary || picked(fine.boundary)) &&

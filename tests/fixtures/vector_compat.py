@@ -26,7 +26,7 @@ def ring(radius, count, wave=0):
     return positions + [positions[0]]
 
 
-def generate(root, quantize=False, meshopt_helper=None, batch=False):
+def generate(root, quantize=False, meshopt_helper=None, batch=False, aggregate_points=False):
     root.mkdir(parents=True, exist_ok=False)
     features = {
         'line': dict(type='LineString', coordinates=[
@@ -74,6 +74,15 @@ def generate(root, quantize=False, meshopt_helper=None, batch=False):
         if batch:
             cases[-1]['samples']=[dict(position=sample,id=json.dumps(name)),dict(position=shift(sample),id=json.dumps(name+'-second'))]
             if name=='line':cases[-1]['gap']=pos(50,0)
+    if aggregate_points:
+        source=root/'point-aggregates.geojson'
+        source.write_text(json.dumps(dict(type='FeatureCollection',features=[
+            dict(type='Feature',id=i,properties=dict(name=f'point-{i}'),
+                 geometry=dict(type='Point',coordinates=pos(i%8,i//8))) for i in range(64)])))
+        vector.run(types.SimpleNamespace(input=str(source),output=str(root/'point-aggregates'),
+            max_features=16,max_parent_features=8,lod_tolerance=5,lod_levels=3,
+            aggregate_points=True,quantize=quantize,meshopt_helper=meshopt_helper))
+        cases.append(dict(name='point-aggregates',sample=pos(0,0)))
     (root / 'cases.json').write_text(json.dumps(cases))
     # The repository preview boots from a single annotations/tileset.json.
     manifest = json.loads((root / 'line/tileset.json').read_text())
@@ -96,5 +105,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch',action='store_true')
     parser.add_argument('--quantize',action='store_true')
     parser.add_argument('--meshopt-helper')
+    parser.add_argument('--aggregate-points',action='store_true')
     args=parser.parse_args()
-    generate(args.output,args.quantize,args.meshopt_helper,args.batch)
+    generate(args.output,args.quantize,args.meshopt_helper,args.batch,args.aggregate_points)

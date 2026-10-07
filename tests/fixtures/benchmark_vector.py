@@ -30,7 +30,7 @@ timing = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(timing)
 METHODS = ['python-1', 'rust-1', 'python-4', 'rust-4']
 CASES = [('small-lines', 24, 128), ('regional-lines', 2048, 128),
-         ('polygons-with-holes', 512, 64), ('projected-lines', 1024, 64)]
+         ('polygons-with-holes', 512, 64), ('projected-lines', 1024, 64), ('dense-points', 8192, 1)]
 
 
 def fixture(root, name, count, vertices):
@@ -44,7 +44,9 @@ def fixture(root, name, count, vertices):
     features = []
     for i in range(count):
         x, y = (i % 64) * 100., (i // 64) * 100.
-        if name == 'polygons-with-holes':
+        if name == 'dense-points':
+            geometry = dict(type='Point', coordinates=[float(i%128), float(i//128), 0.])
+        elif name == 'polygons-with-holes':
             def ring(radius, n):
                 p = [[x + radius * math.cos(j * 2 * math.pi / n),
                       y + radius * math.sin(j * 2 * math.pi / n), 0.] for j in range(n)]
@@ -69,14 +71,19 @@ def decoded(path, directory):
     return details(directory), report
 
 
-def compare(folder):
+def compare(folder, methods=METHODS):
     decoded_outputs = {}
     stats = {}
-    for method in METHODS:
+    for method in methods:
         geometry, report = decoded(folder / (method + '.3tz'), folder / method)
         decoded_outputs[method] = geometry
         stats[method] = dict(tiles=report['tiles'], archiveBytes=(folder / (method + '.3tz')).stat().st_size,
-            encoding=report['encoding'], performance=report.get('performance'))
+            encoding=report['encoding'], performance=report.get('performance'),
+            pointAggregation=report.get('pointAggregation'))
+        with zipfile.ZipFile(folder/(method+'.3tz')) as archive:
+            root=json.loads(archive.read('tileset.json'))['root']
+            stats[method]['rootVertices']=root.get('extras',{}).get('vertices',0)
+            stats[method]['rootPointAggregation']=root.get('extras',{}).get('pointAggregation')
     baseline = decoded_outputs[METHODS[0]]
     maximum = 0.
     for method, geometry in decoded_outputs.items():
@@ -101,6 +108,12 @@ def compare(folder):
         for name in a.namelist():
             if name not in ('conversion.json', '@3dtilesIndex1@'):
                 assert a.read(name) == b.read(name), name
+    if 'rust-aggregate-4' in methods:
+        summary=stats['rust-aggregate-4']['rootPointAggregation']
+        points=sum(len(xyz) for fragments in baseline.values() for _,xyz in fragments)
+        assert summary['sourcePointCount']==points
+        assert summary['aggregateCount']==stats['rust-aggregate-4']['rootVertices']<=64
+        assert summary['aggregateCount']<points
     return dict(fullDetailWorldGeometryAndPropertiesMatch=True, nativeWorkerContentIdentical=True,
                 maxWorldPositionDifferenceMetres=maximum, outputs=stats)
 
@@ -120,7 +133,7 @@ def main():
         platform=platform.platform(), cpu=next(line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name')),
         gdal=gdal.VersionInfo('--version'), python=platform.python_version(), numpy=np.__version__, sqlite=sqlite3.sqlite_version,
         nativeReadiness=json.loads(subprocess.check_output([str(args.new_bin.resolve()),'doctor','--command','vector','--json'],text=True))['commands']['vector'],
-        nativeSourceSha256={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ROOT/'Cargo.toml',ROOT/'Cargo.lock',ROOT/'build.rs',ROOT/'src/vector.rs',ROOT/'src/vector/native.rs',*sorted((ROOT/'src/vector/native').glob('*.rs')),ROOT/'src/vector_encoding.rs',ROOT/'src/geospatial.rs',ROOT/'src/georef.rs',ROOT/'src/bbox.rs',ROOT/'src/glb_write.rs',ROOT/'src/pack.rs']},
+        nativeSourceSha256={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ROOT/'Cargo.toml',ROOT/'Cargo.lock',ROOT/'build.rs',ROOT/'src/vector.rs',ROOT/'src/vector/native.rs',*sorted((ROOT/'src/vector/native').glob('*.rs')),ROOT/'src/point_sampling.rs',ROOT/'src/vector_encoding.rs',ROOT/'src/geospatial.rs',ROOT/'src/georef.rs',ROOT/'src/bbox.rs',ROOT/'src/glb_write.rs',ROOT/'src/pack.rs']},
         oldBinarySha256=hashlib.sha256(args.old_bin.read_bytes()).hexdigest(),
         newBinarySha256=hashlib.sha256(args.new_bin.read_bytes()).hexdigest(),
         build='cargo build --release --locked --features native-geospatial',
@@ -133,19 +146,21 @@ def main():
         folder = args.output / name
         folder.mkdir()
         source, flags = fixture(folder, name, count, vertices)
+        methods=METHODS+['rust-aggregate-4'] if name=='dense-points' else METHODS
         commands = {method: [str((args.old_bin if method.startswith('python') else args.new_bin).resolve()),
             'vector', '-i', str(source.resolve()), '-o', str((folder / (method + '.3tz')).resolve()),
-            '--jobs', method[-1], '--maxFeatures', '64', '--lodTolerance', '.2', '--lodLevels', '3',
-            '--force', *flags] for method in METHODS}
-        samples = {method: [] for method in METHODS}
-        for method in METHODS:
+            '--jobs', method[-1], '--maxFeatures', '64', '--lodTolerance', '5' if name=='dense-points' else '.2', '--lodLevels', '3',
+            '--force', *flags, *(['--maxParentFeatures','64'] if name=='dense-points' else []),
+            *(['--aggregatePoints'] if method=='rust-aggregate-4' else [])] for method in methods}
+        samples = {method: [] for method in methods}
+        for method in methods:
             timing.measured(commands[method], folder / (method + '-warmup.log'), dict(env, PATH='') if method.startswith('rust') else env)
         for repeat in range(args.repeats):
-            for method in METHODS[repeat % len(METHODS):] + METHODS[:repeat % len(METHODS)]:
+            for method in methods[repeat % len(methods):] + methods[:repeat % len(methods)]:
                 samples[method].append(timing.measured(commands[method], folder / f'{method}-{repeat}.log', dict(env, PATH='') if method.startswith('rust') else env))
-        checks = compare(folder)
+        checks = compare(folder,methods)
         medians = {method: {key: statistics.median(s[key] for s in samples[method])
-                    for key in ('wallSeconds', 'cpuSeconds', 'peakRssMiB')} for method in METHODS}
+                    for key in ('wallSeconds', 'cpuSeconds', 'peakRssMiB')} for method in methods}
         result['cases'].append(dict(name=name, features=count, sourceVertices=count*(vertices+vertices//4+2 if name=='polygons-with-holes' else vertices),
             commands=commands, samples=samples, medians=medians, checks=checks))
         (args.output / 'results.json').write_text(json.dumps(result, indent=2))

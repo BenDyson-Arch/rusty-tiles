@@ -365,6 +365,16 @@ RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s 
 
 The original Python modules live unchanged in `tests/fixtures/vector_oracle/`. Integration tests select the native CLI through `RUSTY_TILES_BIN`; oracle math helpers remain independent reference checks. Native tests exercise conversion and readiness with an empty PATH, exact scalar/list/noData metadata, projected and three-axis placement, shared locks, holes, fragment coverage, budgets, repair policies, decoded quantization bounds, deterministic worker output and reuse. The migration rejects Python reuse baselines explicitly. External C++ geodiff 2.3.1 and the local Go driver passed indexed/unindexed cross-apply checks. The vector browser probes passed Cesium 1.143.0 and 1.144.0 rendering, refinement, styling and picking before and after cache-disabled reloads; see `docs/VECTOR.md` to reproduce.
 
+The opt-in `--aggregatePoints` checks independently decode counts and metre error,
+retain boolean/INT64 source properties in leaves, separate layers, preserve every
+oversized MultiPoint coordinate, exercise tolerance/budget fallbacks, and compare
+workers and edited-source reuse. The shared voxel grid also runs through the
+existing point-cloud acceptance tests. The browser aggregate case renders and
+picks seven count aggregates at distance, then all 64 source points with original
+properties at close range on Cesium 1.143.0 and 1.144.0, including quantized meshopt
+content and cache-disabled reloads. Top-level error exceeds root error so large
+aggregate tolerances still leave a distance interval for coarsest content.
+
 Build the Python baseline at `fada1d1` and the new CLI in separate release target directories against the same GDAL/PROJ/GEOS stack, then run:
 
 ```sh
@@ -378,11 +388,23 @@ The baseline needs development Python GDAL/NumPy on PATH; native measured runs u
 
 | Invented input | Python, 1 worker | Rust, 1 worker | Python, 4 workers | Rust, 4 workers | Speedup, 4 workers |
 | --- | --- | --- | --- | --- | --- |
-| small-lines | 0.207 s | 0.042 s | 0.301 s | 0.036 s | 8.4× |
-| regional-lines | 9.773 s | 2.329 s | 7.982 s | 1.841 s | 4.3× |
-| polygons-with-holes | 6.039 s | 0.744 s | 4.049 s | 0.517 s | 7.8× |
-| projected-lines | 2.649 s | 0.532 s | 2.186 s | 0.411 s | 5.3× |
+| small-lines | 0.213 s | 0.039 s | 0.319 s | 0.036 s | 8.8× |
+| regional-lines | 9.740 s | 2.291 s | 7.908 s | 1.810 s | 4.4× |
+| polygons-with-holes | 5.922 s | 0.739 s | 3.982 s | 0.512 s | 7.8× |
+| projected-lines | 2.625 s | 0.530 s | 2.118 s | 0.408 s | 5.2× |
+| dense-points | 1.558 s | 0.458 s | 1.381 s | 0.384 s | 3.6× |
 
-All full-detail world positions and properties matched; maximum coordinate difference was 9.4e-10 metres. Tile counts matched, and native manifests, reports and payloads other than performance diagnostics were identical across worker counts. Peak RSS fell on three cases; for regional lines at four workers it was 117.6 MiB natively versus 111.2 MiB for the largest Python process. Python worker memory is not summed, so this is not an aggregate memory comparison. Native tile data and each worker's SQLite cache are bounded by the existing budgets and 32 MiB cache.
+All full-detail world positions and properties matched; maximum coordinate difference was 9.4e-10 metres. With aggregation off, tile counts matched, and native manifests, reports and payloads other than performance diagnostics were identical across worker counts. Peak RSS fell on four cases; for regional lines at four workers it was 118.2 MiB natively versus 112.1 MiB for the largest Python process. Python worker memory is not summed, so this is not an aggregate memory comparison. Native tile data and each worker's SQLite cache are bounded by the existing budgets and 32 MiB cache.
+
+The invented dense fixture has 8,192 semantic points. At four workers,
+`--aggregatePoints` took 0.520 s versus 0.384 s for native retention/routing and
+1.381 s for Python retention/routing. Aggregation is 2.7× faster than the Python
+baseline but adds 35% native conversion time and 48% archive bytes (1.565 MB versus
+1.057 MB) to provide extra coarse content. It publishes 383 nodes instead of 255,
+with 16 count aggregates at the root and every original point/property in leaves.
+Peak largest-process RSS was 60.6 MiB, versus 56.5 MiB for native routing and
+86.1 MiB for Python routing. These are conversion/output measurements; reduced
+distant geometry is verified by decoded counts and browser refinement, without
+a frame-rate claim. Use `--case dense-points` to repeat this comparison alone.
 
 These are full CLI conversions including packing, after one warmup per method and three serial repetitions with rotated method order. Inputs are invented, content is uncompressed, filesystem caches are warm, and the workstation had unrelated background jobs. CPU and largest-process RSS come from Linux `wait4`. Fixture generation and decoded checks are untimed; these measurements do not establish cold-storage or rendering throughput.

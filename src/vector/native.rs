@@ -1,5 +1,6 @@
 //! Native OGR ingestion and disk-backed vector hierarchy. Native handles never
 //! cross worker boundaries; only owned features, reports and bytes do.
+mod aggregation;
 mod encoding;
 mod geometry;
 mod reuse;

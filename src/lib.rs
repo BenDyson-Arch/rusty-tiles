@@ -20,6 +20,7 @@ pub mod mesh;
 mod output;
 pub mod pack;
 pub mod point_cloud;
+mod point_sampling;
 pub mod split;
 pub mod terrain;
 pub mod texture;

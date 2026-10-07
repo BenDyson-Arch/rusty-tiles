@@ -761,7 +761,16 @@ pub(super) fn convert(
         box_[7].as_f64().unwrap(),
         box_[11].as_f64().unwrap(),
     ]) * 2.;
-    let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":1f64.max(root["geometricError"].as_f64().unwrap()).max(diagonal),"root":root});
+    // Leave an SSE interval in which the root itself can render. Cesium skips
+    // the whole tileset below its top-level error, so equality with the root
+    // error made large-tolerance/coincident aggregate roots unreachable.
+    let top_error = 1f64
+        .max(root["geometricError"].as_f64().unwrap() * 2.)
+        .max(diagonal);
+    if !top_error.is_finite() {
+        return Err(data("vector LOD error overflows; reduce lodTolerance"));
+    }
+    let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
     let reuse_report = build.reuse.publish(&mut manifest, frame)?;
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
     build.reports.file.flush()?;
@@ -798,7 +807,9 @@ pub(super) fn convert(
         "encoding":{"quantize":options.quantize,"meshopt":options.meshopt,"primitiveReferences":sum("primitives"),"maximumTilePrimitives":list.iter().map(|n| n["extras"]["primitives"].as_u64().unwrap_or(0)).max().unwrap_or(0),"maximumQuantizationErrorMetres":max("quantizationErrorMetres"),"uncompressedTileBytes":sum("uncompressedBytes"),"encodedTileBytes":sum("encodedBytes")},
         "parentRepairEnabled":options.parent_repair,"skipInvalidEnabled":options.skip_invalid,"repairEnabled":repair,"lodToleranceMetres":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"reuse":reuse_report,
         "lodFallbacks":build.reports.first,"geometryReportCount":build.reports.count,"geometryReports":"geometry-reports.jsonl","geometryReportsScope":"current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
-        "lockedSharedVertices":shared,"pointPolicy":"retain every semantic point feature; oversized parents route without content","polygonFragmentPolicy":"standard glTF fills plus vector source boundaries; no internal fragment outlines",
+        "lockedSharedVertices":shared,"pointPolicy":if options.aggregate_points {"opt-in per-layer voxel count aggregates in point-only parents; original identities and properties in full-detail leaves"} else {"retain every semantic point feature; oversized parents route without content"},
+        "pointAggregation":{"enabled":options.aggregate_points,"contentTiles":list.iter().filter(|n| n["extras"].get("pointAggregation").is_some()).count()},
+        "polygonFragmentPolicy":"standard glTF fills plus vector source boundaries; no internal fragment outlines",
         "errorPolicy":"direct original-to-parent distance plus float32 rounding; all source bounds retained"});
     report
         .as_object_mut()

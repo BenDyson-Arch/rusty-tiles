@@ -55,6 +55,8 @@ pub struct VectorOptions {
     /// Retained for API compatibility; native compression runs in process.
     pub meshopt_encoder: Option<std::path::PathBuf>,
     pub parent_repair: bool,
+    /// Explicit count aggregates in point-only parents; leaves retain source metadata.
+    pub aggregate_points: bool,
     pub max_parent_features: usize,
     pub where_clause: Option<String>,
     pub force: bool,
@@ -83,6 +85,7 @@ impl Default for VectorOptions {
             meshopt: false,
             meshopt_encoder: None,
             parent_repair: false,
+            aggregate_points: false,
             max_parent_features: 4096,
             where_clause: None,
             force: false,

@@ -193,8 +193,21 @@ fn metadata(
         schema.insert(key.clone(), definition);
         columns.insert(key.clone(), column);
     }
-    glb.document["extensions"] = json!({"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_vector","classes":{"feature":{"properties":schema}}},
-        "propertyTables":[{"name":"features","class":"feature","count":items.len(),"properties":columns}]}});
+    let aggregate = items
+        .iter()
+        .all(|f| !f.properties.contains_key("_source_id"));
+    let class = if aggregate {
+        "pointAggregate"
+    } else {
+        "feature"
+    };
+    let name = if aggregate {
+        "pointAggregates"
+    } else {
+        "features"
+    };
+    glb.document["extensions"] = json!({"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_vector","classes":{class:{"properties":schema}}},
+        "propertyTables":[{"name":name,"class":class,"count":items.len(),"properties":columns}]}});
     Ok(())
 }
 
@@ -449,23 +462,40 @@ pub(super) fn encode(
         reason: None,
         worker: rayon::current_thread_index().unwrap_or(0),
     };
-    if count > cap {
-        result.reason = Some(if level > 0 {
-            "parentFeatures"
-        } else {
-            "features"
-        });
-        return Ok(result);
-    }
     let tolerance = if level > 0 {
         options.lod.tolerance_metres * 2f64.powi(level as i32 - 1)
     } else {
         0.
     };
+    if !tolerance.is_finite() {
+        return Err(data("vector LOD tolerance overflows; reduce lodTolerance"));
+    }
+    let mut aggregation = None;
     let mut items = Vec::new();
+    let mut aggregation_reason = None;
+    if level > 0 && options.aggregate_points {
+        match aggregation::collect(&db, prefix, tolerance, options)? {
+            aggregation::Outcome::Ready(value) => {
+                aggregation = Some(value.summary);
+                items = value.features;
+            }
+            aggregation::Outcome::Rejected(reason) => aggregation_reason = Some(reason),
+            aggregation::Outcome::Unchanged => {}
+        }
+    }
+    if aggregation.is_none() && count > cap {
+        result.reason = Some(aggregation_reason.unwrap_or(if level > 0 {
+            "parentFeatures"
+        } else {
+            "features"
+        }));
+        return Ok(result);
+    }
     let mut vertices = 0;
     let mut estimate = 0;
-    let mut error: f64 = 0.;
+    // The requested tolerance also promotes coincident aggregates to their
+    // original identities on near refinement, even when spatial error is zero.
+    let mut error: f64 = if aggregation.is_some() { tolerance } else { 0. };
     let mut stmt = db
         .prepare("SELECT data FROM features WHERE path>=?1 AND path<?2 ORDER BY id")
         .map_err(sql)?;
@@ -473,7 +503,10 @@ pub(super) fn encode(
     let mut lock_query = db
         .prepare_cached("SELECT shared FROM vertices WHERE x=?1 AND y=?2 AND z=?3")
         .map_err(sql)?;
-    while let Some(row) = rows.next().map_err(sql)? {
+    while aggregation.is_none() {
+        let Some(row) = rows.next().map_err(sql)? else {
+            break;
+        };
         // Load one original at a time; retain only budgeted simplified candidates.
         let feature: Feature = serde_json::from_str(&row.get::<_, String>(0).map_err(sql)?)?;
         let mut locked = BTreeSet::new();
@@ -544,11 +577,16 @@ pub(super) fn encode(
             continue;
         }
         let mut reports = Vec::new();
+        let aggregate_schemas = BTreeMap::new();
         let encoded = emit(
             &features.iter().collect::<Vec<_>>(),
             center,
             repair,
-            schemas,
+            if aggregation.is_some() {
+                &aggregate_schemas
+            } else {
+                schemas
+            },
             fill,
             options.quantize,
             &mut reports,
@@ -613,6 +651,14 @@ pub(super) fn encode(
     let mut node = json!({"extras":{"featureFragments":fills.len()+vectors.iter().filter(|f|!f.surface_fragment).count(),"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
         "geometryErrorMetres":error,"positionRoundingMetres":rounding,"quantizationErrorMetres":quantization,"uncompressedBytes":before_bytes,"toleranceMetres":tolerance},
         "geometricError":if level>0 || options.quantize {error+rounding+quantization}else{0.}});
+    if let Some(summary) = aggregation {
+        node["extras"]["pointAggregation"] = summary.clone();
+        let mut report = summary;
+        report["substitution"] = json!("pointAggregates");
+        report["buildPrefix"] = json!(prefix);
+        report["toleranceMetres"] = json!(tolerance);
+        result.reports.push(report);
+    }
     if contents.len() == 1 {
         node["content"] = contents.remove(0);
     } else {
