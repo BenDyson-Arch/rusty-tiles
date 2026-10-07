@@ -114,7 +114,7 @@ impl Job {
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
         crate::pack::check_members(files, &self.output)?;
-        let mut temp = tempfile::NamedTempFile::new_in(self.work.path())?;
+        let mut temp = crate::pack::temp_archive(self.work.path())?;
         crate::pack::write_archive(files, temp.as_file_mut())?;
         temp.as_file().sync_all()?;
         let persisted = if self.force {

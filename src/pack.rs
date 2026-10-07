@@ -122,6 +122,19 @@ pub(crate) fn check_members(files: &[(String, PathBuf)], output: &Path) -> Resul
     Ok(())
 }
 
+/// Create the temporary archive inside `dir`. tempfile creates files with
+/// mode 0600 and `persist` keeps that mode. Ask for 0666 instead so the
+/// process umask decides, as it does for any other new file.
+pub(crate) fn temp_archive(dir: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    builder.tempfile_in(dir)
+}
+
 /// Write a stored ZIP with `tileset.json` first and the 3TZ index last.
 pub(crate) fn write_archive(files: &[(String, PathBuf)], file: &mut File) -> Result<(), Error> {
     let position = Arc::new(AtomicU64::new(0));
