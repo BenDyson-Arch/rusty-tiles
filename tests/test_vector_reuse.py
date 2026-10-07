@@ -14,6 +14,7 @@ import numpy as np
 from osgeo import ogr
 from test_vector_gpkg import gpkg
 from test_vector_lod import vector, read, parts
+from cli_bin import requires_bin
 
 
 def archive(directory,path):
@@ -171,7 +172,7 @@ class ReuseTests(unittest.TestCase):
 
 
 class CliReuseTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'),'set RUSTY_TILES_BIN for native reuse acceptance')
+    @requires_bin('set RUSTY_TILES_BIN for native reuse acceptance')
     def test_cli_reuses_archive_and_failed_update_does_not_publish(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=ReuseTests().make_source(tmp,8);baseline=root/'baseline.3tz';updated=root/'updated.3tz'

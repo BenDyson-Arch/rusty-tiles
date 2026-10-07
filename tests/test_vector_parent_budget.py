@@ -1,7 +1,6 @@
 """Coarse content is not limited by the leaf feature partition budget."""
 import json
 import math
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -10,7 +9,7 @@ import unittest
 import zipfile
 from test_vector_lod import vector, read
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 class ParentFeatureBudgetTests(unittest.TestCase):
     def source(self,root):
@@ -49,7 +48,7 @@ class ParentFeatureBudgetTests(unittest.TestCase):
                 self.assertNotIn('content',node)
                 self.assertEqual(node['extras']['routingReason'],reason)
 
-    @unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for CLI acceptance')
+    @requires_bin('set RUSTY_TILES_BIN for CLI acceptance')
     def test_cli_parent_budget_option_is_wired_and_zero_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);source=self.source(root);out=root/'result.3tz'

@@ -11,10 +11,10 @@ from osgeo import gdal, osr
 from test_derivatives import decode_terrain
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
 
-@unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native terrain acceptance')
+@requires_bin('set RUSTY_TILES_BIN for native terrain acceptance')
 class TerrainOverlayTests(unittest.TestCase):
     def test_coverage_nulls_height_offset_and_south_to_north_rows(self):
         with tempfile.TemporaryDirectory() as tmp:

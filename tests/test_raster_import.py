@@ -8,14 +8,12 @@ import tempfile
 import unittest
 import numpy as np
 from osgeo import gdal, osr
+from cli_bin import BIN, requires_bin
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-BIN=pathlib.Path(os.environ.get('RUSTY_TILES_BIN',ROOT/'target/debug/rusty-tiles'))
 gdal.UseExceptions(); osr.UseExceptions()
-if os.environ.get('RUSTY_TILES_BIN') and not BIN.is_file():
-    raise RuntimeError(f'configured CLI is missing: {BIN}')
 
-@unittest.skipUnless(BIN.exists(), 'build the local rusty-tiles executable first')
+@requires_bin('set RUSTY_TILES_BIN for raster acceptance')
 class RasterImportTests(unittest.TestCase):
     def call(self, *args, **kwargs):
         # The development oracle uses Python; the actual CLI gets no executable PATH.

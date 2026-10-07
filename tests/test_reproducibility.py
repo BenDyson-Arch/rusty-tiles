@@ -9,9 +9,9 @@ import zipfile
 import laspy
 import numpy as np
 
-BIN=os.environ.get('RUSTY_TILES_BIN')
+from cli_bin import BIN, requires_bin
 
-@unittest.skipUnless(BIN,'set RUSTY_TILES_BIN for reproducibility acceptance')
+@requires_bin('set RUSTY_TILES_BIN for reproducibility acceptance')
 class ReproducibilityTests(unittest.TestCase):
     def call(self,*args):
         result=subprocess.run([BIN,*args],capture_output=True,text=True)

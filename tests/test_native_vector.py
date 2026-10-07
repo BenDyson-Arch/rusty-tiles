@@ -1,12 +1,12 @@
 """Native migration boundaries and OGR reader coverage beyond GeoPackage."""
 import importlib.util
 import json
-import os
 import pathlib
 import struct
 import tempfile
 import types
 import unittest
+from cli_bin import requires_bin
 
 import numpy as np
 from osgeo import ogr, osr
@@ -22,7 +22,7 @@ _spec.loader.exec_module(_oracle)
 python_run = _oracle.run
 
 
-@unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'), 'select the native CLI')
+@requires_bin('select the native CLI')
 class NativeVectorTests(unittest.TestCase):
     def test_mixed_numeric_columns_reject_integers_outside_exact_float64_bounds(self):
         with tempfile.TemporaryDirectory() as tmp:

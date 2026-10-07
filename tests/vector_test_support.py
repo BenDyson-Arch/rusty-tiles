@@ -12,18 +12,16 @@ import types
 import unittest
 import zipfile
 
-if not os.environ.get('RUSTY_TILES_BIN'):
-    print('WARNING: RUSTY_TILES_BIN is not set; native vector CLI tests will be SKIPPED. '
-          'Build target/debug/rusty-tiles and set RUSTY_TILES_BIN to its absolute path.', file=sys.stderr)
+from cli_bin import BIN
 
 def native_run(args):
-    if not os.environ.get('RUSTY_TILES_BIN'):
+    if not BIN:
         raise unittest.SkipTest('RUSTY_TILES_BIN is not set; set it to the rusty-tiles binary for native CLI acceptance')
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
         archive = pathlib.Path(scratch) / 'output.3tz'
-        command = [os.environ['RUSTY_TILES_BIN'], 'vector', '-i', str(args.input), '-o', str(archive)]
+        command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
             max_vertices='maxVertices', max_bytes='maxBytes', max_tiles='maxTiles',
             max_source_vertices='maxSourceVertices', lod_tolerance='lodTolerance', lod_levels='lodLevels',
