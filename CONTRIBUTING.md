@@ -205,10 +205,18 @@ failure before publication leaves the original file/directory untouched.
 
 Pass the global `--json` flag before or after the command to receive exactly one
 JSON result on stdout. Human diagnostics remain on stderr. Successful conversion
-results include `ok`, `output`, numeric `counts`, `skippedFeatures`, `reuse`, and
-`conversionReport` (a directory path or an archive/entry pair). Converters without
-a conversion report return empty counts and null report fields. `doctor --json`
+results include `ok`, `output`, `counts`, `settings`, `skippedFeatures`, `reuse`,
+and `conversionReport` (a directory path or an archive/entry pair). `counts` holds
+only count fields from `conversion.json` (for example `points`, `tiles`,
+`features`, `skippedFeatures`, `geometryReportCount`); every other top-level
+numeric field, such as `heightOffset`, `grid` or `lodLevels`, is under
+`settings`. Converters without a conversion report return empty `counts` and
+`settings` and null report fields. Without `--json`, a successful conversion
+prints a short summary on stderr (output, key counts, warnings and the next
+command); `--progress json` suppresses it so stderr stays NDJSON. `doctor --json`
 returns the dependency inventory with `ok`; failures retain that inventory.
+`doctor --command` accepts subcommand aliases, and `doctor --cesium DIR` checks
+for a preview runtime (informational; it never makes doctor fail).
 
 Failures include `error.code`, `error.message` and `exitCode`. Stable exit codes
 are 0 (success), 1 (I/O or subprocess failure), 2 (usage), 3 (input/data), 4
