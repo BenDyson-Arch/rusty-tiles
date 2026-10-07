@@ -1,9 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="390" viewBox="0 0 1040 390" role="img" aria-labelledby="title desc">
-  <title id="title">Geospatial files, made into tiles</title>
-  <desc id="desc">Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles; elevation becomes quantized-mesh terrain. Try a mesh: doctor, mesh-to-3tz, validate, then preview.</desc>
-  <rect width="1040" height="390" fill="#f4f1e8"/>
-  <g font-family="Arial, Helvetica, sans-serif" fill="#292e28">
-    <text x="36" y="38" font-size="17">Geospatial files, made into tiles.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="252" viewBox="0 0 1040 252" role="img" aria-labelledby="title desc">
+  <title id="title">Input formats and tile outputs</title>
+  <desc id="desc">Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles; elevation becomes quantized-mesh terrain.</desc>
+  <rect width="1040" height="252" fill="#f4f1e8"/>
+  <g transform="translate(0 -40)" font-family="Arial, Helvetica, sans-serif" fill="#292e28">
     <!-- The same little landscape, in five different representations. -->
     <g transform="translate(76 66)" stroke="#a95130" stroke-width="1.6" stroke-linejoin="round">
       <path d="M0 72 33 24 60 35 91 4 119 63 75 93Z" fill="#ead3ba"/>
@@ -52,18 +51,6 @@
     </g>
     <g text-anchor="middle" font-size="17">
       <text x="332" y="275">3D Tiles · .3tz</text><text x="724" y="275">COG + XYZ</text><text x="920" y="275">Quantized-mesh</text>
-    </g>
-    <path d="M36 300H1004" stroke="#d5d5c7"/>
-    <g font-family="monospace" font-size="18">
-      <text x="52" y="336">1 doctor</text><text x="280" y="336">2 mesh-to-3tz</text>
-      <text x="558" y="336">3 validate</text><text x="817" y="336">4 preview</text>
-    </g>
-    <g font-size="14" fill="#62685d">
-      <text x="52" y="361">Check readiness</text><text x="280" y="361">Make a mesh archive</text>
-      <text x="558" y="361">Check the archive</text><text x="817" y="361">Open the local viewer</text>
-    </g>
-    <g stroke="#9a9f8e" stroke-width="1.4" fill="none">
-      <path d="M214 330h32m-6-5 6 5-6 5 M495 330h32m-6-5 6 5-6 5 M751 330h32m-6-5 6 5-6 5"/>
     </g>
   </g>
 </svg>

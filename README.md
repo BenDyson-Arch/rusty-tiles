@@ -4,7 +4,7 @@
 
 rusty-tiles is a local command-line tool and Rust library. It converts textured meshes, point clouds, vector features, imagery and elevation rasters into 3D Tiles, XYZ imagery and quantized-mesh terrain. It runs offline, checks its own readiness, and includes a local Cesium preview. This page is for anyone installing it for the first time.
 
-![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain. The mesh example is doctor, mesh-to-3tz, validate, preview.](docs/assets/readme-overview.svg)
+![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
 **MIT licensed** · **Runs locally** · **Version 0.3.0, in development** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
 
@@ -36,7 +36,7 @@ rusty-tiles --version
 
 The installer downloads the latest stable release, verifies its SHA-256 checksum and installs into `~/.local/bin`. Use `--version 0.3.0` to pin a release or `--prefix /your/bin` to change the destination. It needs `curl`, `tar` and `sha256sum` or `shasum`; it needs neither Rust nor administrator privileges.
 
-For Windows x64, download the `x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases), extract it and add the folder to `PATH`. Manual archives and `SHA256SUMS` are available for every platform. Linux binaries require glibc 2.35+ and libstdc++; macOS binaries require macOS 15+.
+For Windows x64, download `rusty-tiles-VERSION-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases), extract `rusty-tiles.exe` and add its folder to `PATH`. Manual archives and `SHA256SUMS` are available for every platform. Linux binaries require glibc 2.35+ and libstdc++; macOS binaries require macOS 15+.
 
 With `cargo-binstall` already installed, you can also use the manifest from a source checkout:
 
