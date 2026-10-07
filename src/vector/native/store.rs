@@ -795,10 +795,9 @@ pub(super) fn convert(
         "pointAggregation":{"enabled":options.aggregate_points,"contentTiles":list.iter().filter(|n| n["extras"].get("pointAggregation").is_some()).count()},
         "polygonFragmentPolicy":"standard glTF fills plus vector source boundaries; no internal fragment outlines",
         "errorPolicy":"direct original-to-parent distance plus float32 rounding; all source bounds retained"});
-    report
-        .as_object_mut()
-        .unwrap()
-        .extend(values.as_object().unwrap().clone());
+    if let (Value::Object(report), Value::Object(values)) = (&mut report, values) {
+        report.extend(values);
+    }
     if options.reproducible {
         report.as_object_mut().unwrap().remove("performance");
     }

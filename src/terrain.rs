@@ -208,9 +208,11 @@ fn convert(
                     .collect();
                 std::fs::write(
                     folder.join(format!("{y}.heights.json")),
-                    serde_json::to_vec(
-                        &json!({"width":options.grid,"height":options.grid,"heights":overlay}),
-                    )?,
+                    serde_json::to_vec(&HeightOverlay {
+                        height: options.grid,
+                        heights: &overlay,
+                        width: options.grid,
+                    })?,
                 )?;
                 batch.push(SampledTile {
                     path: folder.join(format!("{y}.terrain")),
@@ -259,6 +261,17 @@ fn convert(
         "limitations":"Regular-grid sampling prototype with border-locked simplification. NoData/outside filled explicitly. Height datum supplied by caller. Simplification errors are measured against the quantized grid, not a certified bound on the source DEM surface."}),
         true,
     )
+}
+
+/// One `{z}/{x}/{y}.heights.json` sidecar. Fields stay in the sorted key order
+/// the former `json!` map produced, so the bytes are unchanged; serialising
+/// directly avoids building a `Value` per height sample.
+#[cfg(feature = "native-geospatial")]
+#[derive(serde::Serialize)]
+struct HeightOverlay<'a> {
+    height: u16,
+    heights: &'a [Option<f64>],
+    width: u16,
 }
 
 #[cfg(feature = "native-geospatial")]

@@ -97,11 +97,14 @@ impl Coordinates {
         }
     }
 
-    fn transform(&mut self, positions: Vec<[f64; 3]>) -> Result<Vec<[f64; 3]>, Error> {
+    fn transform<'p>(
+        &mut self,
+        positions: &'p [[f64; 3]],
+    ) -> Result<std::borrow::Cow<'p, [[f64; 3]]>, Error> {
         match self {
-            Self::Local => Ok(positions),
+            Self::Local => Ok(positions.into()),
             #[cfg(feature = "native-geospatial")]
-            Self::Ecef(transform) => transform.transform(&positions),
+            Self::Ecef(transform) => transform.transform(positions).map(Into::into),
         }
     }
 }
@@ -164,13 +167,13 @@ fn convert(
                 }
                 xyz.push(source);
             }
-            let projected = coordinates.transform(xyz.clone())?;
+            let projected = coordinates.transform(&xyz)?;
             let origin = *origin.get_or_insert(projected[0]);
             for ((raw, source), point) in points
                 .raw_bytes()
                 .chunks_exact(raw_len)
                 .zip(&xyz)
-                .zip(projected)
+                .zip(projected.iter())
             {
                 for i in 0..3 {
                     let relative = point[i] - origin[i];
