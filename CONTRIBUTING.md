@@ -31,7 +31,7 @@ Open the PR against `develop`. Describe the problem, the new behaviour, how you 
 
 ### Review rules
 
-Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-date branch and resolved discussions. Direct pushes, force-pushes and branch deletion are blocked, including for administrators. Workflow tokens are read-only and CI receives no deployment secrets.
+Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-date branch and resolved discussions. Direct pushes, force-pushes and branch deletion are blocked, including for administrators. CI workflow tokens are read-only and CI receives no deployment secrets. The separate tag-triggered release workflow has write access to release assets and GHCR packages.
 
 `main` also needs one code-owner approval, and stale approvals are dismissed. CODEOWNERS requests `@BenDyson-Arch`. While there is one maintainer, administrators may bypass only this approval, only through a PR, for their own changes. Review this exception when more maintainers join. Maintainers cut releases from verified commits on `main`. Contributions are licensed under MIT.
 
@@ -133,7 +133,7 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 
 | Path | Role |
 | --- | --- |
-| `tests/fixtures/vector.geojson` | The README example |
+| `tests/fixtures/example.gltf`, `tests/fixtures/vector.geojson` | The README mesh and vector examples |
 | `tests/fixtures/vector_oracle/` | The original Python vector modules, kept unchanged for comparison |
 | `tests/fixtures/terrain_oracle.py` | The original Python terrain converter, compared at every grid size |
 | `tests/fixtures/raster_oracle.py` | The original Python raster converter, compared tile by tile |
@@ -220,6 +220,16 @@ The comparison script builds each revision in its own release target directory. 
 5. The browser probes pass on the pinned Cesium release.
 6. The public-data audits below are repeated when encoders change.
 7. `CHANGELOG.md` describes every user-visible change.
+8. Update `Cargo.toml` to the release version, merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the GitHub release with `SHA256SUMS`. Prereleases do not update the image's `latest` tag.
+9. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
+
+   ```sh
+   sh scripts/install.sh --version VERSION --prefix /tmp/rusty-tiles-release/bin
+   /tmp/rusty-tiles-release/bin/rusty-tiles --version
+   docker run --rm --platform linux/amd64 --network none ghcr.io/bendyson-arch/rusty-tiles:vVERSION doctor --json
+   ```
+
+The standalone downloads are default builds using the portable JPEG encoder. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
 
 A new version changes converter and cache identity. Consumers must invalidate derivative caches. Vector archives from another encoder identity, schema, library version, CRS or setting need a fresh baseline before reuse. The terrain manifest keeps `heightOverlay` version 1 with south-to-north rows. Echidna keeps its own Python raster and height helpers, separate from this runtime.
 

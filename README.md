@@ -4,7 +4,7 @@
 
 rusty-tiles is a local command-line tool and Rust library. It converts textured meshes, point clouds, vector features, imagery and elevation rasters into 3D Tiles, XYZ imagery and quantized-mesh terrain. It runs offline, checks its own readiness, and includes a local Cesium preview. This page is for anyone installing it for the first time.
 
-![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain. A first run is doctor, convert, validate, preview.](docs/assets/readme-overview.svg)
+![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain. The mesh example is doctor, mesh-to-3tz, validate, preview.](docs/assets/readme-overview.svg)
 
 **MIT licensed** · **Runs locally** · **Version 0.3.0, in development** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
 
@@ -23,79 +23,95 @@ Every option for every command is in the [command reference](docs/CLI.md).
 
 ## Install
 
-Releases provide source archives, not prebuilt binaries. Build from source with Cargo, or build the container image.
+### Download a binary
+
+For Linux and macOS, on Intel/AMD or ARM64:
+
+```sh
+curl -fsSLo install-rusty-tiles.sh https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/main/scripts/install.sh
+sh install-rusty-tiles.sh
+export PATH="$HOME/.local/bin:$PATH"
+rusty-tiles --version
+```
+
+The installer downloads the latest stable release, verifies its SHA-256 checksum and installs into `~/.local/bin`. Use `--version 0.3.0` to pin a release or `--prefix /your/bin` to change the destination. It needs `curl`, `tar` and `sha256sum` or `shasum`; it needs neither Rust nor administrator privileges.
+
+For Windows x64, download the `x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases), extract it and add the folder to `PATH`. Manual archives and `SHA256SUMS` are available for every platform. Linux binaries require glibc 2.35+ and libstdc++; macOS binaries require macOS 15+.
+
+With `cargo-binstall` already installed, you can also use the manifest from a source checkout:
+
+```sh
+cargo binstall --manifest-path Cargo.toml rusty-tiles
+```
+
+Prebuilt binaries use the **default build**: mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the container or a native geospatial build.
+
+### Run the full toolset in a container
+
+The published image bundles GDAL and PROJ. No host geospatial libraries are needed. It is a Linux amd64 image; other architectures need Docker's amd64 emulation.
+
+```sh
+docker run --rm --platform linux/amd64 --network none \
+  ghcr.io/bendyson-arch/rusty-tiles:latest doctor --json
+
+docker run --rm --platform linux/amd64 --network none \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:latest \
+  vector -i mapping.gpkg -o mapping.3tz --layer roads
+```
+
+Replace the example input with a file in the mounted directory. Pin the image to `:v0.3.0` for a repeatable setup. The image contains no datasets, Cesium runtime, Basis Universal encoder or extra datum grids. Mount required grids and set `PROJ_DATA` to include them and `proj.db`.
+
+With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs belong to you. Rootless Docker already maps the container's root user to your account.
 
 ### Build with Cargo
 
-You need Rust with Cargo and a C++ compiler. `pkg-config` lets the build find libjpeg-turbo for faster JPEG output.
+You need current stable Rust with Cargo and a C++ compiler. For a default build:
 
 ```sh
 git clone --branch develop https://github.com/BenDyson-Arch/rusty-tiles.git
 cd rusty-tiles
-cargo install --path . --locked --features native-geospatial
-rusty-tiles --help
+cargo install --path . --locked
 ```
 
-`develop` holds the current development version. For a stable version, download a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases) and run the same install command in it. To build without installing, run `cargo build --release --features native-geospatial`. Then use `target/release/rusty-tiles` wherever these docs say `rusty-tiles`.
+Add `--features native-geospatial` to enable every converter. This build needs GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite, development headers, `pkg-config` and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. PROJ's database and any datum grids must be installed locally; conversion never downloads them.
 
-### Choose a build
+`develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
-| Build | Command flag | Commands available | System libraries |
-| --- | --- | --- | --- |
-| Default | none | Mesh, packaging, validate, preview, doctor, and `point-cloud --source-crs local` | None required |
-| Native geospatial | `--features native-geospatial` | Everything, including georeferenced point clouds, vector, raster and terrain | GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite |
-
-The native build also needs GDAL and PROJ headers with their `pkg-config` files, SQLite development files, and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. The PROJ database and any datum grids must be installed locally. Conversion never downloads them.
-
-If libjpeg-turbo is found at build time, it is also needed at run time. Set `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` while building to use the portable Rust encoder instead.
+If `pkg-config` finds libjpeg-turbo at build time, it is also needed at run time. Set `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` while building to use the portable Rust encoder, as the release binaries do.
 
 ### Build the container
-
-The `Dockerfile` builds a Python-free image with GDAL 3.12.4 and PROJ 9.8.1.
 
 ```sh
 docker build --target runtime -t rusty-tiles:native .
 docker run --rm --network none rusty-tiles:native doctor --json
 ```
 
-The image has no Cesium runtime, datasets, Basis Universal encoder or datum grids. Mount grids yourself and set `PROJ_DATA` to include them and `proj.db`.
+The `Dockerfile` builds a Python-free image with GDAL 3.12.4 and PROJ 9.8.1.
 
 ## Quick start
 
-This converts the small invented GeoJSON file in the repository. It has a point, a line, a polygon with a hole and a vertical polygon. Run these commands from the repository directory with the native build installed.
+This example works with the prebuilt binary or either Cargo build. It converts a tiny invented pyramid, places it near Brisbane, checks the archive and opens the local viewer. You need `curl`, `unzip` and Node.js with npm for the viewer setup.
 
 ### 1. Check readiness
 
 ```sh
-rusty-tiles doctor --command vector
+rusty-tiles doctor --command mesh-to-3tz
 ```
 
-The report lists the linked libraries and each command's readiness. Versions vary by machine:
+Look for `mesh-to-3tz: ready`. The default build can run this command without GDAL. `doctor` exits with code 4 if a selected command is missing a dependency.
 
-```text
-GDAL: 3.13.3
-PROJ: [9,8,1]
-GEOS: [3,15,0]
-...
-vector: ready
-```
+### 2. Make tiles
 
-A missing dependency makes `doctor` exit with code 4.
-
-### 2. Convert
+Download the example (or copy `tests/fixtures/example.gltf` from a source checkout):
 
 ```sh
+curl -fsSLo example.gltf https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/v0.3.0/tests/fixtures/example.gltf
 mkdir -p output
-rusty-tiles vector -i tests/fixtures/vector.geojson -o output/example.3tz --max-features 2
+rusty-tiles mesh-to-3tz -i example.gltf -o output/example.3tz \
+  --cartographic-position-degrees 153.02 -27.47 0
 ```
 
-Every converter ends with a short summary and the next command:
-
-```text
-vector: wrote output/example.3tz (4 features, 3 tiles)
-reported: 2 geometry reports in geometry-reports.jsonl
-next: rusty-tiles validate output/example.3tz
-```
+The converter prints what it wrote and the next command. Outputs are not overwritten; choose a new path or add `--force` to repeat the conversion.
 
 ### 3. Validate
 
@@ -103,22 +119,27 @@ next: rusty-tiles validate output/example.3tz
 rusty-tiles validate output/example.3tz
 ```
 
-```text
-Validated output/example.3tz: 3 tiles, 3 content references
-```
+A successful check prints `Validated output/example.3tz: 1 tiles, 1 content references`.
 
 ### 4. Preview
 
-Install the Cesium runtime once, extract the archive, then start the viewer:
+Install Cesium once, extract the archive and serve the mesh:
 
 ```sh
 npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.143.0
 unzip output/example.3tz -d output/example
 rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
-  --annotations output/example
+  --mesh output/example
 ```
 
-Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/) to see the features. Press Ctrl+C to stop.
+Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the pyramid; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
+
+With the full toolset, try the [invented vector fixture](tests/fixtures/vector.geojson) too:
+
+```sh
+rusty-tiles vector -i tests/fixtures/vector.geojson -o output/vector.3tz --max-features 2
+rusty-tiles validate output/vector.3tz
+```
 
 ## Convert your data
 
