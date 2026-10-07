@@ -1,16 +1,19 @@
 //! Lossless buffer-view compression for generated vector content. Metadata and
 //! polygon/feature accessor identities remain unchanged; no vertex reordering.
-use crate::error::Error;
+use crate::{
+    error::Error,
+    glb::{self, FallbackOffsets, MeshoptLayout, MeshoptStream},
+};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, path::Path};
 
-fn encode<const N: usize>(bytes: &[u8]) -> Result<Vec<u8>, Error> {
-    let values: Vec<[u8; N]> = bytes
-        .chunks_exact(N)
-        .map(|v| v.try_into().unwrap())
-        .collect();
-    meshopt::encoding::encode_vertex_buffer(&values).map_err(|e| Error::msg(e.to_string()))
-}
+/// Vector content keeps eight-byte views (64-bit property tables) in both the
+/// compressed and the repacked fallback buffer.
+const VECTOR_MESHOPT: MeshoptLayout = MeshoptLayout {
+    align: 8,
+    fallback: FallbackOffsets::Packed,
+    explicit_filter: false,
+};
 
 pub fn compress_file(path: &Path) -> Result<Value, Error> {
     let input = std::fs::read(path)?;
@@ -25,6 +28,14 @@ pub(crate) fn compress_bytes(input: &[u8]) -> Result<Vec<u8>, Error> {
     let source = glb
         .bin
         .ok_or_else(|| Error::msg("vector GLB has no binary chunk"))?;
+    let binary = compress_document(&mut doc, &source)?;
+    glb::encode_glb(&doc, &binary)
+}
+
+/// Compress every accessor-backed view of a vector document in place as an
+/// attribute stream (positions, feature IDs, polygon offsets and restart
+/// loop indices alike); other views (metadata) stay raw. Returns the binary.
+pub(crate) fn compress_document(doc: &mut Value, source: &[u8]) -> Result<Vec<u8>, Error> {
     let mut layouts = BTreeMap::new();
     for accessor in doc["accessors"]
         .as_array()
@@ -52,74 +63,18 @@ pub(crate) fn compress_bytes(input: &[u8]) -> Result<Vec<u8>, Error> {
             .unwrap_or(components * width);
         layouts.insert(view, (count, stride));
     }
-    let views = doc["bufferViews"]
-        .as_array_mut()
-        .ok_or_else(|| Error::msg("missing views"))?;
-    let mut binary = Vec::new();
-    let mut virtual_size = 0;
-    for (index, view) in views.iter_mut().enumerate() {
-        let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
-        let length = view["byteLength"]
-            .as_u64()
-            .ok_or_else(|| Error::msg("missing view size"))? as usize;
-        let end = offset
-            .checked_add(length)
-            .ok_or_else(|| Error::msg("view overflow"))?;
-        let bytes = source
-            .get(offset..end)
-            .ok_or_else(|| Error::msg("view outside GLB"))?;
-        while binary.len() % 8 != 0 {
-            binary.push(0);
+    glb::meshopt_compress(doc, source, VECTOR_MESHOPT, |view, length| {
+        let Some(&(count, stride)) = layouts.get(&view) else {
+            return Ok(None);
+        };
+        if count.checked_mul(stride) != Some(length) {
+            return Err(Error::msg("vector view layout mismatch"));
         }
-        let start = binary.len();
-        if let Some(&(count, stride)) = layouts.get(&index) {
-            if count.checked_mul(stride) != Some(length) {
-                return Err(Error::msg("vector view layout mismatch"));
-            }
-            let packed = match stride {
-                4 => encode::<4>(bytes)?,
-                8 => encode::<8>(bytes)?,
-                12 => encode::<12>(bytes)?,
-                _ => return Err(Error::msg("unsupported vector stride")),
-            };
-            while virtual_size % 8 != 0 {
-                virtual_size += 1;
-            }
-            view["buffer"] = json!(1);
-            view["byteOffset"] = json!(virtual_size);
-            virtual_size += length;
-            view["extensions"] = json!({"EXT_meshopt_compression":{"buffer":0,"byteOffset":start,
-                "byteLength":packed.len(),"byteStride":stride,"count":count,"mode":"ATTRIBUTES"}});
-            binary.extend(packed);
-        } else {
-            view["buffer"] = json!(0);
-            view["byteOffset"] = json!(start);
-            binary.extend(bytes);
+        if !matches!(stride, 4 | 8 | 12) {
+            return Err(Error::msg("unsupported vector stride"));
         }
-    }
-    doc["buffers"] = json!([{"byteLength":binary.len()}, {"byteLength":virtual_size,
-        "extensions":{"EXT_meshopt_compression":{"fallback":true}}}]);
-    for name in ["extensionsUsed", "extensionsRequired"] {
-        if doc.get(name).is_none() {
-            doc[name] = json!([]);
-        }
-        doc[name]
-            .as_array_mut()
-            .ok_or_else(|| Error::msg("invalid extension list"))?
-            .push(json!("EXT_meshopt_compression"));
-    }
-    let json = serde_json::to_vec(&doc)?;
-    let output = gltf::binary::Glb {
-        header: gltf::binary::Header {
-            magic: *b"glTF",
-            version: 2,
-            length: 0,
-        },
-        json: std::borrow::Cow::Owned(json),
-        bin: Some(std::borrow::Cow::Owned(binary)),
-    }
-    .to_vec()?;
-    Ok(output)
+        Ok(Some(MeshoptStream::Attributes { count, stride }))
+    })
 }
 
 #[cfg(test)]
@@ -154,18 +109,7 @@ mod tests {
             "accessors":[{"bufferView":0,"componentType":5126,"count":1000,"type":"VEC3"},
                 {"bufferView":1,"componentType":5125,"count":1000,"type":"SCALAR"},
                 {"bufferView":2,"componentType":5125,"count":1000,"type":"SCALAR"}]});
-        let json = serde_json::to_vec(&doc).unwrap();
-        let source = gltf::binary::Glb {
-            header: gltf::binary::Header {
-                magic: *b"glTF",
-                version: 2,
-                length: 0,
-            },
-            json: std::borrow::Cow::Owned(json),
-            bin: Some(std::borrow::Cow::Owned(data)),
-        }
-        .to_vec()
-        .unwrap();
+        let source = glb::encode_glb(&doc, &data).unwrap();
         std::fs::write(&path, &source).unwrap();
         let report = compress_file(&path).unwrap();
         assert!(report["afterBytes"].as_u64().unwrap() < report["beforeBytes"].as_u64().unwrap());

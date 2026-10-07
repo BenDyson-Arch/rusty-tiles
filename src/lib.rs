@@ -9,6 +9,7 @@ pub mod fixtures;
 pub mod georef;
 #[cfg(feature = "native-geospatial")]
 pub mod geospatial;
+mod glb;
 pub mod glb_write;
 mod gpu_texture;
 pub mod grid;

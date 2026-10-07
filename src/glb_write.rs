@@ -1,95 +1,14 @@
 //! Author a single-mesh glTF 2.0 GLB (Y-up) for one tile.
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use gltf_json::validation::{Checked::Valid, USize64};
 use gltf_json::{accessor, buffer, image as gimage, material, mesh, scene, texture, Index, Root};
 
 use crate::error::Error;
+use crate::glb::{self, pad_to};
 
-/// Small GLB builder for feature attributes and structural metadata. Views are
-/// eight-byte aligned so numeric property tables can retain 64-bit source values.
-#[derive(Clone)]
-pub(crate) struct MetadataGlb {
-    pub document: serde_json::Value,
-    binary: Vec<u8>,
-}
-
-impl MetadataGlb {
-    pub fn new(generator: &str) -> Self {
-        Self {
-            document: serde_json::json!({
-                "asset":{"version":"2.0","generator":generator},
-                "buffers":[{"byteLength":0}], "bufferViews":[], "accessors":[],
-                "scenes":[{"nodes":[0]}], "scene":0, "nodes":[{"mesh":0}]
-            }),
-            binary: Vec::new(),
-        }
-    }
-
-    pub fn view(&mut self, bytes: &[u8]) -> usize {
-        self.binary.resize(self.binary.len().next_multiple_of(8), 0);
-        let views = self.document["bufferViews"].as_array_mut().unwrap();
-        let index = views.len();
-        views.push(
-            serde_json::json!({"buffer":0,"byteOffset":self.binary.len(),"byteLength":bytes.len()}),
-        );
-        self.binary.extend_from_slice(bytes);
-        index
-    }
-
-    pub fn accessor(&mut self, description: serde_json::Value) -> usize {
-        let accessors = self.document["accessors"].as_array_mut().unwrap();
-        let index = accessors.len();
-        accessors.push(description);
-        index
-    }
-
-    /// Replace a generated view while retaining accessor/metadata identities.
-    #[cfg(feature = "native-geospatial")]
-    pub fn replace_view(&mut self, index: usize, bytes: &[u8]) {
-        self.binary.resize(self.binary.len().next_multiple_of(8), 0);
-        self.document["bufferViews"][index]["byteOffset"] = self.binary.len().into();
-        self.document["bufferViews"][index]["byteLength"] = bytes.len().into();
-        self.binary.extend_from_slice(bytes);
-    }
-
-    #[cfg(feature = "native-geospatial")]
-    pub fn compact_views(&mut self) {
-        let mut binary = Vec::new();
-        for view in self.document["bufferViews"].as_array_mut().unwrap() {
-            binary.resize(binary.len().next_multiple_of(8), 0);
-            let offset = view["byteOffset"].as_u64().unwrap() as usize;
-            let length = view["byteLength"].as_u64().unwrap() as usize;
-            view["byteOffset"] = binary.len().into();
-            binary.extend_from_slice(&self.binary[offset..offset + length]);
-        }
-        self.binary = binary;
-    }
-
-    pub fn finish(mut self) -> Result<Vec<u8>, Error> {
-        pad4(&mut self.binary);
-        self.document["buffers"][0]["byteLength"] = self.binary.len().into();
-        let mut json = serde_json::to_vec(&self.document)?;
-        json.resize(json.len().next_multiple_of(4), b' ');
-        let length = 28_usize
-            .checked_add(json.len())
-            .and_then(|n| n.checked_add(self.binary.len()))
-            .and_then(|n| u32::try_from(n).ok())
-            .ok_or_else(|| Error::Data("GLB exceeds the 32-bit format size limit".into()))?;
-        Ok(gltf::Glb {
-            header: gltf::binary::Header {
-                magic: *b"glTF",
-                version: 2,
-                length,
-            },
-            json: Cow::Owned(json),
-            bin: Some(Cow::Owned(self.binary)),
-        }
-        .to_vec()?)
-    }
-}
+pub(crate) use crate::glb::MetadataGlb;
 
 #[derive(Clone, Debug, Default)]
 pub struct TilePrimitive {
@@ -101,11 +20,18 @@ pub struct TilePrimitive {
 }
 
 pub fn write_glb(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
+    let (root, bin) = build(prims)?;
+    glb::encode_glb(&root, &bin)
+}
+
+/// The typed glTF document and its four-byte padded binary buffer for
+/// `prims`, before any material or compression rewrite.
+pub(crate) fn build(prims: &[TilePrimitive]) -> Result<(Root, Vec<u8>), Error> {
     if prims.is_empty() {
         return Err(Error::msg("no primitives to write"));
     }
 
-    let mut bin: Vec<u8> = Vec::new();
+    let mut bin: Vec<u8> = Vec::with_capacity(prims.iter().map(encoded_capacity).sum());
     let mut root = Root::default();
     root.asset.generator = Some("rusty-tiles".into());
 
@@ -120,7 +46,7 @@ pub fn write_glb(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
         return Err(Error::msg("no primitives to write"));
     }
 
-    pad4(&mut bin);
+    pad_to(&mut bin, 4);
     let buffer = root.push(gltf_json::Buffer {
         byte_length: USize64::from(bin.len()),
         name: None,
@@ -161,27 +87,7 @@ pub fn write_glb(prims: &[TilePrimitive]) -> Result<Vec<u8>, Error> {
     });
     root.scene = Some(sc);
 
-    let mut json = root
-        .to_vec()
-        .map_err(|e| Error::msg(format!("gltf json: {e}")))?;
-    while json.len() % 4 != 0 {
-        json.push(b' ');
-    }
-    pad4(&mut bin);
-
-    let json_len = json.len() as u32;
-    let bin_len = bin.len() as u32;
-    let length = 12 + 8 + json_len + 8 + bin_len;
-    let glb = gltf::Glb {
-        header: gltf::binary::Header {
-            magic: *b"glTF",
-            version: 2,
-            length,
-        },
-        json: Cow::Owned(json),
-        bin: Some(Cow::Owned(bin)),
-    };
-    Ok(glb.to_vec()?)
+    Ok((root, bin))
 }
 
 fn build_primitive(
@@ -189,37 +95,31 @@ fn build_primitive(
     bin: &mut Vec<u8>,
     prim: &TilePrimitive,
 ) -> Result<mesh::Primitive, Error> {
-    pad4(bin);
+    pad_to(bin, 4);
     let pos_off = bin.len();
-    for p in &prim.positions {
-        bin.extend_from_slice(bytemuck::bytes_of(p));
-    }
+    bin.extend_from_slice(bytemuck::cast_slice(&prim.positions));
     let pos_len = prim.positions.len() * 12;
     let (pos_min, pos_max) = min_max_vec3(&prim.positions);
 
-    pad4(bin);
+    pad_to(bin, 4);
     let nrm_off = bin.len();
     if !prim.normals.is_empty() && prim.normals.len() != prim.positions.len() {
         return Err(Error::msg("normal count must match position count"));
     }
     let normals = &prim.normals;
-    for n in normals {
-        bin.extend_from_slice(bytemuck::bytes_of(n));
-    }
+    bin.extend_from_slice(bytemuck::cast_slice(normals));
 
     let has_uv = prim.jpeg.is_some() && prim.uvs.len() == prim.positions.len();
     let uv_off = if has_uv {
-        pad4(bin);
+        pad_to(bin, 4);
         let off = bin.len();
-        for uv in &prim.uvs {
-            bin.extend_from_slice(bytemuck::bytes_of(uv));
-        }
+        bin.extend_from_slice(bytemuck::cast_slice(&prim.uvs));
         Some(off)
     } else {
         None
     };
 
-    pad4(bin);
+    pad_to(bin, 4);
     let idx_off = bin.len();
     let use_u16 = prim.positions.len() <= 65535 && prim.indices.iter().all(|&i| i <= 65535);
     if use_u16 {
@@ -234,7 +134,7 @@ fn build_primitive(
     let idx_len = bin.len() - idx_off;
 
     let jpeg_view = if let Some(jpeg) = &prim.jpeg {
-        pad4(bin);
+        pad_to(bin, 4);
         let off = bin.len();
         bin.extend_from_slice(jpeg);
         Some((off, jpeg.len()))
@@ -424,10 +324,14 @@ fn build_primitive(
     })
 }
 
-fn pad4(buf: &mut Vec<u8>) {
-    while buf.len() % 4 != 0 {
-        buf.push(0);
-    }
+/// Upper bound of the binary bytes one primitive contributes, padding included.
+fn encoded_capacity(prim: &TilePrimitive) -> usize {
+    prim.positions.len() * 12
+        + prim.normals.len() * 12
+        + prim.uvs.len() * 8
+        + prim.indices.len() * 4
+        + prim.jpeg.as_ref().map_or(0, Vec::len)
+        + 5 * 3
 }
 
 /// Photogrammetry albedo: dielectric, fully rough, two-sided (cave interiors).
