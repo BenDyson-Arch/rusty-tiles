@@ -9,11 +9,12 @@ use crate::{
         },
         QuietErrors,
     },
+    report::Reporter,
     Error,
 };
 use serde_json::{json, Value};
 use std::{
-    ffi::{c_char, c_void},
+    ffi::{c_char, c_int, c_void},
     path::Path,
     ptr::{null_mut, NonNull},
 };
@@ -22,7 +23,12 @@ use std::{
 const BYTE: gdal_sys::GDALDataType::Type = 1;
 const FINISH: &str = "cannot finish raster derivative";
 
-pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> Result<(), Error> {
+pub(super) fn convert(
+    input: &Path,
+    output: &Path,
+    options: &RasterOptions,
+    reporter: &Reporter,
+) -> Result<Value, Error> {
     let source = Dataset::open_raster(input, "cannot open raster")?;
     let count = source.band_count();
     let projection = source.projection();
@@ -64,7 +70,7 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
         }
     }
     let bounds = coverage_bounds(&source, &source_crs)?;
-    preflight(bounds, options.min_zoom, options.max_zoom)?;
+    let tiles = preflight(bounds, options.min_zoom, options.max_zoom)?;
     // Instantiate before producing derivatives so stripped GDAL builds report an
     // environment error without starting expensive COG generation.
     let tile = TileAlgorithm::new()?;
@@ -72,6 +78,7 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
     // Compression and tiling run in separate stages, so their pools do not overlap.
     let workers = std::thread::available_parallelism().map_or(1, |count| count.get().min(4));
     let compression_workers = format!("NUM_THREADS={workers}");
+    reporter.progress("cog", 0, 1);
     let cog = translate(
         &source,
         &output.join("source.cog.tif"),
@@ -85,6 +92,8 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
         ],
     )?;
     cog.finish(FINISH)?;
+    reporter.progress("cog", 1, 1);
+    reporter.progress("display", 0, 1);
     let display_path = output.join("display.tif");
     if options.display == "gray" {
         let band = options.band.to_string();
@@ -161,7 +170,15 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
             warped.finish(FINISH)?;
         }
     }
-    tile.run(&display_path, &output.join("tiles"), options, workers)?;
+    reporter.progress("display", 1, 1);
+    tile.run(
+        &display_path,
+        &output.join("tiles"),
+        options,
+        workers,
+        reporter,
+        tiles,
+    )?;
     std::fs::remove_file(display_path)?;
     std::fs::write(
         output.join("tilejson.json"),
@@ -173,15 +190,15 @@ pub(super) fn convert(input: &Path, output: &Path, options: &RasterOptions) -> R
     // Keep the existing recipe schema and GDAL's numeric VERSION_NUM identity.
     // SAFETY: GDAL owns the static null-terminated version string.
     let version = unsafe { geospatial::string(gdal_sys::GDALVersionInfo(c"VERSION_NUM".as_ptr())) };
-    std::fs::write(
-        output.join("conversion.json"),
-        serde_json::to_vec(&json!({
+    crate::output::write_report(
+        output,
+        json!({
             "display":options.display, "band":options.band, "displayMin":options.display_min,
             "displayMax":options.display_max, "alphaBand":options.alpha_band,
             "sourceBands":count, "gdalVersion":version,
-        }))?,
-    )?;
-    Ok(())
+        }),
+        false,
+    )
 }
 
 fn validate_bounds(bounds: [f64; 4]) -> Result<(), Error> {
@@ -200,7 +217,8 @@ fn validate_bounds(bounds: [f64; 4]) -> Result<(), Error> {
     Ok(())
 }
 
-fn preflight(bounds: [f64; 4], min_zoom: u8, max_zoom: u8) -> Result<(), Error> {
+/// Validate coverage and return the number of XYZ tiles it spans.
+fn preflight(bounds: [f64; 4], min_zoom: u8, max_zoom: u8) -> Result<u64, Error> {
     validate_bounds(bounds)?;
     let mut total = 0u64;
     for z in min_zoom..=max_zoom {
@@ -218,7 +236,7 @@ fn preflight(bounds: [f64; 4], min_zoom: u8, max_zoom: u8) -> Result<(), Error> 
             ));
         }
     }
-    Ok(())
+    Ok(total)
 }
 
 fn translate<'a, S: AsRef<str>>(
@@ -523,6 +541,8 @@ impl TileAlgorithm {
         output: &Path,
         options: &RasterOptions,
         workers: usize,
+        reporter: &Reporter,
+        total: u64,
     ) -> Result<(), Error> {
         let _errors = QuietErrors::new();
         let mut arguments = vec![
@@ -544,15 +564,32 @@ impl TileAlgorithm {
             .collect::<Result<Vec<_>, _>>()?;
         strings.extend([c_path(input)?, c_path(output)?]);
         let args = Arguments::owned(strings);
+        reporter.progress("tiling", 0, total);
+        let progress = TileProgress {
+            reporter,
+            total,
+            done: std::sync::Mutex::new(0),
+        };
+        let callback: gdal_sys::GDALProgressFunc = if reporter.wants_progress() {
+            Some(tile_progress)
+        } else {
+            None
+        };
+        let data: *mut c_void = if callback.is_some() {
+            std::ptr::from_ref(&progress).cast_mut().cast()
+        } else {
+            null_mut()
+        };
         // SAFETY: Owned null-terminated argv lives through parsing; the owned
-        // algorithm runs exactly once. No terminal callback or native stdout.
+        // algorithm runs exactly once. The progress callback only reads
+        // `progress`, which outlives the run; there is no native stdout.
         unsafe {
             if !GDALAlgorithmParseCommandLineArguments(self.0.as_ptr(), args.as_ptr()) {
                 return Err(Error::Data(geospatial::diagnostic(
                     "invalid native raster tiling arguments",
                 )));
             }
-            if !GDALAlgorithmRun(self.0.as_ptr(), None, null_mut()) {
+            if !GDALAlgorithmRun(self.0.as_ptr(), callback, data) {
                 return Err(Error::Data(geospatial::diagnostic(
                     "native raster tiling failed",
                 )));
@@ -563,8 +600,46 @@ impl TileAlgorithm {
                 )));
             }
         }
+        progress.report(total);
         Ok(())
     }
+}
+
+/// GDAL's tiling fraction scaled to the preflight tile count, emitted only
+/// when the count advances so events stay ordered and bounded.
+struct TileProgress<'a> {
+    reporter: &'a Reporter,
+    total: u64,
+    done: std::sync::Mutex<u64>,
+}
+impl TileProgress<'_> {
+    fn report(&self, done: u64) {
+        let Ok(mut last) = self.done.lock() else {
+            return;
+        };
+        if done > *last {
+            *last = done;
+            self.reporter.progress("tiling", done, self.total);
+        }
+    }
+}
+unsafe extern "C" fn tile_progress(complete: f64, _: *const c_char, data: *mut c_void) -> c_int {
+    // SAFETY: `data` is the `TileProgress` passed to GDALAlgorithmRun, live
+    // for the whole run.
+    let progress = unsafe { &*data.cast::<TileProgress<'_>>() };
+    // Never unwind into GDAL.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let fraction = if complete.is_finite() {
+            complete.clamp(0., 1.)
+        } else {
+            0.
+        };
+        // The final count is reported once the algorithm has finished.
+        let done =
+            ((fraction * progress.total as f64) as u64).min(progress.total.saturating_sub(1));
+        progress.report(done);
+    }));
+    1
 }
 impl Drop for TileAlgorithm {
     fn drop(&mut self) {
@@ -586,6 +661,7 @@ mod tests {
         }
         assert!(preflight([12., 40., 14., 42.], 0, 24).is_err());
         assert!(preflight([12., 40., 14., 42.], 0, 8).is_ok());
+        assert_eq!(preflight([0.5, 0.5, 1., 1.], 0, 1).unwrap(), 2);
         assert!(preflight([-170., -1., 170., 1.], 0, 0).is_ok());
     }
     #[test]

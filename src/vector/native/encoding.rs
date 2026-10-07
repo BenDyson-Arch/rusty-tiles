@@ -421,17 +421,31 @@ fn emit(
     })
 }
 
+/// Inputs shared by every candidate encoded in one build.
+#[derive(Clone, Copy)]
+pub(super) struct Encoder<'a> {
+    pub spool: &'a Path,
+    pub max_features: usize,
+    pub repair: bool,
+    pub options: &'a VectorOptions,
+    pub schemas: &'a BTreeMap<String, String>,
+    pub output: &'a Path,
+}
+
 pub(super) fn encode(
-    spool: &Path,
+    encoder: Encoder<'_>,
     prefix: &str,
     center: Point,
     level: u32,
-    max_features: usize,
-    repair: bool,
-    options: &VectorOptions,
-    schemas: &BTreeMap<String, String>,
-    output: &Path,
 ) -> Result<Candidate, Error> {
+    let Encoder {
+        spool,
+        max_features,
+        repair,
+        options,
+        schemas,
+        output,
+    } = encoder;
     let db =
         rusqlite::Connection::open_with_flags(spool, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(sql)?;
@@ -757,18 +771,16 @@ mod tests {
                 max_bytes: 4096,
                 ..Default::default()
             };
-            let candidate = encode(
-                &spool,
-                "",
-                [0.; 3],
-                1,
-                1,
-                false,
-                &options,
-                &BTreeMap::new(),
-                root.path(),
-            )
-            .unwrap();
+            let schemas = BTreeMap::new();
+            let encoder = Encoder {
+                spool: &spool,
+                max_features: 1,
+                repair: false,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+            };
+            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
             assert!(candidate.node.is_none());
             assert_eq!(candidate.reason, Some(expected));
         }

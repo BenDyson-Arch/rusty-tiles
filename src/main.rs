@@ -9,10 +9,10 @@ use rusty_tiles::error::Error;
 use rusty_tiles::georef::{
     parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
 };
-use rusty_tiles::pack::{convert_to_3tz, PackOptions};
-use rusty_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
-use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
-use rusty_tiles::{doctor, terrain, vector};
+use rusty_tiles::pack::{convert_to_3tz_reported, PackOptions};
+use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
+use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
+use rusty_tiles::{doctor, terrain, vector, ConversionResult, Reporter};
 
 // Option spelling: multi-word options keep their camelCase name as the primary
 // spelling (3d-tiles-tools compatibility, scripts and machine contracts) and
@@ -79,20 +79,6 @@ enum Command {
 }
 
 impl Command {
-    /// Input/output flags of converter subcommands.
-    fn io(&self) -> Option<&IoArgs> {
-        Some(match self {
-            Self::CreateTilesetJson(a) | Self::GlbTo3tz(a) => &a.io,
-            Self::Convert(a) => a,
-            Self::MeshTo3tz(a) => &a.io,
-            Self::Vector(a) => &a.io,
-            Self::PointCloud(a) => &a.io,
-            Self::Terrain(a) => &a.io,
-            Self::Raster(a) => &a.io,
-            _ => return None,
-        })
-    }
-
     fn name(&self) -> &'static str {
         match self {
             Self::Validate { .. } => "validate",
@@ -493,13 +479,15 @@ struct MeshArgs {
     no_meshopt: bool,
 }
 
-fn progress(enabled: bool, phase: &str, done: usize, total: usize) {
-    if enabled {
-        eprintln!(
-            "{}",
-            json!({"event":"progress","phase":phase,"done":done,"total":total})
-        );
-    }
+/// What a successful command produced.
+enum Outcome {
+    /// A command with its own single machine result (validate, doctor).
+    Report(Value),
+    /// A published conversion.
+    Converted(ConversionResult),
+    /// A plain output file without a conversion report (createTilesetJson).
+    Wrote(PathBuf),
+    Done,
 }
 
 fn main() -> ExitCode {
@@ -523,34 +511,39 @@ fn main() -> ExitCode {
     let json = cli.json && !internal;
     let events = cli.progress.is_some() && !internal;
     let name = cli.command.name();
-    let output = cli.command.io().map(|io| io.output.clone());
-    if events {
-        std::env::set_var("RUSTY_TILES_PROGRESS_JSON", "1");
-    }
-    if json {
-        std::env::set_var("RUSTY_TILES_JSON_STDOUT", "1");
-    }
-    progress(events, "conversion", 0, 1);
-    match run(cli) {
-        Ok(report) => {
-            if report.as_ref().is_some_and(|report| report["ok"] == false) {
-                if let Some(report) = report {
-                    println!("{report}");
+    // NDJSON progress mode keeps stderr machine-readable.
+    let reporter = if events {
+        Reporter::ndjson_stderr()
+    } else {
+        Reporter::human_stderr()
+    };
+    reporter.progress("conversion", 0, 1);
+    match run(cli, &reporter) {
+        Ok(Outcome::Report(report)) if report["ok"] == false => {
+            println!("{report}");
+            ExitCode::from(4)
+        }
+        Ok(outcome) => {
+            reporter.progress("conversion", 1, 1);
+            let summary = match outcome {
+                Outcome::Report(report) => {
+                    if json {
+                        println!("{report}");
+                    }
+                    None
                 }
-                return ExitCode::from(4);
-            }
-            progress(events, "conversion", 1, 1);
-            if let Some(report) = report {
-                if json {
-                    println!("{report}");
-                }
-            } else if let Some(output) = &output {
-                let summary = output_summary(output);
+                Outcome::Converted(result) => Some((
+                    output_summary(&result.output, result.report.as_ref(), result.archive),
+                    result.output,
+                )),
+                Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
+                Outcome::Done => None,
+            };
+            if let Some((summary, output)) = summary {
                 if json {
                     println!("{summary}");
                 } else if !events {
-                    // NDJSON progress mode keeps stderr machine-readable.
-                    for line in human_summary(name, output, &summary) {
+                    for line in human_summary(name, &output, &summary) {
                         eprintln!("{line}");
                     }
                 }
@@ -601,28 +594,15 @@ const COUNT_KEYS: &[&str] = &[
     "sourceBands",
 ];
 
-fn read_conversion_report(path: &Path) -> Option<(Value, Value)> {
-    if path.is_dir() {
-        let file = path.join("conversion.json");
-        let data = std::fs::read(&file).ok()?;
-        return Some((
-            serde_json::from_slice(&data).unwrap_or_default(),
-            json!({"path":file}),
-        ));
-    }
-    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).ok()?).ok()?;
-    let mut entry = archive.by_name("conversion.json").ok()?;
-    let mut data = Vec::new();
-    std::io::Read::read_to_end(&mut entry, &mut data).ok()?;
-    Some((
-        serde_json::from_slice(&data).unwrap_or_default(),
-        json!({"archive":path,"entry":"conversion.json"}),
-    ))
-}
-
-/// Machine summary of a successful conversion, read back from its report.
-fn output_summary(output: &Path) -> Value {
-    let (report, location) = read_conversion_report(output).unwrap_or_default();
+/// Machine summary of a successful conversion, built from the report the
+/// converter published (no output is reread).
+fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value {
+    let location = match report {
+        None => Value::Null,
+        Some(_) if archive => json!({"archive":output,"entry":"conversion.json"}),
+        Some(_) => json!({"path":output.join("conversion.json")}),
+    };
+    let report = report.unwrap_or(&Value::Null);
     let mut counts = serde_json::Map::new();
     let mut settings = serde_json::Map::new();
     for (key, value) in report.as_object().into_iter().flatten() {
@@ -713,9 +693,9 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     lines
 }
 
-fn run(cli: Cli) -> Result<Option<Value>, Error> {
+fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     let json = cli.json;
-    match cli.command {
+    Ok(match cli.command {
         Command::Validate {
             input,
             external_validator,
@@ -729,7 +709,7 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                     report["contentReferences"]
                 );
             }
-            return Ok(Some(report));
+            Outcome::Report(report)
         }
         Command::Doctor(a) => {
             let report = doctor::report(&a.commands, a.cesium.as_deref())?;
@@ -741,7 +721,7 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                     report["error"] = json!({"code":"environment","message":"selected converters have missing dependencies"});
                     report["exitCode"] = 4.into();
                 }
-                return Ok(Some(report));
+                return Ok(Outcome::Report(report));
             }
             doctor::display(&report, false);
             if report["ready"] != true {
@@ -749,6 +729,7 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                     "selected converters have missing dependencies; see doctor report".into(),
                 ));
             }
+            Outcome::Done
         }
         Command::Preview(a) => {
             let layers: Vec<_> = [
@@ -762,37 +743,50 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
             .filter_map(|(name, path)| path.map(|path| (name.to_owned(), path)))
             .collect();
             rusty_tiles::preview::Preview::new(&a.cesium, &layers)?.serve(&a.host, a.port, json)?;
+            Outcome::Done
         }
         Command::EncodeVectorContent { input } => {
             println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
+            Outcome::Done
         }
         Command::CreateTilesetJson(a) => {
             let opts = tileset_opts(&a.io, &a.placement)?;
             create_tileset_json(&a.io.input, &a.io.output, &opts)?;
+            Outcome::Wrote(a.io.output)
         }
-        Command::PointCloud(a) => rusty_tiles::point_cloud::point_cloud_to_3tz(
-            &a.io.input,
-            &a.io.output,
-            &rusty_tiles::point_cloud::PointCloudOptions {
-                force: a.io.force,
-                source_crs: a.source_crs,
-                height_offset: a.height_offset,
-                max_points: a.max_points,
-                chunk_points: a.chunk_points,
-            },
-        )?,
-        Command::Convert(a) => {
-            convert_to_3tz(&a.input, &a.output, &PackOptions { force: a.force })?;
+        Command::PointCloud(a) => {
+            Outcome::Converted(rusty_tiles::point_cloud::point_cloud_to_3tz_reported(
+                &a.io.input,
+                &a.io.output,
+                &rusty_tiles::point_cloud::PointCloudOptions {
+                    force: a.io.force,
+                    source_crs: a.source_crs,
+                    height_offset: a.height_offset,
+                    max_points: a.max_points,
+                    chunk_points: a.chunk_points,
+                },
+                reporter,
+            )?)
         }
+        Command::Convert(a) => Outcome::Converted(convert_to_3tz_reported(
+            &a.input,
+            &a.output,
+            &PackOptions { force: a.force },
+        )?),
         Command::GlbTo3tz(a) => {
             let opts = tileset_opts(&a.io, &a.placement)?;
-            glb_to_3tz(&a.io.input, &a.io.output, &opts)?;
+            Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
         }
         Command::MeshTo3tz(a) => {
             let opts = mesh_opts(&a)?;
-            mesh_to_3tz(&a.io.input, &a.io.output, &opts)?;
+            Outcome::Converted(mesh_to_3tz_reported(
+                &a.io.input,
+                &a.io.output,
+                &opts,
+                reporter,
+            )?)
         }
-        Command::Vector(a) => vector::vector_to_3tz_with_options(
+        Command::Vector(a) => Outcome::Converted(vector::vector_to_3tz_reported(
             &a.io.input,
             &a.io.output,
             a.max_features,
@@ -827,8 +821,9 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                 max_tiles: a.max_tiles,
                 max_source_vertices: a.max_source_vertices,
             },
-        )?,
-        Command::Terrain(a) => terrain::dem_to_terrain(
+            reporter,
+        )?),
+        Command::Terrain(a) => Outcome::Converted(terrain::dem_to_terrain_reported(
             &a.io.input,
             &a.io.output,
             &terrain::TerrainOptions {
@@ -839,8 +834,9 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                 fill_height: a.fill_height,
                 max_error: a.max_error,
             },
-        )?,
-        Command::Raster(a) => rusty_tiles::raster::raster_with_options(
+            reporter,
+        )?),
+        Command::Raster(a) => Outcome::Converted(rusty_tiles::raster::raster_reported(
             &a.io.input,
             &a.io.output,
             &rusty_tiles::raster::RasterOptions {
@@ -853,9 +849,9 @@ fn run(cli: Cli) -> Result<Option<Value>, Error> {
                 display_min: a.display_min,
                 display_max: a.display_max,
             },
-        )?,
-    }
-    Ok(None)
+            reporter,
+        )?),
+    })
 }
 
 fn tileset_opts(io: &IoArgs, a: &PlacementArgs) -> Result<CreateTilesetOptions, Error> {
@@ -1043,13 +1039,13 @@ mod tests {
     #[test]
     fn summary_separates_counts_from_settings() {
         let root = tempfile::tempdir().unwrap();
-        std::fs::write(
-            root.path().join("conversion.json"),
-            r#"{"tiles":5,"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
-               "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"}"#,
-        )
-        .unwrap();
-        let summary = output_summary(root.path());
+        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
+               "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"});
+        let summary = output_summary(root.path(), Some(&report), false);
+        assert_eq!(
+            summary["conversionReport"],
+            json!({"path":root.path().join("conversion.json")})
+        );
         assert_eq!(
             summary["counts"],
             json!({"tiles":5,"skippedFeatures":2,"features":9})

@@ -133,7 +133,8 @@ pub(super) fn convert(
     repair: bool,
     ambiguous_outlines: bool,
     options: &VectorOptions,
-) -> Result<(), Error> {
+    reporter: &crate::report::Reporter,
+) -> Result<Value, Error> {
     store::convert(
         input,
         output,
@@ -141,6 +142,7 @@ pub(super) fn convert(
         repair,
         ambiguous_outlines,
         options,
+        reporter,
     )
 }
 

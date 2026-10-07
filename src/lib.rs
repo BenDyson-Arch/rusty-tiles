@@ -21,6 +21,7 @@ mod output;
 pub mod pack;
 pub mod point_cloud;
 mod point_sampling;
+pub mod report;
 pub mod terrain;
 pub mod texture;
 pub mod tile;
@@ -32,6 +33,7 @@ pub mod vector;
 pub use error::Error;
 pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
+pub use report::{ConversionResult, Event, EventSink, Reporter};
 pub use tile::{
     mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TEXEL_DENSITY,
     DEFAULT_MAX_TRIANGLES, DEFAULT_TILE_SIZE,
