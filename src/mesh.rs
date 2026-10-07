@@ -422,7 +422,9 @@ fn ingest_primitive(
     if prim.mode() != gltf::mesh::Mode::Triangles {
         return Err(Error::msg("mesh-to-3tz requires triangle primitives"));
     }
-    if index_list.len() % 3 != 0 || index_list.iter().any(|&i| i as usize >= positions.len()) {
+    if !index_list.len().is_multiple_of(3)
+        || index_list.iter().any(|&i| i as usize >= positions.len())
+    {
         return Err(Error::msg("invalid triangle indices"));
     }
     if positions.iter().flatten().any(|v| !v.is_finite()) {
@@ -445,7 +447,7 @@ fn ingest_primitive(
     let co = [cross(b, c), cross(c, a), cross(a, b)];
     let det = (0..3).map(|i| a[i] * co[0][i]).sum::<f32>();
     if det < 0.0 {
-        for tri in index_list.chunks_exact_mut(3) {
+        for tri in index_list.as_chunks_mut::<3>().0 {
             tri.swap(1, 2);
         }
     }
@@ -491,7 +493,7 @@ fn ingest_primitive(
             uv: uvs[i],
         });
     }
-    for tri in index_list.chunks_exact(3) {
+    for tri in index_list.as_chunks::<3>().0 {
         triangles.push(Triangle {
             verts: [base + tri[0], base + tri[1], base + tri[2]],
             image,

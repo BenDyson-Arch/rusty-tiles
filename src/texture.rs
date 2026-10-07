@@ -230,7 +230,7 @@ pub fn plan_leaf_atlas_limit(
         let (w, h) = image_dims[*img as usize];
         let mut cell_chart: HashMap<(i64, i64), u32> = HashMap::new();
         let mut per_tri = Vec::with_capacity(prim.indices.len() / 3);
-        for t in prim.indices.chunks_exact(3) {
+        for t in prim.indices.as_chunks::<3>().0 {
             let uv = [
                 prim.uvs[t[0] as usize],
                 prim.uvs[t[1] as usize],
@@ -421,7 +421,7 @@ pub fn plan_leaf_atlas_limit(
         let has_n = prim.normals.len() == prim.positions.len();
         any_n |= has_n;
         let mut weld: HashMap<(u32, u32), u32> = HashMap::new();
-        for (ti, t) in prim.indices.chunks_exact(3).enumerate() {
+        for (ti, t) in prim.indices.as_chunks::<3>().0.iter().enumerate() {
             let ci = tri_chart[gi][ti];
             let Some(&(k, src)) = chart_dst.get(&ci) else {
                 continue;
@@ -807,7 +807,7 @@ pub fn texel_density(prim: &TilePrimitive, img_w: u32, img_h: u32) -> Option<f32
     }
     let mut uv_area = 0.0f64;
     let mut area = 0.0f64;
-    for t in prim.indices.chunks_exact(3) {
+    for t in prim.indices.as_chunks::<3>().0 {
         let (a, b, c) = (t[0] as usize, t[1] as usize, t[2] as usize);
         let (_, ar) =
             grid::face_normal_area(prim.positions[a], prim.positions[b], prim.positions[c]);
@@ -853,7 +853,7 @@ pub fn bake_simplified(
     let denom_w = aw as f32;
     let denom_h = ah as f32;
 
-    for tri in unwrapped.indices.chunks_exact(3) {
+    for tri in unwrapped.indices.as_chunks::<3>().0 {
         let ia = tri[0] as usize;
         let ib = tri[1] as usize;
         let ic = tri[2] as usize;
@@ -942,7 +942,7 @@ fn chart_unwrap(
     let has_n = mesh.normals.len() == mesh.positions.len();
     let mut face_n = vec![[0.0f32; 3]; ntri];
     let mut face_area = vec![0.0f32; ntri];
-    for (fi, tri) in mesh.indices.chunks_exact(3).enumerate() {
+    for (fi, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         let (n, a) = grid::face_normal_area(
             mesh.positions[tri[0] as usize],
             mesh.positions[tri[1] as usize],
@@ -953,7 +953,7 @@ fn chart_unwrap(
     }
 
     let mut edge_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
-    for (fi, tri) in mesh.indices.chunks_exact(3).enumerate() {
+    for (fi, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         for k in 0..3 {
             let a = tri[k];
             let b = tri[(k + 1) % 3];
@@ -1332,7 +1332,7 @@ fn fill_uncovered(img: &mut RgbaImage, uvs: &[[f32; 2]], indices: &[u32], max_di
     let w = img.width().max(1);
     let h = img.height().max(1);
     let mut cover = vec![false; (w * h) as usize];
-    for tri in indices.chunks_exact(3) {
+    for tri in indices.as_chunks::<3>().0 {
         let t0 = uvs[tri[0] as usize];
         let t1 = uvs[tri[1] as usize];
         let t2 = uvs[tri[2] as usize];
@@ -1543,7 +1543,7 @@ impl SceneSampler {
             }
             let img_id = images.len() as u32;
             images.push(rgba);
-            for tri in p.indices.chunks_exact(3) {
+            for tri in p.indices.as_chunks::<3>().0 {
                 let (ia, ib, ic) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
                 let (a, b, c) = (p.positions[ia], p.positions[ib], p.positions[ic]);
                 tris.push([a, b, c]);

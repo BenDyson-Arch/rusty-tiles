@@ -292,7 +292,7 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
         *n = crate::grid::normalize(*n);
     }
     let mut out_idx = Vec::with_capacity(prim.indices.len());
-    for tri in prim.indices.chunks_exact(3) {
+    for tri in prim.indices.as_chunks::<3>().0 {
         let t = [
             remap[tri[0] as usize],
             remap[tri[1] as usize],
@@ -405,7 +405,7 @@ pub fn two_sided_error(parent: &[TilePrimitive], children: &[TilePrimitive]) -> 
 fn soup(prims: &[TilePrimitive]) -> Vec<[[f32; 3]; 3]> {
     let mut out = Vec::new();
     for p in prims {
-        for t in p.indices.chunks_exact(3) {
+        for t in p.indices.as_chunks::<3>().0 {
             out.push([
                 p.positions[t[0] as usize],
                 p.positions[t[1] as usize],
@@ -421,7 +421,7 @@ fn sample_points(prims: &[TilePrimitive]) -> Vec<[f32; 3]> {
     let mut pts = Vec::new();
     for p in prims {
         pts.extend_from_slice(&p.positions);
-        for t in p.indices.chunks_exact(3) {
+        for t in p.indices.as_chunks::<3>().0 {
             let a = p.positions[t[0] as usize];
             let b = p.positions[t[1] as usize];
             let c = p.positions[t[2] as usize];
@@ -507,7 +507,7 @@ mod tests {
         );
         let boundary = |mesh: &TilePrimitive| {
             let mut counts = std::collections::BTreeMap::new();
-            for t in mesh.indices.chunks_exact(3) {
+            for t in mesh.indices.as_chunks::<3>().0 {
                 for i in 0..3 {
                     let a = mesh.positions[t[i] as usize].map(f32::to_bits);
                     let b = mesh.positions[t[(i + 1) % 3] as usize].map(f32::to_bits);
@@ -539,7 +539,7 @@ mod tests {
             "should reduce {src_tris} → got {out_tris}"
         );
         assert!(out_tris >= 3);
-        for t in out.indices.chunks_exact(3) {
+        for t in out.indices.as_chunks::<3>().0 {
             assert!(t[0] != t[1] && t[1] != t[2] && t[2] != t[0]);
             assert!((t[0] as usize) < out.positions.len());
         }
