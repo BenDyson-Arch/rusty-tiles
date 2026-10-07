@@ -4,8 +4,18 @@ version = "0.3.0"
 edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain, LAS/LAZ point clouds and glTF vectors."
 license = "MIT"
+repository = "https://github.com/BenDyson-Arch/rusty-tiles"
 readme = "README.md"
 include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/support/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [[bin]]
 name = "rusty-tiles"
