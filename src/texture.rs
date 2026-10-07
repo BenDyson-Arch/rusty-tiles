@@ -831,12 +831,13 @@ pub fn texel_density(prim: &TilePrimitive, img_w: u32, img_h: u32) -> Option<f32
 }
 
 /// Chart-unwrap `simplified`, then bake each texel from the nearest child
-/// surface. Returns the textured proxy and its texel size in metres.
+/// surface. Returns the textured proxy, its texel size in metres, and the
+/// sampler's grid over the [`sampled_child`] triangles (for reuse).
 pub fn bake_simplified(
     simplified: &TilePrimitive,
     children: &[TilePrimitive],
     atlas_size: u32,
-) -> Result<(TilePrimitive, f64), Error> {
+) -> Result<(TilePrimitive, f64, TriGrid), Error> {
     let mut size = atlas_size.max(MIN_ATLAS);
     let t0 = Instant::now();
     let (unwrapped, (aw, ah)) = loop {
@@ -898,6 +899,7 @@ pub fn bake_simplified(
             jpeg,
         },
         texel_m,
+        sampler.grid,
     ))
 }
 
@@ -1553,6 +1555,12 @@ fn bary_uv(a: [f32; 2], b: [f32; 2], c: [f32; 2], p: [f32; 2]) -> (f32, f32, f32
 // Sampler
 // ---------------------------------------------------------------------------
 
+/// Whether [`SceneSampler`] samples this primitive (its triangles, in order,
+/// make up the sampler grid).
+pub fn sampled_child(p: &TilePrimitive) -> bool {
+    p.jpeg.is_some() && p.uvs.len() == p.positions.len() && p.indices.len() >= 3
+}
+
 /// Nearest-surface colour lookup over a set of textured primitives.
 pub struct SceneSampler {
     images: Vec<RgbaImage>,
@@ -1570,12 +1578,7 @@ impl SceneSampler {
         prims: &[TilePrimitive],
         target_px_per_m: Option<f32>,
     ) -> Result<Self, Error> {
-        let usable: Vec<&TilePrimitive> = prims
-            .iter()
-            .filter(|p| {
-                p.jpeg.is_some() && p.uvs.len() == p.positions.len() && p.indices.len() >= 3
-            })
-            .collect();
+        let usable: Vec<&TilePrimitive> = prims.iter().filter(|p| sampled_child(p)).collect();
         // Child atlases decode independently of each other and of the
         // triangle grid; results keep the children's order.
         let (images, (tri_img, tri_uv, tri_n, grid)) = rayon::join(
@@ -1809,7 +1812,7 @@ mod tests {
             ))
             .unwrap(),
         );
-        let (parent, _) = bake_simplified(&mesh, std::slice::from_ref(&mesh), 64).unwrap();
+        let (parent, _, _) = bake_simplified(&mesh, std::slice::from_ref(&mesh), 64).unwrap();
         let atlas = image::load_from_memory(parent.jpeg.as_ref().unwrap())
             .unwrap()
             .to_rgba8();

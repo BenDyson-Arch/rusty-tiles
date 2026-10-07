@@ -139,10 +139,10 @@ pub fn build_parent(
         .iter()
         .any(|p| p.jpeg.is_some() && p.uvs.len() == p.positions.len());
     let t0 = Instant::now();
-    let (prims, texel_m) = if textured {
+    let (prims, texel_m, sampler_grid) = if textured {
         let atlas = parent_atlas_size(children, tile_size);
         match crate::texture::bake_simplified(&simplified, children, atlas) {
-            Ok((p, texel_m)) => (vec![p], texel_m),
+            Ok((p, texel_m, grid)) => (vec![p], texel_m, Some(grid)),
             Err(e @ Error::TextureProjection { .. }) => {
                 // Some non-manifold inputs cannot be safely reprojected after
                 // simplification. Retain the textured child surfaces rather
@@ -166,11 +166,18 @@ pub fn build_parent(
             Err(e) => return Err(e),
         }
     } else {
-        (vec![simplified], 0.0)
+        (vec![simplified], 0.0, None)
     };
     Timing::add(&TIMING.bake, t0);
     let t0 = Instant::now();
-    let error_m = two_sided_error(&prims, children);
+    // The sampler grid is exactly the children's soup grid when every child
+    // with triangles was sampled; reuse it rather than rebuild.
+    let child_grid = sampler_grid.filter(|_| {
+        children
+            .iter()
+            .all(|p| p.indices.len() < 3 || crate::texture::sampled_child(p))
+    });
+    let error_m = two_sided_error_with(&prims, children, child_grid);
     Timing::add(&TIMING.error, t0);
     Ok(ParentResult {
         prims,
@@ -379,23 +386,31 @@ pub(crate) fn simplify_border_locked(
 /// Two-sided sampled surface distance in model metres: child vertices → parent
 /// surface, and parent vertices + face centroids → child surface.
 pub fn two_sided_error(parent: &[TilePrimitive], children: &[TilePrimitive]) -> f64 {
+    two_sided_error_with(parent, children, None)
+}
+
+/// [`two_sided_error`], given `child_grid` built over exactly `soup(children)`.
+fn two_sided_error_with(
+    parent: &[TilePrimitive],
+    children: &[TilePrimitive],
+    child_grid: Option<TriGrid>,
+) -> f64 {
     let p_tris = soup(parent);
-    let c_tris = soup(children);
-    if p_tris.is_empty() || c_tris.is_empty() {
+    let c_grid = child_grid.unwrap_or_else(|| TriGrid::new(soup(children)));
+    if p_tris.is_empty() || c_grid.is_empty() {
         return 0.0;
     }
     // `f32::max` is order-independent, so both directions and their samples
     // can be measured in parallel with the same result.
-    let directed = |samples: Vec<[f32; 3]>, tris| {
-        let grid = TriGrid::new(tris);
+    let directed = |samples: Vec<[f32; 3]>, grid: &TriGrid| {
         samples
             .par_iter()
             .filter_map(|&q| grid.nearest_dist2(q))
             .reduce(|| 0.0f32, f32::max)
     };
     let (to_parent, to_children) = rayon::join(
-        || directed(sample_points(children), p_tris),
-        || directed(sample_points(parent), c_tris),
+        || directed(sample_points(children), &TriGrid::new(p_tris)),
+        || directed(sample_points(parent), &c_grid),
     );
     to_parent.max(to_children).sqrt() as f64
 }
