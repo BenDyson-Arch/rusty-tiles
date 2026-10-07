@@ -121,6 +121,25 @@ class NativeTerrainTests(unittest.TestCase):
             result=subprocess.run([BIN,'doctor','--json','--command','terrain'],capture_output=True,text=True,env=dict(os.environ,PATH=''))
             self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(json.loads(result.stdout)['commands']['terrain']['ready'])
 
+    def test_parallel_encoders_match_serial_outputs_and_keep_progress_ordered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);source=self.source(root,nodata=True)
+            outputs=[]
+            for workers in (1,4):
+                out=root/f'workers-{workers}'
+                result,_=self.call(source,out,'--progress','json',grid=65,error=1.,
+                    env=dict(os.environ,PATH='',RAYON_NUM_THREADS=str(workers)))
+                self.assertEqual(result.returncode,0,result.stderr)
+                events=[json.loads(line) for line in result.stderr.splitlines()]
+                tile_events=[event for event in events if event.get('phase')=='terrain']
+                total=tile_events[-1]['total']
+                self.assertEqual([event['done'] for event in tile_events],list(range(total+1)))
+                outputs.append(out)
+            paths={path.relative_to(outputs[0]) for path in outputs[0].rglob('*') if path.is_file()}
+            self.assertEqual(paths,{path.relative_to(outputs[1]) for path in outputs[1].rglob('*') if path.is_file()})
+            for path in paths:
+                self.assertEqual((outputs[0]/path).read_bytes(),(outputs[1]/path).read_bytes(),str(path))
+
     def interpolated(self, full, reduced, west, south, size):
         header,base,_,_=full
         rheader,attrs,tris,_=reduced

@@ -310,4 +310,17 @@ python3 tests/fixtures/benchmark_terrain.py \
 
 The harness creates deterministic flat, smooth regional and projected rugged DEMs, compares old Python output with native full-grid and 1 metre simplified output, and writes raw samples plus geometry/coverage checks to `results.json`. It measures serial release CLI runs after a warmup, including publication, with rotated method order. Linux `wait4` peak RSS records the largest process, rather than summed simultaneous process-tree memory. The original uses its default GDAL cache; the native converter uses its 64 MiB cache. Fixtures are synthetic, and filesystem caches remain warm; these results do not establish cold-storage throughput or rendering speed.
 
-A recorded run, including raw timing/RSS samples, input hashes, binary hashes, dependency versions and output checks, is in [`tests/fixtures/terrain_benchmark_results.json`](tests/fixtures/terrain_benchmark_results.json). It shows the tradeoff: simplification substantially reduces smooth terrain, but on rugged terrain it can cost more conversion time for a smaller size reduction. Use `--maxError 0` when preserving the original grid and conversion throughput matter more than reducing terrain payloads.
+A recorded run of the initial native implementation at `62091ea`, including raw timing/RSS samples, input hashes, binary hashes, dependency versions and output checks, is in [`tests/fixtures/terrain_benchmark_results.json`](tests/fixtures/terrain_benchmark_results.json). That initial implementation substantially reduced smooth terrain, but incurred a large conversion-time cost on rugged terrain for a smaller size reduction. Use `--maxError 0` when preserving the original grid and conversion throughput matter more than reducing terrain payloads.
+
+To compare 1 metre simplification performance with the initial native converter at `62091ea`, use the same harness with `--mode performance`. Build that revision in a separate worktree and pass its release binary as `--old-bin`:
+
+```sh
+python3 tests/fixtures/benchmark_terrain.py --mode performance --old-ref 62091ea \
+  --old-bin /path/to/prior-native/release/rusty-tiles \
+  --new-bin target/release/rusty-tiles \
+  --work target/terrain-performance --repeats 3
+```
+
+This compares the prior native 1 metre path with the new single-worker and four-worker paths, and requires identical terrain payloads, coverage sidecars, manifests and geometry counts. Serial and parallel conversion reports must also match. Encoding batches hold at most four grids; native GDAL datasets and warps remain on the sampling thread. Retry pruning avoids identical meshopt candidates, and surface validation avoids rechecking unchanged source edges while still checking changed triangle intersections.
+
+The optimized run is recorded in [`tests/fixtures/terrain_performance_results.json`](tests/fixtures/terrain_performance_results.json). With four encoders, median warm release times improved from 0.118 to 0.064 seconds (small flat), 7.161 to 5.332 seconds (regional smooth), and 27.224 to 5.355 seconds (projected rugged), with byte-identical terrain payloads and unchanged geometry counts/coverage. The same rugged case improved to 14.968 seconds with one worker; peak RSS with four workers rose from 99.3 to 104.2 MiB. An additional run with the default Rayon configuration completed in 5.282 seconds at 113.9 MiB. Sampling remains serial, and memory measurements retain the largest-process `wait4` definition above.

@@ -107,6 +107,7 @@ pub(super) fn reduce(
     // A quadric estimate can understate the decoded surface error. If reducing
     // all the way to the error threshold fails validation, also try less
     // aggressive triangle targets before retaining the complete source grid.
+    let mut unchanged_below = -1_f32;
     for target in [
         0,
         indices.len() / 2,
@@ -114,12 +115,26 @@ pub(super) fn reduce(
         indices.len() * 7 / 8,
         indices.len() * 15 / 16,
     ] {
+        let mut reached_error = None;
         for divisor in [1., 2., 4., 8., 16., 32.] {
+            let tolerance = (budget / divisor) as f32;
+            // No collapse was possible at this tighter tolerance in the
+            // unconstrained triangle-count search. Raising the count target
+            // cannot enable one, so subsequent searches need not repeat it.
+            if tolerance <= unchanged_below {
+                break;
+            }
+            // Once meshopt reached this count target, a tolerance above its
+            // maximum committed collapse error reproduces the same candidate.
+            // Allow a rounding margin around the float32 error estimate.
+            if reached_error.is_some_and(|error| tolerance > error * 1.00001) {
+                continue;
+            }
             let (candidate, estimate) = crate::hlod::simplify_border_locked(
                 &indices,
                 &adapter,
                 target,
-                (budget / divisor) as f32,
+                tolerance,
                 SimplifyOptions::ErrorAbsolute,
                 Some(crate::hlod::SimplificationAttributes {
                     values: bytemuck::cast_slice(&attributes),
@@ -128,6 +143,11 @@ pub(super) fn reduce(
                     locks: &locks,
                 }),
             );
+            if candidate.len() >= indices.len() {
+                unchanged_below = tolerance;
+                break;
+            }
+            reached_error = (candidate.len() <= target && estimate.is_finite()).then_some(estimate);
             let Some(candidate) = repair_collinear_faces(&candidate, uv) else {
                 continue;
             };
@@ -360,13 +380,9 @@ fn surface_errors(
     // Grid vertices alone can miss an error where a simplified edge crosses
     // an original edge. The difference is affine on each triangle intersection;
     // its norm/height extrema occur at intersection vertices. Check those too.
-    let mut edges = std::collections::HashSet::new();
-    for triangle in indices.as_chunks::<3>().0 {
-        for i in 0..3 {
-            edges.insert(edge(triangle[i], triangle[(i + 1) % 3]));
-        }
-    }
-    for segment in edges {
+    // The topology pass already collected every interior edge. Boundary edges
+    // were removed above after checking that they match the source exactly.
+    for segment in edge_counts.into_keys() {
         let (height, surface) = edge_errors(segment, uv, heights, xyz, range, limit)?;
         max_error = max_error.max(height);
         max_surface_error = max_surface_error.max(surface);
@@ -384,6 +400,16 @@ fn edge_errors(
 ) -> Option<(f64, f64)> {
     let count = uv.len();
     let (a, b) = (segment.0 as usize, segment.1 as usize);
+    let (ax, ay, bx, by) = (a % count, a / count, b % count, b / count);
+    // A retained source edge interpolates the same two original vertices in
+    // both meshes. Its displacement is identically zero, even on curved ECEF
+    // geometry. The opposite cell diagonal still needs an intersection check.
+    if (ax == bx && ay.abs_diff(by) == 1)
+        || (ay == by && ax.abs_diff(bx) == 1)
+        || (ax.abs_diff(bx) == 1 && ay.abs_diff(by) == 1 && (ax < bx) != (ay < by))
+    {
+        return Some((0., 0.));
+    }
     let start = [f64::from(uv[a % count]), f64::from(uv[a / count])];
     let end = [f64::from(uv[b % count]), f64::from(uv[b / count])];
     let delta = [end[0] - start[0], end[1] - start[1]];
@@ -431,17 +457,16 @@ fn edge_errors(
         if delta[axis] == 0. {
             continue;
         }
-        for &v in uv {
-            let t = (f64::from(v) - start[axis]) / delta[axis];
-            if t > 0. && t < 1. {
-                cuts.push(t);
-            }
+        let (first, last) = if axis == 0 { (ax, bx) } else { (ay, by) };
+        for &v in &uv[first.min(last) + 1..first.max(last)] {
+            cuts.push((f64::from(v) - start[axis]) / delta[axis]);
         }
     }
     cuts.sort_by(f64::total_cmp);
     cuts.dedup();
     let mut errors: [f64; 2] = [0., 0.];
-    for &t in &cuts {
+    // Endpoints are unchanged source vertices, so their errors are zero.
+    for &t in &cuts[1..cuts.len() - 1] {
         let (h, s) = evaluate(t)?;
         errors[0] = errors[0].max(h);
         errors[1] = errors[1].max(s);

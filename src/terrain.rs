@@ -133,6 +133,14 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
     let mut available = Vec::new();
     let mut tiles = 0_u64;
     let mut optimization = quantized::Statistics::default();
+    // GDAL sampling stays on this thread. Only owned Rust grids enter Rayon;
+    // cap queued encoders so larger DEMs do not multiply GDAL warp/cache memory.
+    let batch_size = if options.max_error == 0. {
+        1
+    } else {
+        rayon::current_num_threads().clamp(1, 4)
+    };
+    let mut batch = Vec::with_capacity(batch_size);
     progress(tiles, total);
     for (z, &(size, x0, x1, y0, y1)) in levels.iter().enumerate() {
         available.push(json!([{"startX":x0,"startY":y0,"endX":x1,"endY":y1}]));
@@ -173,28 +181,39 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
                     .iter()
                     .map(|h| h.unwrap_or(options.fill_height))
                     .collect();
-                let encoded = quantized::encode(
-                    west,
-                    south,
-                    size,
-                    &heights,
-                    options.grid,
-                    low,
-                    high,
-                    options.max_error,
-                )?;
-                optimization.add(&encoded.statistics);
                 std::fs::write(
                     folder.join(format!("{y}.heights.json")),
                     serde_json::to_vec(
                         &json!({"width":options.grid,"height":options.grid,"heights":overlay}),
                     )?,
                 )?;
-                std::fs::write(folder.join(format!("{y}.terrain")), encoded.bytes)?;
-                tiles += 1;
-                progress(tiles, total);
+                batch.push(SampledTile {
+                    path: folder.join(format!("{y}.terrain")),
+                    west,
+                    south,
+                    size,
+                    heights,
+                });
+                if batch.len() == batch_size {
+                    flush_batch(
+                        &mut batch,
+                        options,
+                        [low, high],
+                        &mut optimization,
+                        &mut tiles,
+                        total,
+                    )?;
+                }
             }
         }
+        flush_batch(
+            &mut batch,
+            options,
+            [low, high],
+            &mut optimization,
+            &mut tiles,
+            total,
+        )?;
         if std::env::var_os("RUSTY_TILES_PROGRESS_JSON").is_none() {
             eprintln!(
                 "terrain level {z}: {} tiles",
@@ -218,6 +237,54 @@ fn convert(input: &Path, output: &Path, options: &TerrainOptions) -> Result<(), 
         "simplification":optimization.report(options.max_error),
         "limitations":"Regular-grid sampling prototype with border-locked simplification. NoData/outside filled explicitly. Height datum supplied by caller. Simplification errors are measured against the quantized grid, not a certified bound on the source DEM surface."}))?,
     )?;
+    Ok(())
+}
+
+#[cfg(feature = "native-geospatial")]
+struct SampledTile {
+    path: std::path::PathBuf,
+    west: f64,
+    south: f64,
+    size: f64,
+    heights: Vec<f64>,
+}
+
+#[cfg(feature = "native-geospatial")]
+fn flush_batch(
+    batch: &mut Vec<SampledTile>,
+    options: &TerrainOptions,
+    range: [f64; 2],
+    optimization: &mut quantized::Statistics,
+    tiles: &mut u64,
+    total: u64,
+) -> Result<(), Error> {
+    use rayon::prelude::*;
+    let encode = |tile: &SampledTile| {
+        quantized::encode(
+            tile.west,
+            tile.south,
+            tile.size,
+            &tile.heights,
+            options.grid,
+            range[0],
+            range[1],
+            options.max_error,
+        )
+    };
+    let encoded: Result<Vec<_>, Error> = if batch.len() <= 1 {
+        batch.iter().map(encode).collect()
+    } else {
+        batch.par_iter().map(encode).collect()
+    };
+    // Publication, reports and progress stay in input order regardless of the
+    // encoding schedule. Each batch holds at most four sampled/encoded grids.
+    for (tile, encoded) in batch.iter().zip(encoded?) {
+        std::fs::write(&tile.path, encoded.bytes)?;
+        optimization.add(&encoded.statistics);
+        *tiles += 1;
+        progress(*tiles, total);
+    }
+    batch.clear();
     Ok(())
 }
 

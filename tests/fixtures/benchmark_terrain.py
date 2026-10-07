@@ -1,4 +1,4 @@
-"""Compare released old/new CLI terrain paths on deterministic invented DEMs.
+"""Compare release builds of old/new CLI terrain paths on deterministic invented DEMs.
 
 Run after building both binaries in release mode. Timing includes process startup,
 source inspection, sampling, encoding, sidecars and safe directory publication.
@@ -124,12 +124,37 @@ def compare(old, full, simplified):
     return dict(fullGridGeometryMatches=True, manifestsMatch=True, coverageSidecarsMatch=True, simplifiedEdgesMatch=True)
 
 
+def compare_performance(before, serial, parallel):
+    for other in (serial, parallel):
+        assert json.loads((before/'layer.json').read_text()) == json.loads((other/'layer.json').read_text())
+        paths={path.relative_to(before) for path in before.rglob('*') if path.is_file()}
+        assert paths == {path.relative_to(other) for path in other.rglob('*') if path.is_file()}
+        for relative in paths:
+            if relative.name != 'conversion.json':
+                assert (before/relative).read_bytes() == (other/relative).read_bytes(), str(relative)
+        old=json.loads((before/'conversion.json').read_text())
+        new=json.loads((other/'conversion.json').read_text())
+        original_stats, stats = old.pop('simplification'), new.pop('simplification')
+        assert old == new
+        for name in ('inputVertices','outputVertices','inputTriangles','outputTriangles','maxErrorMetres'):
+            assert original_stats[name] == stats[name]
+        for name in ('maxAddedHeightErrorMetres','maxAddedSurfaceErrorMetres'):
+            assert stats[name] <= stats['maxErrorMetres']
+            assert abs(stats[name]-original_stats[name]) < 1e-8
+    assert (serial/'conversion.json').read_bytes() == (parallel/'conversion.json').read_bytes()
+    return dict(terrainBytesMatch=True, coverageSidecarsMatch=True, manifestsMatch=True,
+        geometryCountsMatch=True, serialParallelReportsMatch=True, addedErrorLimitPreserved=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--old-bin', type=pathlib.Path, required=True)
     parser.add_argument('--new-bin', type=pathlib.Path, required=True)
     parser.add_argument('--work', type=pathlib.Path, required=True)
     parser.add_argument('--repeats', type=int, default=3)
+    parser.add_argument('--mode', choices=['migration','performance'], default='migration',
+        help='performance compares prior 1 m native output with new serial/four-worker output')
+    parser.add_argument('--old-ref', help='optional baseline git revision recorded with results')
     args = parser.parse_args()
     if args.repeats < 3:
         parser.error('use at least three measured repetitions')
@@ -149,25 +174,29 @@ def main():
         folder.mkdir(exist_ok=True)
         source = folder/'dem.tif'
         fixture(source, case)
-        methods = ['python-original', 'rust-full-grid', 'rust-simplified']
+        methods = (['python-original', 'rust-full-grid', 'rust-simplified'] if args.mode == 'migration'
+            else ['rust-prior-simplified', 'rust-simplified-serial', 'rust-simplified'])
+        environments = {}
         commands = {}
         for method in methods:
-            binary = args.old_bin if method == 'python-original' else args.new_bin
+            binary = args.old_bin if method in ('python-original','rust-prior-simplified') else args.new_bin
             command = [str(binary.resolve()), 'terrain', '-i', str(source), '-o', str(folder/method),
                 '--maxZoom', str(case['maxZoom']), '--grid', '65', '--heightOffset', '10.25',
                 '--fillHeight', '0', '--force']
             if method != 'python-original':
                 command += ['--maxError', '0' if method == 'rust-full-grid' else '1']
             commands[method] = command
+            environments[method] = (dict(environment,RAYON_NUM_THREADS='1' if method.endswith('-serial') else '4')
+                if args.mode == 'performance' else environment)
         # Warm the filesystem cache once per method. Serial rotated ordering
         # avoids concurrent conversion contention and a fixed first-run bias.
         samples = {method: [] for method in methods}
         for method in methods:
-            measured(commands[method], folder/f'{method}-warmup.log', environment)
+            measured(commands[method], folder/f'{method}-warmup.log', environments[method])
         for repeat in range(args.repeats):
             for method in methods[repeat % 3:]+methods[:repeat % 3]:
                 print(f'{case["name"]}: {method}, repetition {repeat+1}', flush=True)
-                samples[method].append(measured(commands[method], folder/f'{method}-{repeat}.log', environment))
+                samples[method].append(measured(commands[method], folder/f'{method}-{repeat}.log', environments[method]))
         result = dict(case, grid=65, heightOffset=10.25, fillHeight=0,
             sourceBytes=source.stat().st_size, sourceSha256=hashlib.sha256(source.read_bytes()).hexdigest(), methods={})
         for method in methods:
@@ -177,16 +206,17 @@ def main():
                 medianCpuSeconds=statistics.median(v['cpuSeconds'] for v in values),
                 medianPeakRssMiB=statistics.median(v['peakRssMiB'] for v in values),
                 output=output_stats(folder/method))
-        result['comparison'] = compare(*(folder/method for method in methods))
+        comparison = compare if args.mode == 'migration' else compare_performance
+        result['comparison'] = comparison(*(folder/method for method in methods))
         results.append(result)
-        (root/'results.json').write_text(json.dumps(dict(environment=dict(recordedAtUtc=recorded_at, platform=platform.platform(),
+        (root/'results.json').write_text(json.dumps(dict(environment=dict(recordedAtUtc=recorded_at, mode=args.mode, baselineRevision=args.old_ref, platform=platform.platform(),
             python=platform.python_version(), rustc=subprocess.check_output(['rustc', '--version'], text=True).strip(),
             build='cargo build --release --locked --features native-geospatial',
             cpu=next(line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name')),
             logicalCpus=os.cpu_count(), gdal=gdal.VersionInfo('--version'), numpy=np.__version__,
             oldBinarySha256=hashlib.sha256(args.old_bin.read_bytes()).hexdigest(),
             newBinarySha256=hashlib.sha256(args.new_bin.read_bytes()).hexdigest(),
-            methodology='Release CLI, serial, warm filesystem cache, one warmup then rotated measured repetitions; Linux wait4 peak RSS is largest process, not process-tree sum; original default GDAL cache versus native 64 MiB cache.'), cases=results), indent=2)+'\n')
+            methodology='Release CLI, serial, warm filesystem cache, one warmup then rotated measured repetitions; Linux wait4 peak RSS is largest process, not process-tree sum; Migration: original default GDAL cache versus native 64 MiB cache. Performance: all methods use native 64 MiB cache; new encoders run with one/four workers.'), cases=results), indent=2)+'\n')
 
 
 if __name__ == '__main__':
