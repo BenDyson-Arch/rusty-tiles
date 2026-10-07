@@ -23,6 +23,34 @@
   or non-archive file, instead of reporting an OS error.
 - `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` enables raw GDAL/GEOS warnings. The old
   `RUSTY_TILES_PYTHON_TRACEBACK` name is deprecated but still honoured.
+- Every converter runs as one job: a private `.tiles-work-*` directory beside
+  the output, removed on success or failure, and no-clobber publication unless
+  `--force`. `glb-to-3tz` (and small `mesh-to-3tz` inputs) no longer stage in a
+  fixed `<output>.tileset-work` folder, which deleted any existing folder of
+  that name. An output created by another process during a conversion is
+  reported as an output conflict (exit 5) instead of an I/O error.
+- `raster --progress json` reports `cog`, `display` and `tiling` phases
+  (`tiling` counts XYZ tiles). `mesh-to-3tz --progress json` emits its timing
+  lines as `{"event":"log","message":...}` so stderr stays NDJSON. Other events,
+  phases and exit codes are unchanged.
+- Library: new `rusty_tiles::report` module with `Reporter` (silent, human
+  stderr, NDJSON stderr or a custom `EventSink`), `Event` and
+  `ConversionResult { output, archive, report }`, where `report` is the
+  published `conversion.json` value. New entry points return it:
+  `point_cloud::point_cloud_to_3tz_reported`, `vector::vector_to_3tz_reported`,
+  `terrain::dem_to_terrain_reported`, `raster::raster_reported`,
+  `tile::mesh_to_3tz_reported`, `tileset::glb_to_3tz_reported` and
+  `pack::convert_to_3tz_reported`. Existing entry points are unchanged wrappers
+  using `Reporter::default()` (warnings and notes on stderr, no progress).
+- Library: converters no longer read `RUSTY_TILES_PROGRESS_JSON`, and the CLI no
+  longer sets it or `RUSTY_TILES_JSON_STDOUT`; library callers that relied on
+  the variable for progress should pass `Reporter::ndjson_stderr()` to a
+  `*_reported` entry point.
+- Breaking library API (CLI unaffected): removed the unused
+  `rusty_tiles::split` and `rusty_tiles::compress` modules, including
+  `compress::write_glb_compressed`, `compress::write_glb_compressed_with_scale`
+  and the `rusty_tiles::write_glb_compressed` re-export. Mesh tiling and its
+  meshopt output are unchanged.
 
 ## 0.3.0 — unreleased
 
