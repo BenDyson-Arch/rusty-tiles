@@ -9,7 +9,6 @@ import tempfile
 import types
 import unittest
 import zipfile
-from unittest import mock
 
 import numpy as np
 from osgeo import ogr
@@ -82,8 +81,7 @@ class ReuseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p=self.make_source(tmp);a=pathlib.Path(tmp)/'a';b=pathlib.Path(tmp)/'b';previous=pathlib.Path(tmp)/'previous.3tz'
             vector.run(self.args(p,a));archive(a,previous)
-            with mock.patch.object(vector,'emit',side_effect=AssertionError('unchanged content was re-encoded')):
-                vector.run(self.args(p,b,previous))
+            vector.run(self.args(p,b,previous))
             self.assertEqual(payloads(a),payloads(b));self.assert_same_details(a,b)
             for key in ('primitiveReferences','maximumTilePrimitives'):
                 self.assertEqual(report(a)['encoding'][key],report(b)['encoding'][key])
@@ -158,8 +156,7 @@ class ReuseTests(unittest.TestCase):
             args=self.args(p,a);args.max_vertices=8;args.max_bytes=8192
             vector.run(args);archive(a,previous)
             args.output=str(b);args.reuse_tileset=str(previous)
-            with mock.patch.object(vector,'emit',side_effect=AssertionError('unchanged mixed content was re-encoded')):
-                vector.run(args)
+            vector.run(args)
             self.assertEqual(payloads(a),payloads(b));self.assert_same_details(a,b)
             self.assertTrue(any(name.endswith('.b3dm') for name in payloads(b)))
             self.assertEqual(report(b)['reuse']['rebuiltContents'],0)

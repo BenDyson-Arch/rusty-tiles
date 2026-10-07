@@ -558,4 +558,43 @@ mod tests {
         // SAFETY: This query only reads GDAL's network setting.
         assert_eq!(unsafe { gdal_sys::OSRGetPROJEnableNetwork() }, 0);
     }
+    #[test]
+    fn native_quiet_errors_restore_the_callers_thread_local_handler() {
+        use std::cell::Cell;
+        thread_local! { static WARNINGS: Cell<usize> = const { Cell::new(0) }; }
+        unsafe extern "C" fn count_warning(
+            _: gdal_sys::CPLErr::Type,
+            _: i32,
+            _: *const std::ffi::c_char,
+        ) {
+            WARNINGS.with(|count| count.set(count.get() + 1));
+        }
+        struct Pop;
+        impl Drop for Pop {
+            fn drop(&mut self) {
+                unsafe { gdal_sys::CPLPopErrorHandler() };
+            }
+        }
+        // SAFETY: ABI matches GDAL's thread-local handler, popped by the guard.
+        unsafe {
+            gdal_sys::CPLPushErrorHandler(Some(count_warning));
+        }
+        let _pop = Pop;
+        WARNINGS.with(|count| count.set(0));
+        {
+            let _quiet = QuietErrors::new();
+            // SAFETY: No format placeholders; static null-terminated string.
+            unsafe {
+                gdal_sys::CPLError(gdal_sys::CPLErr::CE_Warning, 1, c"scoped warning".as_ptr());
+            }
+        }
+        unsafe {
+            gdal_sys::CPLError(
+                gdal_sys::CPLErr::CE_Warning,
+                1,
+                c"restored handler".as_ptr(),
+            );
+        }
+        assert_eq!(WARNINGS.with(Cell::get), 1);
+    }
 }

@@ -8,7 +8,7 @@ A local command-line tool for textured meshes, point clouds, vector features, im
 
 ![Meshes, point clouds and vectors become 3D Tiles archives; imagery becomes COG and XYZ tiles; elevation rasters become quantized-mesh terrain.](docs/assets/readme-overview.svg)
 
-**MIT licensed** · **Runs locally** · **Version 0.2.0**
+**MIT licensed** · **Runs locally** · **Version 0.3.0 (development)**
 
 [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
 
@@ -47,7 +47,7 @@ If `pkg-config` finds libjpeg-turbo, the build uses native JPEG acceleration and
 
 #### Optional native geospatial build
 
-The Python-to-Rust migration is tracked in [issues #56–63](https://github.com/BenDyson-Arch/rusty-tiles/issues/56). Its foundation is the optional `native-geospatial` feature:
+The 0.3 native runtime uses the optional `native-geospatial` feature:
 
 ```sh
 cargo install --path . --locked --features native-geospatial
@@ -85,7 +85,7 @@ unzip output/example.3tz -d output/example
 You now have an archive and an extracted tileset. Continue to [preview your results](#preview-your-results) to view it.
 
 Check the installed environment with `rusty-tiles doctor --command vector` (or
-select `point-cloud`, `raster`, `terrain`, or `vector`). See the [dependency profiles](CONTRIBUTING.md#check-and-reproduce-the-python-environment)
+select `point-cloud`, `raster`, `terrain`, or `vector`). See the [dependency profiles](CONTRIBUTING.md#native-runtime-and-development-oracles)
 for exact tested versions and `doctor --json` output.
 
 ## Convert your data

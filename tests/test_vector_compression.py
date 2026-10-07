@@ -9,6 +9,7 @@ import unittest
 import zipfile
 import numpy as np
 from test_vector_lod import vector, read
+from vector_test_support import to_source
 
 BIN=os.environ.get('RUSTY_TILES_BIN')
 
@@ -27,7 +28,7 @@ class VectorCompressionTests(unittest.TestCase):
             self.assertEqual(a['componentType'],5123);self.assertTrue(a['normalized'])
             view=doc['bufferViews'][a['bufferView']]
             raw=np.frombuffer(binary,dtype='<u2',count=a['count']*4,offset=view['byteOffset']).reshape(-1,4)[:,:3]
-            decoded=raw.astype(float)/65535*np.array(doc['nodes'][0]['scale'])+doc['nodes'][0]['translation']
+            decoded=to_source(out,raw,doc)
             self.assertLessEqual(np.linalg.norm(decoded-source,axis=1).max(),report['rounding']+report['quantizationError'])
             self.assertLess(out.stat().st_size,baseline.stat().st_size)
             self.assertIn('KHR_mesh_quantization',doc['extensionsRequired'])

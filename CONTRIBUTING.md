@@ -137,7 +137,7 @@ index functions fail this regression instead of being skipped.
 No upstream source or database fixtures are bundled; CI's core replacement tests
 run without external diff binaries.
 
-## Check and reproduce the Python environment
+## Native runtime and development oracles
 
 Run `rusty-tiles doctor` before starting a job, or select converters explicitly:
 
@@ -178,13 +178,12 @@ CI also checks the conda-forge GDAL 3.12 stack. PROJ grids and their licences re
 separate from Python requirements; use the grid inventory and conversion's precise
 operation check when selecting a height reference.
 
-## Python conversion diagnostics
+## Conversion diagnostics
 
-Data/conversion errors print concise messages; dependency installation guidance
-appears only when an actual Python import fails. Set
-`RUSTY_TILES_PYTHON_TRACEBACK=1` to include a traceback for debugging. Embedded
-modules use named synthetic filenames so tracebacks never inline the helper
-source. Failed conversions still publish nothing.
+Native data/conversion errors use the stable machine result categories. Failed
+conversions publish nothing. For compatibility, `RUSTY_TILES_PYTHON_TRACEBACK=1`
+now enables native GDAL geometry warnings; no interpreter or traceback is involved.
+The frozen Python fixtures remain development oracles and are never embedded.
 
 ## Replacing outputs
 
@@ -413,3 +412,117 @@ distant geometry is verified by decoded counts and browser refinement, without
 a frame-rate claim. Use `--case dense-points` to repeat this comparison alone.
 
 These are full CLI conversions including packing, after one warmup per method and three serial repetitions with rotated method order. Inputs are invented, content is uncompressed, filesystem caches are warm, and the workstation had unrelated background jobs. CPU and largest-process RSS come from Linux `wait4`. Fixture generation and decoded checks are untimed; these measurements do not establish cold-storage or rendering throughput.
+
+## Python-free 0.3 runtime acceptance
+
+Build the full CLI with `--locked --features native-geospatial`, or retain the
+default mesh/archive/local point-cloud build. CI runs both; its native matrix
+uses GDAL 3.12 and 3.13. The release floor is GDAL 3.12, PROJ 9.2, and GEOS 3.10
+for vector constrained triangulation. Install matching headers, `pkg-config`
+files, libclang and SQLite development files for the full build. Deploy the same
+GDAL/PROJ/GEOS shared-library ABI used to compile it; `doctor` reports the actual
+linked versions and checks the local EPSG database and command capabilities.
+
+The checked-in Dockerfile builds GDAL 3.12.4, PROJ 9.8.1 and the required drivers
+(GeoTIFF/COG, PNG, ASCII grid, GeoJSON, Shapefile, SQLite/GeoPackage), with a Debian
+trixie build/runtime ABI. Its `acceptance` stage executes the native test binaries
+in a runtime image with no Python installed, including actual converter/preview
+CLI tests. Its `runtime` stage contains the installed release CLI and native
+libraries/database. It does not contain a Cesium runtime, datasets, Basis Universal
+encoder, or downloaded PROJ grids. Supply those explicitly when needed.
+
+```sh
+docker build --target acceptance -t rusty-tiles:native-acceptance .
+docker build --target runtime -t rusty-tiles:native .
+docker run --rm --network none rusty-tiles:native doctor --json
+```
+
+PROJ's database is not a substitute for source-specific datum/geoid grids. Mount
+licensed local grids and set `PROJ_DATA` to include both grids and `proj.db`.
+Conversion remains offline and fails if its only-best operation needs a missing
+grid. The binary neither downloads grids nor infers vertical datums.
+
+The locked encoder dependencies are `gdal-sys` 0.12.0, `las` 0.11.1 / `laz` 0.13.0,
+and `meshopt` 0.6.2 (vendored meshoptimizer 0.25); the preview server uses
+`tiny_http` 0.12.0. Fixture browser acceptance pins Cesium IIFE 1.143.0.
+The native matrix was also checked locally with GDAL 3.12.4 and 3.13.3.
+
+0.3 changes `--version`, so consumers must invalidate their converter/derivative
+cache identity. Python vector archives require a fresh native conversion before
+reuse. Different native encoder identities, schemas, linked library versions,
+CRSs or conversion settings also require a fresh baseline; same-revision,
+same-settings reproducibility remains covered. The terrain manifest retains
+`heightOverlay` version 1 with south-to-north coverage rows. Consumer upgrades
+must enable `native-geospatial`, carry the matching libraries, and review the
+converter pin/cache changes together. Echidna still has its own Python raster
+and height helpers; their dependencies are separate from this runtime migration.
+
+Development acceptance never silently falls back to Python conversion. Set
+`RUSTY_TILES_BIN` to the full native build; the adapter invokes it with an empty
+executable path and keeps the frozen Python module untouched for explicitly
+selected comparisons. Former helper-only tests now inspect native GLB encoding,
+OGR placement, or native library geometry, warning restoration and streaming
+budget guards. Independent decoded metadata/geometry/coverage checks remain.
+
+For all five invented preview layers, generate an output directory, serve it,
+and run the browser checks with installed Playwright/Chromium and the local
+Cesium runtime:
+
+```sh
+RUSTY_TILES_BIN="$PWD/target/release/rusty-tiles" \
+  python3 tests/fixtures/preview_layers.py target/preview-case
+rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
+  --mesh target/preview-case/mesh --point-cloud target/preview-case/cloud \
+  --annotations target/preview-case/annotations --imagery target/preview-case/imagery \
+  --terrain target/preview-case/terrain --port 9279
+# In another terminal; NODE_PATH must expose an installed Playwright module.
+node tests/fixtures/preview_layers.cjs http://127.0.0.1:9279
+node tests/fixtures/point_cloud.cjs http://127.0.0.1:9279
+node tests/fixtures/terrain.cjs http://127.0.0.1:9279
+node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --require-aggregates
+```
+
+The five-layer probe checks mounts, toggles, mesh picking, imagery decoding,
+cache-disabled hard refresh and zero external requests. The existing focused
+probes additionally check source metadata, near/far refinement, holes/fragment
+boundaries and terrain coverage heights. These use software rendering and make
+no hardware frame-rate claim.
+
+`tests/fixtures/benchmark_runtime.py BINARY RESULTS.json` compares readiness and
+preview with the frozen helpers at `bf3346c`, using seven warm, rotated runs and
+one warmup on invented local files. Recorded release medians in
+`tests/fixtures/runtime_benchmark_results.json` are:
+
+| Measurement | Python helper | Full native CLI |
+| --- | ---: | ---: |
+| All-command doctor | 126.9 ms | 23.9 ms |
+| Preview startup + config fetch | 51.7 ms | 15.7 ms |
+| Sampled server peak RSS | 24.1 MiB | 27.0 MiB |
+| 32 sequential loopback 1 MiB fetches | 28.3 ms | 51.8 ms |
+
+Startup improved 5.3× for doctor and 3.3× for preview. This small sequential HTTP
+case is 1.83× slower natively and uses 2.9 MiB more server RSS. The native build
+links GDAL even when serving a preview. These are local process/HTTP measurements,
+not browser rendering, concurrent throughput, or cold-storage benchmarks.
+
+Full 0.3 public-data audits are recorded in `tests/fixtures/public_runtime_audit.json`:
+all 10,653,336 Autzen numeric records occur exactly once; all 56,600 Natural Earth
+roads retain their scalar fields and 652,521 original segments exactly once.
+Maximum decoded road-position error was 0.104 m, within each leaf's reported
+rounding bound. These use the existing cached licensed sources, with their hashes
+and attribution retained; conversions run without executable helpers, while
+Python independently reads the finished archives. Repeat the roads audit with:
+
+```sh
+python3 scripts/public_data.py roads /path/to/cache
+rusty-tiles vector -i /path/to/cache/natural-earth-roads.gpkg -o /path/to/roads.3tz \
+  --layer roads --heightOffset 0 --maxFeatures 64 --maxVertices 4096 \
+  --maxBytes 131072 --lodTolerance 100 --jobs 4
+python3 scripts/audit_vector.py /path/to/cache/natural-earth-roads.gpkg /path/to/roads.3tz
+```
+
+The road audit expects this EPSG:4326 multiline source, zero ellipsoidal height,
+uncompressed native content, and all scalar fields. It is an opt-in fidelity
+check; audits and dataset preparation are development tools, never runtime
+requirements. Run the external geodiff cross-apply suite documented above before
+release promotion as well.

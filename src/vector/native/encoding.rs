@@ -729,4 +729,57 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn parent_budget_stops_before_decoding_the_next_original() {
+        for (name, label, max_vertices, expected) in [
+            ("vertices", "", 4, "vertices"),
+            ("bytes", "x", 64, "estimatedBytes"),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let spool = root.path().join(format!("{name}.sqlite"));
+            let db = rusqlite::Connection::open(&spool).unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            let points: Vec<_> = (0..5).map(|i| [i as f64, 0., 0.]).collect();
+            let feature = json!({"properties":{"_source_id":"1","name":label.repeat(10000)},"geometry":{"type":"LineString","coordinates":points}});
+            db.execute(
+                "INSERT INTO features VALUES(1,'',?1)",
+                [feature.to_string()],
+            )
+            .unwrap();
+            // This row would fail JSON decoding if the guard retained/loading
+            // loop continued past the first candidate's budget failure.
+            db.execute(
+                "INSERT INTO features VALUES(2,'','deliberately invalid JSON')",
+                [],
+            )
+            .unwrap();
+            for p in points {
+                db.execute(
+                    "INSERT INTO vertices VALUES(?1,?2,?3,1)",
+                    rusqlite::params![p[0], p[1], p[2]],
+                )
+                .unwrap();
+            }
+            drop(db);
+            let options = VectorOptions {
+                max_vertices,
+                max_bytes: 4096,
+                ..Default::default()
+            };
+            let candidate = encode(
+                &spool,
+                "",
+                [0.; 3],
+                1,
+                1,
+                false,
+                &options,
+                &BTreeMap::new(),
+                root.path(),
+            )
+            .unwrap();
+            assert!(candidate.node.is_none());
+            assert_eq!(candidate.reason, Some(expected));
+        }
+    }
 }

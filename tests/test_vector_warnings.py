@@ -14,21 +14,6 @@ from test_vector_lod import vector
 BIN = os.environ.get('RUSTY_TILES_BIN')
 
 class GeometryWarningTests(unittest.TestCase):
-    def test_handler_is_restored_after_a_failed_operation(self):
-        messages = []
-        gdal.PushErrorHandler(lambda severity, code, text: messages.append(text))
-        try:
-            def fail():
-                gdal.Error(gdal.CE_Warning, 1, 'scoped warning')
-                raise ValueError('operation failed')
-            with mock.patch.dict(os.environ, {'RUSTY_TILES_PYTHON_TRACEBACK': '0'}):
-                with self.assertRaisesRegex(ValueError, 'operation failed'):
-                    vector.geometry_operation(fail)
-            gdal.Error(gdal.CE_Warning, 1, 'restored handler')
-            self.assertEqual(messages, ['restored handler'])
-        finally:
-            gdal.PopErrorHandler()
-
     @unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native stderr acceptance')
     def test_skip_and_repair_are_quiet_and_debug_retains_native_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,7 +1,7 @@
 """Frozen Python geometry oracle; integration runs use the actual native CLI.
 
-The oracle's math functions remain available for independent checks. Its run
-function is replaced whenever RUSTY_TILES_BIN selects a native acceptance build.
+Acceptance always invokes the selected native CLI. The frozen module remains
+untouched and is available only for explicitly selected development comparisons.
 """
 import importlib.util
 import os
@@ -20,6 +20,9 @@ python_run = vector.run
 
 
 def native_run(args):
+    if not os.environ.get('RUSTY_TILES_BIN'):
+        import unittest
+        raise unittest.SkipTest('set RUSTY_TILES_BIN for native CLI acceptance')
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
@@ -44,7 +47,7 @@ def native_run(args):
                 command.append('--' + flag)
         if getattr(args, 'meshopt_helper', None) or getattr(args, 'meshopt', False):
             command.append('--meshopt')
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, env=dict(os.environ, PATH=""))
         if result.stderr:
             print(result.stderr, file=sys.stderr, end='')
         if result.returncode:
@@ -57,5 +60,62 @@ def native_run(args):
                     tiles.extract(name, output)
 
 
-if os.environ.get('RUSTY_TILES_BIN'):
-    vector.run = native_run
+# Keep the original module untouched for explicitly selected Python comparisons.
+import types
+vector = types.SimpleNamespace(**vector.__dict__)
+vector.run = native_run
+
+# Actual native CLI encoding fixtures. Oracle emit/math is never substituted
+# for native code when the acceptance binary is selected.
+_native_frames = {}
+
+def native_emit(items, path, transform, encoding_report=None, reports=None, **kwargs):
+    import json
+    import shutil
+    import types
+    import numpy as np
+    if kwargs.pop('fill_only', False):
+        raise AssertionError('filled fragments must be exercised through CLI budgets')
+    path = pathlib.Path(path)
+    with tempfile.TemporaryDirectory() as scratch:
+        root = pathlib.Path(scratch)
+        source = root/'survey.geojson'
+        features = [dict(type='Feature', id=i, properties={k:v for k,v in item['properties'].items() if k not in ('_source_id','_source_layer')}, geometry=item['geometry'])
+                    for i,item in enumerate(items)]
+        source.write_text(json.dumps(dict(type='FeatureCollection',features=features)))
+        out = root/'out'
+        native_run(types.SimpleNamespace(input=str(source),output=str(out),source_crs='local',
+            max_features=max(1,len(items)),max_parent_features=max(1,len(items)),
+            max_vertices=1000000,max_bytes=128000000,lod_levels=1,**kwargs))
+        manifest = json.loads((out/'tileset.json').read_text())
+        leaves=[]
+        def walk(node, parent):
+            frame=parent@np.array(node.get('transform',np.eye(4).T.flatten())).reshape(4,4).T
+            if not node.get('children'):
+                for content in node.get('contents',[node['content']] if 'content' in node else []):
+                    leaves.append((node,content,frame))
+            for child in node.get('children',[]):walk(child,frame)
+        walk(manifest['root'],np.eye(4))
+        if len(leaves)!=1:raise AssertionError(f'encoding fixture needs one leaf, got {len(leaves)}')
+        node,content,frame=leaves[0]
+        shutil.copyfile(out/content['uri'],path)
+        _native_frames[str(path)] = frame
+        if encoding_report is not None:
+            extras=node['extras']
+            encoding_report.update(primitives=extras['primitives'],vertices=extras['vertices'],
+                rounding=extras['positionRoundingMetres'],quantizationError=extras['quantizationErrorMetres'])
+        if reports is not None:
+            reports.extend(json.loads(line) for line in (out/'geometry-reports.jsonl').read_text().splitlines())
+
+def to_source(path, positions, document=None):
+    """Decode the native glTF node, axis conversion and tileset frame independently."""
+    import numpy as np
+    frame=_native_frames[str(path)]
+    positions=np.asarray(positions,dtype=float)
+    if document is not None and document['accessors'][document['meshes'][0]['primitives'][0]['attributes']['POSITION']].get('normalized'):
+        node=document['nodes'][0]
+        positions=positions/65535*np.array(node['scale'])+node['translation']
+    positions=positions[:,[0,2,1]]*[1,-1,1]
+    return (np.c_[positions,np.ones(len(positions))]@frame.T)[:,:3]
+
+vector.emit = native_emit
