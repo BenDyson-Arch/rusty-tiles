@@ -32,29 +32,7 @@ pub fn triangle_glb() -> Vec<u8> {
         }],
         "buffers": [{ "byteLength": 36 }]
     });
-    let mut json_bytes = serde_json::to_vec(&json).expect("json");
-    while json_bytes.len() % 4 != 0 {
-        json_bytes.push(b' ');
-    }
-    while bin.len() % 4 != 0 {
-        bin.push(0);
-    }
-
-    let json_len = json_bytes.len() as u32;
-    let bin_len = bin.len() as u32;
-    let total = 12 + 8 + json_len + 8 + bin_len;
-
-    let mut out = Vec::with_capacity(total as usize);
-    out.extend_from_slice(b"glTF");
-    out.extend_from_slice(&2u32.to_le_bytes());
-    out.extend_from_slice(&total.to_le_bytes());
-    out.extend_from_slice(&json_len.to_le_bytes());
-    out.extend_from_slice(&0x4E4F534Au32.to_le_bytes()); // JSON
-    out.extend_from_slice(&json_bytes);
-    out.extend_from_slice(&bin_len.to_le_bytes());
-    out.extend_from_slice(&0x004E4942u32.to_le_bytes()); // BIN
-    out.extend_from_slice(&bin);
-    out
+    crate::glb::encode_glb(&json, &bin).expect("fixture GLB")
 }
 
 /// Metashape geographic Y-up: X=lon°, Y=height m, Z=−lat°.
@@ -93,25 +71,5 @@ pub fn geographic_glb(positions: &[[f32; 3]]) -> Vec<u8> {
         }],
         "buffers": [{ "byteLength": n * 12 }]
     });
-    let mut json_bytes = serde_json::to_vec(&json).expect("json");
-    while json_bytes.len() % 4 != 0 {
-        json_bytes.push(b' ');
-    }
-    while bin.len() % 4 != 0 {
-        bin.push(0);
-    }
-    let json_len = json_bytes.len() as u32;
-    let bin_len = bin.len() as u32;
-    let total = 12 + 8 + json_len + 8 + bin_len;
-    let mut out = Vec::with_capacity(total as usize);
-    out.extend_from_slice(b"glTF");
-    out.extend_from_slice(&2u32.to_le_bytes());
-    out.extend_from_slice(&total.to_le_bytes());
-    out.extend_from_slice(&json_len.to_le_bytes());
-    out.extend_from_slice(&0x4E4F534Au32.to_le_bytes());
-    out.extend_from_slice(&json_bytes);
-    out.extend_from_slice(&bin_len.to_le_bytes());
-    out.extend_from_slice(&0x004E4942u32.to_le_bytes());
-    out.extend_from_slice(&bin);
-    out
+    crate::glb::encode_glb(&json, &bin).expect("fixture GLB")
 }
