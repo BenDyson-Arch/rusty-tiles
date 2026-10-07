@@ -10,6 +10,7 @@ use std::time::Instant;
 use meshopt::optimize::optimize_vertex_fetch;
 use meshopt::simplify::{simplify, simplify_with_attributes_and_locks, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
+use rayon::prelude::*;
 
 use crate::error::Error;
 use crate::glb_write::TilePrimitive;
@@ -384,22 +385,20 @@ pub fn two_sided_error(parent: &[TilePrimitive], children: &[TilePrimitive]) -> 
     if p_tris.is_empty() || c_tris.is_empty() {
         return 0.0;
     }
-    let p_samples = sample_points(parent);
-    let c_samples = sample_points(children);
-    let p_grid = TriGrid::new(p_tris);
-    let c_grid = TriGrid::new(c_tris);
-    let mut d2 = 0.0f32;
-    for q in c_samples {
-        if let Some(d) = p_grid.nearest_dist2(q) {
-            d2 = d2.max(d);
-        }
-    }
-    for q in p_samples {
-        if let Some(d) = c_grid.nearest_dist2(q) {
-            d2 = d2.max(d);
-        }
-    }
-    d2.sqrt() as f64
+    // `f32::max` is order-independent, so both directions and their samples
+    // can be measured in parallel with the same result.
+    let directed = |samples: Vec<[f32; 3]>, tris| {
+        let grid = TriGrid::new(tris);
+        samples
+            .par_iter()
+            .filter_map(|&q| grid.nearest_dist2(q))
+            .reduce(|| 0.0f32, f32::max)
+    };
+    let (to_parent, to_children) = rayon::join(
+        || directed(sample_points(children), p_tris),
+        || directed(sample_points(parent), c_tris),
+    );
+    to_parent.max(to_children).sqrt() as f64
 }
 
 fn soup(prims: &[TilePrimitive]) -> Vec<[[f32; 3]; 3]> {
