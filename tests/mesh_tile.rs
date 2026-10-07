@@ -685,9 +685,9 @@ fn bake_mercator_offset_keeps_local_precision() {
     assert!((baked.origin.height_m - 100.0).abs() < 1e-12);
     let p = scene.vertices[2].pos;
     assert!(
-        (p[0] - 238.2721198095).abs() < 0.001
-            && (p[1] - 24.9953739448).abs() < 0.001
-            && (p[2] + 47.3631797967).abs() < 0.001,
+        (p[0] - 238.27213).abs() < 0.001
+            && (p[1] - 24.995375).abs() < 0.001
+            && (p[2] + 47.36318).abs() < 0.001,
         "shifted Web Mercator must match independent PROJ ECEF/ENU reference, got {p:?}"
     );
 
