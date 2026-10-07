@@ -1,4 +1,5 @@
 """Native migration boundaries and OGR reader coverage beyond GeoPackage."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -10,8 +11,15 @@ import unittest
 import numpy as np
 from osgeo import ogr, osr
 from pyproj import Transformer
-from vector_test_support import native_run, python_run
+from vector_test_support import native_run
 from test_vector_reuse import archive, details
+
+# The frozen Python oracle, loaded only for the comparisons below.
+_spec = importlib.util.spec_from_file_location(
+    'vector_oracle', pathlib.Path(__file__).parent/'fixtures/vector_oracle/vector.py')
+_oracle = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_oracle)
+python_run = _oracle.run
 
 
 @unittest.skipUnless(os.environ.get('RUSTY_TILES_BIN'), 'select the native CLI')

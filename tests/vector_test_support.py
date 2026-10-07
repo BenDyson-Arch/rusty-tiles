@@ -1,9 +1,8 @@
-"""Frozen Python geometry oracle; integration runs use the actual native CLI.
+"""Native vector CLI helpers for the Python acceptance tests.
 
-Acceptance always invokes the selected native CLI. The frozen module remains
-untouched and is available only for explicitly selected development comparisons.
+Acceptance always invokes the selected native CLI. Tests that compare with
+the frozen Python oracle import it from tests/fixtures/vector_oracle directly.
 """
-import importlib.util
 import os
 import pathlib
 import subprocess
@@ -16,14 +15,6 @@ import zipfile
 if not os.environ.get('RUSTY_TILES_BIN'):
     print('WARNING: RUSTY_TILES_BIN is not set; native vector CLI tests will be SKIPPED. '
           'Build target/debug/rusty-tiles and set RUSTY_TILES_BIN to its absolute path.', file=sys.stderr)
-
-ORACLE = pathlib.Path(__file__).parent / 'fixtures/vector_oracle'
-sys.path.insert(0, str(ORACLE))
-spec = importlib.util.spec_from_file_location('vector_oracle', ORACLE / 'vector.py')
-vector = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vector)
-python_run = vector.run
-
 
 def native_run(args):
     if not os.environ.get('RUSTY_TILES_BIN'):
@@ -65,9 +56,8 @@ def native_run(args):
                     tiles.extract(name, output)
 
 
-# Keep the original module untouched for explicitly selected Python comparisons.
-vector = types.SimpleNamespace(**vector.__dict__)
-vector.run = native_run
+# Tests call vector.run and vector.emit; both use the native CLI.
+vector = types.SimpleNamespace(run=native_run)
 
 # Actual native CLI encoding fixtures. Oracle emit/math is never substituted
 # for native code when the acceptance binary is selected.
