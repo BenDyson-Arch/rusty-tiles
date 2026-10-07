@@ -9,7 +9,13 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import types
+import unittest
 import zipfile
+
+if not os.environ.get('RUSTY_TILES_BIN'):
+    print('WARNING: RUSTY_TILES_BIN is not set; native vector CLI tests will be SKIPPED. '
+          'Build target/debug/rusty-tiles and set RUSTY_TILES_BIN to its absolute path.', file=sys.stderr)
 
 ORACLE = pathlib.Path(__file__).parent / 'fixtures/vector_oracle'
 sys.path.insert(0, str(ORACLE))
@@ -21,8 +27,7 @@ python_run = vector.run
 
 def native_run(args):
     if not os.environ.get('RUSTY_TILES_BIN'):
-        import unittest
-        raise unittest.SkipTest('set RUSTY_TILES_BIN for native CLI acceptance')
+        raise unittest.SkipTest('RUSTY_TILES_BIN is not set; set it to the rusty-tiles binary for native CLI acceptance')
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
@@ -61,7 +66,6 @@ def native_run(args):
 
 
 # Keep the original module untouched for explicitly selected Python comparisons.
-import types
 vector = types.SimpleNamespace(**vector.__dict__)
 vector.run = native_run
 
@@ -72,7 +76,6 @@ _native_frames = {}
 def native_emit(items, path, transform, encoding_report=None, reports=None, **kwargs):
     import json
     import shutil
-    import types
     import numpy as np
     if kwargs.pop('fill_only', False):
         raise AssertionError('filled fragments must be exercised through CLI budgets')

@@ -37,9 +37,14 @@ Use current stable Rust with rustfmt, a C++ compiler and pkg-config. libjpeg-tur
 ```sh
 cargo fmt --check
 cargo test --locked
-python3 -m unittest discover -s tests -p 'test_*.py'
+cargo build --locked --features native-geospatial
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 -m unittest discover -s tests -p 'test_*.py'
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
+
+The Python suite drives the built CLI. Without `RUSTY_TILES_BIN` almost every
+test is skipped; the run prints a `WARNING: RUSTY_TILES_BIN is not set` line
+and reports the skips, so check the skip count before trusting a green run.
 
 For native geospatial work, install GDAL >= 3.12, PROJ >= 9.2, their headers and `pkg-config` files, SQLite development files, and libclang, then run `cargo test --locked --features native-geospatial`. CI tests the minimum GDAL 3.12 and the GDAL 3.13 stack separately from the existing Rust and Python jobs. Native CRS tests use independent coordinate references and synthetic local grids; they require no Python or grid downloads. Create native handles within each worker: spatial references and transformations deliberately cannot be sent or shared between threads. Native CRS operations use GDAL's process-wide offline policy; do not re-enable PROJ networking while they are running.
 
