@@ -3,6 +3,17 @@ use super::*;
 use crate::geospatial::{self, QuietErrors};
 use std::{ffi::c_void, ptr::NonNull};
 
+/// Silence GDAL/GEOS geometry warnings unless native diagnostics are enabled
+/// with `RUSTY_TILES_NATIVE_DIAGNOSTICS=1`. The deprecated
+/// `RUSTY_TILES_PYTHON_TRACEBACK=1` is honoured when the new name is unset.
+pub(super) fn quiet_unless_diagnostics() -> Option<QuietErrors> {
+    let enabled = match std::env::var("RUSTY_TILES_NATIVE_DIAGNOSTICS") {
+        Ok(value) => value == "1",
+        Err(_) => std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() == Ok("1"),
+    };
+    (!enabled).then(QuietErrors::new)
+}
+
 pub(super) struct GeometryHandle(NonNull<c_void>);
 impl Drop for GeometryHandle {
     fn drop(&mut self) {
@@ -17,8 +28,7 @@ impl GeometryHandle {
             .ok_or_else(|| data(geospatial::diagnostic("native geometry operation failed")))
     }
     pub(super) fn polygon(rings: &[Vec<Point>]) -> Result<Self, Error> {
-        let _errors = (std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() != Ok("1"))
-            .then(QuietErrors::new);
+        let _errors = quiet_unless_diagnostics();
         // SAFETY: Every allocated geometry is owned by its RAII wrapper; adding a
         // ring copies it. Coordinate buffers contain finite, validated XY values.
         unsafe {
@@ -41,14 +51,12 @@ impl GeometryHandle {
         }
     }
     fn valid(&self) -> bool {
-        let _errors = (std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() != Ok("1"))
-            .then(QuietErrors::new);
+        let _errors = quiet_unless_diagnostics();
         // SAFETY: A live geometry; GDAL/GEOS validity queries do not mutate it.
         unsafe { gdal_sys::OGR_G_IsValid(self.0.as_ptr()) != 0 }
     }
     fn repair(&self) -> Result<Self, Error> {
-        let _errors = (std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() != Ok("1"))
-            .then(QuietErrors::new);
+        let _errors = quiet_unless_diagnostics();
         // SAFETY: MakeValid returns an independently owned geometry.
         Self::owned(unsafe { gdal_sys::OGR_G_MakeValid(self.0.as_ptr()) })
     }
@@ -102,8 +110,7 @@ impl GeometryHandle {
         }
     }
     pub(super) fn triangulate(&self) -> Result<Self, Error> {
-        let _errors = (std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() != Ok("1"))
-            .then(QuietErrors::new);
+        let _errors = quiet_unless_diagnostics();
         // SAFETY: GDAL 3.12+ returns an independent owned CDT geometry; its
         // GEOS context and this polygon remain on the calling worker.
         Self::owned(unsafe { gdal_sys::OGR_G_ConstrainedDelaunayTriangulation(self.0.as_ptr()) })

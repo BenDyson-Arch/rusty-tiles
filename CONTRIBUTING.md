@@ -181,8 +181,9 @@ operation check when selecting a height reference.
 ## Conversion diagnostics
 
 Native data/conversion errors use the stable machine result categories. Failed
-conversions publish nothing. For compatibility, `RUSTY_TILES_PYTHON_TRACEBACK=1`
-now enables native GDAL geometry warnings; no interpreter or traceback is involved.
+conversions publish nothing. `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` enables raw native
+GDAL/GEOS geometry warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` is
+still honoured when the new variable is unset; no interpreter is involved.
 The frozen Python fixtures remain development oracles and are never embedded.
 
 ## Replacing outputs

@@ -188,8 +188,7 @@ impl Reader {
             )?)
         };
         for layer in self.layers.clone() {
-            let _errors = (std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() != Ok("1"))
-                .then(QuietErrors::new);
+            let _errors = super::geometry::quiet_unless_diagnostics();
             // SAFETY: All layer, field, row and geometry references belong to the
             // live dataset on this ingestion thread. Row RAII spans every query.
             unsafe {
