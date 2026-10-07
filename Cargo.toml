@@ -5,7 +5,7 @@ edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain, LAS/LAZ point clouds and glTF vectors."
 license = "MIT"
 readme = "README.md"
-include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/support/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**"]
 
 [[bin]]
 name = "rusty-tiles"

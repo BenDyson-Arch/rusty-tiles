@@ -2,6 +2,8 @@
 use serde_json::Value;
 use std::{io::Read, path::Path, process::Command};
 
+mod support;
+
 fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["--json", "point-cloud", "-i"])
@@ -251,6 +253,61 @@ fn duplicates_terminate_and_force_replaces_only_after_success() {
     seen.sort_unstable();
     assert_eq!(seen, (0..257).collect::<Vec<_>>());
     assert_eq!(std::fs::read_dir(work.path()).unwrap().count(), 3);
+}
+
+#[test]
+fn force_replaces_only_successful_output() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 2, false, vec![]);
+    support::force_replaces_only_successful_output(
+        "point-cloud",
+        &input,
+        &["--sourceCrs", "local"],
+        false,
+    );
+}
+
+/// tempfile creates 0600 files. The published archive must follow the umask.
+#[cfg(unix)]
+#[test]
+fn published_archive_mode_follows_umask() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 2, false, vec![]);
+    let output = work.path().join("cloud.3tz");
+    let result = support::with_umask_022(&[
+        "point-cloud".as_ref(),
+        "-i".as_ref(),
+        input.as_os_str(),
+        "-o".as_ref(),
+        output.as_os_str(),
+        "--sourceCrs".as_ref(),
+        "local".as_ref(),
+    ] as &[&std::ffi::OsStr]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(support::mode(&output), 0o644);
+    let tree = work.path().join("tree");
+    std::fs::create_dir(&tree).unwrap();
+    std::fs::write(tree.join("tileset.json"), "{}").unwrap();
+    let rebuilt = work.path().join("rebuilt.3tz");
+    let result = support::with_umask_022(&[
+        "convert".as_ref(),
+        "-i".as_ref(),
+        tree.as_os_str(),
+        "-o".as_ref(),
+        rebuilt.as_os_str(),
+    ] as &[&std::ffi::OsStr]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(support::mode(&rebuilt), 0o644);
 }
 
 #[test]
