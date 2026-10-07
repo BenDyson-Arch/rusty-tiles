@@ -10,12 +10,13 @@
 - `vector --reuseTileset previous.3tz` reuses unchanged subtrees and immutable content after an externally applied GeoPackage diff. Spatial moves, insertions, deletions and shared boundaries invalidate affected branches; incompatible settings rebuild from source.
 - Explicit raster image/grayscale recipes that preserve source COG pixels and masks, with transparent display derivatives for missing coverage.
 - Terrain height sidecars and a custom `heightOverlay` manifest entry that retain missing coverage separately from filled terrain heights.
+- Native GDAL terrain sampling and Rust quantized-mesh encoding, with border-preserving mesh simplification. `--maxError` defaults to 1 metre of added elevation and 3D surface error relative to the quantized regular grid; `0` retains the full grid.
 - Opt-in public dataset download/audit helpers and compatibility tests for upstream geodiff 2.3.0 and go-geodiff v0.4.3, including indexed GeoPackage moves, inserts and deletes. Diff creation and application remain external to rusty-tiles.
 
 ### Compatibility and limits
 
 - Vector content uses draft glTF vector extensions tested with Cesium 1.143.0. Fragmented polygon fills use standard glTF inside b3dm wrappers alongside vector outlines. This is experimental content, not a finalized 3D Tiles 2.0 format.
-- Point-cloud conversion requires Python, NumPy, `laspy[lazrs]` and pyproj. Raster/terrain/vector conversion requires Python, NumPy and GDAL; vector also needs GEOS. Helpers are embedded in the executable, but these Python dependencies must be installed separately.
+- Local point-cloud conversion runs entirely in Rust. Geospatial point clouds and terrain require the `native-geospatial` build feature, GDAL >= 3.11, PROJ >= 9.2 and local CRS data. Raster/vector conversion still requires Python, NumPy and GDAL; vector also needs GEOS. Their helpers are embedded in the executable, but Python dependencies must be installed separately.
 - Point-cloud compound vertical CRS, waveform payloads and array extra dimensions are unsupported. Height offsets are constant conversions; no vertical datum is guessed.
 - Vector reuse scans the updated source and repacks the output archive. It avoids encoding unchanged content; it does not avoid every source-processing step. Buffered grid clipping and implicit tiling remain unimplemented.
 

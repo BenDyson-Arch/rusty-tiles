@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use meshopt::optimize::optimize_vertex_fetch;
-use meshopt::simplify::{simplify, SimplifyOptions};
+use meshopt::simplify::{simplify, simplify_with_attributes_and_locks, SimplifyOptions};
 use meshopt::utilities::VertexDataAdapter;
 
 use crate::error::Error;
@@ -317,14 +317,8 @@ fn weld_by_position(prim: &TilePrimitive) -> TilePrimitive {
 fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usize) -> Vec<u32> {
     let mut best = indices.to_vec();
     for error in [0.005, 0.01, 0.03] {
-        let out = simplify(
-            indices,
-            adapter,
-            target,
-            error,
-            SimplifyOptions::LockBorder | SimplifyOptions::Permissive,
-            None,
-        );
+        let (out, _) =
+            simplify_border_locked(indices, adapter, target, error, SimplifyOptions::None, None);
         if out.len() >= 3 && out.len() < best.len() {
             best = out;
         }
@@ -333,6 +327,53 @@ fn reduce_indices(indices: &[u32], adapter: &VertexDataAdapter<'_>, target: usiz
         }
     }
     best
+}
+
+/// Optional metric attributes and explicit vertex locks for simplification.
+pub(crate) struct SimplificationAttributes<'a> {
+    pub values: &'a [f32],
+    pub weights: &'a [f32],
+    pub stride: usize,
+    pub locks: &'a [bool],
+}
+
+/// Shared mesh/terrain simplification kernel. Original vertex indices are
+/// retained and every topological boundary is fixed. Terrain supplies
+/// ErrorAbsolute so both tolerance and the returned estimate are in metres.
+pub(crate) fn simplify_border_locked(
+    indices: &[u32],
+    adapter: &VertexDataAdapter<'_>,
+    target: usize,
+    error: f32,
+    additional_options: SimplifyOptions,
+    attributes: Option<SimplificationAttributes<'_>>,
+) -> (Vec<u32>, f32) {
+    let mut measured = 0.;
+    let options = SimplifyOptions::LockBorder | SimplifyOptions::Permissive | additional_options;
+    let indices = if let Some(attributes) = attributes {
+        simplify_with_attributes_and_locks(
+            indices,
+            adapter,
+            attributes.values,
+            attributes.weights,
+            attributes.stride,
+            attributes.locks,
+            target,
+            error,
+            options,
+            Some(&mut measured),
+        )
+    } else {
+        simplify(
+            indices,
+            adapter,
+            target,
+            error,
+            options,
+            Some(&mut measured),
+        )
+    };
+    (indices, measured)
 }
 
 /// Two-sided sampled surface distance in model metres: child vertices → parent

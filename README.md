@@ -55,7 +55,7 @@ cargo install --path . --locked --features native-geospatial
 
 This feature requires GDAL >= 3.11 and PROJ >= 9.2 headers and libraries, their `pkg-config` files, and libclang for generating bindings against the installed GDAL headers. The same compatible native libraries must be available at runtime. Local PROJ database/grid data remains necessary; CRS operations disable networking and require non-ballpark, only-best transformations. The default build does not require or link GDAL.
 
-The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Raster, terrain, vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
+The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feature enables its geospatial CRS placement; local XYZ point clouds work in the default build. Terrain sampling and quantized-mesh encoding also run natively with this feature. Raster, vector and preview workflows still use the Python dependencies below until their individual migration issues are completed. CI exercises native builds with GDAL 3.11 and 3.13.
 
 ### 2. Install the dependencies for your data
 
@@ -64,13 +64,14 @@ The point-cloud converter uses native Rust LAS/LAZ decoding and tiling. The feat
 | Mesh conversion and archive utilities | No Python required |
 | `point-cloud --sourceCrs local` | No Python or GDAL required |
 | Geospatial `point-cloud` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
-| `raster`, `terrain` | Python 3, NumPy, GDAL |
+| `terrain` | Build with `native-geospatial`; native GDAL/PROJ and local CRS data |
+| `raster` | Python 3, NumPy, GDAL |
 | `vector` | Python 3, NumPy, GDAL with GEOS |
 | Local preview | Python 3; Node/npm to install the Cesium runtime |
 
-The CLI embeds its conversion scripts; their Python libraries must be installed in the environment used by `python3`.
+The CLI embeds the remaining raster/vector conversion scripts; their Python libraries must be installed in the environment used by `python3`.
 
-For GDAL-based commands, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
+For the Python raster/vector commands, an existing GDAL Python environment is sufficient. If you use Conda, the following matches the Python/GDAL/NumPy versions used in CI:
 
 ```sh
 conda create -n rusty-tiles -c conda-forge python=3.12 gdal=3.12 numpy=2 pip
@@ -201,12 +202,14 @@ Output includes `source.cog.tif`, `tilejson.json`, and `tiles/{z}/{x}/{y}.png`. 
 
 ```sh
 rusty-tiles terrain -i elevation.tif -o output/terrain \
-  --maxZoom 14 --heightOffset 0 --fillHeight 0
+  --maxZoom 14 --heightOffset 0 --fillHeight 0 --maxError 1
 ```
 
 This example assumes source heights are already ellipsoidal metres and explicitly fills missing/outside coverage at zero metres. Supply values appropriate to your height reference and use case.
 
-Output includes `layer.json`, TMS `.terrain` tiles, and `.heights.json` sidecars. The sidecars preserve missing coverage as `null`, before fill, through a custom `heightOverlay` manifest entry. The terrain encoder uses regular shared grids; it remains a prototype.
+Terrain requires a build with `native-geospatial` and runs without Python. DEM sampling uses 64 MiB GDAL warp budgets and a 64 MiB process-wide raster block cache; each Rust encoder grid contains at most 129 × 129 samples, and conversion rejects pyramids exceeding 100,000 tiles before writing tiles. Heights use the supplied offset; automatic GDAL vertical datum shifts are disabled.
+
+Output includes `layer.json`, TMS `.terrain` tiles, and `.heights.json` sidecars. The sidecars preserve missing coverage as `null`, before fill, through a custom `heightOverlay` manifest entry. The encoder simplifies sampled grids using the Rust mesh machinery while retaining every original tile-edge vertex. `--maxError` defaults to 1 metre; `0` retains the full grid. The limit bounds both added elevation error and 3D surface displacement, including Earth’s curvature, relative to the decoded, quantized regular-grid mesh. Candidates that fail validation retain the full grid. `conversion.json` reports triangle/vertex counts and the measured added errors. DEM sampling and height quantization errors are separate; this remains a prototype.
 
 ## Preview your results
 
@@ -272,7 +275,7 @@ A constant height offset is not a spatial geoid transformation. Point-cloud/vect
 | Point-cloud fidelity | Every source point is retained in detailed leaves. Rendered positions use float32 with reported rounding; scalar numeric metadata retains source values. Scaled extra dimensions are stored as decoded float64. Waveforms, array extra dimensions, unknown VLR preservation, and compound vertical CRS are unsupported. |
 | Vector compatibility | Uses draft glTF vector extensions requiring Cesium 1.142.0 or a checked newer release; see the [tested runtime matrix](docs/VECTOR.md#compatibility-and-validation). Fragmented polygon fills use standard glTF inside b3dm wrappers alongside vector outlines. This is experimental content, not a finalized 3D Tiles 2.0 format. |
 | Vector limits | Unsupported complex fields must be excluded; list fields can be represented with `--listFields json`. Mixed property types and nullable booleans are unsupported. Geometry collections, curves, and measured geometries are unsupported. Buffered grid clipping and implicit tiling are not implemented. Detailed rules are in the [vector guide](docs/VECTOR.md). |
-| Terrain | Regular-grid prototype with no certified maximum surface-error bound, adaptive simplifier, or encoded normals. The coverage sidecars are a custom extension, not part of the quantized-mesh standard. |
+| Terrain | Sampled-grid prototype with border-preserving simplification; its added-error limit is relative to the quantized mesh, not a certified accuracy bound against the source DEM. No encoded normals. The coverage sidecars are a custom extension, not part of the quantized-mesh standard. |
 | Outputs | `.3tz` uses indexed ZIP/ZIP64. Conversion reports record settings and relevant error/rounding information. Raster output does not include a bundled PMTiles writer. |
 
 Existing output paths are rejected by default. Conversion and archive commands support `--force` for replacement after successful conversion. Archive replacement is atomic; directory replacement uses a backup/swap with rollback and a brief rename gap. Conversion publishes only successful outputs and removes staging files on ordinary success or error. Large jobs need scratch disk beside the output.

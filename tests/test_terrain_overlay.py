@@ -1,9 +1,9 @@
 """Verify custom coverage sidecars against independently decoded terrain values."""
-import importlib.util
+import os
+import subprocess
 import json
 import pathlib
 import tempfile
-import types
 import unittest
 
 import numpy as np
@@ -11,11 +11,10 @@ from osgeo import gdal, osr
 from test_derivatives import decode_terrain
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('terrain_overlay',ROOT/'scripts/terrain.py')
-terrain=importlib.util.module_from_spec(spec)
-spec.loader.exec_module(terrain)
+BIN=os.environ.get('RUSTY_TILES_BIN')
 
 
+@unittest.skipUnless(BIN, 'set RUSTY_TILES_BIN for native terrain acceptance')
 class TerrainOverlayTests(unittest.TestCase):
     def test_coverage_nulls_height_offset_and_south_to_north_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -26,8 +25,11 @@ class TerrainOverlayTests(unittest.TestCase):
             values=100+np.add.outer(np.arange(32)*10,np.arange(32)).astype(np.float32)
             values[12:20,12:20]=-32768
             ds.GetRasterBand(1).WriteArray(values);ds.GetRasterBand(1).SetNoDataValue(-32768);ds=None
-            terrain.run(types.SimpleNamespace(input=str(source),output=str(out),max_zoom=9,grid=17,
-                height_offset=10.,fill_height=-999.,max_tiles=1000))
+            result=subprocess.run([BIN, '--json', 'terrain', '-i', str(source), '-o', str(out),
+                '--maxZoom', '9', '--grid', '17', '--heightOffset', '10', '--fillHeight', '-999', '--maxError', '0'],
+                env=dict(os.environ, PATH=''), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(result.stdout)['ok'])
             manifest=json.loads((out/'layer.json').read_text())
             self.assertEqual(manifest['heightOverlay'],dict(version=1,tiles=['{z}/{x}/{y}.heights.json'],grid=17,rowOrder='south-to-north'))
             report=json.loads((out/'conversion.json').read_text())

@@ -47,7 +47,7 @@ pub fn versions() -> Result<Versions, Error> {
     }
 }
 
-fn offline() -> Result<(), Error> {
+pub(crate) fn offline() -> Result<(), Error> {
     versions()?;
     // SAFETY: This GDAL API updates its mutex-protected network policy. All
     // operations in this module require offline resource resolution.
@@ -57,10 +57,10 @@ fn offline() -> Result<(), Error> {
 
 // Suppress native stderr noise while retaining GDAL's thread-local error message.
 // Each guard is private, stack-scoped and cannot outlive its native operation.
-struct QuietErrors;
+pub(crate) struct QuietErrors;
 
 impl QuietErrors {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         // SAFETY: GDAL's error-handler stack is thread-local; the callback has
         // the exact C ABI and is paired with a pop in Drop.
         unsafe {
@@ -78,7 +78,7 @@ impl Drop for QuietErrors {
     }
 }
 
-unsafe fn string(value: *const std::ffi::c_char) -> String {
+pub(crate) unsafe fn string(value: *const std::ffi::c_char) -> String {
     if value.is_null() {
         String::new()
     } else {
@@ -89,7 +89,7 @@ unsafe fn string(value: *const std::ffi::c_char) -> String {
     }
 }
 
-fn diagnostic(context: &str) -> String {
+pub(crate) fn diagnostic(context: &str) -> String {
     // SAFETY: GDAL owns this thread-local null-terminated error string.
     let detail = unsafe { string(gdal_sys::CPLGetLastErrorMsg()) };
     if detail.is_empty() {
