@@ -6,6 +6,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- Tag-triggered release binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, a native geospatial GHCR image, a SHA-256-verifying installer and `cargo-binstall` metadata.
 - Fixed converter recipes and committed output digests, cross-commit comparison tooling and a manual release acceptance workflow. CI fails when the Python acceptance binary is missing and checks native Clippy warnings.
 - Every multi-word camelCase option now also accepts a kebab-case alias, such as `--sourceCrs`/`--source-crs` and `--maxPoints`/`--max-points`. camelCase stays the primary spelling. The `create-tileset-json`, `glbTo3tz` and `meshTo3tz` subcommand aliases are now shown in help.
 - `doctor` reports whether a Cesium runtime is present at the README location or at `doctor --cesium DIR`. This check is informational only.
@@ -15,6 +16,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Changed
 
+- README installation starts with prebuilt downloads. A simpler header figure and an invented mesh example make the quick start work with the default build.
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
 - Benchmark harnesses, public-data audits and recorded evidence now live in `bench/`.
 - Converter help lists `-i`, `-o` and `-f` first.

@@ -7,7 +7,7 @@
 #   1. build    cargo build --release --locked --features native-geospatial
 #               (skipped when RUSTY_TILES_BIN names an existing binary)
 #   2. doctor   doctor --json reports ok
-#   3. convert  vector -i tests/fixtures/vector.geojson (README example)
+#   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
 #   4. validate validate --json on the archive
 #   5. preview  preview --json starts on a free port, serves config.json and
 #               the extracted tileset manifest (curl), then stops on SIGTERM
@@ -94,8 +94,8 @@ pass doctor
 # 3. convert (README example)
 ARCHIVE=$WORK/output/example.3tz
 mkdir -p "$WORK/output"
-env PATH="" "$BIN" vector -i "$REPO/tests/fixtures/vector.geojson" -o "$ARCHIVE" \
-  --maxFeatures 2 >"$WORK/convert.log" 2>&1 || fail "convert" "$WORK/convert.log"
+env PATH="" "$BIN" mesh-to-3tz -i "$REPO/tests/fixtures/example.gltf" -o "$ARCHIVE" \
+  --cartographic-position-degrees 153.02 -27.47 0 >"$WORK/convert.log" 2>&1 || fail "convert" "$WORK/convert.log"
 grep -q "^next: rusty-tiles validate " "$WORK/convert.log" || fail "convert summary has no next: line" "$WORK/convert.log"
 pass convert
 
@@ -113,11 +113,11 @@ if [[ ! -f $RUNTIME/Cesium.js ]]; then
   mkdir -p "$RUNTIME"
   echo "// stand-in runtime for the startup check" >"$RUNTIME/Cesium.js"
 fi
-start_preview "$WORK/preview.json" --cesium "$RUNTIME" --annotations "$WORK/output/example"
+start_preview "$WORK/preview.json" --cesium "$RUNTIME" --mesh "$WORK/output/example"
 curl -fsS "${URL}config.json" -o "$WORK/config.json" || fail "curl config.json"
-[[ $(json_field "$WORK/config.json" 'd["annotations"]') == /annotations/tileset.json ]] \
-  || fail "config.json does not name the annotations manifest" "$WORK/config.json"
-curl -fsS "${URL}annotations/tileset.json" -o "$WORK/served-tileset.json" || fail "curl tileset.json"
+[[ $(json_field "$WORK/config.json" 'd["mesh"]') == /mesh/tileset.json ]] \
+  || fail "config.json does not name the mesh manifest" "$WORK/config.json"
+curl -fsS "${URL}mesh/tileset.json" -o "$WORK/served-tileset.json" || fail "curl tileset.json"
 cmp -s "$WORK/served-tileset.json" "$WORK/output/example/tileset.json" || fail "served manifest differs"
 PREVIEW_PID=$SERVER
 stop_server
