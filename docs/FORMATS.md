@@ -2,6 +2,8 @@
 
 This page explains what `mesh-to-3tz`, `point-cloud` and `raster` produce, and where their limits are. It is for users choosing settings for their own data. Every option and default is in the [command reference](CLI.md). Vector and terrain have their own guides: [vector](VECTOR.md) and [terrain](TERRAIN.md).
 
+The default build also converts GeoJSON and GeoPackage vectors with the same verified grid-free CRS tier used by point clouds, plus local metre XYZ. It includes Rust polygon processing and bundled SQLite; Shapefile, other OGR drivers and operations requiring datum grids need `native-geospatial`. Vector height conventions and reader limits are in the [vector guide](VECTOR.md#coordinates-and-height).
+
 The commands below use placeholder file names. Replace them with your own data.
 
 ## Meshes

@@ -87,11 +87,41 @@ fn all_command_inventory_matches_enabled_capabilities() {
         assert_eq!(output.status.code(), Some(4));
         assert_eq!(report["error"]["code"], "environment");
         assert_eq!(report["commands"]["terrain"]["ready"], false);
+        assert_eq!(report["commands"]["vector"]["ready"], true);
         assert!(report["nativeGeospatial"]["error"]
             .as_str()
             .unwrap()
             .contains("native-geospatial"));
     }
+}
+
+#[cfg(not(feature = "native-geospatial"))]
+#[test]
+fn portable_vector_readiness_needs_no_native_database_or_executables() {
+    let root = tempfile::tempdir().unwrap();
+    let (output, report) = doctor(&["--command", "vector"], Some(root.path()));
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["ready"], true);
+    assert_eq!(report["nativeGeospatial"]["ready"], false);
+    let vector = &report["commands"]["vector"];
+    assert_eq!(vector["requires"], serde_json::json!([]));
+    assert_eq!(
+        vector["inputs"],
+        serde_json::json!(["GeoJSON", "GeoPackage"])
+    );
+    assert_eq!(vector["reader"]["ready"], true);
+    assert_eq!(vector["geometry"]["ready"], true);
+    assert_eq!(vector["geospatial"]["ready"], true);
+    assert_eq!(vector["geospatial"]["nativeFallback"]["ready"], false);
+    assert!(vector["limitations"]
+        .as_str()
+        .unwrap()
+        .contains("Shapefile"));
+    assert!(vector["geospatial"]["limitations"]
+        .as_str()
+        .unwrap()
+        .contains("height offset"));
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
 #[cfg(feature = "native-geospatial")]
@@ -232,8 +262,8 @@ fn python_modules_and_path_do_not_affect_readiness() {
         assert!(report.get("python").is_none());
     }
     let (output, report) = doctor_with(&["--command", "vector"], None, &pythonpath);
-    assert_eq!(output.status.success(), cfg!(feature = "native-geospatial"));
-    assert_eq!(report["ready"], cfg!(feature = "native-geospatial"));
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["ready"], true);
     assert!(report.get("modules").is_none());
 }
 
