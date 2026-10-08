@@ -21,6 +21,8 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 
 Every option for every command is in the [command reference](docs/CLI.md).
 
+`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling by default. Add `--explicit` to keep the earlier explicit hierarchy and output bytes, including for applications that inspect `tileset.json` directly.
+
 ## Install
 
 The downloads support mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo).
@@ -165,7 +167,7 @@ A height offset of 0 is correct only when source heights are already ellipsoidal
 
 Outputs are never overwritten by default. Add `--force` to replace an existing output after a successful conversion.
 
-To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged content keeps its bytes and URLs. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
+To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged source payloads keep their bytes; implicit display addresses are regenerated. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
 
 ## Preview
 
@@ -241,5 +243,6 @@ println!("wrote {} (archive: {})", result.output.display(), result.archive);
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.
 - [Terrain guide](docs/TERRAIN.md): height decisions, sidecars and viewer setup.
 - [Contributing](CONTRIBUTING.md): build, test and release.
+- [Demo-data suite](CONTRIBUTING.md#demo-data-acceptance-and-benchmarks): opt-in native acceptance and benchmarks against the pinned public corpus.
 
 Licensed under [MIT](LICENSE).

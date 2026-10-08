@@ -253,6 +253,9 @@ struct RasterArgs {
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Keep the legacy explicit tileset hierarchy.
+    #[arg(long)]
+    explicit: bool,
     /// local XYZ metres, header CRS, or explicit 2D horizontal CRS (e.g. EPSG:32632)
     #[arg(long = "sourceCrs", visible_alias = "source-crs")]
     source_crs: String,
@@ -283,6 +286,9 @@ struct PointCloudArgs {
 struct VectorArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Keep the legacy explicit tileset hierarchy.
+    #[arg(long)]
+    explicit: bool,
     /// Omit volatile performance diagnostics for byte-identical archives
     #[arg(long)]
     reproducible: bool,
@@ -413,6 +419,9 @@ struct VectorArgs {
 struct MeshArgs {
     #[command(flatten)]
     io: IoArgs,
+    /// Keep the legacy explicit tileset hierarchy and median partitioning.
+    #[arg(long)]
+    explicit: bool,
     #[command(flatten)]
     placement: PlacementArgs,
     /// Texture output: fast full-chroma JPEG, smaller WebP, GPU UASTC, or exact PNG.
@@ -759,6 +768,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 &a.io.input,
                 &a.io.output,
                 &rusty_tiles::point_cloud::PointCloudOptions {
+                    explicit: a.explicit,
                     force: a.io.force,
                     source_crs: a.source_crs,
                     height_offset: a.height_offset,
@@ -793,6 +803,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             a.repair,
             a.ambiguous_outlines,
             &vector::VectorOptions {
+                explicit: a.explicit,
                 reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,
@@ -913,6 +924,7 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         ));
     }
     Ok(MeshTo3tzOptions {
+        explicit: a.explicit,
         texture_format: a.texture_format,
         basisu: a.basisu.clone(),
         cartographic: ts.cartographic,

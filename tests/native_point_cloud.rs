@@ -5,8 +5,22 @@ use std::{io::Read, path::Path, process::Command};
 mod support;
 
 fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
-        .args(["--json", "point-cloud", "-i"])
+    call_mode(input, output, options, true)
+}
+
+fn call_mode(
+    input: &Path,
+    output: &Path,
+    options: &[&str],
+    explicit: bool,
+) -> std::process::Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
+    command.args(["--json", "point-cloud"]);
+    if explicit {
+        command.arg("--explicit");
+    }
+    command
+        .arg("-i")
         .arg(input)
         .arg("-o")
         .arg(output)
@@ -14,6 +28,129 @@ fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
         .env("PATH", "")
         .output()
         .unwrap()
+}
+
+#[test]
+fn implicit_las_laz_keep_every_record_and_root_relative_placement_across_subtrees() {
+    for (suffix, identical) in [("las", false), ("laz", false), ("laz", true)] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("source.{suffix}"));
+        fixture(&input, 257, identical, vec![]);
+        let output = work.path().join("implicit.3tz");
+        let options = [
+            "--sourceCrs",
+            "local",
+            "--maxPoints",
+            "1",
+            "--chunkPoints",
+            "11",
+        ];
+        let result = call_mode(&input, &output, &options, false);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        assert_eq!(
+            manifest["root"]["implicitTiling"]["subdivisionScheme"],
+            "OCTREE"
+        );
+        if !identical {
+            assert!(zip.file_names().filter(|n| n.ends_with(".subtree")).count() > 1);
+        }
+        let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+            let mut bytes = Vec::new();
+            zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+            Ok(bytes)
+        })
+        .unwrap();
+        let mut seen = Vec::new();
+        audit_leaves(&mut zip, &expanded["root"], &mut seen, 1);
+        seen.sort_unstable();
+        assert_eq!(seen, (0..257).collect::<Vec<_>>());
+        let expected: Vec<_> = las::Reader::from_path(&input)
+            .unwrap()
+            .read_all()
+            .unwrap()
+            .points()
+            .map(Result::unwrap)
+            .collect();
+        let root_translation = std::array::from_fn::<_, 3, _>(|i| {
+            manifest["root"]["transform"][12 + i].as_f64().unwrap()
+        });
+        fn placement(
+            zip: &mut zip::ZipArchive<std::fs::File>,
+            node: &Value,
+            root: [f64; 3],
+            expected: &[las::Point],
+        ) {
+            if let Some(children) = node["children"].as_array() {
+                for child in children {
+                    placement(zip, child, root, expected);
+                }
+                return;
+            }
+            let glb = Glb::read(zip, node["content"]["uri"].as_str().unwrap());
+            let id = u64::from_le_bytes(glb.column("source_index").try_into().unwrap()) as usize;
+            let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
+                ["POSITION"]
+                .as_u64()
+                .unwrap() as usize];
+            let bytes = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
+            let p: [f64; 3] = std::array::from_fn(|i| {
+                f64::from(f32::from_le_bytes(
+                    bytes[i * 4..i * 4 + 4].try_into().unwrap(),
+                ))
+            });
+            let t: [f64; 3] = glb.doc["nodes"][0]
+                .get("translation")
+                .map(|v| serde_json::from_value(v.clone()).unwrap())
+                .unwrap_or([0.; 3]);
+            let actual = [
+                root[0] + p[0] + t[0],
+                root[1] - p[2] - t[2],
+                root[2] + p[1] + t[1],
+            ];
+            for (a, e) in actual
+                .into_iter()
+                .zip([expected[id].x, expected[id].y, expected[id].z])
+            {
+                assert!((a - e).abs() < 1e-5, "{id}: {a} != {e}");
+            }
+            for (name, expected) in [
+                ("red", (id * 233) as u16),
+                ("green", (id * 431) as u16),
+                ("blue", (id * 717) as u16),
+                ("nir", (id * 103) as u16),
+            ] {
+                assert_eq!(
+                    u16::from_le_bytes(glb.column(name).try_into().unwrap()),
+                    expected
+                );
+            }
+        }
+        placement(&mut zip, &expanded["root"], root_translation, &expected);
+        let report = support::rusty_tiles()
+            .args(["validate", "--json"])
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(
+            report.status.success(),
+            "{}",
+            String::from_utf8_lossy(&report.stdout)
+        );
+        let repeated = work.path().join("repeated.3tz");
+        assert!(call_mode(&input, &repeated, &options, false)
+            .status
+            .success());
+        assert_eq!(
+            std::fs::read(output).unwrap(),
+            std::fs::read(repeated).unwrap()
+        );
+    }
 }
 
 fn fixture(path: &Path, count: usize, identical: bool, vlrs: Vec<las::Vlr>) {

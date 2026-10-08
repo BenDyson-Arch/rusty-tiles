@@ -648,7 +648,14 @@ pub(super) fn encode(
         }
         contents.push(content);
     }
-    if vertex_count > options.max_vertices || byte_count > options.max_bytes {
+    // Implicit scene-root placement adds JSON to each content. Reserve its
+    // maximum framing increase before accepting a content candidate.
+    let byte_limit = options.max_bytes.saturating_sub(if options.explicit {
+        0
+    } else {
+        contents.len() * 128
+    });
+    if vertex_count > options.max_vertices || byte_count > byte_limit {
         result.reason = Some(if vertex_count > options.max_vertices {
             "vertices"
         } else {

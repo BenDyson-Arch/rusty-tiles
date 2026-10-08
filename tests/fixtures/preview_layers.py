@@ -22,7 +22,8 @@ meshes=[{'primitives':[{'attributes':{'POSITION':0},'indices':1,'material':0,'mo
 data=json.dumps(doc,separators=(',',':')).encode();data+=b' '*((-len(data))%4);binary+=b'\0'*((-len(binary))%4)
 mesh=root/'quad.glb';mesh.write_bytes(struct.pack('<4sII',b'glTF',2,28+len(data)+len(binary))+struct.pack('<I4s',len(data),b'JSON')+data+struct.pack('<I4s',len(binary),b'BIN\0')+binary)
 archive=root/'mesh.3tz'
-call(['glb-to-3tz','-i',str(mesh),'-o',str(archive),'--cartographicPositionDegrees','12.1','41.9','200',])
+call(['mesh-to-3tz','-i',str(mesh),'-o',str(archive),'--maxTriangles','1','--maxBytes','0',
+      '--cartographicPositionDegrees','12.1','41.9','200',])
 with zipfile.ZipFile(archive) as z:z.extractall(root/'mesh')
 source=root/'imagery.tif';ds=gdal.GetDriverByName('GTiff').Create(str(source),32,32,3,gdal.GDT_Byte)
 srs=osr.SpatialReference();srs.ImportFromEPSG(4326);ds.SetProjection(srs.ExportToWkt());ds.SetGeoTransform([12,.01,0,42,0,-.01])
@@ -38,6 +39,6 @@ call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--maxZoom','9','--gri
       '--heightOffset','10.25','--fillHeight','-999.125'])
 source=root/'cloud.las';fixture(source,crs=CRS.from_epsg(32632))
 run(types.SimpleNamespace(input=str(source),output=str(root/'cloud'),source_crs='header',
-    max_points=32,chunk_points=31,height_offset=10))
+    max_points=32,chunk_points=31,height_offset=10,explicit=False))
 generate(root/'annotations',quantize=True,meshopt_helper=cli_binary,batch=True,aggregate_points=True)
 print('Serve the selected mesh, cloud, annotations, imagery and terrain directories with rusty-tiles preview.')

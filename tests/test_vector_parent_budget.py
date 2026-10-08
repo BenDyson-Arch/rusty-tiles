@@ -52,7 +52,7 @@ class ParentFeatureBudgetTests(unittest.TestCase):
     def test_cli_parent_budget_option_is_wired_and_zero_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);source=self.source(root);out=root/'result.3tz'
-            command=[BIN,'vector','-i',str(source),'-o',str(out),'--sourceCrs','local',
+            command=[BIN,'vector','--explicit','-i',str(source),'-o',str(out),'--sourceCrs','local',
                 '--maxFeatures','2','--maxParentFeatures','32']
             result=subprocess.run(command,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)

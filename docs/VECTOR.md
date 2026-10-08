@@ -4,6 +4,8 @@ This page explains how the `vector` command turns GIS features into 3D Tiles. It
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
+Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. At boundaries that exceed their implicit cell, standard external tileset roots expose actual bounds before Cesium culls or picks the next levels. Add `--explicit` for the earlier explicit manifest and output bytes.
+
 ## Requirements
 
 - A build with the `native-geospatial` feature.
@@ -121,7 +123,7 @@ Large features are split to fit:
 
 A split polygon has two kinds of content. Fills are standard unlit, double-sided glTF triangles inside a `b3dm` wrapper. Source boundaries are separate vector line content. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Both contents carry feature metadata, so fills and outlines are pickable. The `b3dm` wrapper is a compatibility workaround for Cesium's decoder selection, not a private extension.
 
-Buffered grid clipping, coverage-wide edge reconciliation and implicit tiling are not implemented.
+Buffered grid clipping and coverage-wide edge reconciliation are not implemented.
 
 ### Memory and scratch disk
 
@@ -218,16 +220,17 @@ rusty-tiles vector -i updated.gpkg -o output/updated.3tz --layer roads \
 
 ### What must match
 
-Reuse needs the same layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and the same GDAL, GEOS and PROJ versions. Archives made by the earlier Python converter need a fresh native build first.
+Reuse needs the same tiling mode (`--explicit` or the implicit default), layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and the same GDAL, GEOS and PROJ versions. Archives made by the earlier Python converter need a fresh native build first.
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 
 ### How reuse works
 
-- Content file names contain their SHA-256 hash. Unchanged payloads keep their URLs and bytes.
+- Cached source content file names contain their SHA-256 hash. Unchanged source payloads keep their URLs and bytes. Implicit display content uses coordinate templates and includes the original tile translation in its glTF scene nodes. Those display payloads and subtrees are regenerated from the cached originals.
 - Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
 - `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
 - Every reused payload is checked against its recorded checksum.
+- Implicit archives retain the original explicit hierarchy in build state and its immutable payloads for reuse. This increases archive size; the retained sources are listed in manifest extras and validated as references.
 - `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
 
 Reuse saves geometry encoding, not every step. The updated source is still scanned and projected, and the archive is repacked. Source files and the earlier archive are opened read-only, and source triggers are never modified. Geometry reports cover only the new build; earlier reports stay in the earlier archive. A feature that loses its geometry is removed. Repeated edits can unbalance partitions. A fresh build resets them.

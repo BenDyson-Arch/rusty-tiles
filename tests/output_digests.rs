@@ -3,7 +3,10 @@
 //! Every recipe must produce identical bytes on both runs. Recipes that do
 //! not touch GDAL/PROJ (mesh-to-3tz, glb-to-3tz, createTilesetJson, convert)
 //! are also compared with the per-entry sha256 digests committed in
-//! `tests/fixtures/output_digests.json`. Geospatial recipes are not: their
+//! `tests/fixtures/output_digests.json` on the platform recorded there. Codec
+//! output (and hence archive offsets) can differ across CPU architectures.
+//! Every platform still checks repeatability for every enabled recipe.
+//! Geospatial recipes are not compared with committed digests: their
 //! bytes legitimately change with the GDAL/PROJ release (resampling, CRS
 //! transforms and the recorded `gdalVersion`), so cross-commit identity for
 //! them is checked on one machine with `scripts/compare_outputs.sh`.
@@ -112,9 +115,11 @@ fn outputs_match_committed_digests() {
         .into_iter()
         .filter(|(name, _)| portable.contains(&name.as_str()))
         .collect();
+    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     if std::env::var_os("UPDATE_OUTPUT_DIGESTS").is_some_and(|v| v == "1") {
         let file = json!({
             "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes the archive entry order). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
+            "platform": platform,
             "recipes": produced,
         });
         let mut text = serde_json::to_string_pretty(&file).unwrap();
@@ -124,6 +129,15 @@ fn outputs_match_committed_digests() {
         return;
     }
     let committed: Value = serde_json::from_slice(&fs::read(committed_path()).unwrap()).unwrap();
+    let baseline_platform = committed["platform"]
+        .as_str()
+        .expect("committed output digests must identify their baseline platform");
+    if baseline_platform != platform {
+        eprintln!(
+            "repeatability passed on {platform}; committed digests apply to {baseline_platform}"
+        );
+        return;
+    }
     let stored: Digests = serde_json::from_value(committed["recipes"].clone()).unwrap();
     let mut failures = Vec::new();
     for (name, got) in &produced {

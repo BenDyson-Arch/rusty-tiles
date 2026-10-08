@@ -21,6 +21,11 @@ pkg-fmt = "zip"
 name = "rusty-tiles"
 path = "src/main.rs"
 
+[[example]]
+name = "demodata-suite"
+path = "bench/demodata_suite.rs"
+required-features = ["native-geospatial"]
+
 [features]
 default = []
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config", "dep:rusqlite"]
@@ -52,6 +57,8 @@ las = { version = "0.11.1", features = ["laz"] }
 rusqlite = { version = "0.40", optional = true }
 tiny_http = "0.12.0"
 percent-encoding = "2.3.2"
+bitvec = { version = "1.1", default-features = false, features = ["std"] }
+morton-encoding = "2.0"
 
 [build-dependencies]
 pkg-config = { version = "0.3", optional = true }
@@ -59,3 +66,6 @@ pkg-config = { version = "0.3", optional = true }
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"

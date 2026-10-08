@@ -15,6 +15,8 @@ use source::{header_crs, las_error, read_source, Layout, RAW};
 
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
+    /// Keep the legacy explicit hierarchy instead of implicit octree output.
+    pub explicit: bool,
     pub force: bool,
     /// `local` for XYZ metres, `header` for LAS CRS, or an explicit horizontal CRS.
     pub source_crs: String,
@@ -215,7 +217,7 @@ fn convert(
         leaf_points: 0,
     };
     reporter.progress("tiling", 0, count);
-    let mut root = tree.build(&path, [0.; 3], 0)?;
+    let mut root = tree.build(&path, [0.; 3], 0, None)?;
     for i in 0..3 {
         let value = root["transform"][12 + i].as_f64().unwrap() + origin[i];
         if !value.is_finite() {
@@ -230,18 +232,30 @@ fn convert(
             "tileset extent exceeds finite coordinate range".into(),
         ));
     }
+    let mut manifest =
+        serde_json::json!({"asset":{"version":"1.1"},"geometricError":error,"root":root});
+    if !options.explicit {
+        crate::implicit::write_tileset(
+            &mut manifest,
+            output,
+            crate::implicit::SubdivisionScheme::Octree,
+            false,
+        )?;
+    }
     std::fs::write(
         output.join("tileset.json"),
-        serde_json::to_vec_pretty(
-            &serde_json::json!({"asset":{"version":"1.1"},"geometricError":error,"root":root}),
-        )?,
+        serde_json::to_vec_pretty(&manifest)?,
     )?;
-    let report = serde_json::json!({"points":count,"tiles":tree.tiles,"sourceCrs":options.source_crs,
+    let mut report = serde_json::json!({"points":count,"tiles":tree.tiles,"sourceCrs":options.source_crs,
         "resolvedCrs":resolved,"sourceScales":scales,"sourceOffsets":offsets,"heightOffset":options.height_offset,
         "properties":layout.dimensions.iter().map(|d| &d.name).collect::<Vec<_>>(),
         "maxPositionRoundingMetres":tree.max_rounding,
         "sampling":"first source point per voxel; celldiagonal bounds source-to-sample distance",
         "maxPoints":options.max_points,"chunkPoints":options.chunk_points,"encoder":"rusty-tiles-native-las-v1"});
+    if !options.explicit {
+        report["encoder"] = serde_json::json!("rusty-tiles-native-las-implicit-v2");
+        report["tiling"] = serde_json::json!("implicit");
+    }
     crate::output::write_report(output, report, true)
 }
 
@@ -256,6 +270,7 @@ mod tests {
         let output = work.path().join("cloud.3tz");
         std::fs::write(&input, b"invalid input").unwrap();
         let options = PointCloudOptions {
+            explicit: true,
             force: false,
             source_crs: "local".into(),
             height_offset: None,

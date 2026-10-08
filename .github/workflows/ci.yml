@@ -31,6 +31,8 @@ jobs:
           rustup update stable --no-self-update
           rustup default stable
           rustup component add rustfmt
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Check formatting
         run: cargo fmt --check
       - name: Test native build
@@ -41,6 +43,46 @@ jobs:
         env:
           RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
         run: cargo test --locked --lib jpeg::tests
+
+  portable:
+    name: Portable CLI (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: portable-${{ matrix.target }}
+      - name: Test the portable release CLI
+        run: cargo test --locked --target "$RELEASE_TARGET"
 
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
@@ -66,6 +108,10 @@ jobs:
             proj>=9.2
             -c conda-forge
           init-shell: bash
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: gdal-${{ matrix.gdal }}
       - name: Test native geospatial build
         shell: bash -el {0}
         run: |
@@ -106,6 +152,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libclang-dev libsqlite3-dev
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: python-gdal-3.12
       - name: Build CLI for derivative acceptance
         shell: bash -el {0}
         run: |
@@ -127,12 +177,29 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Test installed native suite in a runtime image without Python
-        run: docker build --target acceptance -t rusty-tiles:native-acceptance .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: acceptance
+          outputs: type=cacheonly
+          # Always execute the suite, including when build artifacts are cached.
+          no-cache-filters: acceptance
+          cache-from: type=gha,scope=python-free-acceptance
+          cache-to: type=gha,scope=python-free-acceptance,mode=max
       - name: Build and check packaged runtime
-        run: |
-          docker build --target runtime -t rusty-tiles:native .
-          docker run --rm --network none rusty-tiles:native doctor --json
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: rusty-tiles:native
+          # The acceptance export includes this target's SDK and Rust build.
+          cache-from: type=gha,scope=python-free-acceptance
+      - name: Check runtime without network access
+        run: docker run --rm --network none rusty-tiles:native doctor --json
 
   release-acceptance:
     name: Release acceptance

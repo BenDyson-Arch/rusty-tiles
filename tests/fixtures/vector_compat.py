@@ -52,6 +52,7 @@ def generate(root, quantize=False, meshopt_helper=None, batch=False, aggregate_p
                 geometry=dict(type=geometry['type'],coordinates=shift(geometry['coordinates']))))
         source.write_text(json.dumps(dict(type='FeatureCollection', features=items)))
         vector.run(types.SimpleNamespace(
+            explicit=False,
             input=str(source), output=str(root / name), max_features=64,
             quantize=quantize, meshopt_helper=meshopt_helper,
             max_vertices=(32 if batch else 8) if name == 'fragmented' else 65536, max_bytes=16384,
@@ -80,6 +81,7 @@ def generate(root, quantize=False, meshopt_helper=None, batch=False, aggregate_p
             dict(type='Feature',id=i,properties=dict(name=f'point-{i}'),
                  geometry=dict(type='Point',coordinates=pos(i%8,i//8))) for i in range(64)])))
         vector.run(types.SimpleNamespace(input=str(source),output=str(root/'point-aggregates'),
+            explicit=False,
             max_features=16,max_parent_features=8,lod_tolerance=5,lod_levels=3,
             aggregate_points=True,quantize=quantize,meshopt_helper=meshopt_helper))
         cases.append(dict(name='point-aggregates',sample=pos(0,0)))
@@ -88,6 +90,8 @@ def generate(root, quantize=False, meshopt_helper=None, batch=False, aggregate_p
     manifest = json.loads((root / 'line/tileset.json').read_text())
 
     def prefix(node):
+        if 'implicitTiling' in node:
+            node['implicitTiling']['subtrees']['uri'] = 'line/' + node['implicitTiling']['subtrees']['uri']
         contents = node.get('contents', [node['content']] if 'content' in node else [])
         for content in contents:
             content['uri'] = 'line/' + content['uri']

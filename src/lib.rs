@@ -14,6 +14,7 @@ pub mod glb_write;
 mod gpu_texture;
 pub mod grid;
 pub mod hlod;
+pub mod implicit;
 mod jpeg;
 mod lossless;
 pub mod mesh;

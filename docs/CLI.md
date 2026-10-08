@@ -33,6 +33,8 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
+`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. Packaging commands keep their existing behaviour.
+
 ## Converters
 
 ### mesh-to-3tz
@@ -42,6 +44,7 @@ Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. S
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--textureFormat` | `--texture-format` | `jpeg` | `jpeg`, `webp`, `uastc` or `lossless`, which is exact PNG |
+| `--explicit` | | off | Keep the earlier explicit hierarchy and median partition |
 | `--basisu` | | `basisu` | Basis Universal encoder executable, needed for `uastc` |
 | `--maxTriangles` | `--max-triangles` | `20000` | Stop splitting a node at this many triangles |
 | `--maxBytes` | `--max-bytes` | `204800` | Source files at or below this size are wrapped, not split |
@@ -63,6 +66,7 @@ Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leave
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
+| `--explicit` | | off | Keep the earlier explicit hierarchy and binary partition |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
 | `--maxPoints` | `--max-points` | `50000` | Maximum points per tile, at least 1 |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
@@ -74,6 +78,7 @@ Converts OGR layers into draft glTF vector content in a `.3tz`. Behaviour and li
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--layer` | | automatic for one layer | Select a spatial layer. Repeat for several. |
+| `--explicit` | | off | Keep the earlier explicit hierarchy and output bytes |
 | `--allLayers` | `--all-layers` | off | Include every spatial layer |
 | `--sourceCrs` | `--source-crs` | layer CRS | Override the input CRS, or `local` for metre XYZ |
 | `--heightOffset` | `--height-offset` | none | Metres added to source heights to give ellipsoidal height |
@@ -157,6 +162,7 @@ Validation is read-only. It runs these checks in order:
 
 - ZIP CRCs and the complete 3TZ index.
 - The bundled 3D Tiles tileset schema.
+- Binary implicit subtree headers, aligned buffer views, availability, parent links and native semantic tile metadata.
 - Child bounds inside parent bounds, and geometric error that never increases toward the leaves.
 - Local content and resource references, including `schemaUri` files.
 - Hash-named payload checksums and the build-state checksum.
@@ -165,10 +171,10 @@ Validation is read-only. It runs these checks in order:
 
 Equal geometric errors are allowed for routing nodes and for parents whose child error is the larger bound. Boxes and spheres use relative tile transforms. Region containment handles the antimeridian. Sphere containment under nonuniform scale uses a conservative bound. An external tileset is checked at each placement, with the referring tile's bounds, error and depth. Only references on the active path count as cycles.
 
-The built-in check covers explicit, self-contained archives of GLB, glTF, b3dm and external tileset JSON. These cases are reported as unsupported rather than passed:
+The built-in check covers explicit and native implicit, self-contained archives of GLB, glTF, b3dm and external tileset JSON. Native implicit boundaries are expanded with their actual boxes and errors for the same containment and budget checks. These cases are reported as unsupported rather than passed:
 
 - Mixed region and Cartesian bounds.
-- Implicit tiling.
+- Implicit regions, external subtree buffers, or foreign tile metadata layouts.
 - Remote or percent-encoded URIs.
 - Other content formats.
 

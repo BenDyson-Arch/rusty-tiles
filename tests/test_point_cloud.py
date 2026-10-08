@@ -23,6 +23,8 @@ def run(args):
     command = [BIN, '--json', 'point-cloud', '-i', args.input, '-o', str(archive),
                '--sourceCrs', args.source_crs, '--maxPoints', str(args.max_points),
                '--chunkPoints', str(args.chunk_points)]
+    if getattr(args, 'explicit', True):
+        command.append('--explicit')
     if args.height_offset is not None:
         command += ['--heightOffset', str(args.height_offset)]
     result = subprocess.run(command, capture_output=True, text=True, env=dict(os.environ, PATH=''))

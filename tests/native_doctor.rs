@@ -109,7 +109,8 @@ fn missing_database_keeps_versions_and_environment_category() {
         .contains("database"));
 }
 
-#[cfg(unix)]
+// Linux permits arbitrary filename bytes; macOS filesystems reject this fixture.
+#[cfg(target_os = "linux")]
 #[test]
 fn non_utf8_grid_path_keeps_selected_readiness_and_valid_json() {
     use std::os::unix::ffi::OsStringExt;
@@ -132,6 +133,47 @@ fn non_utf8_grid_path_keeps_selected_readiness_and_valid_json() {
         .iter()
         .any(|error| error.as_str().unwrap().contains("not UTF-8")));
     assert_eq!(std::fs::read(&grid).unwrap(), b"inventory marker");
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_search_path_keeps_selected_readiness_and_valid_json() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = tempfile::tempdir().unwrap();
+    let grid = root.path().join("fixture.gtx");
+    std::fs::write(&grid, b"inventory marker").unwrap();
+    // Environment variables can contain these bytes even when the filesystem
+    // cannot. Also retain a valid directory to check the rest of the inventory.
+    let invalid = root
+        .path()
+        .join(std::ffi::OsString::from_vec(b"missing-\xff".to_vec()));
+    let paths = std::env::join_paths([root.path(), invalid.as_path()]).unwrap();
+    let (output, report) = doctor_with(
+        &["--command", "convert"],
+        None,
+        &[
+            ("PROJ_DATA", paths.as_os_str()),
+            ("PROJ_LIB", paths.as_os_str()),
+        ],
+    );
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["ready"], true);
+    assert!(report["proj"]["availableGrids"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(grid)));
+    assert!(report["proj"]["dataDirectories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path.as_str() == Some(invalid.to_string_lossy().as_ref())));
+    assert!(report["proj"]["inventoryErrors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|error| error.as_str().unwrap().contains("not UTF-8")));
+    assert_eq!(std::fs::read(&grid).unwrap(), b"inventory marker");
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
 }
 
 #[cfg(feature = "native-geospatial")]

@@ -1,5 +1,6 @@
 {
   "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes the archive entry order). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
+  "platform": "linux-x86_64",
   "recipes": {
     "convert": {
       "#order": "5513ed7130bd10c3154e8c7f8cdfa77b5b4500edc500ac35d448a4b6093bdb3e",
