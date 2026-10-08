@@ -54,7 +54,7 @@ Spatial splitting supports static triangle meshes with optional normals, UVs in 
 - Extra vertex attributes and additional PBR texture channels.
 - Unsupported source extensions.
 
-Use `glb-to-3tz` to wrap a richer model unchanged.
+Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, images and structural metadata schemas are bundled alongside the original glTF or GLB. Resources must be inside the model's directory (subdirectories are supported); data URIs stay embedded. Remote, absolute, escaping and percent-encoded resource URIs are refused before publication.
 
 ### Mesh placement
 
@@ -131,7 +131,15 @@ Display tiles are a derivative. The COG is the faithful copy.
 
 ### Transparency
 
-Masks and alpha are intersected in 256 by 256 source windows before resampling. Use `--alpha-band` only for an image band that holds transparency. Display alpha is combined with source coverage, so masked pixels stay transparent.
+Masks and alpha are intersected in 256 by 256 source windows before resampling. `--alpha-band` selects a band holding opacity values from 0 (transparent) to 255 (opaque), for either `image` or `gray` display. Gray display also accepts alpha stored in numeric bands such as Int16: alpha is converted to Byte without scaling, clamping values outside 0–255. The selected data band's mask/NoData and the display alpha still apply, so masked pixels stay transparent. Image display continues to require byte imagery.
+
+For rendered greyscale stored in Int16 bands with alpha in band 4:
+
+```sh
+rusty-tiles raster -i survey.tif -o output/survey \
+  --min-zoom 10 --max-zoom 18 --display gray --band 1 \
+  --display-min 0 --display-max 255 --alpha-band 4
+```
 
 ### Limits and resources
 

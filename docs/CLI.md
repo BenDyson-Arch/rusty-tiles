@@ -115,7 +115,7 @@ Writes a source-preserving COG and a PNG XYZ display pyramid.
 | `--minZoom` | `--min-zoom` | `0` | Coarsest zoom level, from 0 to `--maxZoom` |
 | `--display` | | `image` | `image` uses RGB or RGBA bands. `gray` stretches one band. |
 | `--band` | | `1` | Band used by `gray` display |
-| `--alphaBand` | `--alpha-band` | `0` | Alpha band for `image` display. 0 uses the source mask or NoData. |
+| `--alphaBand` | `--alpha-band` | `0` | Alpha band for `image` or `gray` display, with opacity values 0–255. 0 uses the source mask or NoData. |
 | `--displayMin` | `--display-min` | none | Value shown as black in `gray` display |
 | `--displayMax` | `--display-max` | none | Value shown as white in `gray` display |
 
@@ -137,7 +137,7 @@ These commands package existing content without building spatial level of detail
 
 | Command | Input | Output | Extra options |
 | --- | --- | --- | --- |
-| `glb-to-3tz` | GLB or glTF file or directory | `.3tz` archive | `--cartographicPositionDegrees`, `--rotationDegrees` |
+| `glb-to-3tz` | GLB or glTF file, including referenced local resources | `.3tz` archive | `--cartographicPositionDegrees`, `--rotationDegrees` |
 | `createTilesetJson` | GLB or glTF file or directory | `tileset.json` | `--cartographicPositionDegrees`, `--rotationDegrees` |
 | `convert` | Tileset directory or `tileset.json` | `.3tz` archive | none |
 

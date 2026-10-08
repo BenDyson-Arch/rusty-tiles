@@ -230,7 +230,7 @@ struct RasterArgs {
     display: String,
     #[arg(long, default_value_t = 1)]
     band: u16,
-    /// Alpha band for image display; 0 uses the source mask/NoData
+    /// Alpha band for image or gray display (0..255 opacity); 0 uses mask/NoData
     #[arg(long = "alphaBand", visible_alias = "alpha-band", default_value_t = 0)]
     alpha_band: u16,
     /// Value mapped to black for gray display

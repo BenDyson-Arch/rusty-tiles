@@ -199,7 +199,7 @@ class RasterImportTests(unittest.TestCase):
             ({},['--maxZoom','1','--alphaBand','4'],'band does not exist'),
             ({},['--maxZoom','1','--displayMin','0'],'require --display gray'),
             ({},['--maxZoom','1','--display','gray','--displayMin','nan','--displayMax','1'],'--displayMin and --displayMax must be finite'),
-            ({},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1','--alphaBand','1'],'--alphaBand applies only to --display image'),
+            ({},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1','--alphaBand','2'],'band does not exist'),
             ({'scale':2},['--maxZoom','1','--display','gray','--displayMin','0','--displayMax','1'],'scaled bands'),
             ({'crs':None},['--maxZoom','1'],'declared CRS'),
             ({'gt':[12,.01,0,86,0,-.01]},['--maxZoom','1'],'polar coverage'),

@@ -38,6 +38,11 @@ pub(super) fn convert(
         ));
     }
     let source_crs = geospatial::Crs::from_definition(&projection)?;
+    let explicit_alpha = if options.alpha_band == 0 {
+        None
+    } else {
+        Some(source.band(i32::from(options.alpha_band))?)
+    };
     let mut bands = if count >= 3 { vec![1, 2, 3] } else { vec![1] };
     if options.display == "gray" {
         let band = source.band(i32::from(options.band))?;
@@ -108,7 +113,7 @@ pub(super) fn convert(
             ),
         )?;
         let display = color_relief(&selected, &display_path, &colors)?;
-        apply_coverage(&display, &selected, 4)?;
+        apply_coverage(&display, &selected, 4, explicit_alpha)?;
         display.finish(FINISH)?;
         std::fs::remove_file(colors)?;
     } else {
@@ -160,7 +165,7 @@ pub(super) fn convert(
                     "COMPRESS=NONE",
                 ],
             )?;
-            apply_coverage(&combined, &selected, bands.len() as i32)?;
+            apply_coverage(&combined, &selected, bands.len() as i32, None)?;
             let warped = display_warp(&combined, &display_path, true)?;
             warped.finish(FINISH)?;
             combined.finish(FINISH)?;
@@ -398,6 +403,7 @@ fn apply_coverage(
     display: &Dataset<'_>,
     source: &Dataset<'_>,
     alpha_index: i32,
+    explicit_alpha: Option<gdal_sys::GDALRasterBandH>,
 ) -> Result<(), Error> {
     let _errors = QuietErrors::new();
     let alpha = display.band(alpha_index)?;
@@ -413,6 +419,7 @@ fn apply_coverage(
     }
     let mut values = vec![0u8; 256 * 256];
     let mut coverage = vec![0u8; 256 * 256];
+    let mut source_alpha = vec![0u8; 256 * 256];
     for y in (0..height).step_by(256) {
         for x in (0..width).step_by(256) {
             let w = (width - x).min(256);
@@ -421,6 +428,14 @@ fn apply_coverage(
             raster_io(mask, false, x, y, w, h, &mut coverage)?;
             for (v, c) in values.iter_mut().zip(&coverage).take((w * h) as usize) {
                 *v = (*v).min(*c);
+            }
+            if let Some(band) = explicit_alpha {
+                // GDAL converts alpha values to Byte without scaling. In
+                // particular, Int16 0/128/255 keeps its intended opacity.
+                raster_io(band, false, x, y, w, h, &mut source_alpha)?;
+                for (v, a) in values.iter_mut().zip(&source_alpha).take((w * h) as usize) {
+                    *v = (*v).min(*a);
+                }
             }
             raster_io(alpha, true, x, y, w, h, &mut values)?;
         }

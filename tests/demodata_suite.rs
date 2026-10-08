@@ -27,9 +27,9 @@ fn tiny_manifest(root: &std::path::Path) -> runner::Manifest {
 fn manifest_pins_all_recipes_and_selects_profiles_without_silent_skips() {
     let manifest = runner::Manifest::load().unwrap();
     assert_eq!(manifest.files.len(), 416);
-    assert_eq!(manifest.cases.len(), 27);
+    assert_eq!(manifest.cases.len(), 28);
     assert_eq!(manifest.select("smoke", &[]).unwrap().len(), 8);
-    assert_eq!(manifest.select("core", &[]).unwrap().len(), 20);
+    assert_eq!(manifest.select("core", &[]).unwrap().len(), 21);
     assert_eq!(manifest.select("scale", &[]).unwrap().len(), 7);
     assert!(manifest.select("all", &["typo".into()]).is_err());
     assert!(manifest.select("typo", &[]).is_err());
