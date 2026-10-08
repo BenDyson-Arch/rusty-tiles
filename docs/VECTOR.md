@@ -59,6 +59,8 @@ List fields fail by default. `--list-fields json` stores each list as JSON text.
 
 `--where "category = 'public'"` applies an attribute filter to every selected layer before geometry is processed. The default build evaluates expressions using SQLite; the native build uses OGR. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset. Use a single read-only expression; multiple statements, comments and SQL parameters are refused by the portable reader.
 
+Portable GeoJSON filtering refuses source integers beyond signed 64-bit range instead of converting them to SQLite floating-point values. Encoded integer metadata also requires signed 64-bit values. GeoPackage is opened read-only in immutable mode; checkpoint and close a writer with an active nonempty WAL before conversion so every committed row is available from the main file. Conversion refuses that WAL state rather than silently reading older rows.
+
 ## Coordinates and height
 
 Each layer uses its declared CRS with traditional X and Y axis order. `--source-crs` overrides the declaration. `--source-crs local` means local metre XYZ.

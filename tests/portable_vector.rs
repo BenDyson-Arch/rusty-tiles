@@ -251,8 +251,9 @@ fn exact_geojson_metadata_lists_filters_and_empty_selection() {
         &["--source-crs", "local", "--list-fields", "json"],
     );
     let rows = metadata(&all);
-    assert_eq!(rows["invented:\"nullable\""]["large"], Value::Null);
-    assert_eq!(rows["invented:\"nullable\""]["name"], Value::Null);
+    let nullable = format!("invented:{}", serde_json::to_string("nullable").unwrap());
+    assert_eq!(rows[nullable.as_str()]["large"], Value::Null);
+    assert_eq!(rows[nullable.as_str()]["name"], Value::Null);
     let empty = root.path().join("empty.3tz");
     assert_eq!(
         convert(
@@ -589,4 +590,99 @@ fn unsupported_driver_and_grid_crs_are_environment_errors_without_archives() {
         );
         assert!(!output.exists());
     }
+}
+
+#[test]
+fn filters_are_single_read_only_expressions_and_schema_errors_do_not_publish() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("read-only.gpkg");
+    geopackage(&source);
+    let original = fs::read(&source).unwrap();
+    for expression in [
+        "keep = 1; DELETE FROM roads",
+        "keep = 1 -- comment",
+        "keep = ?",
+        "(keep = 1",
+    ] {
+        let output = root.path().join("rejected.3tz");
+        let (result, report) = run(
+            &source,
+            &output,
+            &["--layer", "roads", "--where", expression],
+        );
+        assert_eq!(result.status.code(), Some(3), "{report}");
+        assert!(!output.exists());
+        assert_eq!(fs::read(&source).unwrap(), original);
+    }
+    let collection = root.path().join("reserved.geojson");
+    geojson(
+        &collection,
+        vec![point(
+            json!(1),
+            json!({"_source_id":"collision"}),
+            [0., 0., 0.],
+        )],
+    );
+    let output = root.path().join("reserved.3tz");
+    assert_eq!(
+        run(
+            &collection,
+            &output,
+            &["--source-crs", "local", "--skip-invalid"]
+        )
+        .0
+        .status
+        .code(),
+        Some(3)
+    );
+    assert!(!output.exists());
+    geojson(
+        &collection,
+        vec![point(json!(1), json!({"name":"example"}), [0., 0., 0.])],
+    );
+    assert_eq!(
+        run(
+            &collection,
+            &output,
+            &["--source-crs", "local", "--fields", "unknown"]
+        )
+        .0
+        .status
+        .code(),
+        Some(3)
+    );
+    assert!(!output.exists());
+}
+
+#[test]
+fn active_geopackage_wal_is_refused_until_checkpointed() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("writer.gpkg");
+    geopackage(&source);
+    let db = Connection::open(&source).unwrap();
+    db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;")
+        .unwrap();
+    db.execute(
+        "INSERT INTO roads VALUES(3,?1,'committed in WAL',3,1,1)",
+        [gpkg_point([0.002, 0., 0.], false)],
+    )
+    .unwrap();
+    let wal = source.with_file_name("writer.gpkg-wal");
+    let before = fs::read(&source).unwrap();
+    let wal_before = fs::read(&wal).unwrap();
+    assert!(!wal_before.is_empty());
+    let output = root.path().join("writer.3tz");
+    let (result, report) = run(&source, &output, &["--layer", "roads"]);
+    assert_eq!(result.status.code(), Some(3), "{report}");
+    assert_eq!(report["error"]["code"], "data");
+    assert!(!output.exists());
+    assert_eq!(fs::read(&source).unwrap(), before);
+    assert_eq!(fs::read(&wal).unwrap(), wal_before);
+    db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .unwrap();
+    drop(db);
+    assert_eq!(
+        convert(&source, &output, &["--layer", "roads"])["features"],
+        3
+    );
 }
