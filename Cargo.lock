@@ -32,6 +32,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -469,15 +475,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "earcut"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88459a2a8e3a514b6e6de38cf3aaa9250a894cb098f74a932db77fcc8341b6d0"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -678,7 +675,6 @@ version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30eb1fdc57c1e5cfd11826fe0caec4b9dc7901f3758263bb506228d88c8d9e9a"
 dependencies = [
- "earcut",
  "float_next_after",
  "geo-types",
  "geographiclib-rs",
@@ -690,6 +686,7 @@ dependencies = [
  "robust",
  "rstar",
  "sif-itree",
+ "spade",
 ]
 
 [[package]]
@@ -711,6 +708,7 @@ dependencies = [
  "num-traits",
  "rstar",
  "serde",
+ "spade",
  "thiserror 2.0.20",
 ]
 
@@ -832,6 +830,8 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash",
 ]
 
@@ -1918,7 +1918,6 @@ dependencies = [
  "geozero",
  "gltf",
  "gltf-json",
- "i_overlay",
  "image",
  "jpeg-decoder",
  "jsonschema",
@@ -1933,10 +1932,12 @@ dependencies = [
  "proj4rs",
  "proj4wkt",
  "rayon",
+ "rstar",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
+ "spade",
  "tempfile",
  "thiserror 2.0.20",
  "tiny_http",
@@ -2076,6 +2077,18 @@ name = "smallvec"
 version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
+
+[[package]]
+name = "spade"
+version = "2.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9699399fd9349b00b184f5635b074f9ec93afffef30c853f8c875b32c0f8c7fa"
+dependencies = [
+ "hashbrown 0.16.1",
+ "num-traits",
+ "robust",
+ "smallvec",
+]
 
 [[package]]
 name = "sqlite-wasm-rs"

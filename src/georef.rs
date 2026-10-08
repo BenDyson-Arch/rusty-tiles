@@ -64,6 +64,7 @@ pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
 /// WGS84 ECEF metres to longitude/latitude in degrees and ellipsoidal metres.
 /// This fixed-datum inverse is also used to orient portable vector frames;
 /// it does not select or perform a source datum transformation.
+/// Longitude is conventionally zero at a pole, where it is indeterminate.
 pub fn ecef_to_cartographic(point: [f64; 3]) -> Result<Cartographic, crate::Error> {
     if !point.iter().all(|value| value.is_finite()) || point.iter().all(|value| value.abs() < 1e-12)
     {
@@ -515,7 +516,14 @@ mod tests {
                     assert!((inverse.lat_deg - lat).abs() < 1e-9);
                     assert!((inverse.height_m - height).abs() < 0.001);
                     let frame = root_transform(inverse, None);
-                    let expected = root_transform(original, None);
+                    let expected = root_transform(
+                        if lat.abs() == 90. {
+                            Cartographic::new(0., lat, height)
+                        } else {
+                            original
+                        },
+                        None,
+                    );
                     for i in [0, 1, 2, 4, 5, 6, 8, 9, 10] {
                         assert!((frame[i] - expected[i]).abs() < 1e-11);
                     }

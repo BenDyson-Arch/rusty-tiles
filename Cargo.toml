@@ -65,8 +65,9 @@ gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
 las = { version = "0.11.1", features = ["laz"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 geozero = { version = "0.15.1", default-features = false, features = ["with-geojson", "with-wkb"] }
-geo = { version = "0.33.1", default-features = false, features = ["earcut"] }
-i_overlay = { version = "4.5.2", default-features = false }
+geo = { version = "0.33.1", default-features = false, features = ["spade"] }
+spade = "2.15"
+rstar = { version = "0.12.2", default-features = false }
 tiny_http = "0.12.0"
 percent-encoding = "2.3.2"
 bitvec = { version = "1.1", default-features = false, features = ["std"] }
