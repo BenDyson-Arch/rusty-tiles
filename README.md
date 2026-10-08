@@ -13,7 +13,7 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | No |
-| LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for globe placement |
+| LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage, GeoJSON or Shapefile | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
 | GeoTIFF or other GDAL imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
 | Elevation rasters | `terrain` | Prototype quantized-mesh terrain with height sidecars | Yes |
@@ -25,7 +25,7 @@ Every option for every command is in the [command reference](docs/CLI.md).
 
 ## Install
 
-The downloads support mesh tiling, local point clouds, packaging, validation and preview. For georeferenced point clouds, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo).
+The default build supports mesh tiling, local and grid-free georeferenced point clouds, packaging, validation and preview. For other CRS operations, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo). See the [point-cloud CRS limits](docs/FORMATS.md#point-clouds).
 
 ### macOS / Linux
 
@@ -221,7 +221,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Transformations use only local PROJ operations. A missing grid fails the job, and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Point clouds automatically use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. Other operations use strict native PROJ when built with `native-geospatial`; the default build refuses them with a message naming that feature. Datum shifts are never silently discarded. Native operations use local PROJ resources only; a missing grid fails the job and ballpark operations are refused.
 
 ## Library use
 

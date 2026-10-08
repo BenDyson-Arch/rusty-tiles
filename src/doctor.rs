@@ -133,8 +133,22 @@ fn geospatial_readiness() -> Value {
 }
 
 fn point_cloud_readiness(geospatial: &Value) -> Value {
+    let classes = [
+        "WGS84 geographic (EPSG:4326)",
+        "WGS84 UTM north/south (EPSG:32601–32660/32701–32760)",
+        "WGS84 Mercator (EPSG:3857/3395)",
+        "supported local projections with an explicit WGS84 datum or 3/7-parameter Helmert shift",
+    ];
+    let tier = if cfg!(feature = "native-geospatial") {
+        "pure Rust with strict native fallback"
+    } else {
+        "pure Rust"
+    };
+    let placement = json!({"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
+        "crsClasses":classes,"nativeFallback":geospatial,
+        "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, quoted PROJ values, PROJ +init or spaced assignments, unsupported WKT syntax, incomplete/mismatched WKT method parameters, unverified method-specific parameter names/identities or colliding aliases, spherical transverse Mercator, oblique stereographic origins at or beyond 80 degrees latitude, ordinary stereographic origins from 80 degrees to below 90 degrees, distinct conic parallels less than one degree apart, conic parallels beyond 80 degrees, omitted LCC origins/second parallels, oblique/nonpolar stereographic points at or beyond 80 degrees source latitude, failed coordinate-domain probes, conflicting polar hemispheres or zero polar standard parallels and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive, latitudes within method-specific domains and projected PROJ units linear. Conflicting polar stereographic scales and conic parallels whose signed sum has magnitude below one degree and Albers points at or beyond 80 degrees source latitude are refused in all builds. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
-        "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
+        "geospatial":placement,"note":"Local XYZ and verified grid-free globe placement need no Python or GDAL. Conversion validates the source-specific operation."})
 }
 
 fn proj_inventory(database: &Value) -> Value {
@@ -228,6 +242,22 @@ pub fn display(report: &Value, json_output: bool) {
                 if let Some(error) = info[capability]["error"].as_str() {
                     println!("  {capability}: {error}");
                 }
+            }
+            if let Some(backend) = info["geospatial"]["backend"].as_str() {
+                println!("  geospatial: {backend}");
+                if let Some(classes) = info["geospatial"]["crsClasses"].as_array() {
+                    for class in classes {
+                        println!("    {}", class.as_str().unwrap_or(""));
+                    }
+                }
+                println!(
+                    "  native fallback: {}",
+                    if info["geospatial"]["nativeFallback"]["ready"] == true {
+                        "ready"
+                    } else {
+                        "unavailable"
+                    }
+                );
             }
             if let Some(path) = info["cesium"]["path"].as_str() {
                 if info["cesium"]["found"] == true {

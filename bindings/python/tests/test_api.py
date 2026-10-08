@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import importlib.metadata
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -102,6 +103,39 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(output.read_bytes(), before)
         rusty_tiles.point_cloud_to_3tz(source, output, force=True)
         self.assertTrue(rusty_tiles.validate(output)["ok"])
+
+    def test_georeferenced_points_and_unsupported_datum(self):
+        source = self.root / "points.las"
+        write_las(source)
+        output = self.root / "globe.3tz"
+        result = rusty_tiles.point_cloud_to_3tz(
+            source, output, source_crs="EPSG:4326", height_offset=7,
+            explicit=True,
+        )
+        self.assertEqual(result.report["resolvedCrs"], "EPSG:4326")
+        self.assertTrue(rusty_tiles.validate(output)["ok"])
+        with zipfile.ZipFile(output) as archive:
+            tileset = json.loads(archive.read("tileset.json"))
+        # Independently calculate the ECEF bounding-box centre used by the root.
+        positions = []
+        a = 6378137.0
+        e2 = 1 - (1 - 1 / 298.257223563) ** 2
+        for lon, lat, height in [(0, 0, 7), (1, 0, 7), (0, 1, 7), (1, 1, 8)]:
+            lon, lat = math.radians(lon), math.radians(lat)
+            n = a / math.sqrt(1 - e2 * math.sin(lat) ** 2)
+            positions.append(((n + height) * math.cos(lat) * math.cos(lon),
+                              (n + height) * math.cos(lat) * math.sin(lon),
+                              (n * (1 - e2) + height) * math.sin(lat)))
+        expected = [(min(p[i] for p in positions) + max(p[i] for p in positions)) / 2
+                    for i in range(3)]
+        for actual, expected in zip(tileset["root"]["transform"][12:15], expected):
+            self.assertAlmostEqual(actual, expected, delta=0.001)
+        rejected = self.root / "rejected.3tz"
+        with self.assertRaisesRegex(rusty_tiles.EnvironmentError, "native-geospatial"):
+            rusty_tiles.point_cloud_to_3tz(
+                source, rejected, source_crs="EPSG:26910", height_offset=0,
+            )
+        self.assertFalse(rejected.exists())
 
     def test_mesh_node_features_are_available_from_python(self):
         source = self.root / "buildings.gltf"

@@ -513,7 +513,22 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
     assert_eq!(report["commands"]["point-cloud"]["local"]["ready"], true);
     assert_eq!(
         report["commands"]["point-cloud"]["geospatial"]["ready"],
+        true
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["backend"],
+        "pure Rust (proj4rs)"
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["nativeFallback"]["ready"],
         cfg!(feature = "native-geospatial")
+    );
+    assert!(
+        report["commands"]["point-cloud"]["geospatial"]["crsClasses"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 4
     );
     let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["doctor", "--json"])
@@ -538,7 +553,7 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
 
 #[cfg(not(feature = "native-geospatial"))]
 #[test]
-fn geospatial_placement_on_a_default_build_names_the_required_feature() {
+fn unverified_datum_on_a_default_build_names_the_required_feature() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 1, false, vec![]);
@@ -546,7 +561,7 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     let result = call(
         &input,
         &out,
-        &["--sourceCrs", "EPSG:32631", "--heightOffset", "0"],
+        &["--sourceCrs", "EPSG:26910", "--heightOffset", "0"],
     );
     assert_eq!(result.status.code(), Some(4));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
@@ -557,7 +572,6 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     assert!(!out.exists());
 }
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
     use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
@@ -628,6 +642,536 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
         assert_eq!(call(&input, &output, &options).status.code(), Some(3));
         assert!(!output.exists());
     }
+}
+
+#[test]
+fn wkt_las_and_laz_headers_place_globe_coordinates_without_external_resources() {
+    use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
+    let wkt = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
+    for suffix in ["las", "laz"] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("cloud.{suffix}"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.vlrs.push(las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        });
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        writer
+            .write_point(las::Point {
+                x: 153.02,
+                y: -27.47,
+                z: 123.,
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        let output = work.path().join("cloud.3tz");
+        let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+            .args(["--json", "point-cloud", "--explicit", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .args(["--source-crs", "header", "--height-offset", "7"])
+            .env("PATH", "")
+            .env("PROJ_DATA", work.path().join("absent-database"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        let expected = geodetic_to_ecef(Cartographic::new(153.02, -27.47, 130.));
+        for (i, expected) in expected.iter().enumerate() {
+            assert!(
+                (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).abs() < 0.001
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "native-geospatial"))]
+#[test]
+fn compound_geoid_header_refuses_default_build_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    let wkt = r#"COMPD_CS["WGS84 + invented geoid",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],VERT_CS["Invented geoid height",VERT_DATUM["Invented geoid",2005,EXTENSION["PROJ4_GRIDS","missing.gtx"]],UNIT["metre",1],AXIS["Up",UP]]]"#;
+    fixture(
+        &input,
+        1,
+        false,
+        vec![las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        }],
+    );
+    let output = work.path().join("cloud.3tz");
+    let result = call(
+        &input,
+        &output,
+        &["--source-crs", "header", "--height-offset", "0"],
+    );
+    assert_eq!(result.status.code(), Some(4));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let message = report["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("--features native-geospatial"),
+        "{message}"
+    );
+    assert!(message.contains("grids"), "{message}");
+    assert!(!output.exists());
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn invalid_projection_parameters_and_units_never_publish() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 1, false, vec![]);
+    let wkt = r#"PROJCS["Invented invalid scale",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["scale_factor",0],UNIT["metre",1]]"#;
+    for definition in [
+        "+proj=stere +lat_0=45 +k=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k=-1 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=-1 +datum=WGS84",
+        "+proj=utm +datum=WGS84",
+        "+proj=utm +lon_0=10 +datum=WGS84",
+        "+proj=tmerc +lat_0=100 +datum=WGS84",
+        "+proj=tmerc +lat_0=-100 +datum=WGS84",
+        "+proj=aea +lat_1=100 +lat_2=45 +datum=WGS84",
+        "+proj=merc +lat_ts=-100 +datum=WGS84",
+        "+proj=lcc +lat_1=-90 +lat_2=45 +datum=WGS84",
+        "+proj=utm +zone=32 +datum=WGS84 +units=degrees",
+        "+proj=stere +lat_0=90 +lat_ts=70 +k=0.99 +datum=WGS84",
+        "+proj=stere +lat_0=-90 +lat_ts=-70 +k_0=2 +datum=WGS84",
+        "+proj=stere +lat_0=90 +lat_ts=-90 +k=0.99 +datum=WGS84",
+        "+proj=stere +lat_0=-90 +lat_ts=90 +k_0=0.99 +datum=WGS84",
+        "+proj=aea +lat_1=30 +lat_2=-29.99999999 +datum=WGS84",
+        "+proj=lcc +lat_1=30 +lat_2=-29.99999999 +lat_0=0 +datum=WGS84",
+        wkt,
+    ] {
+        let output = work.path().join("rejected.3tz");
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        assert_eq!(
+            result.status.code(),
+            Some(3),
+            "{definition}: {}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        let message = report["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("positive")
+                || message.contains("explicit +zone")
+                || message.contains("projection latitude")
+                || message.contains("linear +units")
+                || message.contains("conflicts")
+                || message.contains("conic standard parallels"),
+            "{definition}: {message}"
+        );
+        assert!(!output.exists());
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    for (point_index, point) in [
+        [1000., 2000., 123.],
+        [200000., 567890., 123.],
+        [3000000., -3000000., 500.],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("cloud-{point_index}.las"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.transforms.x.scale = 0.01;
+        builder.transforms.y.scale = 0.01;
+        let header = builder.into_header().unwrap();
+        let mut writer = las::Writer::from_path(&input, header).unwrap();
+        writer
+            .write_point(las::Point {
+                x: point[0],
+                y: point[1],
+                z: point[2],
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        for (index, definition) in [
+            "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE",
+            "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
+            "+proj=sterea +lat_0=-90 +datum=WGS84",
+            "+proj=sterea +lat_0=90 +datum=WGS84",
+            "+proj=sterea +lat_0=89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=80 +datum=WGS84",
+            "+proj=sterea +lat_0=-80 +datum=WGS84",
+            "+proj=stere +lat_0=89.99999999 +datum=WGS84",
+            "+proj=stere +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=lcc +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+proj=lcc +lat_1=33 +datum=WGS84",
+            "+proj=lcc +lat_1=-89.999999 +lat_2=-89.999999 +lat_0=-89.999999 +datum=WGS84",
+            "+proj=aea +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+init=epsg:32632",
+            "+proj=utm +zone = 32 +datum=WGS84",
+            "EPSG:32632@2020",
+            r#"+proj=tmerc +k="0.9996" +datum=WGS84"#,
+            r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#,
+            "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let output = work.path().join(format!("{point_index}-{index}.3tz"));
+            let result = call(
+                &input,
+                &output,
+                &["--source-crs", definition, "--height-offset", "7"],
+            );
+            #[cfg(feature = "native-geospatial")]
+            {
+                use rusty_tiles::geospatial::{Crs, EcefTransform};
+                assert!(
+                    result.status.success(),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let expected =
+                    EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&[point])
+                        .unwrap()[0];
+                let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+                let manifest = document(&mut zip, "tileset.json");
+                let distance = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, expected)| {
+                        (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                    })
+                    .sum::<f64>()
+                    .sqrt();
+                assert!(
+                    distance < 0.001,
+                    "{definition}: ECEF difference {distance} m"
+                );
+                rusty_tiles::validate::archive(&output, None).unwrap();
+            }
+            #[cfg(not(feature = "native-geospatial"))]
+            {
+                assert_eq!(
+                    result.status.code(),
+                    Some(4),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("--features native-geospatial"));
+                assert!(!output.exists());
+            }
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+fn exact_point_fixture(input: &Path, point: [f64; 3]) {
+    let mut builder = las::Builder::from((1, 4));
+    builder.transforms.x.offset = point[0];
+    builder.transforms.y.offset = point[1];
+    builder.transforms.z.offset = point[2];
+    let mut writer = las::Writer::from_path(input, builder.into_header().unwrap()).unwrap();
+    writer
+        .write_point(las::Point {
+            x: point[0],
+            y: point[1],
+            z: point[2],
+            ..Default::default()
+        })
+        .unwrap();
+    writer.close().unwrap();
+}
+
+#[test]
+fn wkt_method_parameters_and_albers_preserve_native_or_refuse() {
+    let work = tempfile::tempdir().unwrap();
+    let incomplete = include_str!("fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    let extra_scale = incomplete.replace(r#",PARAMETER["false_easting""#,
+        r#",PARAMETER["standard_parallel_2",45],PARAMETER["scale_factor",2],PARAMETER["false_easting""#);
+    for (index, (definition, point, outside_accuracy_domain)) in [
+        (incomplete, [200000., 567890., 123.], false),
+        (extra_scale.as_str(), [200000., 567890., 123.], false),
+        (
+            include_str!("fixtures/crs/mercator-redundant-origin.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            include_str!("fixtures/crs/mercator-wrong-parallel.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            "+proj=aea +lat_1=33 +lat_2=45 +lat_0=10 +datum=WGS84",
+            [0., 7279556.2302497085, 123.],
+            true,
+        ),
+        (
+            "+proj=aea +lat_1=-33 +lat_2=-45 +lat_0=-10 +datum=WGS84",
+            [0., -7279556.2302497085, 123.],
+            true,
+        ),
+        (
+            "+proj=aea +lat_1=80 +lat_2=80 +lat_0=80 +ellps=sphere +towgs84=0,0,0",
+            [612606.1867269421, 13949033.598816177, 123.],
+            true,
+        ),
+        (
+            include_str!("fixtures/crs/lcc-michigan-near-equator.wkt"),
+            [5000., 6000., 123.],
+            true,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("source-{index}.las"));
+        exact_point_fixture(&input, point);
+        let output = work.path().join(format!("source-{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            let _ = outside_accuracy_domain;
+            assert_eq!(
+                result.status.code(),
+                Some(if definition.starts_with("+proj=aea") {
+                    3
+                } else {
+                    4
+                }),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            assert!(!output.exists());
+        }
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            if outside_accuracy_domain {
+                assert_eq!(result.status.code(), Some(3));
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("verified point-cloud accuracy"));
+                assert!(!output.exists());
+                continue;
+            }
+            assert!(
+                result.status.success(),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[point])
+                .unwrap()[0];
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                distance < 0.001,
+                "{definition}: ECEF difference {distance} m"
+            );
+            rusty_tiles::validate::archive(&output, None).unwrap();
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    for (index, (definition, point)) in [
+        (
+            "+proj=sterea +lat_0=45 +datum=WGS84",
+            [0.9141389405141953, 5290076.530007198, 123.],
+        ),
+        (
+            "+proj=sterea +lat_0=79.999999 +ellps=airy +towgs84=12,-34,56",
+            [0.00112530269295305, 1119554.6907156024, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=75 +datum=WGS84",
+            [0., 1685039.1152903102, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-75 +datum=WGS84",
+            [0., -1685039.1152903102, 123.],
+        ),
+        (
+            "+proj=stere +lat_0=90 +lat_ts=-70 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-90 +lat_ts=70 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+        (
+            "+proj=stere +lat_0=-90 +lat_ts=0 +datum=WGS84",
+            [0., 0., 123.],
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("polar-point-{index}.las"));
+        exact_point_fixture(&input, point);
+        let output = work.path().join(format!("polar-point-{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[point]);
+            let expected = match expected {
+                Ok(expected) => {
+                    assert!(
+                        result.status.success(),
+                        "{definition}: {}",
+                        String::from_utf8_lossy(&result.stdout)
+                    );
+                    expected[0]
+                }
+                Err(error) => {
+                    assert_eq!(
+                        result.status.code(),
+                        Some(i32::from(error.category().1)),
+                        "{definition}"
+                    );
+                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                    assert_eq!(report["error"]["code"], error.category().0);
+                    assert!(matches!(error, rusty_tiles::Error::Data(_)), "{error}");
+                    assert!(!output.exists());
+                    continue;
+                }
+            };
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(distance < 0.001, "ECEF difference {distance} m");
+            rusty_tiles::validate::archive(&output, None).unwrap();
+        }
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            assert_eq!(result.status.code(), Some(4));
+            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert!(report["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("pure-Rust point-cloud CRS transform unavailable"));
+            assert!(!output.exists());
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn native_lcc_variant_b_conditioning_cannot_be_bypassed_with_alternate_syntax() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 1, false, vec![]);
+    for definition in [
+        r#"+proj=lcc +lat_1="1e-08" +lat_0=5 +datum=WGS84"#,
+        "+proj=lcc +lat_1 = 1e-08 +lat_0=5 +datum=WGS84",
+    ] {
+        let output = work.path().join("rejected.3tz");
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(feature = "native-geospatial")]
+        let (code, message) = (3, "conic standard parallels");
+        #[cfg(not(feature = "native-geospatial"))]
+        let (code, message) = (4, "pure-Rust point-cloud CRS transform unavailable");
+        assert_eq!(
+            result.status.code(),
+            Some(code),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert!(report["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(message));
+        assert!(!output.exists());
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
 }
 
 #[test]
