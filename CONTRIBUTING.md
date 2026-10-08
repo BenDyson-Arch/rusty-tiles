@@ -288,6 +288,19 @@ Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. 
 
 For the deep probe, export the invented 24×24 textured grid using `RUSTY_TILES_DIGEST_EXPORT=target/implicit-inputs cargo test --locked --features native-geospatial --test output_digests export_recipes -- --ignored --exact`. Convert its `inputs/mesh.glb` with `--max-triangles 2 --max-bytes 0 --tile-size 64 --cartographic-position-degrees 12.1 41.9 200`. Reconvert the preview fixture's `cloud.las` with `--source-crs header --height-offset 10 --max-points 1`. Extract both archives and serve them with a generated annotations layer. Run `node tests/fixtures/implicit_levels.cjs URL`. Cesium 1.143.0 traverses levels 0–5, retains all 1,152 leaf triangles and 257 points, and picks both. The vector probe also checks contiguous instantiated levels, including routing nodes.
 
+### Plain fill GLB regression
+
+Issue #75 retains `b3dm` because CesiumJS 1.146.0 fails on plain triangle fill GLBs inside a vector tileset. The paired fixture preserves GLB bytes, source rings and metadata while removing only the wrapper and changing content URI suffixes. It includes batched features, a hole, fragmented source boundaries, LOD and the unchanged Sudan/Antarctica fixture rings. The probe checks picking, property color styling and visibility on initial load and a hard refresh.
+
+```sh
+RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python3 tests/fixtures/vector_fill_glb.py target/fill-glb-fixtures
+rusty-tiles preview --annotations target/fill-glb-fixtures --cesium target/metadata-browser/node_modules/cesium/Build/Cesium --port 9377
+# In another terminal:
+NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/vector_fill_glb.cjs http://127.0.0.1:9377 --expect-current-failure
+```
+
+Generate a second directory with `--compressed` to exercise `--quantize --meshopt`; repeat with portable and native binaries. `--expect-current-failure` requires wrapped fills and unaffected vector contents to pass while plain fragmented fills report the exact known `loopIndices` failure. The invented fragmented polygon and Sudan cannot be picked; Antarctica can retain a pickable coarser polygon while descendants fail. Omit that flag when checking a future runtime: every plain and wrapped case must then pass before changing the default. This regression does not alter converter output, cache identity or the frozen Python oracle. The measured four-build/encoding matrix is in [vector_fill_glb_results.json](bench/vector_fill_glb_results.json).
+
 ## Check byte-identity
 
 Point-cloud and `convert` archives are reproducible by default. For vector archives, add `--reproducible`. It omits `conversion.json.performance`, the only volatile section. Then the same input, options, binary and GDAL, GEOS, PROJ and codec versions give identical bytes, whatever the worker count.
