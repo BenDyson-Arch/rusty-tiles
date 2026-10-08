@@ -65,26 +65,30 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `geospatial.rs`, `geospatial/native.rs` | Shared GDAL and PROJ layer for all native converters |
 | `doctor.rs`, `preview.rs` | Readiness report and local preview server |
 | `fixtures.rs` | Tiny GLB used by tests |
+| `bindings/python/` | PyO3 stable ABI extension, Python API guide and installed-wheel acceptance tests |
 
 Native GDAL handles are created inside each worker. Spatial references and transformations cannot be sent between threads. Native CRS operations use GDAL's process-wide offline policy, so never re-enable PROJ networking while they run.
 
 ## Build
 
-Use current stable Rust with rustfmt, a C++ compiler and `pkg-config`. libjpeg-turbo is optional.
+Use current stable Rust with rustfmt and a C++ compiler. The default build uses portable JPEG. Native features need `pkg-config` and their system libraries.
 
 | Build | Command | Extra system packages |
 | --- | --- | --- |
 | Default | `cargo build --locked` | None |
 | Native geospatial | `cargo build --locked --features native-geospatial` | GDAL 3.12+, PROJ 9.2+, GEOS 3.10+, their headers and `pkg-config` files, SQLite dev files, libclang |
-| Portable JPEG | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo build --locked` | None |
+| Native JPEG | `cargo build --locked --features native-jpeg` | libjpeg-turbo headers/libraries and `pkg-config` |
+
+`RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides `native-jpeg` for portable packaging. Python wheels never enable native features.
 
 ## Run the tests
 
 ### Rust
 
 ```sh
-cargo fmt --check
+cargo fmt --all --check
 cargo test --locked
+cargo test --locked --features native-jpeg
 cargo test --locked --features native-geospatial
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
@@ -117,6 +121,22 @@ Implicit subtrees have four levels. Regular boundaries use child-subtree availab
 Doctor, machine results, native diagnostics, preview, force replacement and archive validation now run in Rust. Their inputs are generated locally, and the CLI runs with an empty executable `PATH`. The remaining Python tests use independent readers or frozen converter oracles.
 
 ### Python acceptance
+
+The Python extension has its own dependency-free suite. It installs an actual
+wheel into a fresh virtual environment and runs the README example, all five
+entry points, callbacks, concurrent calls, errors and force replacement with an
+empty executable `PATH`:
+
+```sh
+python3 -m pip install 'maturin==1.15.0'
+cargo clippy --locked -p rusty-tiles-python -- -D warnings
+RUSTY_TILES_DISABLE_NATIVE_JPEG=1 maturin build --release --locked --out target/wheels
+python3 scripts/test_python_wheel.py target/wheels/*.whl
+```
+
+Normal CI checks the wheel on CPython 3.10 and 3.14. Tag builds produce and
+smoke-test one `cp310-abi3` wheel per release platform; the stable ABI covers
+CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.
 
@@ -303,8 +323,9 @@ These recipes use `--explicit` for the three spatial converters; the script omit
 5. The browser probes pass on the pinned Cesium release.
 6. The public-data audits below are repeated when encoders change.
 7. `CHANGELOG.md` describes every user-visible change.
-8. Update `Cargo.toml` to the release version, merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the GitHub release with `SHA256SUMS`. Prereleases do not update the image's `latest` tag.
-9. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
+8. Before the first Python release, create the GitHub environment `pypi` and configure a PyPI trusted publisher for owner `BenDyson-Arch`, repository `rusty-tiles`, workflow `release.yml`, environment `pypi`. This uses OIDC and needs no API token. Configure a pending publisher if the PyPI project does not exist yet; see [PyPI's trusted publishing guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+9. Update `[workspace.package].version` in `Cargo.toml` to the release version (both Rust crates inherit it), merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries and Python wheels for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the wheels to PyPI and the GitHub release with `SHA256SUMS`. Linux wheels use manylinux_2_28; no system geospatial libraries or libjpeg-turbo are required. Prereleases do not update the image's `latest` tag.
+10. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
 
    ```sh
    sh scripts/install.sh --version VERSION --prefix /tmp/rusty-tiles-release/bin

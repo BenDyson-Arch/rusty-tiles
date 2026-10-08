@@ -9,7 +9,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - Shared public `metadata` types and aligned GLB/property-table authoring for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile bounds/error semantics. Vector payloads and default converter output bytes are preserved.
 - `mesh-to-3tz --node-features` keeps source nodes pickable and styleable by `name` and `node_index` through all LODs, including small inputs and instanced meshes. Unnamed nodes use `node_<index>`.
 - `point-cloud --metadata-attributes` also exposes classification, intensity and return number as property attributes, retaining existing lossless property tables.
-
+- Python bindings via PyO3 and maturin: path-based mesh, glTF/GLB, local LAS/LAZ and tileset conversion, archive validation, progress callbacks and typed exceptions. Tag builds smoke-test CPython stable ABI wheels on the five release platforms and publish to PyPI with trusted publishing.
 - Opt-in native `demodata-suite` acceptance and benchmarks: pinned public inputs, smoke/core/scale profiles, conversion timing and memory, payload repeatability, and geometry/metadata/tile audits. Normal CI runs only the fast harness checks.
 - 3D Tiles 1.1 implicit tiling is the default for point clouds, vectors and meshes. Binary subtrees carry Morton-ordered availability and standard tile bounds/error metadata. Meshes and point clouds use midpoint octrees; vectors preserve padded boxes and reuse. Bounds that exceed regular subtree cells use external implicit tileset roots so Cesium can refine and pick them. `--explicit` preserves the earlier output bytes.
 - Library: `implicit::Subtree`, `TileMetadata` and `expand_tileset` support quadtree/octree availability, multiple contents, child-subtree links, semantic metadata and bounded expansion for audits. Built-in archive validation checks native implicit output.
@@ -23,6 +23,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Changed
 
+- JPEG uses the portable Rust encoder by default. System libjpeg-turbo now requires the explicit `native-jpeg` feature; `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` still overrides it for portable builds.
 - README installation starts with prebuilt downloads. A simpler header figure and an invented mesh example make the quick start work with the default build.
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
 - Benchmark harnesses, public-data audits and recorded evidence now live in `bench/`.

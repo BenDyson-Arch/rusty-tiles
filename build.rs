@@ -16,7 +16,9 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(rusty_tiles_native_jpeg)");
     println!("cargo:rerun-if-env-changed=RUSTY_TILES_DISABLE_NATIVE_JPEG");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
-    if std::env::var_os("RUSTY_TILES_DISABLE_NATIVE_JPEG").is_some() {
+    if !cfg!(feature = "native-jpeg")
+        || std::env::var_os("RUSTY_TILES_DISABLE_NATIVE_JPEG").is_some()
+    {
         return;
     }
     if std::env::var("HOST").ok() != std::env::var("TARGET").ok() {
@@ -26,10 +28,12 @@ fn main() {
         .args(["--libs", "libturbojpeg"])
         .output()
     else {
-        return;
+        panic!(
+            "native-jpeg requires pkg-config and libjpeg-turbo; omit the feature for portable JPEG"
+        );
     };
     if !output.status.success() {
-        return;
+        panic!("native-jpeg requires libjpeg-turbo; omit the feature for portable JPEG");
     }
     for flag in String::from_utf8_lossy(&output.stdout).split_whitespace() {
         if let Some(path) = flag.strip_prefix("-L") {

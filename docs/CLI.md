@@ -301,6 +301,6 @@ Events report work units, not time remaining.
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` still works when this is unset. |
 | `RAYON_NUM_THREADS` | mesh, terrain | Limit worker threads. `1` makes terrain encoding serial. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
-| `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Build with the portable Rust JPEG encoder instead of libjpeg-turbo |
+| `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).

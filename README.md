@@ -84,7 +84,7 @@ Add `--features native-geospatial` to enable every converter. This build needs G
 
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
-If `pkg-config` finds libjpeg-turbo at build time, it is also needed at run time. Set `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` while building to use the portable Rust encoder, as the release binaries do.
+The default build uses the portable Rust JPEG encoder. Add `--features native-jpeg` to use system libjpeg-turbo instead; this needs `pkg-config` at build time and libjpeg-turbo at runtime. `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides that feature for portable packaging.
 
 If you already have `cargo-binstall`, run `cargo binstall --manifest-path Cargo.toml rusty-tiles` from a source checkout to download the prebuilt binary instead.
 
@@ -224,6 +224,23 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 A constant height offset is not a geoid transformation. Transformations use only local PROJ operations. A missing grid fails the job, and ballpark operations are refused.
 
 ## Library use
+
+Python and Blender addons can call the default converters directly:
+
+```sh
+python -m pip install rusty-tiles
+```
+
+```python
+import rusty_tiles
+
+result = rusty_tiles.mesh_to_3tz(
+    "example.gltf", "example.3tz", cartographic=(153.02, -27.47, 0.0)
+)
+assert rusty_tiles.validate(result.output)["ok"]
+```
+
+The wheels need CPython 3.10+ and include the default Rust build, with no GDAL, CLI subprocess or extra Python packages. See the [Python API and source build guide](bindings/python/README.md) for supported platforms, path-based options, progress callbacks and exceptions. Point clouds use local LAS/LAZ XYZ metre coordinates.
 
 Each converter has a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
 
