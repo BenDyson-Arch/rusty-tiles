@@ -16,16 +16,16 @@ pub(super) enum Transform {
 #[cfg(feature = "native-geospatial")]
 pub(super) struct NativeTransform {
     ecef: crate::geospatial::EcefTransform,
-    spherical_albers: Option<(crate::geospatial::StrictTransform, f64)>,
+    albers: Option<(crate::geospatial::StrictTransform, f64)>,
 }
 
 #[cfg(feature = "native-geospatial")]
 impl NativeTransform {
     fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
-        if let Some((geographic, units)) = &mut self.spherical_albers {
+        if let Some((geographic, units)) = &mut self.albers {
             for (index, point) in geographic.transform(points)?.iter().enumerate() {
                 if (point[1] * *units).abs() >= 80_f64.to_radians() {
-                    return Err(spherical_albers_outside_domain(index));
+                    return Err(albers_outside_domain(index));
                 }
             }
         }
@@ -33,8 +33,8 @@ impl NativeTransform {
     }
 }
 
-fn spherical_albers_outside_domain(index: usize) -> Error {
-    Error::Data(format!("point {index}: spherical Albers source latitude at or beyond 80 degrees is outside verified point-cloud accuracy"))
+fn albers_outside_domain(index: usize) -> Error {
+    Error::Data(format!("point {index}: Albers source latitude at or beyond 80 degrees is outside verified point-cloud accuracy"))
 }
 
 impl Transform {
@@ -56,12 +56,9 @@ impl Transform {
         if let Some((first, second)) = source.conic_parallels()? {
             validate_conic_conditioning(first, second)?;
         }
-        let spherical_albers = source.spherical_albers_domain()?;
+        let albers = source.albers_domain()?;
         let ecef = crate::geospatial::EcefTransform::new(source, Some(height_offset))?;
-        Ok(Self::Native(Box::new(NativeTransform {
-            ecef,
-            spherical_albers,
-        })))
+        Ok(Self::Native(Box::new(NativeTransform { ecef, albers })))
     }
 
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
@@ -171,7 +168,7 @@ impl PureTransform {
         let (a, b) = source.ellipse_parameters();
         let source_geographic = if source.projname() == "sterea"
             || (source.projname() == "stere" && !polar_stereographic)
-            || (source.projname() == "aea" && a == b)
+            || source.projname() == "aea"
         {
             // An unknown target datum deliberately skips datum conversion: this
             // probe checks latitude in the source projection, before any shift.
@@ -213,7 +210,7 @@ impl PureTransform {
                     || probe.1.abs() >= 80_f64.to_radians()
                 {
                     if self.source.projname() == "aea" {
-                        return Err(spherical_albers_outside_domain(index));
+                        return Err(albers_outside_domain(index));
                     }
                     return Err(unsupported(&format!(
                         "point {index}: {} coordinates at or beyond 80 degrees source latitude require native PROJ", self.source.projname()
@@ -823,6 +820,106 @@ fn coordinate_units(node: &Node<'_>, angular: bool) -> Result<f64, Error> {
 // Preserve the declared WKT method rather than allowing generic PROJ defaults
 // or parameters from another variant to change the operation. Origin/offset
 // and scale defaults are shared only where both parsers implement them alike.
+fn validate_wkt_parameter_identity(
+    method: &str,
+    wkt1: bool,
+    parameter: &Node<'_>,
+    name: &str,
+    key: &str,
+) -> Result<(), Error> {
+    let conic = matches!(
+        method,
+        "lambertconformalconic2sp"
+            | "lambertconicconformal2sp"
+            | "albersconicequalarea"
+            | "albersequalarea"
+    );
+    let centered = matches!(
+        method,
+        "albersconicequalarea" | "albersequalarea" | "lambertazimuthalequalarea"
+    );
+    let polar_parallel = matches!(method, "polarstereographic" | "polarstereographicvariantb");
+    // WKT1 and WKT2 have distinct method-specific vocabularies. In particular,
+    // Mercator's first standard parallel (8823) is not polar stereographic's
+    // latitude of standard parallel (8832), despite sharing PROJ's lat_ts.
+    let (legacy, canonical, code) = match key {
+        "lat_0" if conic => (
+            if centered {
+                "latitudeofcenter"
+            } else {
+                "latitudeoforigin"
+            },
+            "latitudeoffalseorigin",
+            8821,
+        ),
+        "lon_0" if conic => (
+            if centered {
+                "longitudeofcenter"
+            } else {
+                "centralmeridian"
+            },
+            "longitudeoffalseorigin",
+            8822,
+        ),
+        "lat_1" => ("standardparallel1", "latitudeof1ststandardparallel", 8823),
+        "lat_2" => ("standardparallel2", "latitudeof2ndstandardparallel", 8824),
+        "x_0" if conic => ("falseeasting", "eastingatfalseorigin", 8826),
+        "y_0" if conic => ("falsenorthing", "northingatfalseorigin", 8827),
+        "lat_ts" if polar_parallel => ("latitudeoforigin", "latitudeofstandardparallel", 8832),
+        "lat_ts" => ("standardparallel1", "latitudeof1ststandardparallel", 8823),
+        "lon_0" if polar_parallel => ("centralmeridian", "longitudeoforigin", 8833),
+        "lat_0" => (
+            if centered {
+                "latitudeofcenter"
+            } else {
+                "latitudeoforigin"
+            },
+            "latitudeofnaturalorigin",
+            8801,
+        ),
+        "lon_0" => (
+            if centered {
+                "longitudeofcenter"
+            } else {
+                "centralmeridian"
+            },
+            "longitudeofnaturalorigin",
+            8802,
+        ),
+        "k_0" => ("scalefactor", "scalefactoratnaturalorigin", 8805),
+        "x_0" => ("falseeasting", "falseeasting", 8806),
+        "y_0" => ("falsenorthing", "falsenorthing", 8807),
+        _ => {
+            return Err(unsupported(
+                "WKT projection parameter identity is unsupported",
+            ))
+        }
+    };
+    if name != if wkt1 { legacy } else { canonical } {
+        return Err(unsupported(
+            "WKT parameter name does not match the declared projection method and WKT version",
+        ));
+    }
+    validate_wkt_identity(parameter, code)
+}
+
+fn validate_wkt_identity(node: &Node<'_>, code: u32) -> Result<(), Error> {
+    if let Some(id) = node.child(&["ID", "AUTHORITY"])? {
+        let supplied = match id.attrs.get(1) {
+            Some(Attribute::Number(value) | Attribute::Quoted(value) | Attribute::Label(value)) => {
+                value.parse::<u32>().ok()
+            }
+            _ => None,
+        };
+        if id.text(0)? != "EPSG" || supplied != Some(code) {
+            return Err(unsupported(
+                "WKT identity conflicts with the declared projection method",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_wkt_parameters(
     method: &str,
     seen: &std::collections::BTreeSet<&str>,
@@ -986,6 +1083,22 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
             .text(0)?
             .to_ascii_lowercase()
             .replace([' ', '_', '-', '(', ')'], "");
+        let method_code = match method_name.as_str() {
+            "transversemercator" => 9807,
+            "mercator1sp" | "mercatorvarianta" => 9804,
+            "mercator2sp" | "mercatorvariantb" => 9805,
+            "popularvisualisationpseudomercator" => 1024,
+            "lambertconformalconic1sp" | "lambertconicconformal1sp" => 9801,
+            "lambertconformalconic2sp" | "lambertconicconformal2sp" => 9802,
+            "albersconicequalarea" | "albersequalarea" => 9822,
+            "polarstereographicvarianta" => 9810,
+            "polarstereographicvariantb" | "polarstereographic" => 9829,
+            "obliquestereographic" | "doublestereographic" => 9809,
+            "lambertazimuthalequalarea" => 9820,
+            // Ordinary stereographic has no verified EPSG method identity.
+            _ => 0,
+        };
+        validate_wkt_identity(method, method_code)?;
         let mut projection = match method_name.as_str() {
             "transversemercator" => "etmerc",
             "mercator1sp" | "mercatorvarianta" | "mercator2sp" | "mercatorvariantb" => "merc",
@@ -1092,6 +1205,13 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
                 value
             };
             validate_projection_number(projection, key, value)?;
+            validate_wkt_parameter_identity(
+                &method_name,
+                root.key == "PROJCS",
+                parameter,
+                &name,
+                key,
+            )?;
             if key == "lat_0" {
                 latitude_origin = value;
             }
@@ -1294,7 +1414,20 @@ mod tests {
         } else {
             ("Albers_Conic_Equal_Area", "Albers Equal Area")
         };
-        let [wkt1, wkt2] = projection_wkts(method1, method2, first, 0., None);
+        let origin = if projection == "aea" {
+            first.clamp(-75., 75.)
+        } else {
+            first
+        };
+        let [mut wkt1, wkt2] = projection_wkts(method1, method2, origin, 0., None);
+        if projection == "aea" {
+            wkt1 = wkt1
+                .replace("latitude_of_origin", "latitude_of_center")
+                .replace("central_meridian", "longitude_of_center");
+        }
+        let wkt2 = wkt2
+            .replace("Latitude of natural origin", "Latitude of false origin")
+            .replace("Longitude of natural origin", "Longitude of false origin");
         [
             wkt1.replace(
                 r#",UNIT["metre",1],AXIS"#,
@@ -1321,7 +1454,11 @@ mod tests {
     }
 
     fn incomplete_or_mismatched_wkts() -> Vec<String> {
-        let mut definitions = vec![INCOMPLETE_LCC.to_owned(), MERCATOR_ALIASES.to_owned()];
+        let mut definitions = vec![
+            INCOMPLETE_LCC.to_owned(),
+            MERCATOR_ALIASES.to_owned(),
+            include_str!("../../tests/fixtures/crs/mercator-wrong-parallel.wkt").to_owned(),
+        ];
         for definition in conic_wkts("lcc", 33., 45.) {
             definitions.push(definition.replace(r#",PARAMETER["standard_parallel_2",45]"#, "")
                 .replace(r#",PARAMETER["Latitude of 2nd standard parallel",45,ANGLEUNIT["degree",0.0174532925199433]]"#, ""));
@@ -1329,6 +1466,87 @@ mod tests {
                 .replace("],CS[Cartesian,2]", r#",PARAMETER["Scale factor at natural origin",2,SCALEUNIT["unity",1]]],CS[Cartesian,2]"#));
         }
         definitions
+    }
+
+    #[test]
+    fn wkt_original_parameter_names_and_identities_keep_method_roles() {
+        let [mercator1, mercator2] =
+            projection_wkts("Mercator_2SP", "Mercator (variant B)", 30., 20., None).map(|wkt| {
+                wkt.replace("latitude_of_origin", "standard_parallel_1")
+                    .replace(
+                        "Latitude of natural origin",
+                        "Latitude of 1st standard parallel",
+                    )
+            });
+        let mercator2 = mercator2.replace(
+            r#"PARAMETER["Latitude of 1st standard parallel",30,ANGLEUNIT["degree",0.0174532925199433]]"#,
+            r#"PARAMETER["Latitude of 1st standard parallel",30,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8823]]"#,
+        ).replace(r#"METHOD["Mercator (variant B)"]"#, r#"METHOD["Mercator (variant B)",ID["EPSG",9805]]"#);
+        for definition in [&mercator1, &mercator2] {
+            let mut operation = Transform::new(definition, 7.).unwrap();
+            assert!(matches!(operation, Transform::Pure(_)));
+            assert_mm(
+                operation.transform(&[[0., 0., 123.]]).unwrap()[0],
+                geodetic_to_ecef(Cartographic::new(20., 0., 130.)),
+                "Mercator 2SP analytic origin",
+            );
+            #[cfg(feature = "native-geospatial")]
+            {
+                use crate::geospatial::{Crs, EcefTransform};
+                let points = [[200000., 567890., 123.], [0., 0., 123.]];
+                let expected =
+                    EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&points)
+                        .unwrap();
+                for (actual, expected) in operation
+                    .transform(&points)
+                    .unwrap()
+                    .into_iter()
+                    .zip(expected)
+                {
+                    assert_mm(actual, expected, definition);
+                }
+            }
+        }
+        let mut unverified = vec![
+            mercator1.replace("standard_parallel_1", "Latitude of standard parallel"),
+            mercator1.replace("standard_parallel_1", "Latitude of 1st standard parallel"),
+            mercator2.replace(
+                "Latitude of 1st standard parallel",
+                "Latitude of standard parallel",
+            ),
+            mercator2.replace("Latitude of 1st standard parallel", "standard_parallel_1"),
+            mercator2.replace("8823", "8832"),
+            mercator2.replace("9805", "9829"),
+            mercator2.replace("Longitude of natural origin", "Longitude of false origin"),
+        ];
+        for projection in ["lcc", "aea"] {
+            let [wkt1, wkt2] = conic_wkts(projection, 33., 45.);
+            unverified
+                .push(wkt1.replace("standard_parallel_1", "Latitude of 1st standard parallel"));
+            unverified.push(wkt2.replace("Latitude of false origin", "Latitude of natural origin"));
+            unverified
+                .push(wkt2.replace("Longitude of false origin", "Longitude of natural origin"));
+            unverified.push(wkt2.replace(
+                "Latitude of 1st standard parallel",
+                "Latitude of standard parallel",
+            ));
+        }
+        for definition in unverified {
+            assert!(
+                matches!(
+                    PureTransform::new(&definition, 7.),
+                    Err(Error::Environment(_))
+                ),
+                "{definition}"
+            );
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(matches!(
+                Transform::new(&definition, 7.),
+                Err(Error::Environment(_))
+            ));
+        }
     }
 
     #[test]
@@ -1505,6 +1723,130 @@ mod tests {
                 matches!(operation.transform(&[point]), Err(Error::Data(_))),
                 "{definition}"
             );
+        }
+    }
+
+    #[test]
+    fn ellipsoidal_albers_uses_independent_forward_and_ecef_references() {
+        // Direct Albers forward equations, independent of both inverse
+        // libraries: matching their shared polar clamp would hide the error.
+        fn forward(a: f64, rf: f64, sign: f64, lon: f64, lat: f64) -> [f64; 3] {
+            let flattening = 1. / rf;
+            let e2 = flattening * (2. - flattening);
+            let e = e2.sqrt();
+            let q = |phi: f64| {
+                let sin = phi.to_radians().sin();
+                (1. - e2)
+                    * (sin / (1. - e2 * sin * sin)
+                        - ((1. - e * sin) / (1. + e * sin)).ln() / (2. * e))
+            };
+            let m2 = |phi: f64| {
+                let (sin, cos) = phi.to_radians().sin_cos();
+                cos * cos / (1. - e2 * sin * sin)
+            };
+            let n = (m2(sign * 33.) - m2(sign * 45.)) / (q(sign * 45.) - q(sign * 33.));
+            let c = m2(sign * 33.) + n * q(sign * 33.);
+            let rho = a * (c - n * q(lat)).sqrt() / n;
+            let rho0 = a * (c - n * q(sign * 10.)).sqrt() / n;
+            let (sin, cos) = (n * lon.to_radians()).sin_cos();
+            [rho * sin, rho0 - rho * cos, 123.]
+        }
+        let reported = forward(6378137., 298.257223563, 1., 0., 89.99);
+        assert!((reported[1] - 7279556.2302497085).abs() < 1e-8);
+        let analytic = geodetic_to_ecef(Cartographic::new(0., 89.99, 130.));
+        assert_mm(
+            analytic,
+            [1116.9624790864507, 0., 6356882.216771815],
+            "reported analytic reference",
+        );
+        for (datum, a, rf, shift) in [
+            ("+datum=WGS84", 6378137., 298.257223563, [0.; 3]),
+            (
+                "+ellps=airy +towgs84=12,-34,56",
+                6377563.396,
+                299.3249646,
+                [12., -34., 56.],
+            ),
+        ] {
+            for sign in [-1., 1.] {
+                for (units, factor) in [
+                    ("m", 1.),
+                    ("ft", 0.3048),
+                    ("us-ft", 1200. / 3937.),
+                    ("km", 1000.),
+                ] {
+                    let definition = format!(
+                        "+proj=aea +lat_1={} +lat_2={} +lat_0={} {datum} +units={units}",
+                        sign * 33.,
+                        sign * 45.,
+                        sign * 10.
+                    );
+                    let definitions = vec![definition.clone()];
+                    #[cfg(feature = "native-geospatial")]
+                    let definitions = {
+                        let mut definitions = definitions;
+                        definitions.extend([
+                            definition.replace("+proj=aea", "+proj=\"aea\""),
+                            crate::geospatial::Crs::from_definition(&definition)
+                                .unwrap()
+                                .wkt()
+                                .unwrap(),
+                        ]);
+                        if datum == "+datum=WGS84" && units == "m" {
+                            let wkt2 = conic_wkts("aea", sign * 33., sign * 45.)[1].replace(
+                                &format!(r#"PARAMETER["Latitude of false origin",{}"#, sign * 33.),
+                                &format!(r#"PARAMETER["Latitude of false origin",{}"#, sign * 10.),
+                            );
+                            definitions.push(wkt2);
+                        }
+                        definitions
+                    };
+                    for lat in [
+                        -90_f64, -89.99, -85., -80.000001, -79.999999, -45., 0., 45., 79.999999,
+                        80.000001, 85., 89.99, 90.,
+                    ] {
+                        for lon in [-45., 0., 45.] {
+                            let mut point = forward(a, rf, sign, lon, lat);
+                            point[0] /= factor;
+                            point[1] /= factor;
+                            for definition in &definitions {
+                                let mut operation = Transform::new(definition, 7.).unwrap();
+                                #[cfg(feature = "native-geospatial")]
+                                if definition != &definitions[0] {
+                                    // Exercise the guard after native WKT parsing too,
+                                    // even when the same WKT is also portable.
+                                    operation = Transform::native(definition, 7.).unwrap();
+                                    assert!(matches!(operation, Transform::Native(_)));
+                                }
+                                if lat.abs() > 80. {
+                                    assert!(
+                                        matches!(
+                                            operation.transform(&[point]),
+                                            Err(Error::Data(_))
+                                        ),
+                                        "{definition}: {lon}, {lat}"
+                                    );
+                                } else {
+                                    let flattening = 1. / rf;
+                                    let e2 = flattening * (2. - flattening);
+                                    let (sin_lat, cos_lat) = lat.to_radians().sin_cos();
+                                    let (sin_lon, cos_lon) = lon.to_radians().sin_cos();
+                                    let n = a / (1. - e2 * sin_lat * sin_lat).sqrt();
+                                    assert_mm(
+                                        operation.transform(&[point]).unwrap()[0],
+                                        [
+                                            (n + 130.) * cos_lat * cos_lon + shift[0],
+                                            (n + 130.) * cos_lat * sin_lon + shift[1],
+                                            (n * (1. - e2) + 130.) * sin_lat + shift[2],
+                                        ],
+                                        &format!("{definition}: {lon}, {lat}"),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2173,7 +2515,7 @@ mod tests {
         let mut definitions = Vec::new();
         for projection in ["lcc", "aea"] {
             for (first, second) in [
-                (-80., -80.),
+                (-80_f64, -80.),
                 (80., 80.),
                 (-80., -79.),
                 (79., 80.),
@@ -2185,14 +2527,19 @@ mod tests {
                 (-2., -1.),
                 (33., 45.),
             ] {
+                let origin = if projection == "aea" {
+                    first.clamp(-75., 75.)
+                } else {
+                    first
+                };
                 definitions.push((
                     format!(
-                    "+proj={projection} +lat_1={first} +lat_2={second} +lat_0={first} +datum=WGS84"
+                    "+proj={projection} +lat_1={first} +lat_2={second} +lat_0={origin} +datum=WGS84"
                 ),
-                    first,
+                    origin,
                 ));
                 definitions.extend(
-                    conic_wkts(projection, first, second).map(|definition| (definition, first)),
+                    conic_wkts(projection, first, second).map(|definition| (definition, origin)),
                 );
             }
         }
@@ -2267,9 +2614,24 @@ mod tests {
             [3000000., -3000000., 500.],
         ];
         for definition in additional_native_definitions() {
+            let native_source = Crs::from_definition(&definition).unwrap();
+            // A conic origin may be outside the point-latitude accuracy domain;
+            // compare its native interior instead of assuming XY=0 is usable.
+            let albers_points = if native_source.albers_domain().unwrap().is_some() {
+                crate::geospatial::StrictTransform::new(
+                    &Crs::from_definition("EPSG:4326").unwrap(),
+                    &native_source,
+                )
+                .unwrap()
+                .transform(&[[-2., -45., 123.], [0., 0., -30.], [20., 45., 500.]])
+                .unwrap()
+            } else {
+                Vec::new()
+            };
             let geographic_points = [[0., 0., 123.], [153., -27., 123.], [-2., 52., -30.]];
-            let points = if definition.starts_with("EPSG:4326@") || definition.starts_with("GEOGCS")
-            {
+            let points = if !albers_points.is_empty() {
+                &albers_points[..]
+            } else if definition.starts_with("EPSG:4326@") || definition.starts_with("GEOGCS") {
                 &geographic_points[..]
             } else {
                 &points[..]
@@ -2277,7 +2639,6 @@ mod tests {
             let mut operation = Transform::new(&definition, 7.)
                 .unwrap_or_else(|error| panic!("{definition}: {error}"));
             assert!(matches!(operation, Transform::Native(_)), "{definition}");
-            let native_source = Crs::from_definition(&definition).unwrap();
             if definition.starts_with("EPSG:") && definition.contains('@') {
                 assert_eq!(native_source.coordinate_epoch(), Some(2020.));
             }

@@ -921,7 +921,7 @@ fn exact_point_fixture(input: &Path, point: [f64; 3]) {
 }
 
 #[test]
-fn wkt_method_parameters_and_spherical_albers_preserve_native_or_refuse() {
+fn wkt_method_parameters_and_albers_preserve_native_or_refuse() {
     let work = tempfile::tempdir().unwrap();
     let incomplete = include_str!("fixtures/crs/lcc-2sp-missing-parallel.wkt");
     let extra_scale = incomplete.replace(r#",PARAMETER["false_easting""#,
@@ -933,6 +933,21 @@ fn wkt_method_parameters_and_spherical_albers_preserve_native_or_refuse() {
             include_str!("fixtures/crs/mercator-redundant-origin.wkt"),
             [200000., 567890., 123.],
             false,
+        ),
+        (
+            include_str!("fixtures/crs/mercator-wrong-parallel.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            "+proj=aea +lat_1=33 +lat_2=45 +lat_0=10 +datum=WGS84",
+            [0., 7279556.2302497085, 123.],
+            true,
+        ),
+        (
+            "+proj=aea +lat_1=-33 +lat_2=-45 +lat_0=-10 +datum=WGS84",
+            [0., -7279556.2302497085, 123.],
+            true,
         ),
         (
             "+proj=aea +lat_1=80 +lat_2=80 +lat_0=80 +ellps=sphere +towgs84=0,0,0",

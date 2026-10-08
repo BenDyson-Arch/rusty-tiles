@@ -275,10 +275,10 @@ impl Crs {
         Ok(serde_json::from_str(&definition)?)
     }
 
-    /// Source-latitude guard for spherical Albers, whose polar inverse is also
+    /// Source-latitude guard for Albers, whose polar inverse is also
     /// ill-conditioned in native PROJ. Clone the source geographic CRS so this
     /// check precedes datum shifts and retains the original angular units.
-    pub(crate) fn spherical_albers_domain(&self) -> Result<Option<(StrictTransform, f64)>, Error> {
+    pub(crate) fn albers_domain(&self) -> Result<Option<(StrictTransform, f64)>, Error> {
         let document = self.proj_json()?;
         let source = document.get("source_crs").unwrap_or(&document);
         let method = &source["conversion"]["method"];
@@ -291,14 +291,9 @@ impl Crs {
         // SAFETY: All queries borrow the live SRS; the cloned geographic SRS
         // is independently owned and configured before creating its transform.
         let (geographic, units) = unsafe {
-            let major = gdal_sys::OSRGetSemiMajor(self.0.as_ptr(), null_mut());
-            let minor = gdal_sys::OSRGetSemiMinor(self.0.as_ptr(), null_mut());
-            if !major.is_finite() || major <= 0. || major != minor {
-                return Ok(None);
-            }
             let handle =
                 NonNull::new(gdal_sys::OSRCloneGeogCS(self.0.as_ptr())).ok_or_else(|| {
-                    Error::Environment("cannot inspect spherical Albers coordinate domain".into())
+                    Error::Environment("cannot inspect Albers coordinate domain".into())
                 })?;
             let geographic = Self(handle.cast());
             gdal_sys::OSRSetAxisMappingStrategy(
@@ -310,7 +305,7 @@ impl Crs {
         };
         if !units.is_finite() || units <= 0. {
             return Err(Error::Environment(
-                "cannot normalize spherical Albers latitude".into(),
+                "cannot normalize Albers latitude".into(),
             ));
         }
         Ok(Some((StrictTransform::new(self, &geographic)?, units)))
