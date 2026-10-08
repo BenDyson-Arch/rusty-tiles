@@ -82,7 +82,7 @@ fn preview_readiness(cesium: &Path) -> Value {
     json!({"ready":true,"requires":[],"backend":"native Rust",
         "cesium":{"path":cesium.to_string_lossy(),"found":found,
             "note":if found {"Cesium IIFE runtime found; pass this directory to preview --cesium."}
-                else {"No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium."}}})
+                else {"No Cesium.js here. Install cesium@1.146.0 as described in the README and pass its Build/Cesium directory to preview --cesium."}}})
 }
 
 fn terrain_readiness(geospatial: &Value) -> Value {

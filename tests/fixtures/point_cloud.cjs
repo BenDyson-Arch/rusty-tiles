@@ -76,7 +76,7 @@ const assert = require('node:assert/strict');
     console.log(JSON.stringify(report, null, 2));
     assert.equal(errors.length, 0);
     for (const result of [first, refreshed]) {
-      assert.equal(result.version, '1.143.0');
+      assert.equal(result.version, '1.146.0');
       assert.equal(result.failures.length, 0);
       assert.ok(result.coarse.length > 0);
       const coarse = result.coarse.reduce((sum, tile) => sum + tile.features, 0);

@@ -195,7 +195,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 | Option | Default | Serves |
 | --- | --- | --- |
-| `--cesium` | required | A Cesium 1.143.0 `Build/Cesium` directory containing `Cesium.js` |
+| `--cesium` | required | A Cesium 1.146.0 `Build/Cesium` directory containing `Cesium.js` |
 | `--host` | `127.0.0.1` | Listen address |
 | `--port` | `9227` | Listen port. 0 picks a free port. |
 | `--mesh` | none | Extracted mesh directory with `tileset.json` |

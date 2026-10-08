@@ -162,7 +162,7 @@ struct DoctorArgs {
 
 #[derive(Args)]
 struct PreviewArgs {
-    /// Cesium 1.143.0 Build/Cesium directory containing Cesium.js (IIFE)
+    /// Cesium 1.146.0 Build/Cesium directory containing Cesium.js (IIFE)
     #[arg(long)]
     cesium: PathBuf,
     #[arg(long, default_value = "127.0.0.1")]

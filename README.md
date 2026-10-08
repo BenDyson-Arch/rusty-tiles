@@ -145,7 +145,7 @@ A successful check prints `Validated output/example.3tz: 1 tiles, 1 content refe
 Install Cesium once, extract the archive and serve the mesh:
 
 ```sh
-npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.143.0
+npm install --prefix target/preview-runtime --no-save --package-lock=false cesium@1.146.0
 unzip output/example.3tz -d output/example
 rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
   --mesh output/example

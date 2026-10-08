@@ -321,7 +321,7 @@ These recipes use `--explicit` for the three spatial converters; the script omit
    scripts/release_acceptance.sh
    ```
 
-   This builds the release CLI and checks doctor, the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing build. Browser probes run when `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Missing optional steps are printed. A failed required step or enabled browser probe fails the script.
+   This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Missing optional steps are printed. A failed required step or enabled browser probe fails the script.
 2. The Docker acceptance stage passes. It runs every native test binary in a runtime image with no Python.
 
    ```sh
