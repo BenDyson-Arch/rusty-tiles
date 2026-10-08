@@ -686,3 +686,198 @@ fn active_geopackage_wal_is_refused_until_checkpointed() {
         3
     );
 }
+
+#[test]
+fn malformed_geopackage_declarations_headers_and_wkb_do_not_publish() {
+    let root = tempfile::tempdir().unwrap();
+    let mut cases = Vec::new();
+    cases.push(("required-z", "POINT", 1, gpkg_point([0., 0., 0.], false)));
+    cases.push(("forbidden-z", "POINT", 0, gpkg_point([0., 0., 1.], true)));
+    let mut line = gpkg_point([0., 0., 0.], false)[..8].to_vec();
+    line.push(1);
+    line.extend(2u32.to_le_bytes());
+    line.extend(2u32.to_le_bytes());
+    for xy in [[0f64, 0.], [1., 1.]] {
+        for ordinate in xy {
+            line.extend(ordinate.to_le_bytes());
+        }
+    }
+    cases.push(("wrong-kind", "POINT", 0, line));
+    let mut nested = gpkg_point([0., 0., 0.], false)[..8].to_vec();
+    nested.push(1);
+    nested.extend(1004u32.to_le_bytes());
+    nested.extend(1u32.to_le_bytes());
+    nested.extend(&gpkg_point([0., 0., 0.], false)[8..]);
+    cases.push(("nested-z", "MULTIPOINT", 1, nested));
+    cases.push((
+        "missing-empty-flag",
+        "POINT",
+        0,
+        gpkg_point([f64::NAN; 3], false),
+    ));
+    let mut false_empty = gpkg_point([0., 0., 0.], false);
+    false_empty[3] |= 0x10;
+    cases.push(("false-empty-flag", "POINT", 0, false_empty));
+    let mut wrong_srs = gpkg_point([0., 0., 0.], false);
+    wrong_srs[4..8].copy_from_slice(&3857i32.to_le_bytes());
+    cases.push(("header-srs", "POINT", 0, wrong_srs));
+    let mut reserved = gpkg_point([0., 0., 0.], false);
+    reserved[3] |= 0x80;
+    cases.push(("reserved-flags", "POINT", 0, reserved));
+    let point = gpkg_point([0., 0., 0.], false);
+    let mut envelope = point[..8].to_vec();
+    envelope[3] = 1 | (2 << 1); // XYZ envelope on XY WKB
+    for _ in 0..6 {
+        envelope.extend(0f64.to_le_bytes());
+    }
+    envelope.extend(&point[8..]);
+    cases.push(("envelope-z", "POINT", 0, envelope));
+
+    for (name, declared, z, blob) in cases {
+        let source = root.path().join(format!("{name}.gpkg"));
+        geopackage(&source);
+        let db = Connection::open(&source).unwrap();
+        db.execute(
+            "UPDATE gpkg_geometry_columns SET geometry_type_name=?1,z=?2 WHERE table_name='roads'",
+            params![declared, z],
+        )
+        .unwrap();
+        db.execute("UPDATE roads SET geom=?1 WHERE fid=1", [blob])
+            .unwrap();
+        drop(db);
+        let before = fs::read(&source).unwrap();
+        let output = root.path().join(format!("{name}.3tz"));
+        let (result, report) = run(
+            &source,
+            &output,
+            &["--layer", "roads", "--source-crs", "local"],
+        );
+        assert_eq!(result.status.code(), Some(3), "{name}: {report}");
+        assert_eq!(report["error"]["code"], "data", "{name}: {report}");
+        assert!(!output.exists(), "{name}");
+        assert_eq!(fs::read(&source).unwrap(), before, "{name}");
+    }
+}
+
+#[test]
+fn malformed_geojson_features_are_reported_and_duplicate_members_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("malformed.geojson");
+    for malformed in [
+        json!({"type":"Feature","id":"bad","properties":"lost","geometry":{"type":"Point","coordinates":[0,0,0]}}),
+        json!({"type":"Feature","id":"bad","properties":[],"geometry":{"type":"Point","coordinates":[0,0,0]}}),
+        json!({"type":"Feature","id":"bad","properties":{}}),
+    ] {
+        geojson(
+            &source,
+            vec![point(json!("good"), json!({}), [0., 0., 0.]), malformed],
+        );
+        let failed = root.path().join("failed.3tz");
+        let (result, report) = run(&source, &failed, &["--source-crs", "local"]);
+        assert_eq!(result.status.code(), Some(3), "{report}");
+        assert!(!failed.exists());
+        let skipped = root.path().join("skipped.3tz");
+        let report = convert(
+            &source,
+            &skipped,
+            &["--source-crs", "local", "--skip-invalid"],
+        );
+        assert_eq!(report["features"], 1);
+        assert_eq!(report["skippedFeatures"], 1);
+        assert_eq!(report["featuresWithoutGeometry"], 0);
+        fs::remove_file(skipped).unwrap();
+    }
+    for raw in [
+        r#"{"type":"Feature","id":"first","id":"second","properties":{},"geometry":{"type":"Point","coordinates":[0,0,0]}}"#,
+        r#"{"type":"Feature","properties":{"value":1,"value":2},"geometry":{"type":"Point","coordinates":[0,0,0]}}"#,
+        r#"{"type":"Feature","properties":{},"geometry":{"type":"Point","coordinates":[0,0,0],"coordinates":[1,1,1]}}"#,
+    ] {
+        fs::write(&source, raw).unwrap();
+        let output = root.path().join("duplicate.3tz");
+        let (result, report) = run(
+            &source,
+            &output,
+            &["--source-crs", "local", "--skip-invalid"],
+        );
+        assert_eq!(result.status.code(), Some(3), "{report}");
+        assert!(
+            report["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("duplicate GeoJSON"),
+            "{report}"
+        );
+        assert!(!output.exists());
+    }
+}
+
+#[test]
+fn selected_geopackage_epochs_need_native_or_explicit_crs_override() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("epoch.gpkg");
+    geopackage(&source);
+    let db = Connection::open(&source).unwrap();
+    db.execute_batch("ALTER TABLE gpkg_spatial_ref_sys ADD COLUMN epoch DOUBLE;")
+        .unwrap();
+    db.execute(
+        "INSERT INTO gpkg_spatial_ref_sys VALUES('epoch CRS',4979,'EPSG',4979,?1,'',2020)",
+        [WGS84],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE gpkg_geometry_columns SET srs_id=4979 WHERE table_name='survey'",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE gpkg_contents SET srs_id=4979 WHERE table_name='survey'",
+        [],
+    )
+    .unwrap();
+    let mut blob = gpkg_point([0., 0., 123.], true);
+    blob[4..8].copy_from_slice(&4979i32.to_le_bytes());
+    db.execute("UPDATE survey SET geom=?1", [blob]).unwrap();
+    drop(db);
+    let before = fs::read(&source).unwrap();
+    let roads = root.path().join("roads.3tz");
+    assert_eq!(
+        convert(&source, &roads, &["--layer", "roads"])["features"],
+        2
+    );
+    let rejected = root.path().join("survey-rejected.3tz");
+    let (result, report) = run(&source, &rejected, &["--layer", "survey"]);
+    assert_eq!(result.status.code(), Some(4), "{report}");
+    assert_eq!(report["error"]["code"], "environment");
+    let message = report["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("epoch") && message.contains("native-geospatial"),
+        "{report}"
+    );
+    assert!(!rejected.exists());
+    let overridden = root.path().join("survey-local.3tz");
+    assert_eq!(
+        convert(
+            &source,
+            &overridden,
+            &["--layer", "survey", "--source-crs", "local"]
+        )["features"],
+        1
+    );
+    assert_eq!(fs::read(&source).unwrap(), before);
+
+    // A broken declaration in an unselected layer must not block a valid selected layer.
+    let db = Connection::open(&source).unwrap();
+    db.execute("UPDATE gpkg_geometry_columns SET geometry_type_name='UNSUPPORTED',z=9 WHERE table_name='survey'", []).unwrap();
+    drop(db);
+    let selected = root.path().join("roads-only.3tz");
+    assert_eq!(
+        convert(&source, &selected, &["--layer", "roads"])["features"],
+        2
+    );
+    let all = root.path().join("all.3tz");
+    assert_eq!(
+        run(&source, &all, &["--all-layers"]).0.status.code(),
+        Some(3)
+    );
+    assert!(!all.exists());
+}
