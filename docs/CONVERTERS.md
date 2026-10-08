@@ -7,6 +7,7 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | Static textured GLB/glTF needing spatial tiles and coarser geometry | `mesh-to-3tz` | Default; supported triangle geometry and base-colour materials only |
 | Existing GLB/glTF to preserve, without creating LOD | `glb-to-3tz` | Default; bundles supported local resources and preserves source content |
 | Existing tileset directory to package | `convert` | Default; packages existing content without generating geometry or LOD |
+| Eligible rusty-tiles explicit point/vector archive to migrate | `convert-to-implicit` | Default; requires a regular tree and valid existing content, retains payload bytes; see [eligibility](CLI.md#convert-to-implicit) |
 | GLB/glTF needing an explicit tileset manifest | `createTilesetJson` | Default; writes `tileset.json` |
 | LAS/LAZ with local metre XYZ or a verified grid-free CRS | `point-cloud` | Default; native build required for other supported CRS operations |
 | GeoJSON or GeoPackage points, lines and polygons | `vector` | Default; native build required for other supported CRS operations |

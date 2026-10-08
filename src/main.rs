@@ -48,7 +48,7 @@ enum Command {
         #[arg(long)]
         external_validator: Option<PathBuf>,
     },
-    /// Check linked native capabilities and local PROJ database/grids
+    /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
     /// Serve selected output directories with an installed Cesium IIFE runtime
     Preview(PreviewArgs),
@@ -68,7 +68,7 @@ enum Command {
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// Vector sources → glTF .3tz (requires native GDAL/GEOS)
+    /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
