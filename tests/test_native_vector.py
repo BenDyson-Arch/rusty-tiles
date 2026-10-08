@@ -11,7 +11,7 @@ from cli_bin import requires_bin
 import numpy as np
 from osgeo import ogr, osr
 from pyproj import Transformer
-from vector_test_support import native_run
+from vector_test_support import native_run, portable_vectors
 from test_vector_reuse import archive, details
 
 # The frozen Python oracle, loaded only for the comparisons below.
@@ -74,7 +74,8 @@ class NativeVectorTests(unittest.TestCase):
             original = previous.read_bytes()
             args.output = str(root/'native')
             args.reuse_tileset = str(previous)
-            with self.assertRaisesRegex(ValueError, 'previous encoder differs.*fresh native'):
+            backend = 'portable' if portable_vectors() else 'native'
+            with self.assertRaisesRegex(ValueError, f'previous encoder differs.*fresh {backend}'):
                 native_run(args)
             self.assertFalse((root/'native').exists())
             self.assertEqual(previous.read_bytes(), original)
@@ -98,7 +99,13 @@ class NativeVectorTests(unittest.TestCase):
                 f.SetGeometry(g); layer.CreateFeature(f)
             ds = None
             out = root/'native'
-            native_run(types.SimpleNamespace(input=str(source), output=str(out), where="label = 'keep'"))
+            args = types.SimpleNamespace(input=str(source), output=str(out), where="label = 'keep'")
+            if portable_vectors():
+                with self.assertRaisesRegex(ValueError, 'native-geospatial'):
+                    native_run(args)
+                self.assertFalse(out.exists())
+                return
+            native_run(args)
             result = details(out); self.assertEqual(len(result), 1)
             properties, xyz = next(iter(result.values()))[0]
             self.assertEqual(properties['number'], 2**53+3)
