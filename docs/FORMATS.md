@@ -12,6 +12,10 @@ rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg
 
 Large meshes are split into full-detail leaves with simplified, textured parents. An input within both `--max-triangles` and `--max-bytes` is wrapped without splitting.
 
+The default hierarchy uses midpoint octree cells, assigning each triangle by its centroid. The atlas fit test and single oversized triangle escape remain in place. Standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserve the actual bounds and measured errors. If a subtree's content extends beyond its regular cell, an external implicit tileset root exposes its actual bounds before viewer culling. Coincident centroids are distributed in source order to keep splitting finite; their actual boxes remain authoritative.
+
+`--explicit` keeps the earlier median partition, folded hierarchy and output bytes. It is intended for consumers that walk the explicit `children` array.
+
 ### Texture formats
 
 | `--texture-format` | Choose it for |
@@ -84,6 +88,8 @@ rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --h
 `--source-crs header` reads the LAS CRS as WKT or GeoTIFF EPSG keys. A custom GeoTIFF definition needs an explicit CRS such as `EPSG:32632`. Only a 2D horizontal CRS is accepted. An offset of 0 is right only when source Z is already ellipsoidal metres.
 
 ### What the output keeps
+
+The default output uses a disk-backed midpoint octree and binary implicit subtrees. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
 
 - Points stream through disk-backed partitions, so memory stays bounded.
 - Parents hold voxel samples. Leaves keep every point, including coincident points.

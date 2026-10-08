@@ -22,6 +22,10 @@ def native_run(args):
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
         archive = pathlib.Path(scratch) / 'output.3tz'
         command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
+        # Frozen oracle and explicit-hierarchy audits retain their original
+        # contract. Browser fixtures opt into the converter's implicit default.
+        if getattr(args, 'explicit', True):
+            command.append('--explicit')
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
             max_vertices='maxVertices', max_bytes='maxBytes', max_tiles='maxTiles',
             max_source_vertices='maxSourceVertices', lod_tolerance='lodTolerance', lod_levels='lodLevels',

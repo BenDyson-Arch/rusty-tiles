@@ -6,6 +6,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- 3D Tiles 1.1 implicit tiling is the default for point clouds, vectors and meshes. Binary subtrees carry Morton-ordered availability and standard tile bounds/error metadata. Meshes and point clouds use midpoint octrees; vectors preserve padded boxes and reuse. Bounds that exceed regular subtree cells use external implicit tileset roots so Cesium can refine and pick them. `--explicit` preserves the earlier output bytes.
+- Library: `implicit::Subtree`, `TileMetadata` and `expand_tileset` support quadtree/octree availability, multiple contents, child-subtree links, semantic metadata and bounded expansion for audits. Built-in archive validation checks native implicit output.
 - Tag-triggered release binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, a native geospatial GHCR image, a SHA-256-verifying installer and `cargo-binstall` metadata.
 - Fixed converter recipes and committed output digests, cross-commit comparison tooling and a manual release acceptance workflow. CI fails when the Python acceptance binary is missing and checks native Clippy warnings.
 - Every multi-word camelCase option now also accepts a kebab-case alias, such as `--sourceCrs`/`--source-crs` and `--maxPoints`/`--max-points`. camelCase stays the primary spelling. The `create-tileset-json`, `glbTo3tz` and `meshTo3tz` subcommand aliases are now shown in help.

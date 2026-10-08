@@ -139,6 +139,7 @@ fn leaves_preserve_triangles_float_attributes_rgba_and_materials() {
         fs::copy(&output, Path::new(&path).join("lossless.3tz")).unwrap();
     }
     let ts: Value = serde_json::from_slice(&entry(&output, "tileset.json")).unwrap();
+    let ts = rusty_tiles::implicit::expand_tileset(&ts, |name| Ok(entry(&output, name))).unwrap();
     let mut uris = Vec::new();
     leaves(&ts["root"], &mut uris);
     let mut count = 0;
@@ -410,6 +411,12 @@ fn full_model_leaf_triangle_audit() {
     drop(scene);
     let mut z = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
     let manifest: Value = serde_json::from_reader(z.by_name("tileset.json").unwrap()).unwrap();
+    let manifest = rusty_tiles::implicit::expand_tileset(&manifest, |name| {
+        let mut bytes = Vec::new();
+        z.by_name(name)?.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })
+    .unwrap();
     let mut uris = Vec::new();
     leaves(&manifest["root"], &mut uris);
     let mut actual = Vec::with_capacity(expected.len());
@@ -490,7 +497,13 @@ fn opaque_parent_keeps_colour_even_when_source_alpha_is_zero() {
         },
     )
     .unwrap();
-    let expanded = expand(&entry(&output, "t/0.glb"));
+    let manifest: Value = serde_json::from_slice(&entry(&output, "tileset.json")).unwrap();
+    let manifest =
+        rusty_tiles::implicit::expand_tileset(&manifest, |name| Ok(entry(&output, name))).unwrap();
+    let expanded = expand(&entry(
+        &output,
+        manifest["root"]["content"]["uri"].as_str().unwrap(),
+    ));
     let (_, _, images) = gltf::import_slice(&expanded).unwrap();
     assert!(!images.is_empty());
     for image in images {

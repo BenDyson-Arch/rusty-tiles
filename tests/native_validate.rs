@@ -28,7 +28,7 @@ fn fixture(root: &Path) -> PathBuf {
     .unwrap();
     let out = root.join("valid.3tz");
     let result = support::rusty_tiles()
-        .args(["vector", "-i"])
+        .args(["vector", "--explicit", "-i"])
         .arg(&source)
         .arg("-o")
         .arg(&out)

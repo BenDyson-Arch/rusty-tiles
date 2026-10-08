@@ -77,6 +77,7 @@ impl Tree<'_> {
         path: &Path,
         parent_center: [f64; 3],
         depth: usize,
+        cell: Option<([f64; 3], [f64; 3])>,
     ) -> Result<Value, Error> {
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         let mut lo = [f64::INFINITY; 3];
@@ -134,25 +135,28 @@ impl Tree<'_> {
                 .progress("tiling", self.leaf_points, self.total_points);
             return Ok(node);
         }
-        if depth >= 64 {
-            return Err(Error::Data(
-                "point partition exceeds 64 levels; inspect source extent or raise maxPoints"
-                    .into(),
-            ));
+        let depth_limit = if self.options.explicit { 64 } else { 31 };
+        if depth >= depth_limit {
+            return Err(Error::Data(format!(
+                "point partition exceeds {depth_limit} levels; inspect source extent or raise maxPoints"
+            )));
         }
         let axis = (0..3)
             .max_by(|a, b| extent[*a].total_cmp(&extent[*b]).then_with(|| b.cmp(a)))
             .unwrap();
-        let paths = [
-            self.output.join(format!("scratch/{index}-0.bin")),
-            self.output.join(format!("scratch/{index}-1.bin")),
-        ];
+        let branches = if self.options.explicit { 2 } else { 8 };
+        let (cell_lo, cell_hi) = cell.unwrap_or((lo, hi));
+        let midpoint: [f64; 3] =
+            std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
+        let paths: Vec<_> = (0..branches)
+            .map(|branch| self.output.join(format!("scratch/{index}-{branch}.bin")))
+            .collect();
+        let mut counts = vec![0_u64; branches];
         {
-            let mut files = [
-                BufWriter::new(File::create(&paths[0])?),
-                BufWriter::new(File::create(&paths[1])?),
-            ];
-            let mut counts = [0_u64; 2];
+            let mut files: Vec<_> = paths
+                .iter()
+                .map(|p| File::create(p).map(BufWriter::new))
+                .collect::<Result<_, _>>()?;
             let mut seen = 0_u64;
             let mut records =
                 Records::new(path, self.layout.record_len, self.options.chunk_points)?;
@@ -167,7 +171,16 @@ impl Tree<'_> {
                     } else {
                         position(row)[axis] < center[axis]
                     };
-                    let branch = usize::from(!left);
+                    let branch = if self.options.explicit {
+                        usize::from(!left)
+                    } else if extent == [0.; 3] {
+                        ((seen as u128 * 8 / count as u128) as usize).min(7)
+                    } else {
+                        let p = position(row);
+                        usize::from(p[0] >= midpoint[0])
+                            | (usize::from(p[1] >= midpoint[1]) << 1)
+                            | (usize::from(p[2] >= midpoint[2]) << 2)
+                    };
                     files[branch].write_all(row)?;
                     counts[branch] += 1;
                     seen += 1;
@@ -176,25 +189,53 @@ impl Tree<'_> {
             for file in &mut files {
                 file.flush()?;
             }
-            if counts.contains(&0) {
+            if self.options.explicit && counts.contains(&0) {
                 return Err(Error::Data("spatial split made no progress".into()));
             }
         }
         std::fs::remove_file(path)?;
-        let children = [
-            self.build(&paths[0], center, depth + 1)?,
-            self.build(&paths[1], center, depth + 1)?,
-        ];
-        let offsets = [
-            translation_offset(&children[0])?,
-            translation_offset(&children[1])?,
-        ];
+        let mut children = Vec::new();
+        for (branch, path) in paths.iter().enumerate() {
+            if counts[branch] == 0 {
+                std::fs::remove_file(path)?;
+                continue;
+            }
+            let child_cell = if self.options.explicit {
+                None
+            } else {
+                Some((
+                    std::array::from_fn(|i| {
+                        if branch & (1 << i) != 0 {
+                            midpoint[i]
+                        } else {
+                            cell_lo[i]
+                        }
+                    }),
+                    std::array::from_fn(|i| {
+                        if branch & (1 << i) != 0 {
+                            cell_hi[i]
+                        } else {
+                            midpoint[i]
+                        }
+                    }),
+                ))
+            };
+            let mut child = self.build(path, center, depth + 1, child_cell)?;
+            if !self.options.explicit {
+                child["extras"] = json!({"implicitChildIndex":branch});
+            }
+            children.push(child);
+        }
+        let offsets = children
+            .iter()
+            .map(translation_offset)
+            .collect::<Result<Vec<_>, _>>()?;
         let own_error = error + rounding;
         let error = enclose_children(&mut half, own_error, offsets.into_iter().zip(&children))?;
         node["geometricError"] = error.into();
         node["boundingVolume"]["box"] = box_json(0., half);
         // Move, rather than re-serialise, each finished subtree into its parent.
-        node["children"] = Value::Array(children.into());
+        node["children"] = Value::Array(children);
         Ok(node)
     }
 

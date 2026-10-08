@@ -1,4 +1,4 @@
-//! Read-only validation of explicit, self-contained 3TZ packages.
+//! Read-only validation of self-contained explicit and native implicit 3TZ packages.
 use crate::{pack::TZ_INDEX_NAME, Error};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -311,7 +311,7 @@ impl Check<'_> {
             return Err(invalid("cyclic external tileset reference"));
         }
         self.reference(name.into())?;
-        let doc = read_json(self.zip, name)?;
+        let mut doc = read_json(self.zip, name)?;
         self.schema
             .validate(&doc)
             .map_err(|error| invalid(format!("tileset schema: {error}")))?;
@@ -320,6 +320,39 @@ impl Check<'_> {
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         self.metadata_schema(name, &doc)?;
+        if doc["root"].get("implicitTiling").is_some() {
+            // Raw immutable vector payloads remain reachable through the native
+            // reuse state; display content uses implicit URI templates.
+            if let Some(sources) = doc["extras"]["rustyTilesSourceContents"].as_array() {
+                for source in sources {
+                    let source = uri(
+                        name,
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid cached content URI"))?,
+                    )?;
+                    self.reference(source.clone())?;
+                    gltf(self.zip, &source)?;
+                }
+            }
+            doc = crate::implicit::expand_tileset(&doc, |value| {
+                let source = uri(name, value)?;
+                self.reference(source.clone())?;
+                let mut file = self.zip.by_name(&source)?;
+                if file.size() > 64 * 1024 * 1024 {
+                    return Err(invalid("subtree exceeds 64 MiB"));
+                }
+                let mut bytes = Vec::new();
+                file.read_to_end(&mut bytes)?;
+                if source.ends_with(".json") {
+                    let doc: Value = serde_json::from_slice(&bytes)?;
+                    self.schema
+                        .validate(&doc)
+                        .map_err(|error| invalid(format!("tileset schema: {error}")))?;
+                }
+                Ok(bytes)
+            })?;
+        }
         // Each use has its own placement and constraints, even when the JSON
         // file was already visited under another referring tile.
         let result = self.node(
@@ -347,7 +380,9 @@ impl Check<'_> {
             return Err(invalid("tile must be an object"));
         }
         if node.get("implicitTiling").is_some() {
-            return Err(invalid("implicit tiling requires the external validator"));
+            return Err(invalid(
+                "nested implicit roots require an external tileset JSON",
+            ));
         }
         if let Some(refine) = node.get("refine") {
             if !matches!(refine.as_str(), Some("ADD" | "REPLACE")) {

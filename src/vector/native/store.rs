@@ -755,7 +755,22 @@ pub(super) fn convert(
         return Err(data("vector LOD error overflows; reduce lodTolerance"));
     }
     let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
-    let reuse_report = build.reuse.publish(&mut manifest, frame)?;
+    let explicit_root = if options.explicit {
+        None
+    } else {
+        Some(manifest["root"].clone())
+    };
+    if !options.explicit {
+        crate::implicit::write_tileset(
+            &mut manifest,
+            output,
+            crate::implicit::SubdivisionScheme::Quadtree,
+            true,
+        )?;
+    }
+    let reuse_report = build
+        .reuse
+        .publish(&mut manifest, frame, explicit_root.as_ref())?;
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
     build.reports.file.flush()?;
     let shared: usize = db
@@ -772,7 +787,19 @@ pub(super) fn convert(
         }
     }
     let mut list = Vec::new();
-    nodes(&manifest["root"], &mut list);
+    let display_manifest = if options.explicit {
+        manifest.clone()
+    } else {
+        crate::implicit::expand_tileset(&manifest, |name| Ok(std::fs::read(output.join(name))?))?
+    };
+    nodes(&display_manifest["root"], &mut list);
+    if !options.explicit {
+        build.counters.maximum_tile_bytes = list
+            .iter()
+            .map(|node| node["extras"]["encodedBytes"].as_u64().unwrap_or(0) as usize)
+            .max()
+            .unwrap_or(0);
+    }
     let sum = |key: &str| {
         list.iter()
             .map(|n| n["extras"][key].as_u64().unwrap_or(0))
@@ -800,6 +827,9 @@ pub(super) fn convert(
     }
     if options.reproducible {
         report.as_object_mut().unwrap().remove("performance");
+    }
+    if !options.explicit {
+        report["tiling"] = json!("implicit");
     }
     crate::output::write_report(output, report, true)
 }

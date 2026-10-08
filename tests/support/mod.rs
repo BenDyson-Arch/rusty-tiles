@@ -50,7 +50,13 @@ fn recipe(
         name,
         command,
         output,
-        args: args.concat(),
+        args: {
+            let mut args = args.concat();
+            if matches!(command, "mesh-to-3tz" | "point-cloud" | "vector") {
+                args.push("--explicit");
+            }
+            args
+        },
         native,
         vector: command == "vector",
     }

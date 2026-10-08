@@ -48,9 +48,11 @@ const assert = require('node:assert/strict');
           const accessor = doc.accessors[doc.meshes[0].primitives[0].attributes.POSITION];
           const view = doc.bufferViews[accessor.bufferView];
           const positions = new Float32Array(bytes, 28 + length + (view.byteOffset || 0), accessor.count * 3);
+          const node = doc.nodes[doc.scenes[doc.scene || 0].nodes[0]];
+          const translation = node.translation || [0, 0, 0];
           for (let i = 0; i < accessor.count; i++) {
             const world = C.Matrix4.multiplyByPoint(tile.computedTransform,
-              new C.Cartesian3(positions[i*3], -positions[i*3+2], positions[i*3+1]), new C.Cartesian3());
+              new C.Cartesian3(positions[i*3]+translation[0], -positions[i*3+2]-translation[2], positions[i*3+1]+translation[1]), new C.Cartesian3());
             const screen = C.SceneTransforms.worldToWindowCoordinates(viewer.scene, world);
             const feature = screen && viewer.scene.pick(screen, 1, 1);
             if (!feature?.getPropertyIds) continue;

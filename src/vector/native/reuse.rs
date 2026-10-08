@@ -37,7 +37,12 @@ pub(super) struct Reuse {
     reused_references: usize,
     reused_uris: BTreeSet<String>,
 }
-fn encoder() -> String {
+fn encoder(explicit: bool) -> String {
+    if explicit {
+        // The pre-implicit encoder's reviewed source/dependency fingerprint.
+        // Explicit geometry and manifests retain their established byte identity.
+        return "rusty-tiles-native-vector-v1:f5b4dd47a99e1274bb67b96476fb3e18afc0b40b0a551708a1e986ca7644881a".into();
+    }
     let mut hasher = Sha256::new();
     for source in [
         include_str!("../native.rs"),
@@ -55,6 +60,8 @@ fn encoder() -> String {
         include_str!("../../georef.rs"),
         include_str!("../../geospatial.rs"),
         include_str!("../../../Cargo.lock"),
+        include_str!("../../implicit.rs"),
+        include_str!("../../implicit/tileset.rs"),
     ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
@@ -174,7 +181,10 @@ impl Reuse {
                 }
                 Ok(())
             }
-            index(&manifest["root"], &mut result.nodes)?;
+            index(
+                state.get("explicitRoot").unwrap_or(&manifest["root"]),
+                &mut result.nodes,
+            )?;
             result.old = serde_json::from_value(state["records"].clone())?;
             result.cuts = result
                 .old
@@ -209,10 +219,13 @@ impl Reuse {
                 layer
             })
             .collect();
-        self.config = json!({"encoder":encoder(),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
+        self.config = json!({"encoder":encoder(options.explicit),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
             "quantize":options.quantize,"meshopt":options.meshopt,"maxFeatures":max_features,"maxParentFeatures":options.max_parent_features,"maxVertices":options.max_vertices,"maxBytes":options.max_bytes,
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
+        if !options.explicit {
+            self.config["tiling"] = json!("implicit-quadtree-v2");
+        }
         if self.previous.is_some() && self.config != self.old_config {
             return Err(data("previous encoder, schema, CRS or conversion settings differ; run a fresh conversion without reuseTileset"));
         }
@@ -362,7 +375,12 @@ impl Reuse {
             },
         );
     }
-    pub fn publish(&mut self, manifest: &mut Value, frame: &Frame) -> Result<Value, Error> {
+    pub fn publish(
+        &mut self,
+        manifest: &mut Value,
+        frame: &Frame,
+        explicit_root: Option<&Value>,
+    ) -> Result<Value, Error> {
         fn used(node: &Value, result: &mut BTreeSet<String>) {
             for content in contents(node) {
                 if let Some(uri) = content["uri"].as_str() {
@@ -376,14 +394,17 @@ impl Reuse {
             }
         }
         let mut contents = BTreeSet::new();
-        used(&manifest["root"], &mut contents);
+        used(explicit_root.unwrap_or(&manifest["root"]), &mut contents);
         for entry in std::fs::read_dir(self.output.join("t"))? {
             let entry = entry?;
             if !contents.contains(&format!("t/{}", entry.file_name().to_string_lossy())) {
                 std::fs::remove_file(entry.path())?;
             }
         }
-        let state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,"manifestSha256":digest(manifest)?});
+        let mut state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,"manifestSha256":digest(manifest)?});
+        if let Some(root) = explicit_root {
+            state["explicitRoot"] = root.clone();
+        }
         let raw = canonical(&state)?;
         std::fs::write(self.output.join("vector-build.json"), &raw)?;
         manifest["asset"]["extras"] = json!({"vectorBuildStateSha256":hash(&raw)});

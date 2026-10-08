@@ -110,10 +110,17 @@ while IFS=$'\t' read -r -a fields; do
   args=("${fields[@]:4}")
   args=("${args[@]//\{in\}/$INPUTS}")
   for side in base head; do
+    side_args=("${args[@]}")
+    # Releases before implicit tiling have no --explicit flag. Their default
+    # hierarchy is the byte-identity baseline selected by this recipe.
+    if [[ " ${args[*]} " == *" --explicit "* ]] && ! "$WORK/bin-$side" "$command" --help | grep -q -- '--explicit'; then
+      side_args=()
+      for arg in "${args[@]}"; do [[ $arg == --explicit ]] || side_args+=("$arg"); done
+    fi
     out=$WORK/out-$side
     mkdir -p "$out"
     rm -rf "${out:?}/$output"
-    if env PATH="" "$WORK/bin-$side" "$command" "${args[@]}" -o "$out/$output" \
+    if env PATH="" "$WORK/bin-$side" "$command" "${side_args[@]}" -o "$out/$output" \
       >"$out/$name.log" 2>&1; then
       python3 -c "$DIGEST_PY" "$out/$output" "$vector" >"$out/$name.sha256"
     else

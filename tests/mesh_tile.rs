@@ -22,7 +22,8 @@ fn zip_bytes(tz: &Path, name: &str) -> Vec<u8> {
 }
 
 fn tileset_json(tz: &Path) -> Value {
-    serde_json::from_slice(&zip_bytes(tz, "tileset.json")).unwrap()
+    let manifest = serde_json::from_slice(&zip_bytes(tz, "tileset.json")).unwrap();
+    rusty_tiles::implicit::expand_tileset(&manifest, |name| Ok(zip_bytes(tz, name))).unwrap()
 }
 
 fn collect_uris(tile: &Value, out: &mut Vec<String>) {
@@ -228,7 +229,15 @@ fn under_budget_matches_wrap() {
     glb_to_3tz(&glb, &wrap, &CreateTilesetOptions::default()).unwrap();
 
     let tiled = tmp.path().join("tiled.3tz");
-    mesh_to_3tz(&glb, &tiled, &MeshTo3tzOptions::default()).unwrap();
+    mesh_to_3tz(
+        &glb,
+        &tiled,
+        &MeshTo3tzOptions {
+            explicit: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
 
     validate_3tz(&tiled).unwrap();
     let mut wrap_names = list_zip_names(&wrap).unwrap();

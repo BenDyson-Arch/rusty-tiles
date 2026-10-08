@@ -51,6 +51,8 @@ impl Default for VectorLodOptions {
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {
+    /// Keep the legacy explicit hierarchy.
+    pub explicit: bool,
     pub reproducible: bool,
     pub jobs: usize,
     pub quantize: bool,
@@ -82,6 +84,7 @@ pub struct VectorOptions {
 impl Default for VectorOptions {
     fn default() -> Self {
         Self {
+            explicit: false,
             reproducible: false,
             jobs: std::thread::available_parallelism().map_or(1, usize::from),
             quantize: false,

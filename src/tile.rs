@@ -31,6 +31,8 @@ pub const DEFAULT_MAX_TEXEL_DENSITY: f64 = 0.0;
 
 #[derive(Clone, Debug)]
 pub struct MeshTo3tzOptions {
+    /// Keep the legacy median-split explicit hierarchy and output bytes.
+    pub explicit: bool,
     pub texture_format: TextureFormat,
     pub basisu: std::path::PathBuf,
     pub cartographic: Option<Cartographic>,
@@ -50,6 +52,7 @@ pub struct MeshTo3tzOptions {
 impl Default for MeshTo3tzOptions {
     fn default() -> Self {
         Self {
+            explicit: false,
             texture_format: TextureFormat::Lossless,
             basisu: "basisu".into(),
             cartographic: None,
@@ -91,6 +94,7 @@ struct Planned {
     plan: LeafPlan,
 }
 struct Node {
+    slot: usize,
     children: Vec<Node>,
     plans: Vec<Planned>,
     min: [f64; 3],
@@ -154,7 +158,36 @@ pub fn mesh_to_3tz_reported(
         },
     );
     if baked.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
+        if opts.explicit {
+            return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
+        }
+        let mut manifest = crate::tileset::create_tileset_json(
+            input,
+            &job.path().join("tileset.json"),
+            &CreateTilesetOptions::from(opts),
+        )?;
+        fs::copy(
+            input,
+            job.path().join(
+                input
+                    .file_name()
+                    .ok_or_else(|| Error::msg("input has no filename"))?,
+            ),
+        )?;
+        crate::implicit::write_tileset(
+            &mut manifest,
+            job.path(),
+            crate::implicit::SubdivisionScheme::Octree,
+            false,
+        )?;
+        fs::write(
+            job.path().join("tileset.json"),
+            serde_json::to_vec(&manifest)?,
+        )?;
+        let work = job.path().to_owned();
+        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":1,"leafTiles":1});
+        crate::output::write_report(&work, report.clone(), true)?;
+        return job.publish_tree_3tz(&work, Some(report));
     }
     validate_source(input)?;
     if scene.vertices.iter().any(|v| {
@@ -184,8 +217,12 @@ pub fn mesh_to_3tz_reported(
         &material_ids,
         (0..scene.triangles.len()).collect(),
         opts,
+        None,
+        0,
     )?;
-    fold(&mut root);
+    if opts.explicit {
+        fold(&mut root);
+    }
     let mut nodes = Vec::new();
     flatten(&mut root, &mut nodes);
     let leaves = nodes.iter().filter(|n| n.children.is_empty()).count();
@@ -415,9 +452,44 @@ pub fn mesh_to_3tz_reported(
         root_proxy.geometry_error,
         root_proxy.error
     ));
-    let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes)});
+    let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes,!opts.explicit)});
+    if !opts.explicit {
+        let diagonal = crate::vec3::norm(crate::vec3::sub(nodes[0].max, nodes[0].min));
+        ts["geometricError"] = json!(crate::tileset_node::top_level_error(
+            diagonal,
+            nodes[0].error,
+            2.
+        ));
+    }
     if let Some(origin) = baked.map(|b| b.origin).or(opts.cartographic) {
         ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
+    }
+    if !opts.explicit {
+        crate::implicit::write_tileset(
+            &mut ts,
+            work,
+            crate::implicit::SubdivisionScheme::Octree,
+            false,
+        )?;
+        fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
+        let stage = job.staging("published")?;
+        fs::copy(work.join("tileset.json"), stage.join("tileset.json"))?;
+        for name in ["implicit-content", "subtrees"] {
+            fs::rename(work.join(name), stage.join(name))?;
+        }
+        for entry in fs::read_dir(work)? {
+            let entry = entry?;
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("implicit-tileset-")
+            {
+                fs::rename(entry.path(), stage.join(entry.file_name()))?;
+            }
+        }
+        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":nodes.len(),"leafTiles":leaves});
+        crate::output::write_report(&stage, report.clone(), true)?;
+        return job.publish_tree_3tz(&stage, Some(report));
     }
     fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
     let mut files = vec![("tileset.json".into(), work.join("tileset.json"))];
@@ -486,9 +558,12 @@ fn partition(
     materials: &[usize],
     mut ids: Vec<usize>,
     opts: &MeshTo3tzOptions,
+    cell: Option<([f64; 3], [f64; 3])>,
+    depth: u32,
 ) -> Result<Node, Error> {
     let (lo, hi) = mesh::triangle_aabb_yup(scene, &ids);
     let mut node = Node {
+        slot: 0,
         children: Vec::new(),
         plans: Vec::new(),
         min: lo.map(f64::from),
@@ -525,6 +600,59 @@ fn partition(
             return Ok(node);
         }
     }
+    if !opts.explicit {
+        if depth >= 31 {
+            return Err(Error::Data(
+                "mesh octree exceeds 31 levels; raise maxTriangles or inspect coincident geometry"
+                    .into(),
+            ));
+        }
+        let (cell_lo, cell_hi) = cell.unwrap_or((lo.map(f64::from), hi.map(f64::from)));
+        let mid: [f64; 3] = std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
+        let mut groups: [Vec<usize>; 8] = std::array::from_fn(|_| Vec::new());
+        for &id in &ids {
+            let p = mesh::centroid(scene, &scene.triangles[id]);
+            // The source is Y-up. Address octants in the tileset's Z-up frame.
+            let slot = usize::from(p[0] as f64 >= mid[0])
+                | (usize::from(-(p[2] as f64) >= -mid[2]) << 1)
+                | (usize::from(p[1] as f64 >= mid[1]) << 2);
+            groups[slot].push(id);
+        }
+        if groups.iter().filter(|g| !g.is_empty()).count() == 1
+            && ids.iter().all(|&id| {
+                mesh::centroid(scene, &scene.triangles[id])
+                    == mesh::centroid(scene, &scene.triangles[ids[0]])
+            })
+        {
+            // Coincident centroids cannot be separated spatially. Preserve every
+            // triangle in stable buckets; semantic boxes describe the overlap.
+            groups = std::array::from_fn(|_| Vec::new());
+            for (i, id) in ids.into_iter().enumerate() {
+                groups[i % 8].push(id);
+            }
+        }
+        for (slot, ids) in groups
+            .into_iter()
+            .enumerate()
+            .filter(|(_, ids)| !ids.is_empty())
+        {
+            let upper = [slot & 1 != 0, slot & 4 != 0, slot & 2 == 0];
+            let child_lo = std::array::from_fn(|i| if upper[i] { mid[i] } else { cell_lo[i] });
+            let child_hi = std::array::from_fn(|i| if upper[i] { cell_hi[i] } else { mid[i] });
+            let mut child = partition(
+                scene,
+                dims,
+                materials,
+                ids,
+                opts,
+                Some((child_lo, child_hi)),
+                depth + 1,
+            )?;
+            child.slot = slot;
+            node.children.push(child);
+        }
+        return Ok(node);
+    }
     let axis = (0..3)
         .max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b])))
         .unwrap();
@@ -537,13 +665,13 @@ fn partition(
     let right = ids.split_off(mid);
     let (a, b) = if ids.len() > 20000 {
         rayon::join(
-            || partition(scene, dims, materials, ids, opts),
-            || partition(scene, dims, materials, right, opts),
+            || partition(scene, dims, materials, ids, opts, None, depth + 1),
+            || partition(scene, dims, materials, right, opts, None, depth + 1),
         )
     } else {
         (
-            partition(scene, dims, materials, ids, opts),
-            partition(scene, dims, materials, right, opts),
+            partition(scene, dims, materials, ids, opts, None, depth + 1),
+            partition(scene, dims, materials, right, opts, None, depth + 1),
         )
     };
     node.children = vec![a?, b?];
@@ -635,6 +763,7 @@ fn fold(node: &mut Node) {
 fn flatten(node: &mut Node, out: &mut Vec<Node>) {
     node.id = out.len();
     out.push(Node {
+        slot: node.slot,
         children: Vec::new(),
         plans: std::mem::take(&mut node.plans),
         min: node.min,
@@ -649,6 +778,7 @@ fn flatten(node: &mut Node, out: &mut Vec<Node>) {
         .children
         .iter()
         .map(|c| Node {
+            slot: c.slot,
             children: Vec::new(),
             plans: Vec::new(),
             min: c.min,
@@ -658,16 +788,19 @@ fn flatten(node: &mut Node, out: &mut Vec<Node>) {
         })
         .collect();
 }
-fn tile_json(id: usize, nodes: &[Node]) -> Value {
+fn tile_json(id: usize, nodes: &[Node], implicit: bool) -> Value {
     let n = &nodes[id];
     let lo = [n.min[0], -n.max[2], n.min[1]];
     let hi = [n.max[0], -n.min[2], n.max[1]];
     let mut v = json!({"boundingVolume":{"box":aabb_to_box(lo,hi)},"geometricError":n.error,"refine":"REPLACE","content":{"uri":format!("t/{id}.glb")}});
+    if implicit && id != 0 {
+        v["extras"] = json!({"implicitChildIndex":n.slot});
+    }
     if !n.children.is_empty() {
         v["children"] = json!(n
             .children
             .iter()
-            .map(|c| tile_json(c.id, nodes))
+            .map(|c| tile_json(c.id, nodes, implicit))
             .collect::<Vec<_>>());
     }
     v
@@ -1087,6 +1220,7 @@ mod hierarchy_tests {
             let current = *id;
             *id += 1;
             Node {
+                slot: 0,
                 id: current,
                 min: [0.; 3],
                 max: [1.; 3],
