@@ -10,7 +10,11 @@ use rusqlite::{
     config::DbConfig, params, params_from_iter, types::ValueRef, Connection, OpenFlags,
 };
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
-use std::{fmt, fs::File, io::BufReader};
+use std::{
+    fmt,
+    fs::File,
+    io::{BufReader, Read},
+};
 
 fn input_sql(error: rusqlite::Error) -> Error {
     data(format!("vector input: {error}"))
@@ -870,8 +874,27 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
     let canonical = std::fs::canonicalize(input)?;
     let mut wal = canonical.as_os_str().to_os_string();
     wal.push("-wal");
-    if std::fs::metadata(Path::new(&wal)).is_ok_and(|metadata| metadata.len() != 0) {
-        return Err(data("GeoPackage has an active WAL; checkpoint and close its writer before immutable ingestion"));
+    match std::fs::metadata(Path::new(&wal)) {
+        Ok(metadata) if metadata.len() != 0 => return Err(data("GeoPackage has an active WAL; checkpoint and close its writer before immutable ingestion")),
+        Ok(_) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(error.into()),
+    }
+    let mut journal = canonical.as_os_str().to_os_string();
+    journal.push("-journal");
+    match File::open(Path::new(&journal)) {
+        Ok(mut journal) => {
+            let mut header = [0u8; 28];
+            let size = journal.metadata()?.len().min(header.len() as u64) as usize;
+            journal.read_exact(&mut header[..size])?;
+            // PERSIST mode leaves an inert file with a zeroed header. A live
+            // rollback journal requires recovery, which immutable mode skips.
+            if header[..size].iter().any(|byte| *byte != 0) {
+                return Err(data("GeoPackage has an active rollback journal; recover and close its writer before immutable ingestion"));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
     let filename = canonical
         .to_str()
@@ -889,7 +912,7 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
     db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
         .map_err(input_sql)?;
     db.execute_batch("PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-8192").map_err(input_sql)?;
-    let mut statement = db.prepare("SELECT g.table_name,g.column_name,g.srs_id,g.z,g.m,g.geometry_type_name FROM gpkg_geometry_columns g JOIN gpkg_contents c ON g.table_name=c.table_name WHERE c.data_type='features' ORDER BY g.rowid").map_err(input_sql)?;
+    let mut statement = db.prepare("SELECT g.table_name,g.column_name,g.srs_id,g.z,g.m,g.geometry_type_name FROM gpkg_geometry_columns g JOIN gpkg_contents c ON g.table_name=c.table_name WHERE c.data_type='features' ORDER BY g.table_name,g.column_name").map_err(input_sql)?;
     let metadata = statement
         .query_map([], |row| {
             Ok((
@@ -995,6 +1018,18 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
             .map_err(input_sql)?
             .collect::<Result<BTreeSet<_>, _>>()
             .map_err(input_sql)?;
+        if options.source_crs.is_none() && srs_columns.contains("epoch") {
+            let has_epoch: bool = db
+                .query_row(
+                    "SELECT epoch IS NOT NULL FROM gpkg_spatial_ref_sys WHERE srs_id=?1",
+                    [srs],
+                    |row| row.get(0),
+                )
+                .map_err(input_sql)?;
+            if has_epoch {
+                return Err(Error::Environment("portable GeoPackage CRS coordinate epochs require native-geospatial; an explicit source-crs override replaces the declared CRS semantics".into()));
+            }
+        }
         let query = if srs_columns.contains("definition_12_063") {
             "SELECT CASE WHEN definition_12_063 IS NOT NULL AND definition_12_063 <> 'undefined' THEN definition_12_063 ELSE definition END FROM gpkg_spatial_ref_sys WHERE srs_id=?1"
         } else {
@@ -2044,5 +2079,46 @@ mod tests {
         assert!(decode_gpkg(&empty, 4326, 20).is_err());
         empty[3] |= 0x10;
         assert!(decode_gpkg(&empty, 4326, 20).unwrap().is_none());
+    }
+    #[test]
+    fn gpkg_rowidless_metadata_and_declared_coordinate_epochs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.gpkg");
+        gpkg(&path);
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch("ALTER TABLE gpkg_geometry_columns RENAME TO old_columns;
+            CREATE TABLE gpkg_geometry_columns(table_name TEXT,column_name TEXT,srs_id INTEGER,z INTEGER,m INTEGER,geometry_type_name TEXT,PRIMARY KEY(table_name,column_name)) WITHOUT ROWID;
+            INSERT INTO gpkg_geometry_columns SELECT * FROM old_columns;
+            DROP TABLE old_columns;
+            ALTER TABLE gpkg_spatial_ref_sys ADD COLUMN epoch DOUBLE;
+            UPDATE gpkg_spatial_ref_sys SET epoch=2020.0;").unwrap();
+        let mut options = gpkg_options();
+        let mut reader = Reader::new(&path, &options, None).unwrap();
+        assert_eq!(read(&mut reader, &options).0.len(), 1);
+        options.source_crs = None;
+        assert!(matches!(
+            Reader::new(&path, &options, None),
+            Err(Error::Environment(_))
+        ));
+        options.source_crs = Some("EPSG:4326".into());
+        options.height_offset = Some(0.);
+        let mut reader = Reader::new(&path, &options, None).unwrap();
+        assert_eq!(read(&mut reader, &options).0.len(), 1);
+    }
+
+    #[test]
+    fn gpkg_hot_rollback_journal_is_not_ignored_by_immutable_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.gpkg");
+        gpkg(&path);
+        let journal = dir.path().join("input.gpkg-journal");
+        fs::write(&journal, [0u8; 1024]).unwrap();
+        assert!(Reader::new(&path, &gpkg_options(), None).is_ok());
+        let mut header = [0u8; 1024];
+        header[..8].copy_from_slice(&[0xd9, 0xd5, 0x05, 0xf9, 0x20, 0xa1, 0x63, 0xd7]);
+        fs::write(&journal, header).unwrap();
+        assert!(
+            matches!(Reader::new(&path, &gpkg_options(), None), Err(Error::Data(message)) if message.contains("rollback journal"))
+        );
     }
 }
