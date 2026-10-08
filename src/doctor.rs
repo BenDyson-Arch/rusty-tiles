@@ -146,7 +146,7 @@ fn point_cloud_readiness(geospatial: &Value) -> Value {
     };
     let placement = json!({"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
         "crsClasses":classes,"nativeFallback":geospatial,
-        "limitations":"Grids, geoid/compound heights, coordinate epochs and unverified datum operations require --features native-geospatial. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
+        "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets and non-decimal PROJ angles require --features native-geospatial. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
         "geospatial":placement,"note":"Local XYZ and verified grid-free globe placement need no Python or GDAL. Conversion validates the source-specific operation."})
 }

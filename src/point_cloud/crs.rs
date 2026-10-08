@@ -237,6 +237,16 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
         if key == "type" && value != "crs" {
             return Err(unsupported("only CRS definitions are supported"));
         }
+        if matches!(key, "lon_0" | "lat_0" | "lat_ts" | "lat_1" | "lat_2")
+            && value.parse::<f64>().is_err()
+        {
+            // PROJ supports DMS and directional/radian suffixes. They are
+            // outside this decimal-degree tier, not necessarily malformed
+            // definitions: preserve automatic strict native parsing/fallback.
+            return Err(unsupported(&format!(
+                "angular parameter +{key} uses syntax outside the verified decimal-degree tier"
+            )));
+        }
         if matches!(
             key,
             "a" | "b"
@@ -256,6 +266,15 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
         ) {
             finite(value)?;
         }
+    }
+    if matches!(projection, "longlat" | "latlong")
+        && params
+            .get("lon_0")
+            .is_some_and(|value| finite(value).is_ok_and(|value| value != 0.))
+    {
+        // proj4rs ignores lam0 for geographic input, while native PROJ applies
+        // it. Never select an operation that silently loses this offset.
+        return Err(unsupported("geographic +lon_0 offsets require native PROJ"));
     }
     if params.contains_key("k") && params.contains_key("k_0") {
         return Err(Error::Data("conflicting +k and +k_0 parameters".into()));
@@ -810,6 +829,7 @@ mod tests {
 
     const WGS_WKT: &str = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
     const UTM_WKT2: &str = r#"PROJCRS["WGS 84 / UTM zone 56S",BASEGEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["UTM zone 56S",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",153,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",0.9996,SCALEUNIT["unity",1]],PARAMETER["False easting",500000,LENGTHUNIT["metre",1]],PARAMETER["False northing",10000000,LENGTHUNIT["metre",1]]],CS[Cartesian,2],AXIS["easting (E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["northing (N)",north,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",32756]]"#;
+    const DMS_TMERC: &str = r#"+proj=tmerc +lon_0=2d20'14.025"E +datum=WGS84 +type=crs"#;
 
     fn assert_mm(actual: [f64; 3], expected: [f64; 3], label: &str) {
         let distance = actual
@@ -940,6 +960,90 @@ mod tests {
             assert_eq!(input[0], [0., 0., 0.]);
         }
         assert!(PureTransform::new("EPSG:4326", f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn geographic_longitude_offsets_and_nondecimal_angles_require_native_tier() {
+        for definition in [
+            "+proj=longlat +lon_0=10 +datum=WGS84",
+            "+proj=latlong +lon_0=-10 +datum=WGS84",
+            DMS_TMERC,
+            r#"+proj=tmerc +lat_0=49d30'0"N +datum=WGS84"#,
+            r#"+proj=merc +lat_ts=30d0'0"N +datum=WGS84"#,
+            r#"+proj=lcc +lat_1=33d0'0"N +lat_2=45 +datum=WGS84"#,
+            r#"+proj=lcc +lat_1=33 +lat_2=45d0'0"N +datum=WGS84"#,
+        ] {
+            let error = PureTransform::new(definition, 7.).err().expect(definition);
+            assert!(
+                matches!(error, Error::Environment(_)),
+                "{definition}: {error}"
+            );
+            assert!(error.to_string().contains("--features native-geospatial"));
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(matches!(
+                Transform::new(definition, 7.),
+                Err(Error::Environment(_))
+            ));
+        }
+        for projection in ["longlat", "latlong"] {
+            let definition = format!("+proj={projection} +lon_0=0 +datum=WGS84");
+            let operation = PureTransform::new(&definition, 7.).unwrap();
+            assert_mm(
+                operation.transform(&[[0., 0., 123.]]).unwrap()[0],
+                [6378137. + 130., 0., 0.],
+                &definition,
+            );
+        }
+        // A nonfinite numeric angle remains a data error, rather than being
+        // mistaken for a supported native syntax such as DMS.
+        assert!(matches!(
+            PureTransform::new("+proj=tmerc +lon_0=NaN +datum=WGS84", 7.),
+            Err(Error::Data(_))
+        ));
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn geographic_offsets_and_dms_fallback_match_strict_native_positions() {
+        use crate::geospatial::{Crs, EcefTransform};
+        let points = [[0., 0., 123.], [10000., 20000., -30.]];
+        for (definition, input) in [
+            ("+proj=longlat +lon_0=10 +datum=WGS84", &points[..1]),
+            ("+proj=latlong +lon_0=-10 +datum=WGS84", &points[..1]),
+            (DMS_TMERC, &points[..]),
+            (r#"+proj=tmerc +lat_0=49d30'0"N +datum=WGS84"#, &points[..]),
+            (r#"+proj=merc +lat_ts=30d0'0"N +datum=WGS84"#, &points[..]),
+            (
+                r#"+proj=lcc +lat_1=33d0'0"N +lat_2=45 +datum=WGS84"#,
+                &points[..],
+            ),
+            (
+                r#"+proj=lcc +lat_1=33 +lat_2=45d0'0"N +datum=WGS84"#,
+                &points[..],
+            ),
+        ] {
+            let mut operation = Transform::new(definition, 7.).unwrap();
+            assert!(matches!(operation, Transform::Native(_)), "{definition}");
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(input)
+                .unwrap();
+            for (actual, expected) in operation
+                .transform(input)
+                .unwrap()
+                .into_iter()
+                .zip(expected)
+            {
+                assert_mm(actual, expected, definition);
+            }
+        }
+        // The original review reproducer lands at longitude 10 degrees, not 0.
+        let mut operation = Transform::new("+proj=longlat +lon_0=10 +datum=WGS84", 7.).unwrap();
+        assert_mm(
+            operation.transform(&points[..1]).unwrap()[0],
+            geodetic_to_ecef(Cartographic::new(10., 0., 130.)),
+            "geographic +lon_0=10",
+        );
     }
 
     #[cfg(feature = "native-geospatial")]
