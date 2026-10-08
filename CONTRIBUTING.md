@@ -308,7 +308,6 @@ Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. 
 
 For the deep probe, export the invented 24×24 textured grid using `RUSTY_TILES_DIGEST_EXPORT=target/implicit-inputs cargo test --locked --features native-geospatial --test output_digests export_recipes -- --ignored --exact`. Convert its `inputs/mesh.glb` with `--max-triangles 2 --max-bytes 0 --tile-size 64 --cartographic-position-degrees 12.1 41.9 200`. Reconvert the preview fixture's `cloud.las` with `--source-crs header --height-offset 10 --max-points 1`. Extract both archives and serve them with a generated annotations layer. Run `node tests/fixtures/implicit_levels.cjs URL`. Cesium 1.143.0 traverses levels 0–5, retains all 1,152 leaf triangles and 257 points, and picks both. The vector probe also checks contiguous instantiated levels, including routing nodes.
 
-
 ## Check byte-identity
 
 Point-cloud and `convert` archives are reproducible by default. For vector archives, add `--reproducible`. It omits `conversion.json.performance`, the only volatile section. Then the same input, options, binary and GDAL, GEOS, PROJ and codec versions give identical bytes, whatever the worker count.
