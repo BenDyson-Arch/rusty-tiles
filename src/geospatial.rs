@@ -158,49 +158,162 @@ impl Crs {
     /// Normalized conic parallels for point-cloud accuracy checks. Read the
     /// parsed native CRS, so quotes, aliases and inferred defaults cannot bypass
     /// the same conditioning limit used by the portable operation.
-    pub(crate) fn conic_parallels(&self) -> Option<(f64, f64)> {
-        let _errors = QuietErrors::new();
-        // SAFETY: All queries borrow this live SRS. Attribute text is copied
-        // before returning; null error pointers request default parameter values.
-        unsafe {
-            let method = string(gdal_sys::OSRGetAttrValue(
-                self.0.as_ptr(),
-                c"PROJECTION".as_ptr(),
-                0,
-            ));
-            if method == "Lambert_Conformal_Conic_1SP"
-                || method == "Lambert Conic Conformal (1SP variant B)"
-            {
-                // Variant B separates the natural and false origins. GDAL
-                // normalizes latitude_of_origin to the natural origin, which
-                // determines the tangent cone and its conditioning.
-                let origin = gdal_sys::OSRGetNormProjParm(
-                    self.0.as_ptr(),
-                    c"latitude_of_origin".as_ptr(),
-                    0.,
-                    null_mut(),
-                );
-                Some((origin, origin))
-            } else if method.starts_with("Lambert_Conformal_Conic")
-                || method == "Albers_Conic_Equal_Area"
-            {
-                let first = gdal_sys::OSRGetNormProjParm(
-                    self.0.as_ptr(),
-                    c"standard_parallel_1".as_ptr(),
-                    0.,
-                    null_mut(),
-                );
-                let second = gdal_sys::OSRGetNormProjParm(
-                    self.0.as_ptr(),
-                    c"standard_parallel_2".as_ptr(),
-                    0.,
-                    null_mut(),
-                );
-                Some((first, second))
-            } else {
-                None
-            }
+    pub(crate) fn conic_parallels(&self) -> Result<Option<(f64, f64)>, Error> {
+        let document = self.proj_json()?;
+        let source = document.get("source_crs").unwrap_or(&document);
+        let conversion = &source["conversion"];
+        let epsg_code = |value: &serde_json::Value| {
+            (value["authority"] == "EPSG")
+                .then(|| {
+                    value["code"]
+                        .as_u64()
+                        .or_else(|| value["code"].as_str()?.parse().ok())
+                })
+                .flatten()
+        };
+        let method = &conversion["method"];
+        let code = epsg_code(&method["id"]);
+        let normalize = |value: &str| {
+            value
+                .to_ascii_lowercase()
+                .replace([' ', '_', '-', '(', ')'], "")
+        };
+        let name = normalize(method["name"].as_str().unwrap_or(""));
+        let conic = matches!(
+            code,
+            Some(9801 | 9802 | 9803 | 1051 | 1102 | 9817 | 9826 | 9822)
+        ) || name.starts_with("lambertconicconformal")
+            || name.starts_with("lambertconformalconic")
+            || name.starts_with("lambertconicnearconformal")
+            || matches!(name.as_str(), "albersequalarea" | "albersconicequalarea");
+        if !conic {
+            return Ok(None);
         }
+        let parameters = conversion["parameters"]
+            .as_array()
+            .ok_or_else(|| Error::Environment("cannot inspect native conic parameters".into()))?;
+        let angle = |code, aliases: &[&str]| -> Result<Option<f64>, Error> {
+            let Some(parameter) = parameters
+                .iter()
+                .find(|parameter| epsg_code(&parameter["id"]) == Some(code))
+                .or_else(|| {
+                    parameters.iter().find(|parameter| {
+                        aliases
+                            .contains(&normalize(parameter["name"].as_str().unwrap_or("")).as_str())
+                    })
+                })
+            else {
+                return Ok(None);
+            };
+            let unit = &parameter["unit"];
+            let factor = match unit.as_str() {
+                Some("degree") => Some(1.),
+                Some("radian") => Some(180. / std::f64::consts::PI),
+                Some("grad") => Some(0.9),
+                Some("arc-second") => Some(1. / 3600.),
+                _ => unit["conversion_factor"]
+                    .as_f64()
+                    .map(|factor| factor.to_degrees()),
+            };
+            let value = parameter["value"]
+                .as_f64()
+                .zip(factor)
+                .filter(|(_, factor)| factor.is_finite() && *factor > 0.)
+                .map(|(value, factor)| value * factor)
+                .filter(|value| value.is_finite())
+                .ok_or_else(|| {
+                    Error::Environment("cannot normalize native conic latitude".into())
+                })?;
+            Ok(Some(value))
+        };
+        let first = angle(
+            8823,
+            &["latitudeof1ststandardparallel", "standardparallel1"],
+        )?;
+        let second = angle(
+            8824,
+            &["latitudeof2ndstandardparallel", "standardparallel2"],
+        )?;
+        let tangent = match code {
+            Some(9801 | 1102 | 9817 | 9826) => true,
+            Some(9802 | 9803 | 1051 | 9822) => false,
+            _ => {
+                name.contains("1sp")
+                    || name.contains("westorientated")
+                    || name.contains("nearconformal")
+            }
+        };
+        if !tangent
+            && (matches!(code, Some(9802 | 9803 | 1051 | 9822))
+                || first.is_some()
+                || second.is_some())
+        {
+            // Native CRS parsing uses zero for an omitted 2SP parallel.
+            return Ok(Some((first.unwrap_or(0.), second.unwrap_or(0.))));
+        }
+        let origin =
+            angle(8801, &["latitudeofnaturalorigin", "latitudeoforigin"])?.ok_or_else(|| {
+                Error::Environment("cannot establish native conic conditioning".into())
+            })?;
+        Ok(Some((origin, origin)))
+    }
+
+    fn proj_json(&self) -> Result<serde_json::Value, Error> {
+        let _errors = QuietErrors::new();
+        let mut raw = null_mut();
+        // SAFETY: The SRS is live. Copy GDAL's allocation and free it once.
+        let definition = unsafe {
+            if gdal_sys::OSRExportToPROJJSON(self.0.as_ptr(), &mut raw, null()) != 0 {
+                return Err(Error::Environment(diagnostic(
+                    "cannot inspect native CRS operation",
+                )));
+            }
+            let definition = string(raw);
+            gdal_sys::VSIFree(raw.cast());
+            definition
+        };
+        Ok(serde_json::from_str(&definition)?)
+    }
+
+    /// Source-latitude guard for spherical Albers, whose polar inverse is also
+    /// ill-conditioned in native PROJ. Clone the source geographic CRS so this
+    /// check precedes datum shifts and retains the original angular units.
+    pub(crate) fn spherical_albers_domain(&self) -> Result<Option<(StrictTransform, f64)>, Error> {
+        let document = self.proj_json()?;
+        let source = document.get("source_crs").unwrap_or(&document);
+        let method = &source["conversion"]["method"];
+        if !((method["id"]["authority"] == "EPSG" && method["id"]["code"] == 9822)
+            || method["name"] == "Albers Equal Area")
+        {
+            return Ok(None);
+        }
+        let _errors = QuietErrors::new();
+        // SAFETY: All queries borrow the live SRS; the cloned geographic SRS
+        // is independently owned and configured before creating its transform.
+        let (geographic, units) = unsafe {
+            let major = gdal_sys::OSRGetSemiMajor(self.0.as_ptr(), null_mut());
+            let minor = gdal_sys::OSRGetSemiMinor(self.0.as_ptr(), null_mut());
+            if !major.is_finite() || major <= 0. || major != minor {
+                return Ok(None);
+            }
+            let handle =
+                NonNull::new(gdal_sys::OSRCloneGeogCS(self.0.as_ptr())).ok_or_else(|| {
+                    Error::Environment("cannot inspect spherical Albers coordinate domain".into())
+                })?;
+            let geographic = Self(handle.cast());
+            gdal_sys::OSRSetAxisMappingStrategy(
+                geographic.0.as_ptr(),
+                gdal_sys::OSRAxisMappingStrategy::OAMS_TRADITIONAL_GIS_ORDER,
+            );
+            let units = gdal_sys::OSRGetAngularUnits(geographic.0.as_ptr(), null_mut());
+            (geographic, units)
+        };
+        if !units.is_finite() || units <= 0. {
+            return Err(Error::Environment(
+                "cannot normalize spherical Albers latitude".into(),
+            ));
+        }
+        Ok(Some((StrictTransform::new(self, &geographic)?, units)))
     }
 
     fn empty() -> Result<Self, Error> {

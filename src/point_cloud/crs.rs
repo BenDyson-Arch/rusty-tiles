@@ -10,7 +10,31 @@ use std::collections::BTreeMap;
 pub(super) enum Transform {
     Pure(Box<PureTransform>),
     #[cfg(feature = "native-geospatial")]
-    Native(crate::geospatial::EcefTransform),
+    Native(Box<NativeTransform>),
+}
+
+#[cfg(feature = "native-geospatial")]
+pub(super) struct NativeTransform {
+    ecef: crate::geospatial::EcefTransform,
+    spherical_albers: Option<(crate::geospatial::StrictTransform, f64)>,
+}
+
+#[cfg(feature = "native-geospatial")]
+impl NativeTransform {
+    fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
+        if let Some((geographic, units)) = &mut self.spherical_albers {
+            for (index, point) in geographic.transform(points)?.iter().enumerate() {
+                if (point[1] * *units).abs() >= 80_f64.to_radians() {
+                    return Err(spherical_albers_outside_domain(index));
+                }
+            }
+        }
+        self.ecef.transform(points)
+    }
+}
+
+fn spherical_albers_outside_domain(index: usize) -> Error {
+    Error::Data(format!("point {index}: spherical Albers source latitude at or beyond 80 degrees is outside verified point-cloud accuracy"))
 }
 
 impl Transform {
@@ -29,10 +53,15 @@ impl Transform {
         if !source.is_horizontal() {
             return Err(horizontal_required());
         }
-        if let Some((first, second)) = source.conic_parallels() {
+        if let Some((first, second)) = source.conic_parallels()? {
             validate_conic_conditioning(first, second)?;
         }
-        crate::geospatial::EcefTransform::new(source, Some(height_offset)).map(Self::Native)
+        let spherical_albers = source.spherical_albers_domain()?;
+        let ecef = crate::geospatial::EcefTransform::new(source, Some(height_offset))?;
+        Ok(Self::Native(Box::new(NativeTransform {
+            ecef,
+            spherical_albers,
+        })))
     }
 
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
@@ -139,12 +168,13 @@ impl PureTransform {
                     .strip_prefix("+lat_0=")
                     .is_some_and(|value| finite(value).is_ok_and(|value| value.abs() == 90.))
             });
+        let (a, b) = source.ellipse_parameters();
         let source_geographic = if source.projname() == "sterea"
             || (source.projname() == "stere" && !polar_stereographic)
+            || (source.projname() == "aea" && a == b)
         {
             // An unknown target datum deliberately skips datum conversion: this
             // probe checks latitude in the source projection, before any shift.
-            let (a, b) = source.ellipse_parameters();
             Some(
                 Proj::from_proj_string(&format!("+proj=longlat +a={a} +b={b}"))
                     .map_err(|error| unsupported(&error.to_string()))?,
@@ -175,15 +205,18 @@ impl PureTransform {
             if let Some(geographic) = &self.source_geographic {
                 let mut probe = p;
                 proj4rs::transform::transform(&self.source, geographic, &mut probe).map_err(
-                    |error| unsupported(&format!("point {index}: cannot establish portable stereographic coordinate domain: {error}")),
+                    |error| unsupported(&format!("point {index}: cannot establish portable {} coordinate domain: {error}", self.source.projname())),
                 )?;
                 if ![probe.0, probe.1, probe.2]
                     .iter()
                     .all(|value| value.is_finite())
                     || probe.1.abs() >= 80_f64.to_radians()
                 {
+                    if self.source.projname() == "aea" {
+                        return Err(spherical_albers_outside_domain(index));
+                    }
                     return Err(unsupported(&format!(
-                        "point {index}: stereographic coordinates at or beyond 80 degrees source latitude require native PROJ"
+                        "point {index}: {} coordinates at or beyond 80 degrees source latitude require native PROJ", self.source.projname()
                     )));
                 }
             }
@@ -365,33 +398,7 @@ fn validate_proj(definition: &str, from_wkt: bool) -> Result<String, Error> {
         ) && !named_greenwich
         {
             let number = finite(value)?;
-            if matches!(key, "k" | "k_0") && number <= 0. {
-                return Err(Error::Data(format!(
-                    "projection scale +{key} must be positive"
-                )));
-            }
-            if matches!(key, "lat_0" | "lat_1" | "lat_2" | "lat_ts") {
-                let excludes_poles = (projection == "lcc" && matches!(key, "lat_1" | "lat_2"))
-                    || (projection == "merc" && key == "lat_ts");
-                let lcc_near_pole = projection == "lcc"
-                    && matches!(key, "lat_1" | "lat_2")
-                    && number.to_radians().cos().abs() < 1e-10;
-                if lcc_near_pole {
-                    return Err(Error::Data(format!(
-                        "projection latitude +{key} is too close to a pole for Lambert conformal conic"
-                    )));
-                }
-                if number.abs() > 90. || (excludes_poles && number.abs() == 90.) {
-                    let range = if excludes_poles {
-                        "(-90, 90)"
-                    } else {
-                        "[-90, 90]"
-                    };
-                    return Err(Error::Data(format!(
-                        "projection latitude +{key} must be in {range} degrees"
-                    )));
-                }
-            }
+            validate_projection_number(projection, key, number)?;
         }
     }
     if projection == "utm" && !params.contains_key("zone") {
@@ -547,6 +554,37 @@ fn finite(value: &str) -> Result<f64, Error> {
         .ok()
         .filter(|value| value.is_finite())
         .ok_or_else(|| Error::Data(format!("invalid finite CRS number: {value}")))
+}
+
+fn validate_projection_number(projection: &str, key: &str, number: f64) -> Result<(), Error> {
+    if matches!(key, "k" | "k_0") && number <= 0. {
+        return Err(Error::Data(format!(
+            "projection scale +{key} must be positive"
+        )));
+    }
+    if matches!(key, "lat_0" | "lat_1" | "lat_2" | "lat_ts") {
+        let excludes_poles = (projection == "lcc" && matches!(key, "lat_1" | "lat_2"))
+            || (projection == "merc" && key == "lat_ts");
+        let lcc_near_pole = projection == "lcc"
+            && matches!(key, "lat_1" | "lat_2")
+            && number.to_radians().cos().abs() < 1e-10;
+        if lcc_near_pole {
+            return Err(Error::Data(format!(
+                "projection latitude +{key} is too close to a pole for Lambert conformal conic"
+            )));
+        }
+        if number.abs() > 90. || (excludes_poles && number.abs() == 90.) {
+            let range = if excludes_poles {
+                "(-90, 90)"
+            } else {
+                "[-90, 90]"
+            };
+            return Err(Error::Data(format!(
+                "projection latitude +{key} must be in {range} degrees"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_conic_conditioning(first: f64, second: f64) -> Result<(), Error> {
@@ -782,6 +820,51 @@ fn coordinate_units(node: &Node<'_>, angular: bool) -> Result<f64, Error> {
     Ok(axis_factor.unwrap_or(factor))
 }
 
+// Preserve the declared WKT method rather than allowing generic PROJ defaults
+// or parameters from another variant to change the operation. Origin/offset
+// and scale defaults are shared only where both parsers implement them alike.
+fn validate_wkt_parameters(
+    method: &str,
+    seen: &std::collections::BTreeSet<&str>,
+) -> Result<(), Error> {
+    let origin_scale = &["lat_0", "lon_0", "k_0", "x_0", "y_0"][..];
+    let origin = &["lat_0", "lon_0", "x_0", "y_0"][..];
+    let conic = &["lat_0", "lon_0", "lat_1", "lat_2", "x_0", "y_0"][..];
+    let parallel = &["lat_ts", "lon_0", "x_0", "y_0"][..];
+    let (allowed, required): (&[&str], &[&str]) = match method {
+        "lambertconformalconic2sp"
+        | "lambertconicconformal2sp"
+        | "albersconicequalarea"
+        | "albersequalarea" => (conic, &["lat_1", "lat_2"]),
+        "lambertconformalconic1sp" | "lambertconicconformal1sp" => (origin_scale, &["lat_0"]),
+        "mercator2sp"
+        | "mercatorvariantb"
+        | "polarstereographic"
+        | "polarstereographicvariantb" => (parallel, &["lat_ts"]),
+        "polarstereographicvarianta" => (origin_scale, &["lat_0"]),
+        "transversemercator"
+        | "mercator1sp"
+        | "mercatorvarianta"
+        | "stereographic"
+        | "obliquestereographic"
+        | "doublestereographic" => (origin_scale, &[]),
+        "popularvisualisationpseudomercator" | "lambertazimuthalequalarea" => (origin, &[]),
+        _ => {
+            return Err(unsupported(
+                "WKT projection method is outside the verified tier",
+            ))
+        }
+    };
+    if seen.iter().any(|key| !allowed.contains(key))
+        || required.iter().any(|key| !seen.contains(key))
+    {
+        return Err(unsupported(
+            "WKT parameters do not match the declared projection method",
+        ));
+    }
+    Ok(())
+}
+
 fn wkt(definition: &str) -> Result<(String, f64), Error> {
     // Bound recursion before using the generic recursive parser, including LAS
     // EVLRs which can be much larger than a normal WKT declaration.
@@ -1008,6 +1091,7 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
             } else {
                 value
             };
+            validate_projection_number(projection, key, value)?;
             if key == "lat_0" {
                 latitude_origin = value;
             }
@@ -1015,7 +1099,9 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
                 latitude_parallel = Some(value);
             }
             if !seen.insert(key) {
-                return Err(Error::Data("duplicate WKT projection parameter".into()));
+                return Err(unsupported(
+                    "colliding WKT projection parameter aliases require native interpretation",
+                ));
             }
             if web_mercator
                 && !matches!(
@@ -1028,6 +1114,20 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
                 ));
             }
             result.push_str(&format!(" +{key}={value}"));
+        }
+        // Check the declared method before injecting generic PROJ defaults.
+        validate_wkt_parameters(&method_name, &seen)?;
+        if matches!(method_name.as_str(), "mercator1sp" | "mercatorvarianta")
+            && latitude_origin != 0.
+        {
+            return Err(unsupported(
+                "Mercator variant A requires a zero latitude origin",
+            ));
+        }
+        if method_name == "polarstereographicvarianta" && latitude_origin.abs() != 90. {
+            return Err(unsupported(
+                "polar stereographic variant A requires a polar latitude origin",
+            ));
         }
         if matches!(
             method_name.as_str(),
@@ -1070,6 +1170,12 @@ mod tests {
 
     const WGS_WKT: &str = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
     const UTM_WKT2: &str = r#"PROJCRS["WGS 84 / UTM zone 56S",BASEGEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["UTM zone 56S",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",153,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",0.9996,SCALEUNIT["unity",1]],PARAMETER["False easting",500000,LENGTHUNIT["metre",1]],PARAMETER["False northing",10000000,LENGTHUNIT["metre",1]]],CS[Cartesian,2],AXIS["easting (E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["northing (N)",north,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",32756]]"#;
+    const INCOMPLETE_LCC: &str =
+        include_str!("../../tests/fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    const MERCATOR_ALIASES: &str =
+        include_str!("../../tests/fixtures/crs/mercator-redundant-origin.wkt");
+    const MICHIGAN_LCC: &str =
+        include_str!("../../tests/fixtures/crs/lcc-michigan-near-equator.wkt");
     const DMS_TMERC: &str = r#"+proj=tmerc +lon_0=2d20'14.025"E +datum=WGS84 +type=crs"#;
 
     fn projection_wkts(
@@ -1212,6 +1318,252 @@ mod tests {
             distance < 0.001,
             "{label}: ECEF difference {distance} m: {actual:?} != {expected:?}"
         );
+    }
+
+    fn incomplete_or_mismatched_wkts() -> Vec<String> {
+        let mut definitions = vec![INCOMPLETE_LCC.to_owned(), MERCATOR_ALIASES.to_owned()];
+        for definition in conic_wkts("lcc", 33., 45.) {
+            definitions.push(definition.replace(r#",PARAMETER["standard_parallel_2",45]"#, "")
+                .replace(r#",PARAMETER["Latitude of 2nd standard parallel",45,ANGLEUNIT["degree",0.0174532925199433]]"#, ""));
+            definitions.push(definition.replace(r#",UNIT["metre",1],AXIS"#, r#",PARAMETER["scale_factor",2],UNIT["metre",1],AXIS"#)
+                .replace("],CS[Cartesian,2]", r#",PARAMETER["Scale factor at natural origin",2,SCALEUNIT["unity",1]]],CS[Cartesian,2]"#));
+        }
+        definitions
+    }
+
+    #[test]
+    fn wkt_parameter_sets_keep_declared_projection_method_and_native_aliases() {
+        for definition in incomplete_or_mismatched_wkts() {
+            assert!(
+                matches!(
+                    PureTransform::new(&definition, 7.),
+                    Err(Error::Environment(_))
+                ),
+                "{definition}"
+            );
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(matches!(
+                Transform::new(&definition, 7.),
+                Err(Error::Environment(_))
+            ));
+            #[cfg(feature = "native-geospatial")]
+            {
+                use crate::geospatial::{Crs, EcefTransform};
+                let points = [[200000., 567890., 123.], [5000., 6000., 123.]];
+                let mut operation = Transform::new(&definition, 7.).unwrap();
+                assert!(matches!(operation, Transform::Native(_)));
+                let expected =
+                    EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&points)
+                        .unwrap();
+                for (actual, expected) in operation
+                    .transform(&points)
+                    .unwrap()
+                    .into_iter()
+                    .zip(expected)
+                {
+                    assert_mm(actual, expected, &definition);
+                }
+            }
+        }
+        // A complete method remains portable, with its false origin checked
+        // independently of either projection library.
+        let complete = INCOMPLETE_LCC.replace(
+            r#",PARAMETER["false_easting""#,
+            r#",PARAMETER["standard_parallel_2",45],PARAMETER["false_easting""#,
+        );
+        let mut operation = Transform::new(&complete, 7.).unwrap();
+        assert!(matches!(operation, Transform::Pure(_)));
+        assert_mm(
+            operation.transform(&[[5000., 6000., 123.]]).unwrap()[0],
+            geodetic_to_ecef(Cartographic::new(20., 10., 130.)),
+            "complete LCC analytic false origin",
+        );
+        // Variant-specific parameters must not be repurposed: these methods
+        // cannot acquire conic parallels or a scale belonging to another variant.
+        for (method1, method2, extra1, extra2) in [
+            (
+                "Lambert_Conformal_Conic_1SP",
+                "Lambert Conic Conformal (1SP)",
+                "standard_parallel_1",
+                "Latitude of 1st standard parallel",
+            ),
+            (
+                "Mercator_1SP",
+                "Mercator (variant A)",
+                "standard_parallel_1",
+                "Latitude of 1st standard parallel",
+            ),
+            (
+                "Albers_Conic_Equal_Area",
+                "Albers Equal Area",
+                "scale_factor",
+                "Scale factor at natural origin",
+            ),
+            (
+                "Stereographic",
+                "Stereographic",
+                "standard_parallel_1",
+                "Latitude of 1st standard parallel",
+            ),
+        ] {
+            for definition in projection_wkts(method1, method2, 0., 0., None) {
+                let definition = definition
+                    .replace(
+                        r#",UNIT["metre",1],AXIS"#,
+                        &format!(r#",PARAMETER["{extra1}",2],UNIT["metre",1],AXIS"#),
+                    )
+                    .replace(
+                        "],CS[Cartesian,2]",
+                        &format!(
+                            r#",PARAMETER["{extra2}",2,SCALEUNIT["unity",1]]],CS[Cartesian,2]"#
+                        ),
+                    );
+                assert!(
+                    matches!(
+                        PureTransform::new(&definition, 7.),
+                        Err(Error::Environment(_))
+                    ),
+                    "{definition}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn native_conic_variants_cannot_bypass_conditioning() {
+        #[cfg(not(feature = "native-geospatial"))]
+        assert!(matches!(
+            Transform::new(MICHIGAN_LCC, 7.),
+            Err(Error::Environment(_))
+        ));
+        #[cfg(feature = "native-geospatial")]
+        {
+            use crate::geospatial::Crs;
+            // Include every native LCC family, not just Michigan's display name.
+            for (method, code) in [
+                ("Lambert Conic Conformal (2SP Michigan)", 1051),
+                ("Lambert Conic Conformal (2SP)", 9802),
+                ("Lambert Conic Conformal (2SP Belgium)", 9803),
+            ] {
+                let definition = MICHIGAN_LCC
+                    .replace("Lambert Conic Conformal (2SP Michigan)", method)
+                    .replace("1051", &code.to_string());
+                let source = Crs::from_definition(&definition).unwrap();
+                assert_eq!(source.conic_parallels().unwrap(), Some((1e-8, 1e-8)));
+                assert!(
+                    matches!(Transform::new(&definition, 7.), Err(Error::Data(_))),
+                    "{definition}"
+                );
+            }
+            let valid = MICHIGAN_LCC.replace("0.00000001", "33");
+            let mut operation = Transform::new(&valid, 7.).unwrap();
+            assert!(matches!(operation, Transform::Native(_)));
+            assert_mm(
+                operation.transform(&[[5000., 6000., 123.]]).unwrap()[0],
+                geodetic_to_ecef(Cartographic::new(20., 10., 130.)),
+                "Michigan analytic false origin",
+            );
+            let grads = MICHIGAN_LCC.replace("0.00000001", "0.00000002").replace(
+                r#"ANGLEUNIT["degree",0.0174532925199433]"#,
+                r#"ANGLEUNIT["grad",0.015707963267949]"#,
+            );
+            let (first, second) = Crs::from_definition(&grads)
+                .unwrap()
+                .conic_parallels()
+                .unwrap()
+                .unwrap();
+            assert!((first - 1.8e-8).abs() < 1e-20 && (second - 1.8e-8).abs() < 1e-20);
+            assert!(matches!(Transform::new(&grads, 7.), Err(Error::Data(_))));
+        }
+    }
+
+    #[test]
+    fn spherical_albers_polar_point_is_refused_in_both_builds() {
+        let definition = "+proj=aea +lat_1=80 +lat_2=80 +lat_0=80 +ellps=sphere +towgs84=0,0,0";
+        let point = [612606.1867269421, 13949033.598816177, 123.];
+        assert!(matches!(
+            PureTransform::new(definition, 7.)
+                .unwrap()
+                .transform(&[point]),
+            Err(Error::Data(_))
+        ));
+        let mut operation = Transform::new(definition, 7.).unwrap();
+        assert!(matches!(operation.transform(&[point]), Err(Error::Data(_))));
+        #[cfg(feature = "native-geospatial")]
+        for definition in [
+            definition.replace("+lat_1=80", "+lat_1=\"80\""),
+            crate::geospatial::Crs::from_definition(definition)
+                .unwrap()
+                .wkt()
+                .unwrap(),
+        ] {
+            let mut operation = Transform::new(&definition, 7.).unwrap();
+            assert!(matches!(operation, Transform::Native(_)));
+            assert!(
+                matches!(operation.transform(&[point]), Err(Error::Data(_))),
+                "{definition}"
+            );
+        }
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn spherical_albers_coordinate_matrix_uses_fresh_transforms() {
+        use crate::geospatial::{Crs, EcefTransform, StrictTransform};
+        for origin in [-80., 30., 80.] {
+            let definition = format!("+proj=aea +lat_1={origin} +lat_2={origin} +lat_0={origin} +ellps=sphere +towgs84=0,0,0");
+            let source = Crs::from_definition(&definition).unwrap();
+            let geographic =
+                Crs::from_definition("+proj=longlat +ellps=sphere +towgs84=0,0,0").unwrap();
+            let mut forward = StrictTransform::new(&geographic, &source).unwrap();
+            let mut expected = EcefTransform::new(source, Some(7.)).unwrap();
+            for latitude in [
+                -90_f64, -89.99999, -85., -79.999999, -45., 0., 45., 79.999999, 85., 89.99999, 90.,
+            ] {
+                for longitude in [-45_f64, 0., 45.] {
+                    let point = forward.transform(&[[longitude, latitude, 123.]]).unwrap()[0];
+                    let quoted = definition
+                        .replace(&format!("+lat_1={origin}"), &format!("+lat_1=\"{origin}\""));
+                    let mut native = Transform::new(&quoted, 7.).unwrap();
+                    assert!(matches!(native, Transform::Native(_)));
+                    if latitude.abs() > 80. {
+                        assert!(matches!(native.transform(&[point]), Err(Error::Data(_))));
+                    } else {
+                        assert_mm(
+                            native.transform(&[point]).unwrap()[0],
+                            expected.transform(&[point]).unwrap()[0],
+                            "native spherical Albers interior after domain check",
+                        );
+                    }
+                    let mut operation = Transform::new(&definition, 7.).unwrap();
+                    if latitude.abs() > 80. {
+                        assert!(matches!(operation.transform(&[point]), Err(Error::Data(_))));
+                    } else {
+                        let actual = operation.transform(&[point]).unwrap()[0];
+                        assert_mm(
+                            actual,
+                            expected.transform(&[point]).unwrap()[0],
+                            &format!("{definition}: {longitude}, {latitude}"),
+                        );
+                        assert!(matches!(operation, Transform::Pure(_)));
+                        let radius = 6370997. + 130.;
+                        let (sin_lat, cos_lat) = latitude.to_radians().sin_cos();
+                        let (sin_lon, cos_lon) = longitude.to_radians().sin_cos();
+                        assert_mm(
+                            actual,
+                            [
+                                radius * cos_lat * cos_lon,
+                                radius * cos_lat * sin_lon,
+                                radius * sin_lat,
+                            ],
+                            "analytic spherical Albers interior",
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1568,7 +1920,23 @@ mod tests {
         for latitude in [-33., -0.1, -1e-8, 1e-8, 0.1, 33.] {
             let definition = format!("+proj=lcc +lat_1=\"{latitude}\" +lat_0=5 +datum=WGS84");
             let source = Crs::from_definition(&definition).unwrap();
-            assert_eq!(source.conic_parallels(), Some((latitude, latitude)));
+            assert_eq!(
+                source.conic_parallels().unwrap(),
+                Some((latitude, latitude))
+            );
+            if latitude.abs() < 0.5 {
+                let extra_parallel = source.wkt().unwrap().replace("],CS[Cartesian,2]",
+                    r#",PARAMETER["Latitude of 1st standard parallel",33,ANGLEUNIT["degree",0.0174532925199433]]],CS[Cartesian,2]"#);
+                let source = Crs::from_definition(&extra_parallel).unwrap();
+                assert_eq!(
+                    source.conic_parallels().unwrap(),
+                    Some((latitude, latitude))
+                );
+                assert!(matches!(
+                    Transform::new(&extra_parallel, 7.),
+                    Err(Error::Data(_))
+                ));
+            }
             for definition in [definition, source.wkt().unwrap()] {
                 if latitude.abs() < 0.5 {
                     assert!(
@@ -1642,15 +2010,23 @@ mod tests {
                     let mut expected =
                         EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
                             .unwrap();
-                    for (actual, expected) in operation
-                        .transform(&points)
-                        .unwrap()
-                        .into_iter()
-                        .zip(expected.transform(&points).unwrap())
-                    {
-                        assert_mm(actual, expected, &definition);
+                    // Exact pole inverses may be refused by native PROJ on
+                    // another platform. Verify its outcome rather than forcing
+                    // success or publishing a partial portable batch.
+                    match (operation.transform(&points), expected.transform(&points)) {
+                        (Ok(actual), Ok(expected)) => {
+                            for (actual, expected) in actual.into_iter().zip(expected) {
+                                assert_mm(actual, expected, &definition);
+                            }
+                            assert!(matches!(operation, Transform::Native(_)));
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.category(), expected.category(), "{definition}");
+                            assert!(matches!(expected, Error::Data(_)), "{expected}");
+                            assert!(matches!(operation, Transform::Pure(_)));
+                        }
+                        _ => panic!("native retry outcome differs for {definition}"),
                     }
-                    assert!(matches!(operation, Transform::Native(_)));
                     let subsequent = [[0., 0., 123.]];
                     assert_mm(
                         operation.transform(&subsequent).unwrap()[0],
@@ -1676,14 +2052,19 @@ mod tests {
                 let expected =
                     EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
                         .unwrap()
-                        .transform(&[polar_point])
-                        .unwrap()[0];
-                assert_mm(
-                    result.unwrap()[0],
-                    expected,
-                    "fresh transform at polar point",
-                );
-                assert!(matches!(operation, Transform::Native(_)));
+                        .transform(&[polar_point]);
+                match (result, expected) {
+                    (Ok(actual), Ok(expected)) => {
+                        assert_mm(actual[0], expected[0], "fresh transform at polar point");
+                        assert!(matches!(operation, Transform::Native(_)));
+                    }
+                    (Err(actual), Err(expected)) => {
+                        assert_eq!(actual.category(), expected.category(), "{definition}");
+                        assert!(matches!(expected, Error::Data(_)), "{expected}");
+                        assert!(matches!(operation, Transform::Pure(_)));
+                    }
+                    _ => panic!("native retry outcome differs for {definition}"),
+                }
             }
         }
     }

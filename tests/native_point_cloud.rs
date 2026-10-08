@@ -903,6 +903,120 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
         .starts_with(".tiles-work-")));
 }
 
+fn exact_point_fixture(input: &Path, point: [f64; 3]) {
+    let mut builder = las::Builder::from((1, 4));
+    builder.transforms.x.offset = point[0];
+    builder.transforms.y.offset = point[1];
+    builder.transforms.z.offset = point[2];
+    let mut writer = las::Writer::from_path(input, builder.into_header().unwrap()).unwrap();
+    writer
+        .write_point(las::Point {
+            x: point[0],
+            y: point[1],
+            z: point[2],
+            ..Default::default()
+        })
+        .unwrap();
+    writer.close().unwrap();
+}
+
+#[test]
+fn wkt_method_parameters_and_spherical_albers_preserve_native_or_refuse() {
+    let work = tempfile::tempdir().unwrap();
+    let incomplete = include_str!("fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    let extra_scale = incomplete.replace(r#",PARAMETER["false_easting""#,
+        r#",PARAMETER["standard_parallel_2",45],PARAMETER["scale_factor",2],PARAMETER["false_easting""#);
+    for (index, (definition, point, outside_accuracy_domain)) in [
+        (incomplete, [200000., 567890., 123.], false),
+        (extra_scale.as_str(), [200000., 567890., 123.], false),
+        (
+            include_str!("fixtures/crs/mercator-redundant-origin.wkt"),
+            [200000., 567890., 123.],
+            false,
+        ),
+        (
+            "+proj=aea +lat_1=80 +lat_2=80 +lat_0=80 +ellps=sphere +towgs84=0,0,0",
+            [612606.1867269421, 13949033.598816177, 123.],
+            true,
+        ),
+        (
+            include_str!("fixtures/crs/lcc-michigan-near-equator.wkt"),
+            [5000., 6000., 123.],
+            true,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let input = work.path().join(format!("source-{index}.las"));
+        exact_point_fixture(&input, point);
+        let output = work.path().join(format!("source-{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            let _ = outside_accuracy_domain;
+            assert_eq!(
+                result.status.code(),
+                Some(if definition.starts_with("+proj=aea") {
+                    3
+                } else {
+                    4
+                }),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            assert!(!output.exists());
+        }
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            if outside_accuracy_domain {
+                assert_eq!(result.status.code(), Some(3));
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("verified point-cloud accuracy"));
+                assert!(!output.exists());
+                continue;
+            }
+            assert!(
+                result.status.success(),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[point])
+                .unwrap()[0];
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                distance < 0.001,
+                "{definition}: ECEF difference {distance} m"
+            );
+            rusty_tiles::validate::archive(&output, None).unwrap();
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
 #[test]
 fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing() {
     let work = tempfile::tempdir().unwrap();
@@ -940,20 +1054,7 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
     .enumerate()
     {
         let input = work.path().join(format!("polar-point-{index}.las"));
-        let mut builder = las::Builder::from((1, 4));
-        builder.transforms.x.offset = point[0];
-        builder.transforms.y.offset = point[1];
-        builder.transforms.z.offset = point[2];
-        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
-        writer
-            .write_point(las::Point {
-                x: point[0],
-                y: point[1],
-                z: point[2],
-                ..Default::default()
-            })
-            .unwrap();
-        writer.close().unwrap();
+        exact_point_fixture(&input, point);
         let output = work.path().join(format!("polar-point-{index}.3tz"));
         let result = call(
             &input,
@@ -963,15 +1064,31 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
         #[cfg(feature = "native-geospatial")]
         {
             use rusty_tiles::geospatial::{Crs, EcefTransform};
-            assert!(
-                result.status.success(),
-                "{}",
-                String::from_utf8_lossy(&result.stdout)
-            );
             let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
                 .unwrap()
-                .transform(&[point])
-                .unwrap()[0];
+                .transform(&[point]);
+            let expected = match expected {
+                Ok(expected) => {
+                    assert!(
+                        result.status.success(),
+                        "{definition}: {}",
+                        String::from_utf8_lossy(&result.stdout)
+                    );
+                    expected[0]
+                }
+                Err(error) => {
+                    assert_eq!(
+                        result.status.code(),
+                        Some(i32::from(error.category().1)),
+                        "{definition}"
+                    );
+                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                    assert_eq!(report["error"]["code"], error.category().0);
+                    assert!(matches!(error, rusty_tiles::Error::Data(_)), "{error}");
+                    assert!(!output.exists());
+                    continue;
+                }
+            };
             let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
             let manifest = document(&mut zip, "tileset.json");
             let distance = expected
