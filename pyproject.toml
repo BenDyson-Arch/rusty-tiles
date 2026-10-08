@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "rusty-tiles"
 dynamic = ["version"]
-description = "Self-contained mesh, local point cloud and 3D Tiles converters"
+description = "Self-contained mesh, grid-free point cloud and 3D Tiles converters"
 readme = "bindings/python/README.md"
 requires-python = ">=3.10"
 license = "MIT"

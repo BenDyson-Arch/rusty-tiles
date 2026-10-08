@@ -9,6 +9,7 @@ use std::{
     io::{BufWriter, Write},
 };
 
+mod crs;
 mod source;
 mod tiles;
 use source::{header_crs, las_error, read_source, Layout, RAW};
@@ -60,8 +61,7 @@ pub fn point_cloud_to_3tz_reported(
 
 enum Coordinates {
     Local,
-    #[cfg(feature = "native-geospatial")]
-    Ecef(crate::geospatial::EcefTransform),
+    Ecef(crs::Transform),
 }
 
 impl Coordinates {
@@ -85,20 +85,8 @@ impl Coordinates {
         } else {
             options.source_crs.clone()
         };
-        #[cfg(feature = "native-geospatial")]
-        {
-            let source = crate::geospatial::Crs::from_definition(&definition)?;
-            if !source.is_horizontal() {
-                return Err(Error::Data("use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported".into()));
-            }
-            let transform = crate::geospatial::EcefTransform::new(source, options.height_offset)?;
-            Ok((Self::Ecef(transform), Some(definition)))
-        }
-        #[cfg(not(feature = "native-geospatial"))]
-        {
-            let _ = definition;
-            Err(Error::Environment("geospatial point clouds require a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2); local XYZ needs no GDAL or Python".into()))
-        }
+        let transform = crs::Transform::new(&definition, options.height_offset.unwrap())?;
+        Ok((Self::Ecef(transform), Some(definition)))
     }
 
     fn transform<'p>(
@@ -107,7 +95,6 @@ impl Coordinates {
     ) -> Result<std::borrow::Cow<'p, [[f64; 3]]>, Error> {
         match self {
             Self::Local => Ok(positions.into()),
-            #[cfg(feature = "native-geospatial")]
             Self::Ecef(transform) => transform.transform(positions).map(Into::into),
         }
     }

@@ -513,7 +513,22 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
     assert_eq!(report["commands"]["point-cloud"]["local"]["ready"], true);
     assert_eq!(
         report["commands"]["point-cloud"]["geospatial"]["ready"],
+        true
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["backend"],
+        "pure Rust (proj4rs)"
+    );
+    assert_eq!(
+        report["commands"]["point-cloud"]["geospatial"]["nativeFallback"]["ready"],
         cfg!(feature = "native-geospatial")
+    );
+    assert!(
+        report["commands"]["point-cloud"]["geospatial"]["crsClasses"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 4
     );
     let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["doctor", "--json"])
@@ -538,7 +553,7 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
 
 #[cfg(not(feature = "native-geospatial"))]
 #[test]
-fn geospatial_placement_on_a_default_build_names_the_required_feature() {
+fn unverified_datum_on_a_default_build_names_the_required_feature() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 1, false, vec![]);
@@ -546,7 +561,7 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     let result = call(
         &input,
         &out,
-        &["--sourceCrs", "EPSG:32631", "--heightOffset", "0"],
+        &["--sourceCrs", "EPSG:26910", "--heightOffset", "0"],
     );
     assert_eq!(result.status.code(), Some(4));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
@@ -557,7 +572,6 @@ fn geospatial_placement_on_a_default_build_names_the_required_feature() {
     assert!(!out.exists());
 }
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
     use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
@@ -628,6 +642,96 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
         assert_eq!(call(&input, &output, &options).status.code(), Some(3));
         assert!(!output.exists());
     }
+}
+
+#[test]
+fn wkt_las_and_laz_headers_place_globe_coordinates_without_external_resources() {
+    use rusty_tiles::georef::{geodetic_to_ecef, Cartographic};
+    let wkt = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
+    for suffix in ["las", "laz"] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("cloud.{suffix}"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.vlrs.push(las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        });
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        writer
+            .write_point(las::Point {
+                x: 153.02,
+                y: -27.47,
+                z: 123.,
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        let output = work.path().join("cloud.3tz");
+        let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+            .args(["--json", "point-cloud", "--explicit", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .args(["--source-crs", "header", "--height-offset", "7"])
+            .env("PATH", "")
+            .env("PROJ_DATA", work.path().join("absent-database"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        let expected = geodetic_to_ecef(Cartographic::new(153.02, -27.47, 130.));
+        for (i, expected) in expected.iter().enumerate() {
+            assert!(
+                (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).abs() < 0.001
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "native-geospatial"))]
+#[test]
+fn compound_geoid_header_refuses_default_build_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    let wkt = r#"COMPD_CS["WGS84 + invented geoid",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],VERT_CS["Invented geoid height",VERT_DATUM["Invented geoid",2005,EXTENSION["PROJ4_GRIDS","missing.gtx"]],UNIT["metre",1],AXIS["Up",UP]]]"#;
+    fixture(
+        &input,
+        1,
+        false,
+        vec![las::Vlr {
+            user_id: "LASF_Projection".into(),
+            record_id: 2112,
+            data: format!("{wkt}\0").into_bytes(),
+            ..Default::default()
+        }],
+    );
+    let output = work.path().join("cloud.3tz");
+    let result = call(
+        &input,
+        &output,
+        &["--source-crs", "header", "--height-offset", "0"],
+    );
+    assert_eq!(result.status.code(), Some(4));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let message = report["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("--features native-geospatial"),
+        "{message}"
+    );
+    assert!(message.contains("grids"), "{message}");
+    assert!(!output.exists());
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
 }
 
 #[test]

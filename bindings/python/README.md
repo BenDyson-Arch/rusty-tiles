@@ -1,6 +1,6 @@
 # rusty-tiles for Python
 
-Convert meshes, local LAS/LAZ point clouds and existing tilesets directly from
+Convert meshes, local or grid-free georeferenced LAS/LAZ point clouds and existing tilesets directly from
 Python, including Blender's bundled Python. The wheels contain the portable
 default Rust build: no CLI subprocess, GDAL, Rust compiler or extra Python
 packages are needed at runtime.
@@ -58,9 +58,22 @@ the original LAS property tables for picking and table styling.
 
 `glb_to_3tz` wraps GLB/glTF without making new levels of detail.
 `convert_to_3tz` packs a tileset directory or a `tileset.json` path.
-Point-cloud input is LAS/LAZ in local XYZ metres with Z up; this API does
-not apply CRS transformations or height offsets. Text `.xyz` files and
-in-memory buffers are not supported in this release.
+Point-cloud input defaults to local XYZ metres with Z up. For globe placement,
+pass `source_crs="header"` or an explicit CRS such as `"EPSG:32656"`, and
+`height_offset=0` only when source Z is already ellipsoidal metres:
+
+```python
+rusty_tiles.point_cloud_to_3tz(
+    "cloud.laz", "cloud.3tz", source_crs="header", height_offset=0,
+)
+```
+
+The wheel supports verified grid-free WGS84 geographic, UTM and Mercator
+transforms, plus supported WKT/PROJ local projections with explicit WGS84
+or Helmert datum parameters. It refuses grid-dependent, compound/geoid,
+dynamic or unknown datum definitions with `EnvironmentError` naming the
+native build. See the [CRS limits](../../docs/FORMATS.md#point-clouds).
+Text `.xyz` files and in-memory buffers are not supported in this release.
 
 Callbacks receive dictionaries using the Rust reporter's event contract:
 `{"event": "progress", "phase": ..., "done": ..., "total": ...}`,

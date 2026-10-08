@@ -265,15 +265,17 @@ fn glb_to_3tz(
     })
 }
 
-/// Tile LAS/LAZ in local XYZ metre coordinates, with Z up.
+/// Tile local or grid-free georeferenced LAS/LAZ point clouds.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, force=false, max_points=50_000, chunk_points=100_000, explicit=false, metadata_attributes=false, callback=None))]
+#[pyo3(signature = (input, output, *, force=false, source_crs="local", height_offset=None, max_points=50_000, chunk_points=100_000, explicit=false, metadata_attributes=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn point_cloud_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
     force: bool,
+    source_crs: &str,
+    height_offset: Option<f64>,
     max_points: usize,
     chunk_points: usize,
     explicit: bool,
@@ -282,8 +284,8 @@ fn point_cloud_to_3tz(
 ) -> PyResult<ConversionResult> {
     let options = PointCloudOptions {
         force,
-        source_crs: "local".into(),
-        height_offset: None,
+        source_crs: source_crs.into(),
+        height_offset,
         max_points,
         chunk_points,
         explicit,

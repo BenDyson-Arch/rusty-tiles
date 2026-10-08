@@ -133,8 +133,22 @@ fn geospatial_readiness() -> Value {
 }
 
 fn point_cloud_readiness(geospatial: &Value) -> Value {
+    let classes = [
+        "WGS84 geographic (EPSG:4326)",
+        "WGS84 UTM north/south (EPSG:32601–32660/32701–32760)",
+        "WGS84 Mercator (EPSG:3857/3395)",
+        "supported local projections with an explicit WGS84 datum or 3/7-parameter Helmert shift",
+    ];
+    let tier = if cfg!(feature = "native-geospatial") {
+        "pure Rust with strict native fallback"
+    } else {
+        "pure Rust"
+    };
+    let placement = json!({"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
+        "crsClasses":classes,"nativeFallback":geospatial,
+        "limitations":"Grids, geoid/compound heights, coordinate epochs and unverified datum operations require --features native-geospatial. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
-        "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
+        "geospatial":placement,"note":"Local XYZ and verified grid-free globe placement need no Python or GDAL. Conversion validates the source-specific operation."})
 }
 
 fn proj_inventory(database: &Value) -> Value {
@@ -228,6 +242,22 @@ pub fn display(report: &Value, json_output: bool) {
                 if let Some(error) = info[capability]["error"].as_str() {
                     println!("  {capability}: {error}");
                 }
+            }
+            if let Some(backend) = info["geospatial"]["backend"].as_str() {
+                println!("  geospatial: {backend}");
+                if let Some(classes) = info["geospatial"]["crsClasses"].as_array() {
+                    for class in classes {
+                        println!("    {}", class.as_str().unwrap_or(""));
+                    }
+                }
+                println!(
+                    "  native fallback: {}",
+                    if info["geospatial"]["nativeFallback"]["ready"] == true {
+                        "ready"
+                    } else {
+                        "unavailable"
+                    }
+                );
             }
             if let Some(path) = info["cesium"]["path"].as_str() {
                 if info["cesium"]["found"] == true {

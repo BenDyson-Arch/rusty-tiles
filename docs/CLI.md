@@ -64,6 +64,8 @@ Mesh placement rules are in [Coordinates and height](../README.md#coordinates-an
 
 Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leaves.
 
+Grid-free globe placement works in the default build. CRS selection automatically uses pure Rust for verified definitions and strict native GDAL/PROJ for other operations when enabled. Unsupported grid/datum operations name `--features native-geospatial` in the error. See the [supported CRS classes and height rules](FORMATS.md#point-clouds).
+
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
@@ -215,7 +217,7 @@ rusty-tiles doctor --command vector --command terrain
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
 | `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium` | Where to look for a Cesium runtime. This check is informational only. |
 
-`doctor` reports linked GDAL, PROJ and GEOS versions. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
+`doctor` reports linked GDAL, PROJ and GEOS versions. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
 
 ## Exit codes
 
