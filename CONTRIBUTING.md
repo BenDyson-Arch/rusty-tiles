@@ -276,20 +276,6 @@ node tests/fixtures/terrain.cjs http://127.0.0.1:9279
 node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --require-aggregates
 ```
 
-| Probe | Checks |
-| --- | --- |
-| `preview_layers.cjs` | Mounts, toggles, mesh picking, imagery decoding and zero external requests |
-| `point_cloud.cjs` | Coarse-to-full refinement and picked LAS properties |
-| `terrain.cjs` | Cesium terrain loading and sampled heights. Expects a 32 by 32 EPSG:4326 DEM at 123.5 m, NoData rows 12 to 19, `--height-offset 10.25 --fill-height -999.125`, zoom 9. |
-| `vector_compat.cjs` | Native vector rendering, LOD, holes, fragment boundaries, picking and aggregates |
-| `vector_metadata.cjs` | Property styling, visibility, source identity, exact INT64 and missing values |
-| `implicit_levels.cjs` | Deep implicit mesh/cloud traversal across every level and boundary, full leaf counts and picking |
-| `convert_implicit.cjs` | Explicit, converted and fresh implicit cloud/vector refinement, world placement, both-cluster picking, original properties, style and visibility |
-
-Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. Add `--batch`, `--quantize`, `--meshopt-helper PATH` or `--aggregate-points` to match the option under test. `tests/fixtures/vector_metadata.py OUTPUT` builds the metadata cases. Omit `--require-native` to inspect fallback behaviour in older Cesium releases.
-
-For the deep probe, export the invented 24×24 textured grid using `RUSTY_TILES_DIGEST_EXPORT=target/implicit-inputs cargo test --locked --features native-geospatial --test output_digests export_recipes -- --ignored --exact`. Convert its `inputs/mesh.glb` with `--max-triangles 2 --max-bytes 0 --tile-size 64 --cartographic-position-degrees 12.1 41.9 200`. Reconvert the preview fixture's `cloud.las` with `--source-crs header --height-offset 10 --max-points 1`. Extract both archives and serve them with a generated annotations layer. Run `node tests/fixtures/implicit_levels.cjs URL`. Cesium 1.143.0 traverses levels 0–5, retains all 1,152 leaf triangles and 257 points, and picks both. The vector probe also checks contiguous instantiated levels, including routing nodes.
-
 For `convert-to-implicit`, export the native Rust fixtures and prepare separate preview copies. The helper requires a new destination directory; it preserves the exported manifests. Install CesiumJS 1.146.0 and Playwright 1.63.0 for the recorded gate:
 
 ```sh
@@ -307,6 +293,21 @@ NODE_PATH="$PWD/target/convert-implicit-browser/node_modules" \
 ```
 
 [The recorded migration gate](bench/convert_implicit_browser_results.json) passes initial load and a cache-disabled reload. All three cloud variants refine from 2 proxy points to 16 leaf points; vectors reach all 8 points. Both source clusters remain pickable with their original properties, cyan styling and hidden visibility. Georeferenced world positions agree within 0.00001 m, with no page, tile or render errors. The report also records the rejected wrapper design, which left 18 cloud points visible by retaining the parent proxy alongside its descendants. The accepted alias layout preserves payload bytes but duplicates their storage; archive migration eligibility remains the regular point/vector subset documented in the command reference.
+
+| Probe | Checks |
+| --- | --- |
+| `preview_layers.cjs` | Mounts, toggles, mesh picking, imagery decoding and zero external requests |
+| `point_cloud.cjs` | Coarse-to-full refinement and picked LAS properties |
+| `terrain.cjs` | Cesium terrain loading and sampled heights. Expects a 32 by 32 EPSG:4326 DEM at 123.5 m, NoData rows 12 to 19, `--height-offset 10.25 --fill-height -999.125`, zoom 9. |
+| `vector_compat.cjs` | Native vector rendering, LOD, holes, fragment boundaries, picking and aggregates |
+| `vector_metadata.cjs` | Property styling, visibility, source identity, exact INT64 and missing values |
+| `implicit_levels.cjs` | Deep implicit mesh/cloud traversal across every level and boundary, full leaf counts and picking |
+| `convert_implicit.cjs` | Explicit, converted and fresh implicit cloud/vector refinement, world placement, both-cluster picking, original properties, style and visibility |
+
+Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. Add `--batch`, `--quantize`, `--meshopt-helper PATH` or `--aggregate-points` to match the option under test. `tests/fixtures/vector_metadata.py OUTPUT` builds the metadata cases. Omit `--require-native` to inspect fallback behaviour in older Cesium releases.
+
+For the deep probe, export the invented 24×24 textured grid using `RUSTY_TILES_DIGEST_EXPORT=target/implicit-inputs cargo test --locked --features native-geospatial --test output_digests export_recipes -- --ignored --exact`. Convert its `inputs/mesh.glb` with `--max-triangles 2 --max-bytes 0 --tile-size 64 --cartographic-position-degrees 12.1 41.9 200`. Reconvert the preview fixture's `cloud.las` with `--source-crs header --height-offset 10 --max-points 1`. Extract both archives and serve them with a generated annotations layer. Run `node tests/fixtures/implicit_levels.cjs URL`. Cesium 1.143.0 traverses levels 0–5, retains all 1,152 leaf triangles and 257 points, and picks both. The vector probe also checks contiguous instantiated levels, including routing nodes.
+
 
 ## Check byte-identity
 
