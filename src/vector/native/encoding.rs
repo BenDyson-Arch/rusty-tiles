@@ -1,6 +1,6 @@
 //! Draft vector GLBs, typed metadata, quantization and direct Rust meshopt.
 use super::*;
-use crate::glb::{self, MetadataGlb};
+use crate::{glb, metadata::MetadataGlb};
 use std::io::Write;
 
 #[derive(Default)]
@@ -39,164 +39,25 @@ fn metadata(
     items: &[&Feature],
     schemas: &BTreeMap<String, String>,
 ) -> Result<(), Error> {
-    let keys: BTreeSet<_> = items.iter().flat_map(|f| f.properties.keys()).collect();
-    let mut schema = BTreeMap::new();
-    let mut columns = BTreeMap::new();
-    for key in keys {
-        let mut values: Vec<_> = items
-            .iter()
-            .map(|f| f.properties.get(key).cloned().unwrap_or(Value::Null))
-            .collect();
-        let present: Vec<_> = values.iter().filter(|v| !v.is_null()).collect();
-        let missing = present.len() != values.len();
-        let expected = schemas.get(key).map(String::as_str);
-        let real = expected == Some("real")
-            || (expected.is_none()
-                && present.iter().all(|v| v.is_number())
-                && present.iter().any(|v| v.is_f64()));
-        if real {
-            for v in &present {
-                // Check the original integer: converting first rounds 2^53+1
-                // down to the boundary and would silently accept a lossy value.
-                if v.as_i64()
-                    .is_some_and(|n| !(-(1i64 << 53)..=(1i64 << 53)).contains(&n))
-                    || v.as_u64().is_some_and(|n| n > (1u64 << 53))
-                {
-                    return Err(data(format!(
-                        "property {key:?} cannot represent large integers as float64 without loss"
-                    )));
-                }
-            }
-            for value in &mut values {
-                if !value.is_null() {
-                    *value = json!(value
-                        .as_f64()
-                        .ok_or_else(|| data("incompatible numeric property"))?);
-                }
-            }
-        }
-        let mut no_data = None;
-        if missing {
-            let present: Vec<_> = values.iter().filter(|v| !v.is_null()).collect();
-            let sentinel = if expected == Some("integer")
-                || (expected.is_none()
-                    && !present.is_empty()
-                    && present.iter().all(|v| v.is_i64() || v.is_u64()))
-            {
-                let mut sentinel = -(1i64 << 53);
-                while present.iter().any(|v| v.as_i64() == Some(sentinel)) {
-                    sentinel += 1;
-                }
-                json!(sentinel)
-            } else if real || (!present.is_empty() && present.iter().all(|v| v.is_number())) {
-                let sentinel = -f64::MAX;
-                if present.iter().any(|v| v.as_f64() == Some(sentinel)) {
-                    return Err(data("reserved missing-value sentinel occurs in source"));
-                }
-                json!(sentinel)
-            } else if expected == Some("boolean") {
-                return Err(data(format!(
-                    "nullable boolean property {key:?} requires an explicit schema"
-                )));
-            } else if expected == Some("string") || present.iter().all(|v| v.is_string()) {
-                let mut sentinel = "__RUSTY_TILES_MISSING__".to_string();
-                while present.iter().any(|v| v.as_str() == Some(&sentinel)) {
-                    sentinel.push('_');
-                }
-                json!(sentinel)
-            } else {
-                return Err(data(format!(
-                    "nullable boolean/complex property {key:?} requires an explicit schema"
-                )));
-            };
-            for v in &mut values {
-                if v.is_null() {
-                    *v = sentinel.clone();
-                }
-            }
-            no_data = Some(sentinel);
-        }
-        let (mut definition, column) = if values.iter().all(Value::is_boolean) {
-            let mut bytes = vec![0; values.len().div_ceil(8)];
-            for (i, v) in values.iter().enumerate() {
-                if v.as_bool().unwrap() {
-                    bytes[i / 8] |= 1 << (i % 8);
-                }
-            }
-            (
-                json!({"type":"BOOLEAN"}),
-                json!({"values":view(glb,&bytes)}),
-            )
-        } else if values.iter().all(|v| v.is_i64() || v.is_u64()) {
-            let mut bytes = Vec::new();
-            for v in &values {
-                bytes.extend(
-                    v.as_i64()
-                        .ok_or_else(|| {
-                            data(format!(
-                                "integer property {key:?} is outside signed INT64 range"
-                            ))
-                        })?
-                        .to_le_bytes(),
-                );
-            }
-            (
-                json!({"type":"SCALAR","componentType":"INT64"}),
-                json!({"values":view(glb,&bytes)}),
-            )
-        } else if values.iter().all(Value::is_number) {
-            let mut bytes = Vec::new();
-            for v in &values {
-                let value = v
-                    .as_f64()
-                    .filter(|v| v.is_finite())
-                    .ok_or_else(|| data("nonfinite scalar property"))?;
-                bytes.extend(value.to_le_bytes());
-            }
-            (
-                json!({"type":"SCALAR","componentType":"FLOAT64"}),
-                json!({"values":view(glb,&bytes)}),
-            )
-        } else if values.iter().all(Value::is_string) {
-            let mut bytes = Vec::new();
-            let mut offsets = 0u32.to_le_bytes().to_vec();
-            for v in &values {
-                bytes.extend(v.as_str().unwrap().as_bytes());
-                let offset = u32::try_from(bytes.len())
-                    .map_err(|_| data("metadata strings exceed UINT32 range"))?;
-                offsets.extend(offset.to_le_bytes());
-            }
-            (
-                json!({"type":"STRING"}),
-                json!({"values":view(glb,&bytes),"stringOffsets":view(glb,&offsets),"stringOffsetType":"UINT32"}),
-            )
-        } else {
-            return Err(data(format!(
-                "unsupported/null/mixed property {key:?}; retain source and normalize explicitly"
-            )));
-        };
-        if let Some(no_data) = no_data {
-            definition["noData"] = no_data;
-        }
-        schema.insert(key.clone(), definition);
-        columns.insert(key.clone(), column);
-    }
     let aggregate = items
         .iter()
         .all(|f| !f.properties.contains_key("_source_id"));
-    let class = if aggregate {
-        "pointAggregate"
-    } else {
-        "feature"
-    };
-    let name = if aggregate {
-        "pointAggregates"
-    } else {
-        "features"
-    };
-    glb.document["extensions"] = json!({"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_vector","classes":{class:{"properties":schema}}},
-        "propertyTables":[{"name":name,"class":class,"count":items.len(),"properties":columns}]}});
-    Ok(())
+    crate::metadata::encode_property_table(
+        glb,
+        &items.iter().map(|f| &f.properties).collect::<Vec<_>>(),
+        schemas,
+        "rusty_tiles_vector",
+        if aggregate {
+            "pointAggregate"
+        } else {
+            "feature"
+        },
+        if aggregate {
+            "pointAggregates"
+        } else {
+            "features"
+        },
+    )
 }
 
 fn emit(
@@ -300,7 +161,7 @@ fn emit(
     }
     let mut position_accessors = Vec::new();
     for (mode, batch) in &batches {
-        let mut ext = json!({"EXT_mesh_features":{"featureIds":[{"featureCount":items.len(),"attribute":0,"propertyTable":0}]}});
+        let mut ext = json!({"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(items.len(), 0, Some(0))});
         if *mode == 4 && !fill_only {
             ext["EXT_mesh_polygon"] = json!({"count":batch.triangles.len(),"indicesOffsets":u32_accessor(&mut glb,&batch.triangles),
                 "loopIndices":u32_accessor(&mut glb,&batch.loops),"loopIndicesOffsets":u32_accessor(&mut glb,&batch.loop_offsets)});

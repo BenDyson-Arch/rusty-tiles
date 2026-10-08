@@ -404,11 +404,7 @@ fn derived_box(root: [f64; 12], c: Coordinates, scheme: SubdivisionScheme) -> [f
 }
 
 fn schema() -> Value {
-    json!({"id":"rustyTilesImplicit","classes":{"rustyTile":{"properties":{
-        "boundingBox":{"type":"SCALAR","componentType":"FLOAT64","array":true,"count":12,"semantic":"TILE_BOUNDING_BOX"},
-        "geometricError":{"type":"SCALAR","componentType":"FLOAT64","semantic":"TILE_GEOMETRIC_ERROR"},
-        "extras":{"type":"STRING"}
-    }}}})
+    serde_json::to_value(crate::metadata::tile_schema()).expect("tile schema serializes")
 }
 
 fn chunk_document(

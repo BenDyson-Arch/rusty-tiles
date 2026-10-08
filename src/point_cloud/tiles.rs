@@ -4,7 +4,7 @@ use super::source::{position, Layout, RAW};
 use super::PointCloudOptions;
 use crate::report::Reporter;
 use crate::{
-    glb_write::MetadataGlb,
+    metadata::MetadataGlb,
     tileset_node::{
         box_half, box_json, enclose_children, top_level_error, translation, translation_offset,
     },
@@ -120,7 +120,13 @@ impl Tree<'_> {
         let index = self.tiles;
         self.tiles += 1;
         let uri = format!("t/{index}.glb");
-        let rounding = emit(&rows, center, self.layout, &self.output.join(&uri))?;
+        let rounding = emit(
+            &rows,
+            center,
+            self.layout,
+            self.options.metadata_attributes,
+            &self.output.join(&uri),
+        )?;
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6));
@@ -261,7 +267,13 @@ impl Tree<'_> {
     }
 }
 
-fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f64, Error> {
+fn emit(
+    rows: &[u8],
+    center: [f64; 3],
+    layout: &Layout,
+    metadata_attributes: bool,
+    path: &Path,
+) -> Result<f64, Error> {
     let count = rows.len() / layout.record_len;
     if count > 16_777_217 {
         return Err(Error::Data("too many exact feature IDs in one tile".into()));
@@ -316,6 +328,8 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
     let mut schema = serde_json::Map::new();
     let mut columns = serde_json::Map::new();
     let mut values = Vec::new();
+    let mut property_attributes = BTreeMap::new();
+    let mut attribute_schema = serde_json::Map::new();
     for dim in &layout.dimensions {
         values.clear();
         for row in rows.chunks_exact(layout.record_len) {
@@ -326,18 +340,77 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
             json!({"type":"SCALAR","componentType":dim.kind.component()}),
         );
         columns.insert(dim.name.clone(), json!({"values":glb.view(&values)}));
+        if metadata_attributes
+            && matches!(
+                dim.name.as_str(),
+                "classification" | "intensity" | "return_number"
+            )
+        {
+            let semantic = format!("_{}", dim.name.to_ascii_uppercase());
+            let width = dim.kind.width();
+            let padded: Vec<u8> = values
+                .chunks_exact(width)
+                .flat_map(|v| {
+                    let mut bytes = [0; 4];
+                    bytes[..width].copy_from_slice(v);
+                    bytes
+                })
+                .collect();
+            let view = glb.view(&padded);
+            glb.document["bufferViews"][view]["byteStride"] = 4.into();
+            let accessor = glb.accessor(json!({"bufferView":view,"componentType":if width == 1 {5121} else {5123},"count":count,"type":"SCALAR"}));
+            attributes[&semantic] = accessor.into();
+            // Cesium emits shader fields for both tables and attributes.
+            // Give attribute properties distinct IDs to avoid duplicate fields
+            // when styling uses the table's original LAS property names.
+            let property = format!("vertex_{}", dim.name);
+            if layout.dimensions.iter().any(|d| d.name == property) {
+                return Err(Error::Data(format!(
+                    "LAS dimension {property:?} conflicts with metadata attribute property"
+                )));
+            }
+            attribute_schema.insert(
+                property.clone(),
+                json!({"type":"SCALAR","componentType":dim.kind.component()}),
+            );
+            property_attributes.insert(
+                property,
+                crate::metadata::PropertyAttributeProperty {
+                    attribute: semantic,
+                    ..Default::default()
+                },
+            );
+        }
     }
     glb.document["extensionsUsed"] = json!([
         "EXT_mesh_features",
         "EXT_structural_metadata",
         "KHR_materials_unlit"
     ]);
-    glb.document["extensions"] = json!({"EXT_structural_metadata":{
+    let mut metadata: crate::metadata::StructuralMetadata = serde_json::from_value(json!({
         "schema":{"id":"rusty_tiles_point_cloud","classes":{"point":{"properties":schema}}},
-        "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}});
+        "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}))?;
+    if metadata_attributes {
+        metadata.schema.as_mut().unwrap().classes.insert(
+            "pointAttribute".into(),
+            serde_json::from_value(json!({"properties":attribute_schema}))?,
+        );
+        metadata
+            .property_attributes
+            .push(crate::metadata::PropertyAttribute {
+                class: "pointAttribute".into(),
+                properties: property_attributes,
+                ..Default::default()
+            });
+    }
+    metadata.attach(&mut glb.document)?;
     glb.document["materials"] = json!([{"extensions":{"KHR_materials_unlit":{}},"pbrMetallicRoughness":{"metallicFactor":0,"roughnessFactor":1}}]);
     glb.document["meshes"] = json!([{"primitives":[{"mode":0,"attributes":attributes,"material":0,
-        "extensions":{"EXT_mesh_features":{"featureIds":[{"featureCount":count,"attribute":0,"propertyTable":0}]}}}]}]);
+        "extensions":{"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(count, 0, Some(0))}}]}]);
+    if metadata_attributes {
+        glb.document["meshes"][0]["primitives"][0]["extensions"]
+            [crate::metadata::STRUCTURAL_METADATA] = json!({"propertyAttributes":[0]});
+    }
     std::fs::write(path, glb.finish()?)?;
     Ok(rounding)
 }

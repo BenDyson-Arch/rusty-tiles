@@ -281,11 +281,14 @@ impl Subtree {
                 );
             }
             doc["tileMetadata"] = json!(0);
-            doc["propertyTables"] = json!([{"class":"rustyTile","count":self.metadata.len(),"properties":{
-                "boundingBox":{"values":buffer_view(&boxes,&mut binary,&mut views)},
-                "geometricError":{"values":buffer_view(&errors,&mut binary,&mut views)},
-                "extras":{"values":buffer_view(&strings,&mut binary,&mut views),"stringOffsets":buffer_view(&offsets,&mut binary,&mut views)}
-            }}]);
+            let table: crate::metadata::PropertyTable = serde_json::from_value(
+                json!({"class":"rustyTile","count":self.metadata.len(),"properties":{
+                    "boundingBox":{"values":buffer_view(&boxes,&mut binary,&mut views)},
+                    "geometricError":{"values":buffer_view(&errors,&mut binary,&mut views)},
+                    "extras":{"values":buffer_view(&strings,&mut binary,&mut views),"stringOffsets":buffer_view(&offsets,&mut binary,&mut views)}
+                }}),
+            )?;
+            doc["propertyTables"] = serde_json::to_value([table])?;
         }
         if !binary.is_empty() {
             doc["buffers"] = json!([{"byteLength": binary.len()}]);

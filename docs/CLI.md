@@ -50,6 +50,7 @@ Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. S
 | `--maxBytes` | `--max-bytes` | `204800` | Source files at or below this size are wrapped, not split |
 | `--tileSize` | `--tile-size` | `2048` | Leaf atlas edge in pixels. Parent atlases are capped at 1024. |
 | `--maxTexelDensity` | `--max-texel-density` | `0` | Must be 0, so leaf texels keep source resolution |
+| `--nodeFeatures` | `--node-features` | off | Pick and style individual source nodes by `name` and `node_index`; also authors small inputs as tiles |
 | `--noMeshopt` | `--no-meshopt` | off | Disable lossless meshopt compression |
 | `--sourceCrs` | `--source-crs` | `auto` | Position convention: `auto`, `geographic` or `epsg:3857` |
 | `--sourceOffset E N [A]` | `--source-offset` | none | Metashape shift in metres, added in double precision |
@@ -69,6 +70,7 @@ Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leave
 | `--explicit` | | off | Keep the earlier explicit hierarchy and binary partition |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
 | `--maxPoints` | `--max-points` | `50000` | Maximum points per tile, at least 1 |
+| `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
 ### vector
@@ -299,6 +301,6 @@ Events report work units, not time remaining.
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` still works when this is unset. |
 | `RAYON_NUM_THREADS` | mesh, terrain | Limit worker threads. `1` makes terrain encoding serial. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
-| `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Build with the portable Rust JPEG encoder instead of libjpeg-turbo |
+| `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).

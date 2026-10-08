@@ -286,7 +286,7 @@ fn encode_attributes(
 /// Small GLB builder for feature attributes and structural metadata. Views are
 /// eight-byte aligned so numeric property tables can retain 64-bit source values.
 #[derive(Clone)]
-pub(crate) struct MetadataGlb {
+pub struct MetadataGlb {
     pub document: Value,
     binary: Vec<u8>,
 }
@@ -303,6 +303,11 @@ impl MetadataGlb {
             }),
             binary: Vec::new(),
         }
+    }
+
+    /// Continue authoring an existing glTF document and its binary buffer.
+    pub fn from_parts(document: Value, binary: Vec<u8>) -> Self {
+        Self { document, binary }
     }
 
     pub fn view(&mut self, bytes: &[u8]) -> usize {
@@ -353,7 +358,6 @@ impl MetadataGlb {
 
     /// The finished document and its four-byte padded binary buffer, for
     /// callers that rewrite views (e.g. meshopt) before [`encode_glb`].
-    #[cfg(feature = "native-geospatial")]
     pub fn into_parts(mut self) -> (Value, Vec<u8>) {
         self.record_buffer_length();
         pad_to(&mut self.binary, 4);

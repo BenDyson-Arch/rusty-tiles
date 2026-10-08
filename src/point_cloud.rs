@@ -17,6 +17,8 @@ use source::{header_crs, las_error, read_source, Layout, RAW};
 pub struct PointCloudOptions {
     /// Keep the legacy explicit hierarchy instead of implicit octree output.
     pub explicit: bool,
+    /// Also expose classification, intensity and return_number as property attributes.
+    pub metadata_attributes: bool,
     pub force: bool,
     /// `local` for XYZ metres, `header` for LAS CRS, or an explicit horizontal CRS.
     pub source_crs: String,
@@ -271,6 +273,7 @@ mod tests {
         std::fs::write(&input, b"invalid input").unwrap();
         let options = PointCloudOptions {
             explicit: true,
+            metadata_attributes: false,
             force: false,
             source_crs: "local".into(),
             height_offset: None,

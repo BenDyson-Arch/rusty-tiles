@@ -70,6 +70,8 @@ Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, ima
 
 Choose an explicit `--source-crs` when you know the export's reference. These adapters cover Metashape-style exports only. They do not read arbitrary CRS metadata. Float32 degree coordinates may already have lost precision that conversion cannot recover.
 
+Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `name` and `node_index`. Instances with the same name remain separate features; unnamed nodes use `node_<index>`. The option authors new tile content even for small inputs and keeps node boundaries through parent simplification. It may increase primitive counts and metadata size.
+
 ## Point clouds
 
 Local metre XYZ data needs no globe placement and works in the default build:
@@ -98,6 +100,8 @@ The default output uses a disk-backed midpoint octree and binary implicit subtre
 - Scalar metadata keeps source values. Scaled extra dimensions are stored as decoded float64.
 
 Waveforms, array extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported.
+
+`point-cloud --metadata-attributes` exposes `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes for shader access. The existing table properties (`classification`, `intensity`, `return_number`) remain available for feature picking and table styling. The distinct attribute names prevent shader field collisions in CesiumJS 1.146.
 
 ## Imagery
 

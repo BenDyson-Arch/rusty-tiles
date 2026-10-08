@@ -54,6 +54,7 @@ fn encoder(explicit: bool) -> String {
         include_str!("store.rs"),
         include_str!("reuse.rs"),
         include_str!("../../vector_encoding.rs"),
+        include_str!("../../metadata.rs"),
         include_str!("../../glb_write.rs"),
         include_str!("../../glb.rs"),
         include_str!("../../bbox.rs"),

@@ -65,26 +65,30 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `geospatial.rs`, `geospatial/native.rs` | Shared GDAL and PROJ layer for all native converters |
 | `doctor.rs`, `preview.rs` | Readiness report and local preview server |
 | `fixtures.rs` | Tiny GLB used by tests |
+| `bindings/python/` | PyO3 stable ABI extension, Python API guide and installed-wheel acceptance tests |
 
 Native GDAL handles are created inside each worker. Spatial references and transformations cannot be sent between threads. Native CRS operations use GDAL's process-wide offline policy, so never re-enable PROJ networking while they run.
 
 ## Build
 
-Use current stable Rust with rustfmt, a C++ compiler and `pkg-config`. libjpeg-turbo is optional.
+Use current stable Rust with rustfmt and a C++ compiler. The default build uses portable JPEG. Native features need `pkg-config` and their system libraries.
 
 | Build | Command | Extra system packages |
 | --- | --- | --- |
 | Default | `cargo build --locked` | None |
 | Native geospatial | `cargo build --locked --features native-geospatial` | GDAL 3.12+, PROJ 9.2+, GEOS 3.10+, their headers and `pkg-config` files, SQLite dev files, libclang |
-| Portable JPEG | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo build --locked` | None |
+| Native JPEG | `cargo build --locked --features native-jpeg` | libjpeg-turbo headers/libraries and `pkg-config` |
+
+`RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides `native-jpeg` for portable packaging. Python wheels never enable native features.
 
 ## Run the tests
 
 ### Rust
 
 ```sh
-cargo fmt --check
+cargo fmt --all --check
 cargo test --locked
+cargo test --locked --features native-jpeg
 cargo test --locked --features native-geospatial
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
@@ -99,11 +103,40 @@ To retain invented linked quadtree/octree archives, run `RUSTY_TILES_IMPLICIT_FI
 
 Upstream validator 0.6.1 validates native single-content cloud, mesh and vector fixtures with zero errors. Draft vector declarations produce a warning. Its pinned `3d-tiles-tools` 0.5.0 [traverser](https://github.com/CesiumGS/3d-tiles-tools/blob/v0.5.0/src/tilesets/traversal/ImplicitTraversedTile.ts) reads only `root.content.uri`, so stock traversal fails on multiple implicit content templates. For complete multiple-content checks, use `node tests/fixtures/implicit_validator.cjs target/validator/node_modules/3d-tiles-validator PATH/tileset.json --fix-multiple-content-traversal`. This explicitly patches only template selection in that pinned traverser; schema, subtree, metadata and content validators remain unchanged. It reports the workaround and fails on validation errors. Deep mesh and fragmented vector fixtures pass with zero errors under this workaround.
 
+`tests/shared_metadata.rs` checks the public metadata API and node identities through instancing, mesh compression and LODs. `native_point_cloud.rs` checks property attributes against every LAS/LAZ tile's source table. The committed output digests cover unchanged defaults and vector payloads.
+
+For the optional issue #79 browser acceptance, install CesiumJS 1.146.0 and Playwright once, then export the invented fixtures and serve them:
+
+```sh
+npm install --prefix target/metadata-browser --no-save --package-lock=false cesium@1.146.0 playwright
+RUSTY_TILES_METADATA_ACCEPTANCE_DIR=target/metadata-fixtures cargo test --locked --features native-geospatial --test shared_metadata --test native_point_cloud
+cargo run --features native-geospatial -- preview --cesium target/metadata-browser/node_modules/cesium/Build/Cesium \
+  --mesh target/metadata-fixtures/mesh-false-true --point-cloud target/metadata-fixtures/point-false --port 9279
+```
+
+In another terminal, run `NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/shared_metadata.cjs http://127.0.0.1:9279`. The probe uses installed Chromium (`CHROMIUM` overrides its path), picks separately instanced buildings, checks building and point style colors and picks a point with its original LAS metadata. Both explicit and implicit fixtures, including compressed meshes, pass upstream `3d-tiles-validator` 0.6.1 with zero errors and warnings using the validator command above.
+
 Implicit subtrees have four levels. Regular boundaries use child-subtree availability. Boundaries whose actual boxes exceed their regular cells use standard external tileset roots containing bounded implicit subtrees. This preserves tight bounds, measured errors and picking: Cesium otherwise culls an unloaded subtree using its regular cell, even when later tile metadata enlarges it. The coordinate limit is 31 refinements; coincident point/centroid buckets use deterministic assignment with actual bounds retained.
 
 Doctor, machine results, native diagnostics, preview, force replacement and archive validation now run in Rust. Their inputs are generated locally, and the CLI runs with an empty executable `PATH`. The remaining Python tests use independent readers or frozen converter oracles.
 
 ### Python acceptance
+
+The Python extension has its own dependency-free suite. It installs an actual
+wheel into a fresh virtual environment and runs the README example, all five
+entry points, callbacks, concurrent calls, errors and force replacement with an
+empty executable `PATH`:
+
+```sh
+python3 -m pip install 'maturin==1.15.0'
+cargo clippy --locked -p rusty-tiles-python -- -D warnings
+RUSTY_TILES_DISABLE_NATIVE_JPEG=1 maturin build --release --locked --out target/wheels
+python3 scripts/test_python_wheel.py target/wheels/*.whl
+```
+
+Normal CI checks the wheel on CPython 3.10 and 3.14. Tag builds produce and
+smoke-test one `cp310-abi3` wheel per release platform; the stable ABI covers
+CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.
 
@@ -292,8 +325,9 @@ These recipes use `--explicit` for the three spatial converters; the script omit
 5. The browser probes pass on the pinned Cesium release.
 6. The public-data audits below are repeated when encoders change.
 7. `CHANGELOG.md` describes every user-visible change.
-8. Update `Cargo.toml` to the release version, merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the GitHub release with `SHA256SUMS`. Prereleases do not update the image's `latest` tag.
-9. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
+8. Before the first Python release, create the GitHub environment `pypi` and configure a PyPI trusted publisher for owner `BenDyson-Arch`, repository `rusty-tiles`, workflow `release.yml`, environment `pypi`. This uses OIDC and needs no API token. Configure a pending publisher if the PyPI project does not exist yet; see [PyPI's trusted publishing guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+9. Update `[workspace.package].version` in `Cargo.toml` to the release version (both Rust crates inherit it), merge to `main`, then push the matching `vVERSION` tag. [The release workflow](.github/workflows/release.yml) checks that the tag matches the crate version and belongs to `main`, tests and packages default binaries and Python wheels for Linux and macOS (x86_64 and ARM64) and Windows x64, then tests and publishes the Linux amd64 native image to GHCR. After all builds pass, it publishes the wheels to PyPI and the GitHub release with `SHA256SUMS`. Linux wheels use manylinux_2_28; no system geospatial libraries or libjpeg-turbo are required. Prereleases do not update the image's `latest` tag.
+10. Confirm the GHCR package is public in its package settings ([new packages start private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)), then check the installer against the published release and pull the image without authentication:
 
    ```sh
    sh scripts/install.sh --version VERSION --prefix /tmp/rusty-tiles-release/bin

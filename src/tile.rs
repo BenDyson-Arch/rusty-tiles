@@ -33,6 +33,8 @@ pub const DEFAULT_MAX_TEXEL_DENSITY: f64 = 0.0;
 pub struct MeshTo3tzOptions {
     /// Keep the legacy median-split explicit hierarchy and output bytes.
     pub explicit: bool,
+    /// Preserve each source glTF node as a named pickable feature.
+    pub node_features: bool,
     pub texture_format: TextureFormat,
     pub basisu: std::path::PathBuf,
     pub cartographic: Option<Cartographic>,
@@ -53,6 +55,7 @@ impl Default for MeshTo3tzOptions {
     fn default() -> Self {
         Self {
             explicit: false,
+            node_features: false,
             texture_format: TextureFormat::Lossless,
             basisu: "basisu".into(),
             cartographic: None,
@@ -87,10 +90,11 @@ pub enum TextureFormat {
     Uastc,
 }
 
-/// Material, textured, has-normals.
-type GroupKey = (usize, bool, bool);
+/// Material, textured, has-normals, optional source node.
+type GroupKey = (usize, bool, bool, Option<u32>);
 struct Planned {
     material: usize,
+    feature: Option<u32>,
     plan: LeafPlan,
 }
 struct Node {
@@ -105,6 +109,7 @@ struct Node {
 #[derive(Clone)]
 struct Piece {
     material: usize,
+    feature: Option<u32>,
     prim: TilePrimitive,
     delivery_image: Option<Vec<u8>>,
 }
@@ -148,7 +153,11 @@ pub fn mesh_to_3tz_reported(
             crate::jpeg::backend()
         ));
     }
-    let mut scene = mesh::load(input)?;
+    let mut scene = if opts.node_features {
+        mesh::load_with_node_features(input)?
+    } else {
+        mesh::load(input)?
+    };
     let baked = mesh::bake_to_enu(
         &mut scene,
         &mesh::BakeToEnu {
@@ -157,7 +166,10 @@ pub fn mesh_to_3tz_reported(
             offset: opts.source_offset,
         },
     );
-    if baked.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
+    if !opts.node_features
+        && baked.is_none()
+        && scene.under_budget(opts.max_triangles, opts.max_bytes)
+    {
         if opts.explicit {
             return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
         }
@@ -300,6 +312,7 @@ pub fn mesh_to_3tz_reported(
         "mesh-to-3tz: chart extraction {:.2}s",
         start.elapsed().as_secs_f64()
     ));
+    let node_names = std::mem::take(&mut scene.node_names);
     drop(scene);
     nodes
         .par_iter_mut()
@@ -366,12 +379,13 @@ pub fn mesh_to_3tz_reported(
                 }
                 out.push(Piece {
                     material: p.material,
+                    feature: p.feature,
                     prim,
                     delivery_image,
                 });
             }
             if node.children.is_empty() {
-                write_node(work, node.id, out, &materials, opts)?;
+                write_node(work, node.id, out, &materials, &node_names, opts)?;
                 spill_images(work, node.id, out)?;
             }
             Ok(())
@@ -427,7 +441,7 @@ pub fn mesh_to_3tz_reported(
                         }
                         let mut proxy =
                             parent_proxy(children.into_iter().map(|(_, p)| p).collect(), opts)?;
-                        write_node(work, id, &proxy.pieces, &materials, opts)?;
+                        write_node(work, id, &proxy.pieces, &materials, &node_names, opts)?;
                         spill_images(work, id, &mut proxy.pieces)?;
                         Ok((id, proxy))
                     })
@@ -453,7 +467,10 @@ pub fn mesh_to_3tz_reported(
         root_proxy.error
     ));
     let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes,!opts.explicit)});
-    if !opts.explicit {
+    // Cesium skips an entire tileset when its top-level error is below the
+    // viewing SSE. Node-feature output bypasses the small-model wrapper, so
+    // even explicit output needs the bounds-based error to remain visible.
+    if !opts.explicit || opts.node_features {
         let diagonal = crate::vec3::norm(crate::vec3::sub(nodes[0].max, nodes[0].min));
         ts["geometricError"] = json!(crate::tileset_node::top_level_error(
             diagonal,
@@ -572,7 +589,14 @@ fn partition(
         error: 0.0,
     };
     if ids.len() <= opts.max_triangles {
-        node.plans = plan(scene, dims, materials, &ids, opts.tile_size)?;
+        node.plans = plan(
+            scene,
+            dims,
+            materials,
+            &ids,
+            opts.tile_size,
+            opts.node_features,
+        )?;
         if node.plans.iter().all(|p| p.plan.scale == 1.0) {
             return Ok(node);
         }
@@ -591,7 +615,7 @@ fn partition(
                     "a source triangle requires an atlas larger than 32768 pixels",
                 ));
             }
-            node.plans = plan(scene, dims, materials, &ids, edge)?;
+            node.plans = plan(scene, dims, materials, &ids, edge, opts.node_features)?;
             if node.plans.iter().any(|p| p.plan.scale != 1.0) {
                 return Err(Error::msg(
                     "cannot retain source texels for an individual triangle",
@@ -683,6 +707,7 @@ fn plan(
     materials: &[usize],
     ids: &[usize],
     edge: u32,
+    node_features: bool,
 ) -> Result<Vec<Planned>, Error> {
     let mut groups: BTreeMap<GroupKey, BTreeMap<Option<u32>, Vec<usize>>> = BTreeMap::new();
     for &id in ids {
@@ -692,6 +717,7 @@ fn plan(
                 materials[t.material.map_or(0, |m| m as usize + 1)],
                 t.image.is_some(),
                 scene.vertices[t.verts[0] as usize].nrm != [0.0; 3],
+                node_features.then(|| scene.triangle_nodes[id]),
             ))
             .or_default()
             .entry(t.image)
@@ -700,7 +726,7 @@ fn plan(
     }
     groups
         .into_iter()
-        .map(|((material, _, _), imgs)| {
+        .map(|((material, _, _, feature), imgs)| {
             let mut groups = Vec::new();
             for (image, ids) in imgs {
                 let mut prim = TilePrimitive::default();
@@ -728,6 +754,7 @@ fn plan(
             }
             Ok(Planned {
                 material,
+                feature,
                 plan: texture::plan_leaf_atlas_limit(groups, dims, edge, 0.0)?,
             })
         })
@@ -810,6 +837,7 @@ fn write_node(
     id: usize,
     pieces: &[Piece],
     materials: &[Value],
+    node_names: &BTreeMap<u32, String>,
     opts: &MeshTo3tzOptions,
 ) -> Result<(), Error> {
     let mut prims: Vec<_> = pieces.iter().map(|p| p.prim.clone()).collect();
@@ -842,7 +870,22 @@ fn write_node(
         .collect();
     fs::write(
         dir.join(format!("t/{id}.glb")),
-        crate::lossless::write(&prims, &mats, opts.meshopt)?,
+        if opts.node_features {
+            crate::lossless::write_with_features(
+                &prims,
+                &mats,
+                opts.meshopt,
+                &pieces
+                    .iter()
+                    .map(|p| {
+                        let id = p.feature.expect("node feature group");
+                        (id, node_names[&id].clone())
+                    })
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            crate::lossless::write(&prims, &mats, opts.meshopt)?
+        },
     )?;
     Ok(())
 }
@@ -905,7 +948,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
     } else {
         opts.tile_size.min(1024)
     };
-    let mut groups: BTreeMap<(usize, bool, bool), Vec<TilePrimitive>> = BTreeMap::new();
+    let mut groups: BTreeMap<GroupKey, Vec<TilePrimitive>> = BTreeMap::new();
     for child in children {
         for p in child.pieces {
             groups
@@ -913,6 +956,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
                     p.material,
                     p.prim.jpeg.is_some(),
                     !p.prim.normals.is_empty(),
+                    p.feature,
                 ))
                 .or_default()
                 .push(p.prim);
@@ -922,7 +966,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
     let mut geometry_error = 0.0f64;
     let mut texture_error = 0.0f64;
     let total_triangles: usize = groups.values().flatten().map(|p| p.indices.len() / 3).sum();
-    for ((material, _, _), prims) in groups {
+    for ((material, _, _, feature), prims) in groups {
         let triangles: usize = prims.iter().map(|p| p.indices.len() / 3).sum();
         let budget = (opts.max_triangles * triangles / total_triangles.max(1)).max(1);
         let parent = crate::hlod::build_parent(&prims, budget, parent_atlas)?;
@@ -930,6 +974,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
         texture_error = texture_error.max(parent.texel_m * 16.0);
         pieces.extend(parent.prims.into_iter().map(|prim| Piece {
             material,
+            feature,
             prim,
             delivery_image: None,
         }));

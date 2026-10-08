@@ -256,6 +256,9 @@ struct PointCloudArgs {
     /// Keep the legacy explicit tileset hierarchy.
     #[arg(long)]
     explicit: bool,
+    /// Expose classification, intensity and return number as vertex property attributes
+    #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
+    metadata_attributes: bool,
     /// local XYZ metres, header CRS, or explicit 2D horizontal CRS (e.g. EPSG:32632)
     #[arg(long = "sourceCrs", visible_alias = "source-crs")]
     source_crs: String,
@@ -486,6 +489,9 @@ struct MeshArgs {
     /// Disable lossless meshopt compression. Both modes retain float32 geometry.
     #[arg(long = "noMeshopt", visible_alias = "no-meshopt")]
     no_meshopt: bool,
+    /// Preserve source glTF nodes as pickable features with a name property
+    #[arg(long = "nodeFeatures", visible_alias = "node-features")]
+    node_features: bool,
 }
 
 /// What a successful command produced.
@@ -769,6 +775,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 &a.io.output,
                 &rusty_tiles::point_cloud::PointCloudOptions {
                     explicit: a.explicit,
+                    metadata_attributes: a.metadata_attributes,
                     force: a.io.force,
                     source_crs: a.source_crs,
                     height_offset: a.height_offset,
@@ -937,6 +944,7 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         source_crs,
         source_offset,
         meshopt: !a.no_meshopt,
+        node_features: a.node_features,
     })
 }
 
