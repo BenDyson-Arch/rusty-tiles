@@ -101,6 +101,8 @@ The default output uses a disk-backed midpoint octree and binary implicit subtre
 
 Waveforms, array extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported.
 
+`point-cloud --metadata-attributes` exposes `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes for shader access. The existing table properties (`classification`, `intensity`, `return_number`) remain available for feature picking and table styling. The distinct attribute names prevent shader field collisions in CesiumJS 1.146.
+
 ## Imagery
 
 `raster` needs the `native-geospatial` build. It uses GDAL's COG, display and tiling APIs directly, so no Python or `gdal` executable is involved.

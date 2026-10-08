@@ -329,6 +329,7 @@ fn emit(
     let mut columns = serde_json::Map::new();
     let mut values = Vec::new();
     let mut property_attributes = BTreeMap::new();
+    let mut attribute_schema = serde_json::Map::new();
     for dim in &layout.dimensions {
         values.clear();
         for row in rows.chunks_exact(layout.record_len) {
@@ -359,8 +360,21 @@ fn emit(
             glb.document["bufferViews"][view]["byteStride"] = 4.into();
             let accessor = glb.accessor(json!({"bufferView":view,"componentType":if width == 1 {5121} else {5123},"count":count,"type":"SCALAR"}));
             attributes[&semantic] = accessor.into();
+            // Cesium emits shader fields for both tables and attributes.
+            // Give attribute properties distinct IDs to avoid duplicate fields
+            // when styling uses the table's original LAS property names.
+            let property = format!("vertex_{}", dim.name);
+            if layout.dimensions.iter().any(|d| d.name == property) {
+                return Err(Error::Data(format!(
+                    "LAS dimension {property:?} conflicts with metadata attribute property"
+                )));
+            }
+            attribute_schema.insert(
+                property.clone(),
+                json!({"type":"SCALAR","componentType":dim.kind.component()}),
+            );
             property_attributes.insert(
-                dim.name.clone(),
+                property,
                 crate::metadata::PropertyAttributeProperty {
                     attribute: semantic,
                     ..Default::default()
@@ -377,10 +391,14 @@ fn emit(
         "schema":{"id":"rusty_tiles_point_cloud","classes":{"point":{"properties":schema}}},
         "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}))?;
     if metadata_attributes {
+        metadata.schema.as_mut().unwrap().classes.insert(
+            "pointAttribute".into(),
+            serde_json::from_value(json!({"properties":attribute_schema}))?,
+        );
         metadata
             .property_attributes
             .push(crate::metadata::PropertyAttribute {
-                class: "point".into(),
+                class: "pointAttribute".into(),
                 properties: property_attributes,
                 ..Default::default()
             });

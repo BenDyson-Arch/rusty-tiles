@@ -46,7 +46,7 @@ const assert = require('node:assert/strict');
       }
       mesh.show = false;
       cloud.show = true;
-      cloud.pointCloudShading.attenuation = false;
+      cloud.pointCloudShading.attenuation = false; cloud.colorBlendMode = C.Cesium3DTileColorBlendMode.REPLACE;
       cloud.style = new C.Cesium3DTileStyle({color: "${classification} === 42 && ${return_number} === 1 && ${intensity} >= 0 ? color('cyan') : color('red')", pointSize: 12});
       camera(cloud.boundingSphere.center, cloud.boundingSphere.radius * 3);
       await settle(cloud);
@@ -69,6 +69,8 @@ const assert = require('node:assert/strict');
           const feature = screen && viewer.scene.pick(screen,1,1);
           if (!feature?.getProperty || feature.getProperty('source_index') === undefined) continue;
           point = Object.fromEntries(['source_index','classification','intensity','return_number'].map(name => [name,Number(feature.getProperty(name))]));
+          viewer.scene.render();
+          point.pixel = Array.from(viewer.scene.context.readPixels({x:Math.floor(screen.x), y:viewer.scene.drawingBufferHeight - Math.floor(screen.y) - 1, width:1, height:1}));
           break;
         }
         if (point) break;
@@ -86,5 +88,7 @@ const assert = require('node:assert/strict');
     assert.equal(result.point.classification, 42);
     assert.equal(result.point.return_number, 1);
     assert.equal(result.point.intensity, result.point.source_index * 13);
+    assert.equal(result.point.pixel[0], 0);
+    assert.ok(result.point.pixel[1] > 0 && result.point.pixel[1] === result.point.pixel[2], 'Point style did not render cyan');
   } finally {await browser.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});

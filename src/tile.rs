@@ -467,7 +467,10 @@ pub fn mesh_to_3tz_reported(
         root_proxy.error
     ));
     let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes,!opts.explicit)});
-    if !opts.explicit {
+    // Cesium skips an entire tileset when its top-level error is below the
+    // viewing SSE. Node-feature output bypasses the small-model wrapper, so
+    // even explicit output needs the bounds-based error to remain visible.
+    if !opts.explicit || opts.node_features {
         let diagonal = crate::vec3::norm(crate::vec3::sub(nodes[0].max, nodes[0].min));
         ts["geometricError"] = json!(crate::tileset_node::top_level_error(
             diagonal,

@@ -130,6 +130,9 @@ fn node_features_survive_instancing_partition_and_parent_lods() {
                 rusty_tiles::validate::archive(&output, None).unwrap();
                 let mut archive =
                     zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+                let manifest: Value =
+                    serde_json::from_reader(archive.by_name("tileset.json").unwrap()).unwrap();
+                assert!(manifest["geometricError"].as_f64().unwrap() >= 7.);
                 let files: Vec<_> = archive
                     .file_names()
                     .filter(|s| s.ends_with(".glb"))

@@ -668,6 +668,18 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
                 let glb = Glb::read(&mut zip, &file);
                 let metadata = &glb.doc["extensions"]["EXT_structural_metadata"];
                 let primitive = &glb.doc["meshes"][0]["primitives"][0];
+                let classes = &metadata["schema"]["classes"];
+                assert_eq!(metadata["propertyAttributes"][0]["class"], "pointAttribute");
+                for name in classes["pointAttribute"]["properties"]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                {
+                    assert!(
+                        classes["point"]["properties"].get(name).is_none(),
+                        "duplicate shader property {name}"
+                    );
+                }
                 assert_eq!(
                     primitive["extensions"]["EXT_structural_metadata"]["propertyAttributes"],
                     serde_json::json!([0])
@@ -678,8 +690,8 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
                     ("intensity", 2, 5123),
                     ("return_number", 1, 5121),
                 ] {
-                    let attribute = metadata["propertyAttributes"][0]["properties"][name]
-                        ["attribute"]
+                    let attribute = metadata["propertyAttributes"][0]["properties"]
+                        [format!("vertex_{name}")]["attribute"]
                         .as_str()
                         .unwrap();
                     let accessor = &glb.doc["accessors"]

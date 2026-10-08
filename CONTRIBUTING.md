@@ -110,7 +110,7 @@ cargo run --features native-geospatial -- preview --cesium target/metadata-brows
   --mesh target/metadata-fixtures/mesh-false-true --point-cloud target/metadata-fixtures/point-false --port 9279
 ```
 
-In another terminal, run `NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/shared_metadata.cjs http://127.0.0.1:9279`. The probe uses installed Chromium (`CHROMIUM` overrides its path), picks separately instanced buildings, checks their style colors and picks a point with its original LAS metadata. Both explicit and implicit fixtures, including compressed meshes, pass upstream `3d-tiles-validator` 0.6.1 with zero errors and warnings using the validator command above.
+In another terminal, run `NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/shared_metadata.cjs http://127.0.0.1:9279`. The probe uses installed Chromium (`CHROMIUM` overrides its path), picks separately instanced buildings, checks building and point style colors and picks a point with its original LAS metadata. Both explicit and implicit fixtures, including compressed meshes, pass upstream `3d-tiles-validator` 0.6.1 with zero errors and warnings using the validator command above.
 
 Implicit subtrees have four levels. Regular boundaries use child-subtree availability. Boundaries whose actual boxes exceed their regular cells use standard external tileset roots containing bounded implicit subtrees. This preserves tight bounds, measured errors and picking: Cesium otherwise culls an unloaded subtree using its regular cell, even when later tile metadata enlarges it. The coordinate limit is 31 refinements; coincident point/centroid buckets use deterministic assignment with actual bounds retained.
 

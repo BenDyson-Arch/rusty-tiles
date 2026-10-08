@@ -70,7 +70,7 @@ Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leave
 | `--explicit` | | off | Keep the earlier explicit hierarchy and binary partition |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
 | `--maxPoints` | `--max-points` | `50000` | Maximum points per tile, at least 1 |
-| `--metadataAttributes` | `--metadata-attributes` | off | Also expose classification, intensity and return number as vertex property attributes |
+| `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
 ### vector
