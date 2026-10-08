@@ -146,7 +146,7 @@ fn point_cloud_readiness(geospatial: &Value) -> Value {
     };
     let placement = json!({"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
         "crsClasses":classes,"nativeFallback":geospatial,
-        "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, spherical transverse Mercator, polar oblique stereographic and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
+        "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, quoted PROJ values, spherical transverse Mercator, oblique stereographic origins at or beyond 80 degrees latitude and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive, latitudes within method-specific domains and projected PROJ units linear. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
         "geospatial":placement,"note":"Local XYZ and verified grid-free globe placement need no Python or GDAL. Conversion validates the source-specific operation."})
 }

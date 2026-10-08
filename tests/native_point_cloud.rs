@@ -735,7 +735,7 @@ fn compound_geoid_header_refuses_default_build_without_publishing() {
 }
 
 #[test]
-fn invalid_projection_scales_and_missing_utm_zone_never_publish() {
+fn invalid_projection_parameters_and_units_never_publish() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 1, false, vec![]);
@@ -747,6 +747,12 @@ fn invalid_projection_scales_and_missing_utm_zone_never_publish() {
         "+proj=stere +lat_0=45 +k_0=-1 +datum=WGS84",
         "+proj=utm +datum=WGS84",
         "+proj=utm +lon_0=10 +datum=WGS84",
+        "+proj=tmerc +lat_0=100 +datum=WGS84",
+        "+proj=tmerc +lat_0=-100 +datum=WGS84",
+        "+proj=aea +lat_1=100 +lat_2=45 +datum=WGS84",
+        "+proj=merc +lat_ts=-100 +datum=WGS84",
+        "+proj=lcc +lat_1=-90 +lat_2=45 +datum=WGS84",
+        "+proj=utm +zone=32 +datum=WGS84 +units=degrees",
         wkt,
     ] {
         let output = work.path().join("rejected.3tz");
@@ -764,7 +770,10 @@ fn invalid_projection_scales_and_missing_utm_zone_never_publish() {
         let report: Value = serde_json::from_slice(&result.stdout).unwrap();
         let message = report["error"]["message"].as_str().unwrap();
         assert!(
-            message.contains("positive") || message.contains("explicit +zone"),
+            message.contains("positive")
+                || message.contains("explicit +zone")
+                || message.contains("projection latitude")
+                || message.contains("linear +units"),
             "{definition}: {message}"
         );
         assert!(!output.exists());
@@ -796,6 +805,13 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
         "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
         "+proj=sterea +lat_0=-90 +datum=WGS84",
         "+proj=sterea +lat_0=90 +datum=WGS84",
+        "+proj=sterea +lat_0=89.99999999 +datum=WGS84",
+        "+proj=sterea +lat_0=-89.99999999 +datum=WGS84",
+        "+proj=sterea +lat_0=80 +datum=WGS84",
+        "+proj=sterea +lat_0=-80 +datum=WGS84",
+        "EPSG:32632@2020",
+        r#"+proj=tmerc +k="0.9996" +datum=WGS84"#,
+        r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#,
         "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
     ]
     .into_iter()

@@ -151,6 +151,9 @@ impl PureTransform {
 }
 
 fn epsg(definition: &str) -> Result<String, Error> {
+    if definition[5..].contains('@') {
+        return Err(unsupported("EPSG coordinate epochs require native PROJ"));
+    }
     if definition[5..].contains('+') {
         return Err(unsupported(
             "compound/vertical EPSG CRS may require a geoid grid",
@@ -194,6 +197,15 @@ fn projection_keys(projection: &str) -> Result<&'static [&'static str], Error> {
 }
 
 fn validate_proj(definition: &str) -> Result<String, Error> {
+    // This tokenizer only handles unquoted, whitespace-separated parameters.
+    // Defer quoted values (including embedded spaces) before splitting them.
+    if definition.split_whitespace().any(|token| {
+        token
+            .split_once('=')
+            .is_some_and(|(_, value)| value.starts_with(['\'', '"']))
+    }) {
+        return Err(unsupported("quoted PROJ values require native PROJ"));
+    }
     let mut params = BTreeMap::new();
     for token in definition.split_whitespace() {
         let token = token
@@ -247,6 +259,14 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
         if key == "type" && value != "crs" {
             return Err(unsupported("only CRS definitions are supported"));
         }
+        if key == "units"
+            && !matches!(projection, "longlat" | "latlong")
+            && proj4rs::units::find_units(value).is_none()
+        {
+            return Err(Error::Data(format!(
+                "projected CRS requires a supported linear +units value, got {value}"
+            )));
+        }
         let named_greenwich = key == "pm" && value.eq_ignore_ascii_case("greenwich");
         if matches!(key, "lon_0" | "lat_0" | "lat_ts" | "lat_1" | "lat_2" | "pm")
             && !named_greenwich
@@ -284,6 +304,28 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
                     "projection scale +{key} must be positive"
                 )));
             }
+            if matches!(key, "lat_0" | "lat_1" | "lat_2" | "lat_ts") {
+                let excludes_poles = (projection == "lcc" && matches!(key, "lat_1" | "lat_2"))
+                    || (projection == "merc" && key == "lat_ts");
+                let lcc_near_pole = projection == "lcc"
+                    && matches!(key, "lat_1" | "lat_2")
+                    && number.to_radians().cos().abs() < 1e-10;
+                if lcc_near_pole {
+                    return Err(Error::Data(format!(
+                        "projection latitude +{key} is too close to a pole for Lambert conformal conic"
+                    )));
+                }
+                if number.abs() > 90. || (excludes_poles && number.abs() == 90.) {
+                    let range = if excludes_poles {
+                        "(-90, 90)"
+                    } else {
+                        "[-90, 90]"
+                    };
+                    return Err(Error::Data(format!(
+                        "projection latitude +{key} must be in {range} degrees"
+                    )));
+                }
+            }
         }
     }
     if projection == "utm" && !params.contains_key("zone") {
@@ -294,12 +336,13 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
     if projection == "sterea"
         && params
             .get("lat_0")
-            .is_some_and(|value| finite(value).is_ok_and(|value| value.abs() >= 90. - 1e-10))
+            .is_some_and(|value| finite(value).is_ok_and(|value| value.abs() >= 80.))
     {
-        // inv_gauss fails at the poles in proj4rs. Include the small degree
-        // roundoff introduced by converting WKT angular units before init.
+        // gauss_ini loses precision as sin(phi0) approaches 1, well before the
+        // exact pole. Restrict portable origins to the tested range below 80
+        // degrees in either hemisphere, with a generous stability margin.
         return Err(unsupported(
-            "polar oblique stereographic requires native PROJ",
+            "oblique stereographic origins at or beyond 80 degrees require native PROJ",
         ));
     }
     if matches!(projection, "longlat" | "latlong")
@@ -706,7 +749,7 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
         let method_name = method
             .text(0)?
             .to_ascii_lowercase()
-            .replace([' ', '_', '-'], "");
+            .replace([' ', '_', '-', '(', ')'], "");
         let mut projection = match method_name.as_str() {
             "transversemercator" => "etmerc",
             "mercator1sp" | "mercatorvarianta" | "mercator2sp" | "mercatorvariantb" => "merc",
@@ -802,6 +845,16 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
                 } else {
                     key
                 };
+            // WKT unit conversion can put an exact pole a few ulps outside
+            // its domain. Normalize only that roundoff before validation.
+            let value = if matches!(key, "lat_0" | "lat_1" | "lat_2" | "lat_ts")
+                && value.abs() > 90.
+                && value.abs() <= 90. + 1e-10
+            {
+                value.signum() * 90.
+            } else {
+                value
+            };
             if key == "lat_0" {
                 latitude_origin = value;
             }
@@ -895,6 +948,13 @@ mod tests {
 
     fn additional_native_definitions() -> Vec<String> {
         let mut definitions = vec![
+            "EPSG:32632@2020".into(),
+            "EPSG:4326@2020".into(),
+            r#"+proj=tmerc +k="0.9996" +datum=WGS84"#.into(),
+            r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#.into(),
+            r#"+proj="tmerc" +datum=WGS84"#.into(),
+            r#"+proj=tmerc +k_0="0.9996" +datum=WGS84"#.into(),
+            r#"+proj=tmerc +datum=WGS84 +title="Invented local grid""#.into(),
             "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE".into(),
             "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0".into(),
             "+proj=tmerc +a=6371000 +f=0 +towgs84=0,0,0".into(),
@@ -902,7 +962,8 @@ mod tests {
             "+proj=sterea +lat_0=90 +datum=WGS84".into(),
             "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84".into(),
         ];
-        for latitude in [-90., 90.] {
+        for latitude in [-90., -89.99999999, -85., -80., 80., 85., 89.99999999, 90.] {
+            definitions.push(format!("+proj=sterea +lat_0={latitude} +datum=WGS84"));
             definitions.extend(projection_wkts(
                 "Oblique_Stereographic",
                 "Oblique Stereographic",
@@ -1092,6 +1153,144 @@ mod tests {
     }
 
     #[test]
+    fn projection_latitude_domains_and_units_are_validated() {
+        let mut definitions = Vec::new();
+        for (projection, key, other) in [
+            ("tmerc", "lat_0", ""),
+            ("utm", "lat_0", "+zone=32"),
+            ("stere", "lat_0", ""),
+            ("sterea", "lat_0", ""),
+            ("merc", "lat_ts", ""),
+            ("stere", "lat_ts", "+lat_0=90"),
+            ("aea", "lat_1", "+lat_2=45"),
+            ("aea", "lat_2", "+lat_1=45"),
+            ("lcc", "lat_1", "+lat_2=45"),
+            ("lcc", "lat_2", "+lat_1=45"),
+        ] {
+            for latitude in [-100., 100.] {
+                definitions.push(format!(
+                    "+proj={projection} +{key}={latitude} {other} +datum=WGS84"
+                ));
+            }
+        }
+        for latitude in [-90., -89.999999999, 89.999999999, 90.] {
+            for projection in [
+                format!("+proj=lcc +lat_1={latitude} +lat_2=45"),
+                format!("+proj=lcc +lat_1=45 +lat_2={latitude}"),
+            ] {
+                definitions.push(format!("{projection} +datum=WGS84"));
+            }
+            definitions.extend(projection_wkts(
+                "Lambert_Conformal_Conic_1SP",
+                "Lambert Conic Conformal (1SP)",
+                latitude,
+                0.,
+                Some(1.),
+            ));
+        }
+        for latitude in [-90., 90.] {
+            definitions.push(format!("+proj=merc +lat_ts={latitude} +datum=WGS84"));
+        }
+        for latitude in [-100., 100.] {
+            definitions.extend(projection_wkts(
+                "Transverse_Mercator",
+                "Transverse Mercator",
+                latitude,
+                0.,
+                Some(1.),
+            ));
+            definitions.extend(
+                projection_wkts(
+                    "Albers_Conic_Equal_Area",
+                    "Albers Equal Area",
+                    latitude,
+                    0.,
+                    None,
+                )
+                .map(|wkt| {
+                    wkt.replace("latitude_of_origin", "standard_parallel_1")
+                        .replace(
+                            "Latitude of natural origin",
+                            "Latitude of 1st standard parallel",
+                        )
+                }),
+            );
+        }
+        for latitude in [-100., -90., 90., 100.] {
+            definitions.extend(
+                projection_wkts("Mercator_2SP", "Mercator (variant B)", latitude, 0., None).map(
+                    |wkt| {
+                        wkt.replace("latitude_of_origin", "standard_parallel_1")
+                            .replace(
+                                "Latitude of natural origin",
+                                "Latitude of 1st standard parallel",
+                            )
+                    },
+                ),
+            );
+        }
+        for projection in ["utm +zone=32", "tmerc", "merc", "lcc +lat_1=33 +lat_2=45"] {
+            for units in ["degrees", "rad", "grad"] {
+                definitions.push(format!("+proj={projection} +datum=WGS84 +units={units}"));
+            }
+        }
+        for definition in definitions {
+            let error = Transform::new(&definition, 7.).err().expect(&definition);
+            assert!(matches!(error, Error::Data(_)), "{definition}: {error}");
+            #[cfg(feature = "native-geospatial")]
+            // PROJ ignores out-of-domain lat_ts for stere; the portable tier
+            // still refuses those physically invalid standard parallels.
+            if !definition.starts_with("+proj=stere +lat_ts=") {
+                assert!(
+                    crate::geospatial::Crs::from_definition(&definition)
+                        .and_then(|crs| crate::geospatial::EcefTransform::new(crs, Some(7.)))
+                        .and_then(|mut operation| operation.transform(&[[1000., 2000., 123.]]))
+                        .is_err(),
+                    "native PROJ should reject {definition}"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn portable_oblique_stereographic_origin_range_matches_strict_native() {
+        use crate::geospatial::{Crs, EcefTransform};
+        let points = [
+            [0., 0., 123.],
+            [1000., 2000., 123.],
+            [-300000., 700000., -30.],
+            [3000000., -3000000., 500.],
+        ];
+        for latitude in [
+            -79.999999, -75., -60., -52., -30., 0., 30., 52., 60., 75., 79.999999,
+        ] {
+            for longitude in [0., 123.] {
+                for datum in ["+datum=WGS84", "+ellps=airy +towgs84=12,-34,56"] {
+                    let definition = format!(
+                        "+proj=sterea +lat_0={latitude} +lon_0={longitude} +k=0.9996 {datum}"
+                    );
+                    let mut operation = Transform::new(&definition, 7.).unwrap();
+                    assert!(matches!(operation, Transform::Pure(_)), "{definition}");
+                    let expected =
+                        EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                            .unwrap()
+                            .transform(&points)
+                            .unwrap();
+                    for (actual, expected) in operation
+                        .transform(&points)
+                        .unwrap()
+                        .into_iter()
+                        .zip(expected)
+                    {
+                        assert_mm(actual, expected, &definition);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn additional_valid_native_crs_are_not_misclassified_as_bad_data() {
         for definition in additional_native_definitions() {
             assert!(
@@ -1119,14 +1318,25 @@ mod tests {
             [-300000., 700000., -30.],
         ];
         for definition in additional_native_definitions() {
-            let mut operation = Transform::new(&definition, 7.).unwrap();
+            let geographic_points = [[0., 0., 123.], [153., -27., 123.], [-2., 52., -30.]];
+            let points = if definition.starts_with("EPSG:4326@") {
+                &geographic_points
+            } else {
+                &points
+            };
+            let mut operation = Transform::new(&definition, 7.)
+                .unwrap_or_else(|error| panic!("{definition}: {error}"));
             assert!(matches!(operation, Transform::Native(_)), "{definition}");
-            let expected = EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+            let native_source = Crs::from_definition(&definition).unwrap();
+            if definition.starts_with("EPSG:") && definition.contains('@') {
+                assert_eq!(native_source.coordinate_epoch(), Some(2020.));
+            }
+            let expected = EcefTransform::new(native_source, Some(7.))
                 .unwrap()
-                .transform(&points)
+                .transform(points)
                 .unwrap();
             for (actual, expected) in operation
-                .transform(&points)
+                .transform(points)
                 .unwrap()
                 .into_iter()
                 .zip(expected)
@@ -1275,6 +1485,15 @@ mod tests {
                 format!("EPSG:{code}"),
                 vec![[200000., 5678901., 123.], [786543., 7000000., -30.]],
             ));
+        }
+        for definition in projection_wkts(
+            "Lambert_Conformal_Conic_1SP",
+            "Lambert Conic Conformal (1SP)",
+            49.,
+            10.,
+            Some(0.99),
+        ) {
+            cases.push((definition, vec![[0., 0., 123.], [200000., 567890., -30.]]));
         }
         for projection in [
             "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000",
