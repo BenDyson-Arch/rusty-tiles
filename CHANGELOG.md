@@ -6,6 +6,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- Opt-in native `demodata-suite` acceptance and benchmarks: pinned public inputs, smoke/core/scale profiles, conversion timing and memory, payload repeatability, and geometry/metadata/tile audits. Normal CI runs only the fast harness checks.
 - 3D Tiles 1.1 implicit tiling is the default for point clouds, vectors and meshes. Binary subtrees carry Morton-ordered availability and standard tile bounds/error metadata. Meshes and point clouds use midpoint octrees; vectors preserve padded boxes and reuse. Bounds that exceed regular subtree cells use external implicit tileset roots so Cesium can refine and pick them. `--explicit` preserves the earlier output bytes.
 - Library: `implicit::Subtree`, `TileMetadata` and `expand_tileset` support quadtree/octree availability, multiple contents, child-subtree links, semantic metadata and bounded expansion for audits. Built-in archive validation checks native implicit output.
 - Tag-triggered release binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, a native geospatial GHCR image, a SHA-256-verifying installer and `cargo-binstall` metadata.
@@ -42,6 +43,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Default implicit mesh output accepts uppercase and mixed-case glTF/GLB extensions consistently with the mesh loader.
+- Archive validation traverses nested external tilesets with a work queue, retaining cycle/depth checks without recursive stack growth.
 - Published `.3tz` files honor the process umask instead of retaining temporary-file mode 0600.
 - `doctor --command` limits both human and JSON command inventories to the selected commands.
 - Empty triangle grids allocate one cell and return immediately from nearest-surface searches.

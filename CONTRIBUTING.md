@@ -138,6 +138,60 @@ GEODIFF_CPP_BIN=/path/to/geodiff GO_GEODIFF_DRIVER=/tmp/go-geodiff-driver \
 
 It generates invented GeoPackages, checks byte-identical changesets, cross-applies them and compares reuse output with a fresh build. It includes GDAL spatial-index triggers. Older Go versions without the index functions fail rather than skip.
 
+### Demo-data acceptance and benchmarks
+
+The native Rust `demodata-suite` example exercises the openly licensed corpus assembled on 2026-10-08, normally in the sibling `../demodata` directory. Keep the approximately 1.5 GB of assets outside this checkout. [The manifest](bench/demodata_manifest.json) pins 416 files by size and SHA-256 and retains their source URLs, licences and attribution. Use the corpus's own README and `fetch.py` to provision it separately; provisioning can require Python/GDAL tools and Blender. The suite itself downloads nothing and runs every converter with an empty executable `PATH` and `PROJ_NETWORK=OFF`. Missing or changed required files fail a run.
+
+```sh
+cargo build --locked --release --features native-geospatial \
+  --bin rusty-tiles --example demodata-suite
+target/release/examples/demodata-suite --data-root ../demodata --verify
+target/release/examples/demodata-suite --data-root ../demodata --list
+target/release/examples/demodata-suite --data-root ../demodata \
+  --bin target/release/rusty-tiles --profile smoke --output target/demodata-smoke
+target/release/examples/demodata-suite --data-root ../demodata \
+  --bin target/release/rusty-tiles --profile all --benchmark --repeats 3 \
+  --output target/demodata-benchmark
+```
+
+Choose a fresh output directory for each invocation. Outputs must not overlap the corpus; selected source hashes are checked before and after a run. On Windows, append `.exe` to the executable paths. `--case ID` selects a named recipe and can be repeated. `--baseline-bin PATH` compares another CLI using the same inputs and options, rotating the method order between repetitions. Baselines must support the selected command options; an unsupported option fails the run.
+
+| Profile | Cases | Coverage |
+| --- | ---: | --- |
+| `smoke` | 8 | Milk truck mesh; trimmed Autzen and USGS root points; Natural Earth places/countries; Australian imagery; Brisbane terrain; safe splat rejection |
+| `core` | 20, including smoke | Lantern, Corset, 999,999-triangle Floreat and Delft meshes; 56,600 roads; 3DBAG building geometry; safe FlightHelmet/global imagery rejections; Cesium sparse quadtree/octree, multiple contents and metadata fixtures |
+| `scale` | 7 | Full Autzen; all 144 USGS EPT nodes; Sentinel-2 imagery; terrain mosaic/projected DEM; dense places; 3D roads |
+| `all` | 27 | All profiles |
+
+Audits run outside conversion timing. Mesh leaves must retain every oriented float32 position triangle exactly once. Point leaves must retain every staged LAS record exactly once and every declared scalar metadata column byte-for-byte, including flags, RGB and Extra Bytes. Archive validation checks the hierarchies, placement and declared budgets. Vectors account for accepted/skipped source features; this corpus check does not independently compare every feature property or triangulated polygon. Imagery audits decode every 256-square PNG and check geographic XYZ coverage. Terrain audits independently decode quantized attributes and triangle/edge indices and check finite height overlays and tile counts. Packed Cesium reference resources must remain byte-identical. Expected failures must return the structured data-error category, exit 3 and publish nothing.
+
+LAS decompression and sorted EPT-node merging happen in a private directory before timing. Raw integer records, flags and attributes survive preparation unchanged. Full Autzen converts horizontal international feet and vertical US survey feet through its staged header into local metres, with no datum transformation or globe placement. Trimmed Autzen remains in its original numeric foot units for a local encoding test. 3DBAG vectors use local numeric RD New/NAP coordinates to avoid optional datum grids. Copernicus and draped-road heights remain orthometric numeric values; `--heightOffset 0` is an encoding benchmark setting. These recipes do not assert correct ellipsoidal heights or survey placement. Recipe notes retain the individual coordinate assumptions.
+
+Benchmark mode runs one audited warmup and at least three audited serial repetitions per method. `results.json` records the binary hashes, doctor/library information, machine information, input hashes, preparation hashes, exact commands, individual samples, medians, output sizes, fidelity checks and payload fingerprints. Wall time includes CLI startup and publication; fixture preparation and audits are excluded. On Unix, an isolated worker measures conversion CPU time and peak RSS with `wait4`, avoiding the audit process's inherited memory floor. Other platforms report unavailable CPU/RSS as null. Inputs use the warm filesystem cache. Repeated runs must produce the same member/file payload hashes, excluding `conversion.json` timing diagnostics and the derived ZIP index. This checks repeatability on the same codec/GDAL stack, not byte identity between different converter versions.
+
+Fast manifest, path, input integrity and process-measurement tests run in normal native CI and the Python-free Docker suite. The large corpus is opt-in and adds no downloads to normal CI:
+
+```sh
+RUSTY_TILES_DEMODATA="$PWD/../demodata" \
+  cargo test --locked --features native-geospatial --test demodata_suite \
+  demodata_smoke -- --ignored --nocapture
+```
+
+The glTF extension, voxel, SPZ, CityJSON and unused 3D Tiles fixtures remain a hash-pinned reference inventory for future work. Listing or verifying them is not a passing conversion/conformance claim. [Recorded demo-data results](bench/demodata_benchmark_results.json) contain the full acceptance and benchmark evidence; timings describe that machine and recipe only.
+
+Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. All 27 cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
+
+| Recipe | Source size | Wall seconds | Peak RSS MiB |
+| --- | ---: | ---: | ---: |
+| Floreat mesh | 999,999 triangles | 3.540 | 584.8 |
+| Full Autzen, staged local metres | 10,653,336 points | 14.883 | 56.0 |
+| Merged USGS EPT nodes | 11,553,258 points | 21.015 | 58.8 |
+| Sentinel-2 imagery | 954 decoded tiles | 11.839 | 227.3 |
+| Copernicus terrain mosaic | 822 decoded tiles | 6.679 | 136.2 |
+
+[The paired smoke run](bench/demodata_baseline_results.json) also passed all eight cases for current and baseline `99b9605`, with identical payloads within each method's three repetitions. The baseline defaults to explicit tiling and current defaults to implicit tiling. For the 512-pixel atlas milk-truck recipe, current emits 270 leaves versus 132 in the baseline: medians are 0.376 versus 0.207 seconds, with archives of 5,494,680 versus 4,200,493 bytes. This exposes the cost of the changed partition/layout on that recipe; it is not a general speedup claim. Both methods retain all 3,624 source triangles exactly once.
+
+
 ## Fixtures and oracles
 
 Core tests use invented fixtures only. Private data and credentials are never bundled.

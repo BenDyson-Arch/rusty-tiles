@@ -1607,6 +1607,7 @@ dependencies = [
  "jpeg-decoder",
  "jsonschema",
  "las",
+ "libc",
  "md5",
  "memmap2",
  "meshopt",

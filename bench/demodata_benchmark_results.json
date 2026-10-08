@@ -1,0 +1,4514 @@
+{
+  "attribution": {
+    ".downloads/NE1_50M_SR_W.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 88413091,
+      "license": "Public domain",
+      "sha256": "9e85417223414bbed425aea5dca0f0b4c5661fc94d4f14494140a21a08dfa450",
+      "url": "https://naciscdn.org/naturalearth/50m/raster/NE1_50M_SR_W.zip"
+    },
+    ".downloads/ne_10m_populated_places.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 2811199,
+      "license": "Public domain",
+      "sha256": "cd149186f03d2603e0410da399b980a4357d0ac32d3a2305a49ed3dffcc41d7b",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places.zip"
+    },
+    ".downloads/ne_10m_roads.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 9075919,
+      "license": "Public domain",
+      "sha256": "880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip"
+    },
+    ".downloads/ne_110m_admin_0_countries.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 214976,
+      "license": "Public domain",
+      "sha256": "0f243aeac8ac6cf26f0417285b0bd33ac47f1b5bdb719fd3e0df37d03ea37110",
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+    },
+    ".downloads/ne_110m_populated_places.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 126591,
+      "license": "Public domain",
+      "sha256": "29b901a2ae0a745741c0642123480e31101ed723086c4d0cae657a8d722c3b28",
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_populated_places.zip"
+    },
+    "city-model/3dbag-delft/9-280-564-obj.zip": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2661385,
+      "license": "CC-BY-4.0",
+      "sha256": "cd7f88a883cd5635ccd71a9e2c4df492eaa83d16da0e712a1e262af5ec787f44",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564-obj.zip"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json": {
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 12815571,
+      "license": "CC-BY-4.0",
+      "sha256": "d38c6a3d19a2faa9078527b0ec93b54824c50d3aecfb1c78d8d55a264aa73565",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json.gz": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2206100,
+      "license": "CC-BY-4.0",
+      "sha256": "d1985cc8222f7257c7251b45466daaca165bfe2010fdc60fc99a60c08578969d",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg": {
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 29278208,
+      "license": "CC-BY-4.0",
+      "sha256": "a69be7ea5886a1ad0dd049fba2e6b9a946892502988d285129d22f6cef5fc891",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg.gz": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 4854412,
+      "license": "CC-BY-4.0",
+      "sha256": "9e85aeda7295d3ca9393c29d16c8115030bb877681b4a351542f15bf159f1da9",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz"
+    },
+    "gltf-extensions/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 5173473,
+      "files": 65,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "c72d9d9a88d04581b290316856f7944b499637cce5c33fb4cb63e6e542754195",
+      "url": "https://github.com/CesiumGS/3d-tiles-samples glTF"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 6503,
+      "files": 4,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "e7f8e8bfa80d96f22c6f596a818f82ede0b4e445a61d95e02054027cb50519ca",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/BoxInstanced"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 20606,
+      "files": 6,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "fdf79f3b36480b0156f950082a5df89112df69a1c580aac2791c1846e28fe7bc",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/PrimitiveRestart"
+    },
+    "imagery/S2A_56JMQ_20250704_TCI.tif": {
+      "attribution": "Contains modified Copernicus Sentinel data 2025, processed by Element 84 / AWS sentinel-cogs",
+      "bytes": 326477076,
+      "license": "Copernicus Sentinel data, free and open under the Sentinel Data Legal Notice",
+      "sha256": "84b3e211ab135fb4eb9aac6faf923d1d6e2268ac77e35d0fceee73affd784d1a",
+      "url": "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/56/J/MQ/2025/7/S2A_56JMQ_20250704_0_L2A/TCI.tif"
+    },
+    "mesh/CesiumMilkTruck.README.upstream.md": {
+      "attribution": "Cesium",
+      "bytes": 1198,
+      "license": "CC-BY-4.0",
+      "sha256": "72795225ebbbbd09138dfe0a911fadd7b9dbaeddaf134175cc3c9546383be1cb",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMilkTruck/README.md"
+    },
+    "mesh/CesiumMilkTruck.glb": {
+      "attribution": "Cesium",
+      "bytes": 441972,
+      "license": "CC-BY-4.0",
+      "sha256": "31dc008a7b0adc3349888a9bf2d9acc01323a70a301d2936aef3711b36a3f72d",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumMilkTruck/CesiumMilkTruck.glb"
+    },
+    "mesh/Corset.README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 955,
+      "license": "CC0-1.0",
+      "sha256": "437e4a46f008ed20326d9681b36b381db1ac6ef6730a94bc26f61ca366e12384",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/README.md"
+    },
+    "mesh/Corset.glb": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 13491364,
+      "license": "CC0-1.0",
+      "sha256": "9582c0dc0dee813be77f60e6ddf7213987c7e11497bf3cc66fd7b18957ae0d26",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/glTF-Binary/Corset.glb"
+    },
+    "mesh/Lantern.README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 1080,
+      "license": "CC0-1.0",
+      "sha256": "58a4903ae9c0bbb7d3f6ff1b9263b3b480edb7ca82109afdb06723275835a6c7",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/README.md"
+    },
+    "mesh/Lantern.glb": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 9564264,
+      "license": "CC0-1.0",
+      "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/glTF-Binary/Lantern.glb"
+    },
+    "mesh/flight-helmet/FlightHelmet.gltf": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 18698,
+      "license": "CC0-1.0",
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/glTF/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 3348,
+      "license": "CC0-1.0",
+      "sha256": "7724b64fb4fae1135ddec3738d1eb9320d3bb9c890f599c423a09e205fb7257f",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/README.md"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip": {
+      "attribution": "Cambridge Coastcare via DataWA; EPSG:7850, offset E 382368 N 6466878 A 5",
+      "bytes": 41242406,
+      "license": "CC-BY-4.0",
+      "sha256": "1b2533fc5c339a2a3e5646a5344c0932fe809c2c4ff0fe37e80d9cece39f89e9",
+      "url": "https://catalogue.data.wa.gov.au/dataset/59e33118-4b23-4dbd-940f-106a9a173dae/resource/ac51dfd4-b872-4ff1-ab51-c04fa411c592/download/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "point-cloud/autzen-classified.laz": {
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 74416814,
+      "license": "CC-BY-4.0",
+      "sha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51",
+      "url": "https://media.githubusercontent.com/media/PDAL/data/main/autzen/autzen-classified.laz"
+    },
+    "point-cloud/autzen_trim.las": {
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 3742038,
+      "license": "CC-BY-4.0",
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75",
+      "url": "https://github.com/PDAL/PDAL/raw/master/test/data/las/autzen_trim.las"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-hierarchy/0-0-0-0.json": {
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 252231,
+      "license": "Public domain",
+      "sha256": "139c335cec73e9c075096ca30dbfdc0903e3b3ddd3682024547b949db3832ab8",
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept-hierarchy/0-0-0-0.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept.json": {
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 2426,
+      "license": "Public domain",
+      "sha256": "811ad38e3e2d43cf0dd74f9df734f92e41789ccc8b4e6e7df0ff179114c3ad37",
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 2688,
+      "license": "Apache-2.0",
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/tileset.json": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 540,
+      "license": "Apache-2.0",
+      "sha256": "bedf1ad764aa1f99908fc66616872e5e4480fb12121b2c9d0182fbf0ae509e01",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/tileset.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/0/0.glb": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 7499156,
+      "license": "Apache-2.0",
+      "sha256": "9ef9d8d0756d1f423cd6aa8bd99f7dd26957f96df03dcbcec6e37103e39350b4",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/tileset.json": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 1322,
+      "license": "Apache-2.0",
+      "sha256": "a29517618aef75aaf47191949660bc8fed3f121d09555dbc1bbe9e4dfe26b493",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/tileset.json"
+    },
+    "splats/niantic-spz/LICENSE": {
+      "attribution": "Niantic Labs",
+      "bytes": 1069,
+      "license": "MIT",
+      "sha256": "d2b852220d1043148f523c4154e8bf7d9c5e419aede33b4c94115cfc457e4714",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/LICENSE"
+    },
+    "splats/niantic-spz/hornedlizard.spz": {
+      "attribution": "Niantic Labs",
+      "bytes": 18143098,
+      "license": "MIT",
+      "sha256": "a076ca6aeb9f1a8fe52526f4a7c381fe8fffec60c0d7eb64b45532189b64bc6a",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/hornedlizard.spz"
+    },
+    "splats/niantic-spz/racoonfamily.spz": {
+      "attribution": "Niantic Labs",
+      "bytes": 24202962,
+      "license": "MIT",
+      "sha256": "2e068d893730955c09aee324ff170c559f71c0e8758c1b14c3811a5969333cfe",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/racoonfamily.spz"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47965852,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "24ac3224821f3d2b0e3933bd7d6d64b54eb11ab5dae363aef3c64d83d57bf47f",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E152_00_DEM/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 5894466,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "783d5dfa1108d3fb95c107e55dd2623f3268fbbacf9229793b42c3d42da9fa5a",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E153_00_DEM/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47261499,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E152_00_DEM/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 15824152,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "dea0be928bddde7158a1ba8d6d9dffde62d0f8d2c9b3a6eef13dcea94069e196",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E153_00_DEM/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif"
+    },
+    "tiles-1.1/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 4163733,
+      "files": 159,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "62ffd375deb9bf8a8ed22f50c4f7640dea5a2dc37e2d39e133c1edfd4e574ac6",
+      "url": "https://github.com/CesiumGS/3d-tiles-samples 1.1"
+    },
+    "tiles-1.1/CesiumVoxels/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 33472,
+      "files": 28,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "156f8760ba6cc0aeb8a91c0920fdf15ee556d97bd28aac05d28d0869c89aa307",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/Cesium3DTiles/Voxel"
+    }
+  },
+  "benchmark": true,
+  "cases": [
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-milktruck/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 346,
+            "entries": 398,
+            "ok": true,
+            "tiles": 346
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 270,
+          "leafTriangles": 3624,
+          "outputBytes": 5494680,
+          "sourceTriangles": 3624
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/CesiumMilkTruck-static.glb",
+          "-o",
+          "$OUTPUT/mesh-milktruck/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ]
+      },
+      "id": "mesh-milktruck",
+      "medians": {
+        "current": {
+          "cpuSeconds": 1.864515,
+          "peakRssMiB": 150.90234375,
+          "wallSeconds": 0.379964066
+        }
+      },
+      "payloadFingerprints": {
+        "current": "8ab2c146b5bd4b562165b1ea98313190af0e6732a9e9bdb789afe0b1aebddd59"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-milktruck",
+        "input": "mesh/CesiumMilkTruck-static.glb",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 1.827107,
+            "exit_code": 0,
+            "peakRssMiB": 147.73828125,
+            "wallSeconds": 0.379964066
+          },
+          {
+            "cpuSeconds": 1.8648419999999999,
+            "exit_code": 0,
+            "peakRssMiB": 150.90234375,
+            "wallSeconds": 0.360117189
+          },
+          {
+            "cpuSeconds": 1.864515,
+            "exit_code": 0,
+            "peakRssMiB": 151.046875,
+            "wallSeconds": 0.382661031
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/autzen-trim/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 31,
+            "entries": 35,
+            "ok": true,
+            "tiles": 31
+          },
+          "auditedColumns": [
+            "X",
+            "Y",
+            "Z",
+            "blue",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "green",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "red",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 27,
+          "leafPoints": 110000,
+          "outputBytes": 11640192,
+          "sourcePoints": 110000
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/autzen-trim/input.las",
+          "-o",
+          "$OUTPUT/autzen-trim/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "20000"
+        ]
+      },
+      "id": "autzen-trim",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.071627,
+          "peakRssMiB": 39.671875,
+          "wallSeconds": 0.079849098
+        }
+      },
+      "payloadFingerprints": {
+        "current": "5e4b127880b8a083853a528ede4398bf745577114e3d1561d9d1033a180bed71"
+      },
+      "preparedInput": {
+        "bytes": 3742038,
+        "sha256": "21ca4173751bcf0a6986bb28ace57a03416577ad58ae6c11054e724c54bb7176"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "20000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "autzen-trim",
+        "input": "point-cloud/autzen_trim.las",
+        "notes": "Original horizontal foot coordinates tested as local numeric XYZ; no metre conversion, georeference or vertical datum claim.",
+        "prepare": "decompress-las",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.071177,
+            "exit_code": 0,
+            "peakRssMiB": 39.50390625,
+            "wallSeconds": 0.079059675
+          },
+          {
+            "cpuSeconds": 0.072336,
+            "exit_code": 0,
+            "peakRssMiB": 39.75,
+            "wallSeconds": 0.08351431
+          },
+          {
+            "cpuSeconds": 0.071627,
+            "exit_code": 0,
+            "peakRssMiB": 39.671875,
+            "wallSeconds": 0.079849098
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/usgs-root/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 20,
+            "entries": 24,
+            "ok": true,
+            "tiles": 20
+          },
+          "auditedColumns": [
+            "OriginId",
+            "X",
+            "Y",
+            "Z",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 17,
+          "leafPoints": 19873,
+          "outputBytes": 1892658,
+          "sourcePoints": 19873
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/usgs-root/input.las",
+          "-o",
+          "$OUTPUT/usgs-root/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "5000"
+        ]
+      },
+      "id": "usgs-root",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.046821,
+          "peakRssMiB": 42.9921875,
+          "wallSeconds": 0.051164895
+        }
+      },
+      "payloadFingerprints": {
+        "current": "6451d9d80dca7e3be44bdf79e33e2b76e2990db00248e0f35d653cd453f80f64"
+      },
+      "preparedInput": {
+        "bytes": 636720,
+        "sha256": "4b086436de639bc74847739c215089d762672778d0cdddbeb667b3293d9600c3"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "5000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "usgs-root",
+        "input": "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz",
+        "notes": "Known fixture horizontal metre CRS; supplied Z treated as ellipsoidal for this encoding test, without a vertical datum conversion.",
+        "prepare": "decompress-las",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.046821,
+            "exit_code": 0,
+            "peakRssMiB": 42.9921875,
+            "wallSeconds": 0.051164895
+          },
+          {
+            "cpuSeconds": 0.045369,
+            "exit_code": 0,
+            "peakRssMiB": 43.05078125,
+            "wallSeconds": 0.049594218
+          },
+          {
+            "cpuSeconds": 0.04709,
+            "exit_code": 0,
+            "peakRssMiB": 42.9609375,
+            "wallSeconds": 0.051406539
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/places/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 20,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 3472378,
+          "sourceFeatureAccounting": {
+            "encoded": 243,
+            "skipped": 0,
+            "source": 243
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/places/current.3tz",
+          "--force",
+          "--layer",
+          "populated_places",
+          "--maxFeatures",
+          "64",
+          "--reproducible"
+        ]
+      },
+      "id": "places",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.158361,
+          "peakRssMiB": 71.71484375,
+          "wallSeconds": 0.113337761
+        }
+      },
+      "payloadFingerprints": {
+        "current": "e1b777749011c8aaa134f0056212af855dfb8cb1f00164c21686a20d81dc0283"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "populated_places",
+          "--maxFeatures",
+          "64",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 243,
+        "id": "places",
+        "input": "vector/natural-earth-110m.gpkg",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.157305,
+            "exit_code": 0,
+            "peakRssMiB": 71.55078125,
+            "wallSeconds": 0.11088342
+          },
+          {
+            "cpuSeconds": 0.15909,
+            "exit_code": 0,
+            "peakRssMiB": 71.71484375,
+            "wallSeconds": 0.116071402
+          },
+          {
+            "cpuSeconds": 0.158361,
+            "exit_code": 0,
+            "peakRssMiB": 71.7890625,
+            "wallSeconds": 0.113337761
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/countries/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 20,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 5236837,
+          "sourceFeatureAccounting": {
+            "encoded": 176,
+            "skipped": 1,
+            "source": 177
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/countries/current.3tz",
+          "--force",
+          "--layer",
+          "countries",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ]
+      },
+      "id": "countries",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.406787,
+          "peakRssMiB": 85.1484375,
+          "wallSeconds": 0.268989561
+        }
+      },
+      "payloadFingerprints": {
+        "current": "fd602ee63fee9a0e747c343ba8bf6901894be4ea455d239e5a1050ff3db756e7"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "countries",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 177,
+        "id": "countries",
+        "input": "vector/natural-earth-110m.gpkg",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.406558,
+            "exit_code": 0,
+            "peakRssMiB": 85.1484375,
+            "wallSeconds": 0.268913656
+          },
+          {
+            "cpuSeconds": 0.406787,
+            "exit_code": 0,
+            "peakRssMiB": 80.515625,
+            "wallSeconds": 0.268989561
+          },
+          {
+            "cpuSeconds": 0.417244,
+            "exit_code": 0,
+            "peakRssMiB": 86.51953125,
+            "wallSeconds": 0.275684814
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "decodedPngTiles": 17,
+          "outputBytes": 4203441,
+          "scheme": "xyz",
+          "tileDimensions": [
+            256,
+            256
+          ]
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "raster",
+          "-i",
+          "$DEMODATA/imagery/NE1_50M_SR_W_australia.tif",
+          "-o",
+          "$OUTPUT/imagery-australia/current",
+          "--force",
+          "--minZoom",
+          "2",
+          "--maxZoom",
+          "4"
+        ]
+      },
+      "id": "imagery-australia",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.363916,
+          "peakRssMiB": 145.921875,
+          "wallSeconds": 0.274832818
+        }
+      },
+      "payloadFingerprints": {
+        "current": "b108ebf36eb3248ce991a3854dbf073da8fde0dc073bdbc43c7ba20571403189"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--minZoom",
+          "2",
+          "--maxZoom",
+          "4"
+        ],
+        "audit": "raster",
+        "category": "imagery",
+        "command": "raster",
+        "expect": "success",
+        "id": "imagery-australia",
+        "input": "imagery/NE1_50M_SR_W_australia.tif",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.361027,
+            "exit_code": 0,
+            "peakRssMiB": 146.234375,
+            "wallSeconds": 0.269896059
+          },
+          {
+            "cpuSeconds": 0.363916,
+            "exit_code": 0,
+            "peakRssMiB": 145.64453125,
+            "wallSeconds": 0.274832818
+          },
+          {
+            "cpuSeconds": 0.366003,
+            "exit_code": 0,
+            "peakRssMiB": 145.921875,
+            "wallSeconds": 0.299385149
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "decodedTerrainTiles": 13,
+          "fidelity": "Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence.",
+          "heightOverlays": 13,
+          "outputBytes": 1393770,
+          "scheme": "tms",
+          "triangles": 105472,
+          "vertices": 54413
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "terrain",
+          "-i",
+          "$DEMODATA/terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+          "-o",
+          "$OUTPUT/terrain-brisbane/current",
+          "--force",
+          "--maxZoom",
+          "8",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ]
+      },
+      "id": "terrain-brisbane",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.252655,
+          "peakRssMiB": 122.6328125,
+          "wallSeconds": 0.213198443
+        }
+      },
+      "payloadFingerprints": {
+        "current": "fa766f8e1537e5501bfc3d12c34f6456ddf5dba5e52d6999c46d8ccc6f4d4bf2"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxZoom",
+          "8",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ],
+        "audit": "terrain",
+        "category": "terrain",
+        "command": "terrain",
+        "expect": "success",
+        "id": "terrain-brisbane",
+        "input": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+        "notes": "Source EGM2008 orthometric elevations retained as numeric test heights; no vertical datum conversion.",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.254206,
+            "exit_code": 0,
+            "peakRssMiB": 122.6328125,
+            "wallSeconds": 0.21390712
+          },
+          {
+            "cpuSeconds": 0.252655,
+            "exit_code": 0,
+            "peakRssMiB": 122.46875,
+            "wallSeconds": 0.213198443
+          },
+          {
+            "cpuSeconds": 0.247781,
+            "exit_code": 0,
+            "peakRssMiB": 122.7109375,
+            "wallSeconds": 0.20918432
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "expectedRejection": "KHR_gaussian_splatting",
+          "unpublished": true
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "glb-to-3tz",
+          "-i",
+          "$DEMODATA/splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+          "-o",
+          "$OUTPUT/splats-unsupported/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "splats-unsupported",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.012237,
+          "peakRssMiB": 28.6015625,
+          "wallSeconds": 0.012390101
+        }
+      },
+      "payloadFingerprints": {},
+      "preparedInput": null,
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "splats",
+        "command": "glb-to-3tz",
+        "expect": "KHR_gaussian_splatting",
+        "id": "splats-unsupported",
+        "input": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+        "profile": "smoke"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.011947,
+            "exit_code": 3,
+            "peakRssMiB": 28.6015625,
+            "wallSeconds": 0.012088883
+          },
+          {
+            "cpuSeconds": 0.012237,
+            "exit_code": 3,
+            "peakRssMiB": 28.765625,
+            "wallSeconds": 0.012390101
+          },
+          {
+            "cpuSeconds": 0.015252,
+            "exit_code": 3,
+            "peakRssMiB": 28.38671875,
+            "wallSeconds": 0.015432318
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "expectedRejection": "polar",
+          "unpublished": true
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "raster",
+          "-i",
+          "$DEMODATA/imagery/NE1_50M_SR_W.tif",
+          "-o",
+          "$OUTPUT/global-imagery-refused/current",
+          "--force",
+          "--maxZoom",
+          "2"
+        ]
+      },
+      "id": "global-imagery-refused",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.020398,
+          "peakRssMiB": 47.65625,
+          "wallSeconds": 0.020603687
+        }
+      },
+      "payloadFingerprints": {},
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxZoom",
+          "2"
+        ],
+        "audit": "raster",
+        "category": "imagery",
+        "command": "raster",
+        "expect": "polar",
+        "id": "global-imagery-refused",
+        "input": "imagery/NE1_50M_SR_W.tif",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.019795,
+            "exit_code": 3,
+            "peakRssMiB": 47.7421875,
+            "wallSeconds": 0.019987935
+          },
+          {
+            "cpuSeconds": 0.021976,
+            "exit_code": 3,
+            "peakRssMiB": 47.6328125,
+            "wallSeconds": 0.02220021
+          },
+          {
+            "cpuSeconds": 0.020398,
+            "exit_code": 3,
+            "peakRssMiB": 47.65625,
+            "wallSeconds": 0.020603687
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "expectedRejection": "cannot yet preserve source glTF extensions",
+          "unpublished": true
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/flight-helmet/FlightHelmet.gltf",
+          "-o",
+          "$OUTPUT/flight-helmet-external/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "flight-helmet-external",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.018885,
+          "peakRssMiB": 34.62890625,
+          "wallSeconds": 0.019063401
+        }
+      },
+      "payloadFingerprints": {},
+      "preparedInput": null,
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "cannot yet preserve source glTF extensions",
+        "id": "flight-helmet-external",
+        "input": "mesh/flight-helmet/FlightHelmet.gltf",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.019165,
+            "exit_code": 3,
+            "peakRssMiB": 34.64453125,
+            "wallSeconds": 0.019405261
+          },
+          {
+            "cpuSeconds": 0.018885,
+            "exit_code": 3,
+            "peakRssMiB": 34.625,
+            "wallSeconds": 0.019063401
+          },
+          {
+            "cpuSeconds": 0.018842,
+            "exit_code": 3,
+            "peakRssMiB": 34.62890625,
+            "wallSeconds": 0.018990469
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-lantern/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 259,
+            "entries": 333,
+            "ok": true,
+            "tiles": 259
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 159,
+          "leafTriangles": 5394,
+          "outputBytes": 9107400,
+          "sourceTriangles": 5394
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/Lantern-static.glb",
+          "-o",
+          "$OUTPUT/mesh-lantern/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ]
+      },
+      "id": "mesh-lantern",
+      "medians": {
+        "current": {
+          "cpuSeconds": 2.232689,
+          "peakRssMiB": 252.11328125,
+          "wallSeconds": 0.362688493
+        }
+      },
+      "payloadFingerprints": {
+        "current": "2c5e45ef8aaac20be7c6b8bfb16f8a70f459029de11b7b3512c9fa398d596961"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-lantern",
+        "input": "mesh/Lantern-static.glb",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 2.232689,
+            "exit_code": 0,
+            "peakRssMiB": 252.11328125,
+            "wallSeconds": 0.348814123
+          },
+          {
+            "cpuSeconds": 2.211941,
+            "exit_code": 0,
+            "peakRssMiB": 250.8125,
+            "wallSeconds": 0.362688493
+          },
+          {
+            "cpuSeconds": 2.245613,
+            "exit_code": 0,
+            "peakRssMiB": 259.125,
+            "wallSeconds": 0.363306134
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-corset/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 431,
+            "entries": 487,
+            "ok": true,
+            "tiles": 431
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 350,
+          "leafTriangles": 18324,
+          "outputBytes": 17680533,
+          "sourceTriangles": 18324
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/Corset-static.glb",
+          "-o",
+          "$OUTPUT/mesh-corset/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ]
+      },
+      "id": "mesh-corset",
+      "medians": {
+        "current": {
+          "cpuSeconds": 4.812939,
+          "peakRssMiB": 169.41015625,
+          "wallSeconds": 0.66307583
+        }
+      },
+      "payloadFingerprints": {
+        "current": "02479640e3d4768ccd5ada9aacea09cebd3973979b32220261fde7ff1c6438d3"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-corset",
+        "input": "mesh/Corset-static.glb",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 4.812939,
+            "exit_code": 0,
+            "peakRssMiB": 173.65234375,
+            "wallSeconds": 0.66307583
+          },
+          {
+            "cpuSeconds": 4.825597,
+            "exit_code": 0,
+            "peakRssMiB": 167.11328125,
+            "wallSeconds": 0.69840281
+          },
+          {
+            "cpuSeconds": 4.6071539999999995,
+            "exit_code": 0,
+            "peakRssMiB": 169.41015625,
+            "wallSeconds": 0.650245357
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-floreat/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 1507,
+            "entries": 1737,
+            "ok": true,
+            "tiles": 1507
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 1278,
+          "leafTriangles": 999999,
+          "outputBytes": 156276643,
+          "sourceTriangles": 999999
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/floreat-dunes/floreat-f2-2022-static.glb",
+          "-o",
+          "$OUTPUT/mesh-floreat/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512",
+          "--cartographicPositionDegrees",
+          "115.755644",
+          "-31.927922",
+          "5"
+        ]
+      },
+      "id": "mesh-floreat",
+      "medians": {
+        "current": {
+          "cpuSeconds": 21.574331,
+          "peakRssMiB": 584.83203125,
+          "wallSeconds": 3.54043551
+        }
+      },
+      "payloadFingerprints": {
+        "current": "7657fc95426810d03401ff2f49bbd42c27be18bbe23d96fdc4f428a40dd79efe"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512",
+          "--cartographicPositionDegrees",
+          "115.755644",
+          "-31.927922",
+          "5"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-floreat",
+        "input": "mesh/floreat-dunes/floreat-f2-2022-static.glb",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 21.574331,
+            "exit_code": 0,
+            "peakRssMiB": 584.83203125,
+            "wallSeconds": 5.038773925
+          },
+          {
+            "cpuSeconds": 21.634498,
+            "exit_code": 0,
+            "peakRssMiB": 585.6328125,
+            "wallSeconds": 3.54043551
+          },
+          {
+            "cpuSeconds": 21.557157,
+            "exit_code": 0,
+            "peakRssMiB": 584.59765625,
+            "wallSeconds": 3.517288978
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-delft/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 48,
+            "entries": 52,
+            "ok": true,
+            "tiles": 48
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 42,
+          "leafTriangles": 92716,
+          "outputBytes": 4498006,
+          "sourceTriangles": 92716
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb",
+          "-o",
+          "$OUTPUT/mesh-delft/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512",
+          "--cartographicPositionDegrees",
+          "4.352914",
+          "52.015809",
+          "0"
+        ]
+      },
+      "id": "mesh-delft",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.296119,
+          "peakRssMiB": 107.359375,
+          "wallSeconds": 0.196020721
+        }
+      },
+      "payloadFingerprints": {
+        "current": "26b83d23da51b97e10c7a64755f10ab0a19916256d87cd8ac1d20c144fc7e79f"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512",
+          "--cartographicPositionDegrees",
+          "4.352914",
+          "52.015809",
+          "0"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-delft",
+        "input": "city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.329392,
+            "exit_code": 0,
+            "peakRssMiB": 107.359375,
+            "wallSeconds": 0.22013724
+          },
+          {
+            "cpuSeconds": 0.296119,
+            "exit_code": 0,
+            "peakRssMiB": 105.98046875,
+            "wallSeconds": 0.196020721
+          },
+          {
+            "cpuSeconds": 0.296081,
+            "exit_code": 0,
+            "peakRssMiB": 112.4765625,
+            "wallSeconds": 0.19516267
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/roads/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 2450,
+            "entries": 6080,
+            "ok": true,
+            "tiles": 2465
+          },
+          "outputBytes": 701268034,
+          "sourceFeatureAccounting": {
+            "encoded": 56600,
+            "skipped": 0,
+            "source": 56600
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-roads.gpkg",
+          "-o",
+          "$OUTPUT/roads/current.3tz",
+          "--force",
+          "--layer",
+          "roads",
+          "--reproducible"
+        ]
+      },
+      "id": "roads",
+      "medians": {
+        "current": {
+          "cpuSeconds": 22.687608,
+          "peakRssMiB": 241.82421875,
+          "wallSeconds": 17.74325634
+        }
+      },
+      "payloadFingerprints": {
+        "current": "d531b7f62aee39f800ff429d6a37bc0a6c8b0f3f5379e1060eed9d4a4b3c33dc"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "roads",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 56600,
+        "id": "roads",
+        "input": "vector/natural-earth-roads.gpkg",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 22.618493,
+            "exit_code": 0,
+            "peakRssMiB": 238.40234375,
+            "wallSeconds": 18.899235018
+          },
+          {
+            "cpuSeconds": 22.735695,
+            "exit_code": 0,
+            "peakRssMiB": 241.828125,
+            "wallSeconds": 17.45303845
+          },
+          {
+            "cpuSeconds": 22.687608,
+            "exit_code": 0,
+            "peakRssMiB": 241.82421875,
+            "wallSeconds": 17.74325634
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/delft-buildings-local/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 315,
+            "entries": 780,
+            "ok": true,
+            "tiles": 319
+          },
+          "outputBytes": 108580121,
+          "sourceFeatureAccounting": {
+            "encoded": 2258,
+            "skipped": 32,
+            "source": 2290
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/city-model/3dbag-delft/9-280-564.gpkg",
+          "-o",
+          "$OUTPUT/delft-buildings-local/current.3tz",
+          "--force",
+          "--layer",
+          "lod22_3d",
+          "--sourceCrs",
+          "local",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ]
+      },
+      "id": "delft-buildings-local",
+      "medians": {
+        "current": {
+          "cpuSeconds": 8.275975,
+          "peakRssMiB": 148.18359375,
+          "wallSeconds": 6.108239117
+        }
+      },
+      "payloadFingerprints": {
+        "current": "dace3cb56ca7cdeebd1f28018f6556276b3dc9753d1001cc7b3ed54018461135"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "lod22_3d",
+          "--sourceCrs",
+          "local",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 2290,
+        "id": "delft-buildings-local",
+        "input": "city-model/3dbag-delft/9-280-564.gpkg",
+        "notes": "RD New/NAP coordinates treated as local numeric XYZ to audit encoding without optional datum grids; output is not georeferenced.",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 8.328858,
+            "exit_code": 0,
+            "peakRssMiB": 148.4453125,
+            "wallSeconds": 6.170259989
+          },
+          {
+            "cpuSeconds": 8.269429,
+            "exit_code": 0,
+            "peakRssMiB": 148.18359375,
+            "wallSeconds": 6.107509499
+          },
+          {
+            "cpuSeconds": 8.275975,
+            "exit_code": 0,
+            "peakRssMiB": 147.546875,
+            "wallSeconds": 6.108239117
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/autzen-full/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 787,
+            "entries": 927,
+            "ok": true,
+            "tiles": 787
+          },
+          "auditedColumns": [
+            "X",
+            "Y",
+            "Z",
+            "blue",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "green",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "overlap",
+            "point_source_id",
+            "red",
+            "return_number",
+            "scan_angle",
+            "scan_direction_flag",
+            "scanner_channel",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 676,
+          "leafPoints": 10653336,
+          "outputBytes": 1148021744,
+          "sourcePoints": 10653336
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/autzen-full/input.las",
+          "-o",
+          "$OUTPUT/autzen-full/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "50000"
+        ]
+      },
+      "id": "autzen-full",
+      "medians": {
+        "current": {
+          "cpuSeconds": 7.366342,
+          "peakRssMiB": 55.96484375,
+          "wallSeconds": 14.883085964
+        }
+      },
+      "payloadFingerprints": {
+        "current": "9aa011a38ec330e35e233d3cfa8d7453c8298b1b8680d07bd69c9b21788eea37"
+      },
+      "preparedInput": {
+        "bytes": 383540641,
+        "sha256": "1097cceed15242f112c413f72ea669109638795d8e60a0e228fb39ef5648a5ed"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "50000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "autzen-full",
+        "input": "point-cloud/autzen-classified.laz",
+        "notes": "Horizontal international feet and vertical US survey feet converted to local metres; no datum transformation or ellipsoidal placement.",
+        "prepare": "local-feet",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 7.252814,
+            "exit_code": 0,
+            "peakRssMiB": 55.96484375,
+            "wallSeconds": 8.620288251
+          },
+          {
+            "cpuSeconds": 7.632133,
+            "exit_code": 0,
+            "peakRssMiB": 55.94921875,
+            "wallSeconds": 25.794590134
+          },
+          {
+            "cpuSeconds": 7.366342,
+            "exit_code": 0,
+            "peakRssMiB": 56.0234375,
+            "wallSeconds": 14.883085964
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/usgs-all-nodes/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 959,
+            "entries": 1059,
+            "ok": true,
+            "tiles": 959
+          },
+          "auditedColumns": [
+            "OriginId",
+            "X",
+            "Y",
+            "Z",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 784,
+          "leafPoints": 11553258,
+          "outputBytes": 1041971971,
+          "sourcePoints": 11553258
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/usgs-all-nodes/input.las",
+          "-o",
+          "$OUTPUT/usgs-all-nodes/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "50000"
+        ]
+      },
+      "id": "usgs-all-nodes",
+      "medians": {
+        "current": {
+          "cpuSeconds": 9.846035,
+          "peakRssMiB": 58.7890625,
+          "wallSeconds": 21.014867797
+        }
+      },
+      "payloadFingerprints": {
+        "current": "896cfaec0e370ef922e4b414fbf7f0b80bc6aa84a67f3193b4cbe800bc33acc9"
+      },
+      "preparedInput": {
+        "bytes": 369705040,
+        "sha256": "16f197da1a52c37539ec70dc102fe59b64bdf53dc45c91d72394d143112293d8"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "50000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "usgs-all-nodes",
+        "input": "point-cloud/usgs-3dep-brookscamp/ept-data",
+        "notes": "All LAZ nodes merged in sorted filename order outside timing; original records preserved, no vertical datum conversion.",
+        "prepare": "merge-las",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 9.846035,
+            "exit_code": 0,
+            "peakRssMiB": 58.7890625,
+            "wallSeconds": 18.723430334
+          },
+          {
+            "cpuSeconds": 9.870716,
+            "exit_code": 0,
+            "peakRssMiB": 59.0703125,
+            "wallSeconds": 23.994389411
+          },
+          {
+            "cpuSeconds": 9.786909,
+            "exit_code": 0,
+            "peakRssMiB": 58.62890625,
+            "wallSeconds": 21.014867797
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "decodedPngTiles": 954,
+          "outputBytes": 497764665,
+          "scheme": "xyz",
+          "tileDimensions": [
+            256,
+            256
+          ]
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "raster",
+          "-i",
+          "$DEMODATA/imagery/S2A_56JMQ_20250704_TCI.tif",
+          "-o",
+          "$OUTPUT/sentinel-brisbane/current",
+          "--force",
+          "--minZoom",
+          "8",
+          "--maxZoom",
+          "13"
+        ]
+      },
+      "id": "sentinel-brisbane",
+      "medians": {
+        "current": {
+          "cpuSeconds": 19.138034,
+          "peakRssMiB": 227.28515625,
+          "wallSeconds": 11.839270252
+        }
+      },
+      "payloadFingerprints": {
+        "current": "000a1af402b0a8d328ce9c6717c1ad52ca633d2f9d265acde3f3e11740b9f4c7"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--minZoom",
+          "8",
+          "--maxZoom",
+          "13"
+        ],
+        "audit": "raster",
+        "category": "imagery",
+        "command": "raster",
+        "expect": "success",
+        "id": "sentinel-brisbane",
+        "input": "imagery/S2A_56JMQ_20250704_TCI.tif",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 19.112526,
+            "exit_code": 0,
+            "peakRssMiB": 225.703125,
+            "wallSeconds": 11.69602792
+          },
+          {
+            "cpuSeconds": 19.202259,
+            "exit_code": 0,
+            "peakRssMiB": 228.7265625,
+            "wallSeconds": 11.839270252
+          },
+          {
+            "cpuSeconds": 19.138034,
+            "exit_code": 0,
+            "peakRssMiB": 227.28515625,
+            "wallSeconds": 13.059301651
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "decodedTerrainTiles": 822,
+          "fidelity": "Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence.",
+          "heightOverlays": 822,
+          "outputBytes": 77738655,
+          "scheme": "tms",
+          "triangles": 4133752,
+          "vertices": 2172914
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "terrain",
+          "-i",
+          "$DEMODATA/terrain/copernicus-brisbane-2x2.tif",
+          "-o",
+          "$OUTPUT/terrain-mosaic/current",
+          "--force",
+          "--maxZoom",
+          "11",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ]
+      },
+      "id": "terrain-mosaic",
+      "medians": {
+        "current": {
+          "cpuSeconds": 17.114104,
+          "peakRssMiB": 136.1953125,
+          "wallSeconds": 6.678782836
+        }
+      },
+      "payloadFingerprints": {
+        "current": "156dcaf346a3eedca8aa292cb46a2a4ae11c6a43250884f425fa438b1b73c6b7"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxZoom",
+          "11",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ],
+        "audit": "terrain",
+        "category": "terrain",
+        "command": "terrain",
+        "expect": "success",
+        "id": "terrain-mosaic",
+        "input": "terrain/copernicus-brisbane-2x2.tif",
+        "notes": "Source orthometric heights retained for numeric encoding benchmarks.",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 17.212624,
+            "exit_code": 0,
+            "peakRssMiB": 136.62109375,
+            "wallSeconds": 6.70076366
+          },
+          {
+            "cpuSeconds": 17.114104,
+            "exit_code": 0,
+            "peakRssMiB": 135.58203125,
+            "wallSeconds": 6.678782836
+          },
+          {
+            "cpuSeconds": 17.015473,
+            "exit_code": 0,
+            "peakRssMiB": 136.1953125,
+            "wallSeconds": 6.612412108
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "decodedTerrainTiles": 78,
+          "fidelity": "Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence.",
+          "heightOverlays": 78,
+          "outputBytes": 9323563,
+          "scheme": "tms",
+          "triangles": 572928,
+          "vertices": 296526
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "terrain",
+          "-i",
+          "$DEMODATA/terrain/copernicus-s28e152-utm56s.tif",
+          "-o",
+          "$OUTPUT/terrain-projected/current",
+          "--force",
+          "--maxZoom",
+          "10",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ]
+      },
+      "id": "terrain-projected",
+      "medians": {
+        "current": {
+          "cpuSeconds": 3.6951270000000003,
+          "peakRssMiB": 200.51953125,
+          "wallSeconds": 2.814280582
+        }
+      },
+      "payloadFingerprints": {
+        "current": "034993e5a6c4ab1d90316c8111daafe5224fc395afc103941936a012ce0ce7c2"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxZoom",
+          "10",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ],
+        "audit": "terrain",
+        "category": "terrain",
+        "command": "terrain",
+        "expect": "success",
+        "id": "terrain-projected",
+        "input": "terrain/copernicus-s28e152-utm56s.tif",
+        "notes": "Prepared UTM 56S raster; source orthometric heights retained.",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 3.6951270000000003,
+            "exit_code": 0,
+            "peakRssMiB": 200.54296875,
+            "wallSeconds": 2.814280582
+          },
+          {
+            "cpuSeconds": 3.69464,
+            "exit_code": 0,
+            "peakRssMiB": 200.51953125,
+            "wallSeconds": 2.812354621
+          },
+          {
+            "cpuSeconds": 3.6968870000000003,
+            "exit_code": 0,
+            "peakRssMiB": 200.234375,
+            "wallSeconds": 2.8233655239999997
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/places-dense/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 252,
+            "entries": 654,
+            "ok": true,
+            "tiles": 255
+          },
+          "outputBytes": 203256620,
+          "sourceFeatureAccounting": {
+            "encoded": 7342,
+            "skipped": 0,
+            "source": 7342
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-10m-places.gpkg",
+          "-o",
+          "$OUTPUT/places-dense/current.3tz",
+          "--force",
+          "--layer",
+          "populated_places",
+          "--reproducible"
+        ]
+      },
+      "id": "places-dense",
+      "medians": {
+        "current": {
+          "cpuSeconds": 5.198252,
+          "peakRssMiB": 213.47265625,
+          "wallSeconds": 3.819169328
+        }
+      },
+      "payloadFingerprints": {
+        "current": "f6f204962a045e4f1acc88e3c09ed56be2ce82746ad0396c3ffdbe2a42afc416"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "populated_places",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 7342,
+        "id": "places-dense",
+        "input": "vector/natural-earth-10m-places.gpkg",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 5.176373,
+            "exit_code": 0,
+            "peakRssMiB": 208.98046875,
+            "wallSeconds": 3.79782364
+          },
+          {
+            "cpuSeconds": 5.200875,
+            "exit_code": 0,
+            "peakRssMiB": 213.47265625,
+            "wallSeconds": 3.819169328
+          },
+          {
+            "cpuSeconds": 5.198252,
+            "exit_code": 0,
+            "peakRssMiB": 229.2421875,
+            "wallSeconds": 3.837094763
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/roads-3d/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 1,
+            "entries": 8,
+            "ok": true,
+            "tiles": 1
+          },
+          "outputBytes": 46193,
+          "sourceFeatureAccounting": {
+            "encoded": 14,
+            "skipped": 0,
+            "source": 14
+          }
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/brisbane-roads-3d.gpkg",
+          "-o",
+          "$OUTPUT/roads-3d/current.3tz",
+          "--force",
+          "--layer",
+          "roads_3d",
+          "--heightOffset",
+          "0",
+          "--reproducible"
+        ]
+      },
+      "id": "roads-3d",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.038196,
+          "peakRssMiB": 54.6328125,
+          "wallSeconds": 0.037334374
+        }
+      },
+      "payloadFingerprints": {
+        "current": "3e43b9d280705a2deed4c99cb3ff0342923647cf21188ad6476f45bcce89a7ee"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "roads_3d",
+          "--heightOffset",
+          "0",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 14,
+        "id": "roads-3d",
+        "input": "vector/brisbane-roads-3d.gpkg",
+        "notes": "Source was draped over the orthometric DEM; Z preserved for encoding, without vertical datum conversion.",
+        "profile": "scale"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.03726,
+            "exit_code": 0,
+            "peakRssMiB": 54.93359375,
+            "wallSeconds": 0.037334374
+          },
+          {
+            "cpuSeconds": 0.039932,
+            "exit_code": 0,
+            "peakRssMiB": 54.19140625,
+            "wallSeconds": 0.038639189
+          },
+          {
+            "cpuSeconds": 0.038196,
+            "exit_code": 0,
+            "peakRssMiB": 54.6328125,
+            "wallSeconds": 0.036851647
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/reference-quadtree/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 32,
+            "entries": 43,
+            "ok": true,
+            "tiles": 63
+          },
+          "outputBytes": 49059,
+          "unchangedReferenceMembers": 42
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "convert",
+          "-i",
+          "$OUTPUT/reference-quadtree/input",
+          "-o",
+          "$OUTPUT/reference-quadtree/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "reference-quadtree",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.015366,
+          "peakRssMiB": 28.83984375,
+          "wallSeconds": 0.019310965
+        }
+      },
+      "payloadFingerprints": {
+        "current": "ae1968d871c7d23b8d24450438a3f0d428123f6af9f0adb88a717cb71d0a7133"
+      },
+      "preparedInput": {
+        "bytes": 42559,
+        "sha256": "ae1968d871c7d23b8d24450438a3f0d428123f6af9f0adb88a717cb71d0a7133"
+      },
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "tiles-1.1",
+        "command": "convert",
+        "expect": "success",
+        "id": "reference-quadtree",
+        "input": "tiles-1.1/SparseImplicitQuadtree",
+        "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue.",
+        "prepare": "tileset-resources",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.017227,
+            "exit_code": 0,
+            "peakRssMiB": 28.65625,
+            "wallSeconds": 0.021228331
+          },
+          {
+            "cpuSeconds": 0.015366,
+            "exit_code": 0,
+            "peakRssMiB": 28.83984375,
+            "wallSeconds": 0.019310965
+          },
+          {
+            "cpuSeconds": 0.013261,
+            "exit_code": 0,
+            "peakRssMiB": 28.875,
+            "wallSeconds": 0.017118607
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/reference-octree/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 31,
+            "entries": 46,
+            "ok": true,
+            "tiles": 58
+          },
+          "outputBytes": 69229,
+          "unchangedReferenceMembers": 45
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "convert",
+          "-i",
+          "$OUTPUT/reference-octree/input",
+          "-o",
+          "$OUTPUT/reference-octree/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "reference-octree",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.01494,
+          "peakRssMiB": 28.75390625,
+          "wallSeconds": 0.019068034
+        }
+      },
+      "payloadFingerprints": {
+        "current": "ea49a313c3b9f13b227bbe74e34b0cf23b69f03701aa2892c41cd94631b70b3b"
+      },
+      "preparedInput": {
+        "bytes": 62097,
+        "sha256": "ea49a313c3b9f13b227bbe74e34b0cf23b69f03701aa2892c41cd94631b70b3b"
+      },
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "tiles-1.1",
+        "command": "convert",
+        "expect": "success",
+        "id": "reference-octree",
+        "input": "tiles-1.1/SparseImplicitOctree",
+        "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue.",
+        "prepare": "tileset-resources",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.012156,
+            "exit_code": 0,
+            "peakRssMiB": 28.734375,
+            "wallSeconds": 0.016069691
+          },
+          {
+            "cpuSeconds": 0.017535,
+            "exit_code": 0,
+            "peakRssMiB": 28.75390625,
+            "wallSeconds": 0.021559979
+          },
+          {
+            "cpuSeconds": 0.01494,
+            "exit_code": 0,
+            "peakRssMiB": 28.80859375,
+            "wallSeconds": 0.019068034
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/reference-multiple-content/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 2,
+            "entries": 4,
+            "ok": true,
+            "tiles": 1
+          },
+          "outputBytes": 381382,
+          "unchangedReferenceMembers": 3
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "convert",
+          "-i",
+          "$OUTPUT/reference-multiple-content/input",
+          "-o",
+          "$OUTPUT/reference-multiple-content/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "reference-multiple-content",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.013003,
+          "peakRssMiB": 28.796875,
+          "wallSeconds": 0.017502879
+        }
+      },
+      "payloadFingerprints": {
+        "current": "d73a6aa074274401014200e4f9940c3f1cefa7c9db6562b34dd272cf99ebd8ca"
+      },
+      "preparedInput": {
+        "bytes": 380864,
+        "sha256": "d73a6aa074274401014200e4f9940c3f1cefa7c9db6562b34dd272cf99ebd8ca"
+      },
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "tiles-1.1",
+        "command": "convert",
+        "expect": "success",
+        "id": "reference-multiple-content",
+        "input": "tiles-1.1/MultipleContents",
+        "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue.",
+        "prepare": "tileset-resources",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.013675,
+            "exit_code": 0,
+            "peakRssMiB": 28.8515625,
+            "wallSeconds": 0.018143287
+          },
+          {
+            "cpuSeconds": 0.013003,
+            "exit_code": 0,
+            "peakRssMiB": 28.48046875,
+            "wallSeconds": 0.017502879
+          },
+          {
+            "cpuSeconds": 0.012711,
+            "exit_code": 0,
+            "peakRssMiB": 28.796875,
+            "wallSeconds": 0.017170038
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/reference-metadata/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 20,
+            "entries": 22,
+            "ok": true,
+            "tiles": 5
+          },
+          "outputBytes": 3360967,
+          "unchangedReferenceMembers": 21
+        }
+      },
+      "commands": {
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "convert",
+          "-i",
+          "$OUTPUT/reference-metadata/input",
+          "-o",
+          "$OUTPUT/reference-metadata/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "reference-metadata",
+      "medians": {
+        "current": {
+          "cpuSeconds": 0.01592,
+          "peakRssMiB": 28.6875,
+          "wallSeconds": 0.021416618
+        }
+      },
+      "payloadFingerprints": {
+        "current": "237c105af00dd3ad5130689b62ca00293a695c584bf5ac477df2421d8ab91fe5"
+      },
+      "preparedInput": {
+        "bytes": 3358045,
+        "sha256": "237c105af00dd3ad5130689b62ca00293a695c584bf5ac477df2421d8ab91fe5"
+      },
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "tiles-1.1",
+        "command": "convert",
+        "expect": "success",
+        "id": "reference-metadata",
+        "input": "tiles-1.1/MetadataGranularities",
+        "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue.",
+        "prepare": "tileset-resources",
+        "profile": "core"
+      },
+      "samples": {
+        "current": [
+          {
+            "cpuSeconds": 0.015256,
+            "exit_code": 0,
+            "peakRssMiB": 28.6875,
+            "wallSeconds": 0.020650212
+          },
+          {
+            "cpuSeconds": 0.01592,
+            "exit_code": 0,
+            "peakRssMiB": 28.55859375,
+            "wallSeconds": 0.021416618
+          },
+          {
+            "cpuSeconds": 0.022703,
+            "exit_code": 0,
+            "peakRssMiB": 28.86328125,
+            "wallSeconds": 0.028337184
+          }
+        ]
+      }
+    }
+  ],
+  "inputFiles": {
+    "city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb": {
+      "bytes": 8409780,
+      "sha256": "3a25632979497420ad6d75198194943c5cc58f4d24e547f284f55695fc40ba00",
+      "source": "city-model/3dbag-delft/9-280-564-obj.zip"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg": {
+      "bytes": 29278208,
+      "sha256": "a69be7ea5886a1ad0dd049fba2e6b9a946892502988d285129d22f6cef5fc891",
+      "source": "city-model/3dbag-delft/9-280-564.gpkg"
+    },
+    "imagery/NE1_50M_SR_W.tif": {
+      "bytes": 175041354,
+      "sha256": "22a4d66193002df6d4f1fa59655196cde48eba232fd7f60ed2f3bba5004a65ee",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/NE1_50M_SR_W_australia.tif": {
+      "bytes": 2591831,
+      "sha256": "4dbd398f03514dfa269410e09f6cc2c00f09087968d36a01e7dcc781601ea0a9",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/S2A_56JMQ_20250704_TCI.tif": {
+      "bytes": 326477076,
+      "sha256": "84b3e211ab135fb4eb9aac6faf923d1d6e2268ac77e35d0fceee73affd784d1a",
+      "source": "imagery/S2A_56JMQ_20250704_TCI.tif"
+    },
+    "mesh/CesiumMilkTruck-static.glb": {
+      "bytes": 441716,
+      "sha256": "1f2c376b54a5d9eff35408a38bf4991f91f91f81cba33af3a99f89108b33f744",
+      "source": "mesh/CesiumMilkTruck.glb"
+    },
+    "mesh/Corset-static.glb": {
+      "bytes": 13491252,
+      "sha256": "91865e9792c9a7d5ab5c8721a56f4f8b3b85b4b886b42d664c5504a5b7000e2c",
+      "source": "mesh/Corset.glb"
+    },
+    "mesh/Lantern-static.glb": {
+      "bytes": 9564128,
+      "sha256": "422492d46ca5ba0e03073141e5bfdb3ca45d377c0b2c7e6386513c05327925b0",
+      "source": "mesh/Lantern.glb"
+    },
+    "mesh/flight-helmet/FlightHelmet.bin": {
+      "bytes": 3227148,
+      "sha256": "9e623a27f837e1cc995d1380da5fd3becf4d29586fefba882fc0ba76b49f94bf",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet.gltf": {
+      "bytes": 18698,
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_BaseColor.png": {
+      "bytes": 2306649,
+      "sha256": "0914544aabe161046f417274051e34ecc85163cfce6698581b3e1e18c96fe4f1",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_Normal.png": {
+      "bytes": 2648815,
+      "sha256": "c297f18f3b4259fc8b411cdc843a4a44b8cef3e3a53b21cec7b53574e5ef6872",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.png": {
+      "bytes": 3696183,
+      "sha256": "d4519704f15395c7138421a5814b478df549a2411bc6fa97dd6d02ba62dc6c54",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_BaseColor.png": {
+      "bytes": 5478748,
+      "sha256": "c9346ac6daa3ad34d0b36c1e7cf311ccbcc298710ea453cdf3b6ad40dc60013f",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_Normal.png": {
+      "bytes": 5675531,
+      "sha256": "7fb69b26f80c67df41e87d7344bde9d24dda0be77546b0a6acabc4040694872a",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.png": {
+      "bytes": 4375686,
+      "sha256": "b77e60f175e4632cd3d892bc9f0e748f522c9288a469585d5cb90270cd68910e",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_BaseColor.png": {
+      "bytes": 696304,
+      "sha256": "b55f6561f8adabc907360443aab010f3effaf05074fdccea46d8c2d66247cf16",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_Normal.png": {
+      "bytes": 5575,
+      "sha256": "430775894001933044c89070b1bfd4f9b8489f74780b1ab7079efb0afca95d8d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.png": {
+      "bytes": 601603,
+      "sha256": "35d81a71ab184f9b50f63ff8f3e0f90cfb6c99f9b2d9ed9d9887a902c16a458d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_BaseColor.png": {
+      "bytes": 2680488,
+      "sha256": "8e26add3ad1b2398d58638580bb1fe56f2fbae3572b4a682b6595a5a26fb1b40",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_Normal.png": {
+      "bytes": 3273483,
+      "sha256": "a833fcc12718c02bcba97cbc9760d06c4a711ce7f36c23076e7cf6d4393a80e7",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.png": {
+      "bytes": 2976508,
+      "sha256": "17f3e27b51011b8f98751dae25958e2b850fcf1467f1019bec812553e0e5eb1d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_BaseColor.png": {
+      "bytes": 3594300,
+      "sha256": "f751d643d1f220b300705d9ad57ed284a883eb7d3788469199b752f4381dcc37",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_Normal.png": {
+      "bytes": 3327566,
+      "sha256": "bb70753c836c59db7e245e5fe2c9db8eee833d29d67e03da348f6adb1e95142a",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.png": {
+      "bytes": 3809284,
+      "sha256": "2727d4638514f75fcbd29777bf03db6bd2f0f1ad926e2976cf2346aa22c0bd19",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/README.upstream.md": {
+      "bytes": 3348,
+      "sha256": "7724b64fb4fae1135ddec3738d1eb9320d3bb9c890f599c423a09e205fb7257f",
+      "source": "mesh/flight-helmet/README.upstream.md"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022-static.glb": {
+      "bytes": 130309956,
+      "sha256": "0cb65ccc7a825c00adbdbb16869a227d9fa617bc997524744c6401ee309480d3",
+      "source": "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "point-cloud/autzen-classified.laz": {
+      "bytes": 74416814,
+      "sha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51",
+      "source": "point-cloud/autzen-classified.laz"
+    },
+    "point-cloud/autzen_trim.las": {
+      "bytes": 3742038,
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75",
+      "source": "point-cloud/autzen_trim.las"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz": {
+      "bytes": 243245,
+      "sha256": "bda94e290319eb03f2cccc35edb52da2f739d971d424d4c2bf09d6a4250471c2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-0-0.laz": {
+      "bytes": 83778,
+      "sha256": "f1cd60225ee9248c78627dc2adfb106740788bab3e5b97e84b031638e1641922",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-1-0.laz": {
+      "bytes": 532454,
+      "sha256": "1124dbfad1f24dfda66c4df32a7e7d93a757f458f06bd46c5857cf1678e106e7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-1-1.laz": {
+      "bytes": 1422,
+      "sha256": "e287e3563b03ae8fa08a6477e3c78a9c4319f891c5d0d8cb1a934195b707cbe7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-1-0-0.laz": {
+      "bytes": 395718,
+      "sha256": "bb12e66bc1a6b8bd924c3c014a22cd6da11a70cc3df8607c0f1b6064fd0709e9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-1-1-0.laz": {
+      "bytes": 28983,
+      "sha256": "51c5b5c2cacd56d75410bcb2ddd75a986cdca5c51e06fc93dbfaa89ba08ef279",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-2-1.laz": {
+      "bytes": 548736,
+      "sha256": "206d8897abf9280003ac9f33fb59d9392eb6e3647abe0444c0b0d2b33ed022d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-3-1.laz": {
+      "bytes": 747646,
+      "sha256": "b128eff75dd6b860682dc40f6eec3bca0229fae816cd597fd4dc05435fc4f322",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-3-2.laz": {
+      "bytes": 2728,
+      "sha256": "f29352c7b962722f76f2fef4efac144e66178036e5d95879967feb561774dcdd",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-1-1.laz": {
+      "bytes": 505567,
+      "sha256": "14f6c4ce909f05e7021d9d2c7d6756414a3486ce3ce2cb71aad7c80d4425b456",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-2-1.laz": {
+      "bytes": 1034390,
+      "sha256": "85b14798067613ba1803e9c39f7d2789cc24b998d26d108229ac30830485c2f2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-3-1.laz": {
+      "bytes": 201094,
+      "sha256": "202d187e41ae292779201264247e62052de0e604923f8fb457a20bfe0b500862",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-0-1.laz": {
+      "bytes": 220975,
+      "sha256": "3f3d795965edbb6aa192d410e2db2d089ac30f694099b7e795d085e4136c2986",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-1-1.laz": {
+      "bytes": 721063,
+      "sha256": "fb8441d30617cb5f5818b63c8efef7c3b9cd6d1150c82b480960d5d993c3cb34",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-2-1.laz": {
+      "bytes": 97666,
+      "sha256": "12d863695ac764488ea94b2d89b3ce5fa7ed6906548284cba35ba5727530c010",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-3-0-1.laz": {
+      "bytes": 532142,
+      "sha256": "e4c2d08ea4a341d3cdcd67d9b27d1fb3e33fd897d45ab462e73d31c9c363e14b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-3-1-1.laz": {
+      "bytes": 108845,
+      "sha256": "778be29e5a50b04bb08d9629235fda1c741251270635f68522f95a487c8b35e1",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-5-3.laz": {
+      "bytes": 704703,
+      "sha256": "754abc976a5c09651fe23ea7fb839b1870f6910956fb1b7c713afe4c64961c6e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-6-3.laz": {
+      "bytes": 1244715,
+      "sha256": "31070a16fe6e345ca7143d8af1b3a55af1a4369c2141f93facf3f07c049857e9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-7-3.laz": {
+      "bytes": 229992,
+      "sha256": "721264d61260a0363fa63b96cb5cc27a70d9cd5ead25dedb2dd87524cdbd4b0e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-7-4.laz": {
+      "bytes": 6819,
+      "sha256": "466be58d00b4f3322c1637b526e959cd57433f10f91ecf2280326180ec149ad6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-4-3.laz": {
+      "bytes": 561827,
+      "sha256": "3c4f9590b250fe511c6efd47a8b9e803f26be7298c05b01df3d1b770385cc0f6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-5-3.laz": {
+      "bytes": 1188191,
+      "sha256": "209702ba63d78c74039877a54cbc8af4cdd02dd670a33ebaa99f7c3508b2ca27",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-6-3.laz": {
+      "bytes": 1336276,
+      "sha256": "d357207292e6f357fc4fd04e404a862e5d6a6afb6246f3651d619c9cb67384eb",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-7-3.laz": {
+      "bytes": 491970,
+      "sha256": "8a5707ec835d99ef419518d7c618c71c2b11f3828da500c2a90ef3e2555a95c6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-3-3.laz": {
+      "bytes": 513886,
+      "sha256": "a2b88fdde052e27213788bb09fa4faca98e5ac2b672059eb7bcb3e98438aa2af",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-4-3.laz": {
+      "bytes": 1310311,
+      "sha256": "46f1d1f0d3e6036aab51527318aa65ef1fac4332c9e188733c8039797a5d390e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-5-3.laz": {
+      "bytes": 986030,
+      "sha256": "eca521913b1b3b9d576998343d57138a8a7d3d7c6c0dabe4ac579cdb1b92db06",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-6-3.laz": {
+      "bytes": 513316,
+      "sha256": "94f09430942734ed3b29469a07eda64115a82fbcb803c1b5e805891a85c93083",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-7-3.laz": {
+      "bytes": 343486,
+      "sha256": "7a7d0154d071495ab2e5f96ab4c304834fddcb8c9af754ebcf21fc00df630c3b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-2-3.laz": {
+      "bytes": 192249,
+      "sha256": "21b197561f39712a66aa7f81be28227d7b5e7a4bea3333b755ecf93c25ad9f82",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-3-3.laz": {
+      "bytes": 1284572,
+      "sha256": "427d0d446c05f89f4b97a90598b5f00e0bf1347cd7b6120400a551bc8170de6e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-4-3.laz": {
+      "bytes": 1235877,
+      "sha256": "71b096707ea9f402d56b682fef6832401c725bb8d7371dbd12cea75efff4159b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-5-3.laz": {
+      "bytes": 504580,
+      "sha256": "ed5ca09508ed8b0a449f80798abe2aa8f9d58b02e86b1c714a19e75ef7d8fc0c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-1-3.laz": {
+      "bytes": 63240,
+      "sha256": "ee88c49229a8cb51df6c60a07f628f093a4341a7d0dd33aab93f713b622303cd",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-2-3.laz": {
+      "bytes": 1077433,
+      "sha256": "3b07e5a4cbc0ff98da523b5db4f606d2d3c8e5d61d9d786e326302ea31d8cd69",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-3-3.laz": {
+      "bytes": 832234,
+      "sha256": "6121bb263a6ff43b0648f7c4fae78a1901eb92bc6bea7fdfc524bf1c1c4a41ac",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-4-3.laz": {
+      "bytes": 42850,
+      "sha256": "34cd66ad2bec160f3aceac1627c4f7a5ca2cd4cf4cb63409340431e3b50454ea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-5-3.laz": {
+      "bytes": 336429,
+      "sha256": "456313d45ad588b1f5cb3cf275333c68998eb0d0d479ec16dfe541bbf4186005",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-0-3.laz": {
+      "bytes": 52510,
+      "sha256": "68b5710da83bced6bc01e39c4a2e0627e309fd681dd72db201b445b336880f0c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-1-3.laz": {
+      "bytes": 832953,
+      "sha256": "1a5628e7e19006502696717fe316d86a3e7edf563ba9032e36fe6cc389a5b044",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-2-3.laz": {
+      "bytes": 1149899,
+      "sha256": "eff6b31f2639e1b3b19bb3922fe41dcc409d3efc38c2af3716f129f17eea9ca4",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-3-3.laz": {
+      "bytes": 106424,
+      "sha256": "55026fe21a3df1c440da567abaf6f4f949c140816189e8c03e7f8eea455fc372",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-0-3.laz": {
+      "bytes": 301895,
+      "sha256": "bf478bb1068b0596854c21790e709af3197fdb59cf0900f2b1169228e90fbf0d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-1-3.laz": {
+      "bytes": 1280682,
+      "sha256": "b91ca6a1dc3acad2485aedb119e5b860050008963bd461efb180a617d21a7802",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-2-3.laz": {
+      "bytes": 485891,
+      "sha256": "2760ad73bdc9f85529d169c0b5a30f0bfc40035280dd7cfb4f6218db19456ba0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-7-0-3.laz": {
+      "bytes": 486499,
+      "sha256": "5e29b95b3bcfebb1162dc87e593b814aaa85545038511de0abe58127a428799e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-7-1-3.laz": {
+      "bytes": 362072,
+      "sha256": "c5e8403c5330ede2b730ffe4d11674aa27abb253d46cc2563361af54e9293414",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-10-7.laz": {
+      "bytes": 238794,
+      "sha256": "e563ba6f12a283b92a54224a842676974415258d9154a3912f669b7cc9c7ed43",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-11-7.laz": {
+      "bytes": 1193310,
+      "sha256": "2ed84fa51532fc976cdf75d02952b2dfcec6cedec09b9c4ce793dedd6c89b801",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-12-7.laz": {
+      "bytes": 1316207,
+      "sha256": "58d1f0e75ef3d61ed1274593f724054b125112ebb701f190206bc079d23d2e6f",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-13-7.laz": {
+      "bytes": 1190818,
+      "sha256": "7b403a88ae20d94510770ed0a2195a383f4b7b6d9e687ad7410cfbbf39dc4113",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-14-7.laz": {
+      "bytes": 324269,
+      "sha256": "1c75193616cad10232b4a072ba706841dbc453b5bf9a3e2d98f008e9451fea04",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-14-8.laz": {
+      "bytes": 19272,
+      "sha256": "5f0b7723418c1a79fcbd174f99fb8a608c485f8613b18b5b7c5b6e18db1e57e0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-10-7.laz": {
+      "bytes": 96185,
+      "sha256": "8860fed2c19ddebdfd6ec40c588c76c2ff049efcad85f612bff286f1b6433214",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-11-7.laz": {
+      "bytes": 1259047,
+      "sha256": "d4381836c3873bddfac18f608ad22cbe062e72e406f25e4dd6a19ca77054ec08",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-12-7.laz": {
+      "bytes": 1471544,
+      "sha256": "5d34d5765c10a1ebd0bfbd267a8fc1c1716657ac06ff70cd8f7e076397baf42c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-13-7.laz": {
+      "bytes": 1294645,
+      "sha256": "f8f7d3c865cf7fb0c818d4eda3f55073fe1c73ce7ad52980895ec6c9a1e67dae",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-14-7.laz": {
+      "bytes": 494018,
+      "sha256": "69ad4709b7d979fe579eb7f82128f89b89bee4096731bc5f5b43bc687a84f089",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-2-7.laz": {
+      "bytes": 81585,
+      "sha256": "07581baf96fa09d2b9453d8f2ac2a20d0ba3d9eccf63f0f07424a4bfaa636105",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-3-7.laz": {
+      "bytes": 1061930,
+      "sha256": "07fe407f4b3ded15644541544016df12a89e29cae3b3bf8f1111f059b145eac7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-4-7.laz": {
+      "bytes": 1340061,
+      "sha256": "9c68dc45c12b66b87cfd8a9fddb945ea7c72e624ba51a3e27aeb74ae0be8d9ea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-5-7.laz": {
+      "bytes": 1281536,
+      "sha256": "fd3cf40bc16e99fe405857dad0857fcc0681397c721dc450111f608dea495df8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-6-7.laz": {
+      "bytes": 402529,
+      "sha256": "8f3b9da5d7dde7292cff4067f3a912d9e8664773f86964cfb421022585497a69",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-2-7.laz": {
+      "bytes": 883553,
+      "sha256": "83800b1dc03a6d2065f50eb44d1d9d36edc0c3eb96d0f3f091e01467e3bbb800",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-3-7.laz": {
+      "bytes": 1262275,
+      "sha256": "1ee31f95c337f80c411dab965a81ecc335c6b605c30a61c8d8b1315d8269706e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-4-7.laz": {
+      "bytes": 1448976,
+      "sha256": "3ca3fbccce4884e02a7160a0efa1ac4e7266c8413a4e8217da26820c3152b0da",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-5-7.laz": {
+      "bytes": 813774,
+      "sha256": "992d2a52ca49c555573ee7aa205297b68c0337a1d9cb572b1b12c6daa85de8d5",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-6-7.laz": {
+      "bytes": 52021,
+      "sha256": "c4864c266da6b7f9ff3eba2205d20d3bebdb7ecaa5f0db65eaad1c9d6427a868",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-1-7.laz": {
+      "bytes": 438419,
+      "sha256": "6a57824c1e271ecf83c76183fd34934eef433424efb0df2a76728ffd9f5f414c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-2-7.laz": {
+      "bytes": 1416666,
+      "sha256": "332210506c95cd03f9e795ffc3113b5d04f57482c92b07bff2f1696159decd66",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-3-7.laz": {
+      "bytes": 1496416,
+      "sha256": "049d7441b1d057e2f52ecf313196d6abe0c557299e0097d7a3d45140ccebb645",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-4-7.laz": {
+      "bytes": 1403072,
+      "sha256": "7bd7f0c9554a4415906e764664e62ab4c7e9dc21024c7f2af9364a584023e054",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-5-7.laz": {
+      "bytes": 341299,
+      "sha256": "58340e41d1e1980936ac19548629bb1b445f8e8668fedbf3ee24c169e13deb09",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-1-7.laz": {
+      "bytes": 809114,
+      "sha256": "fc67d2ff466eeed40d0256d84e1c44bb9b79fc399111381e40292ba9965708fa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-2-7.laz": {
+      "bytes": 1307333,
+      "sha256": "72ea016afcb2d407e18ddb354724ab100dd385b7965b817e1dfba7e0b23deb08",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-3-7.laz": {
+      "bytes": 1289783,
+      "sha256": "df9a1f4529cd360bfe4274f1df63a0533d33801dcd3f1e7195c19f37a5dbe605",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-4-7.laz": {
+      "bytes": 347141,
+      "sha256": "d895cab70f3143b53cf95a0a2fc50c2f8912e6ad3d1364cae225ca7ea40edf65",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-1-7.laz": {
+      "bytes": 1077567,
+      "sha256": "e38046666195da11cd3f106b58a15ad2914a3e8517164af688499a0bac59b63d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-2-7.laz": {
+      "bytes": 1166122,
+      "sha256": "8d7a26944ff20f288d636eb89ba7f9f488ab2c00a2c833819183c5b668ac2c4d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-3-7.laz": {
+      "bytes": 237105,
+      "sha256": "09ff1321a7d7fac641e8aca7a913ea349fcb744ce120773e03e6eb8e102a922b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-0-7.laz": {
+      "bytes": 18511,
+      "sha256": "413a659fc574d833b7e5c74836c743d646f184c4a1afa4d6d3ad39ecd1f851cc",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-1-7.laz": {
+      "bytes": 1041780,
+      "sha256": "643b20004caebf717f5b0b93a5e310ec5318490e930186e27db06804e7ca0279",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-2-7.laz": {
+      "bytes": 147919,
+      "sha256": "22aab2d6a967f8ac0857ed303f2a10d69fcd7b0a41dbb37295d30104c4613d60",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-10-7.laz": {
+      "bytes": 463472,
+      "sha256": "2b96476676f0b60ecff0e0fd9512ff420dfd46ea4e4f3e04f772ff00f93bf5e3",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-11-7.laz": {
+      "bytes": 1353283,
+      "sha256": "45202e15c8aa0d64fd0834bc3250f62a71690c4cc68d7d407864ec63192816b4",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-12-7.laz": {
+      "bytes": 1480552,
+      "sha256": "d577d43c14be42a317a535aeba4777dbb2cf92bfc891ffeaef268b0cc296a805",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-13-7.laz": {
+      "bytes": 1420544,
+      "sha256": "8e344e28673cb8773da6797a06ec1a13340784e77a31656b893272b6dcc32d6d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-14-7.laz": {
+      "bytes": 749888,
+      "sha256": "892678837e5c78e9316eb0a00fc716ef5cdd06c775628123d929eb85c10d1bf2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-8-7.laz": {
+      "bytes": 18434,
+      "sha256": "e58ace506e5f9bb972d7110f95b1eae3f7dd28a4b70b8dcceccc4bd28236bfea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-9-7.laz": {
+      "bytes": 52076,
+      "sha256": "40a6bdce9e3523fbe1d771d264bb9f7f50148d2b8d57bbf27e499cf5b3072727",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-10-7.laz": {
+      "bytes": 1647021,
+      "sha256": "9e8c3a4ef46a95d1df393e3388f4bad40739cf48e65b974af65d38fa752da916",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-11-7.laz": {
+      "bytes": 1486021,
+      "sha256": "735173e2ce69de354f65c39ad65453996c534f115c2941d87fc6895e85507c41",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-12-7.laz": {
+      "bytes": 1313027,
+      "sha256": "5d78b04cba99eb2651b5f1268569e575c5801763e207de6a11138f29ab426ac0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-13-7.laz": {
+      "bytes": 1664283,
+      "sha256": "89d0a049ac06a6a3abb6f46c17722a786abb4bf26b4a3e22080549c073c8fdb0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-14-7.laz": {
+      "bytes": 1317567,
+      "sha256": "18598ddf3604b8a5498ddee8183138946e06be2c5fa80c110b2ac22b79a2e548",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-8-7.laz": {
+      "bytes": 838952,
+      "sha256": "2aee1a8d4d5d51450c7ec3a7a060bc4163463855d7c289c31fa66dfab863d0aa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-9-7.laz": {
+      "bytes": 1322617,
+      "sha256": "a4bd2ad4731159f75c92cd0c30f5acd15829cd4229ce924cf85e80f7e6b1ffe0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-10-7.laz": {
+      "bytes": 1358516,
+      "sha256": "6631019012077ba7b53700781ecafd2a44a8f856d90274e5659ae1324bd64427",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-11-7.laz": {
+      "bytes": 630814,
+      "sha256": "2e590784aefa257fb2b1f0e7e69898e3902424429a360731ff6706a488480f15",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-12-7.laz": {
+      "bytes": 227096,
+      "sha256": "a0f9bd8a001ce06df2a08c39d5f6b04dfc312fc57993ef08a08df7335a55392e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-13-7.laz": {
+      "bytes": 1481719,
+      "sha256": "2ef23ffd38c2caa59431c36b309e0c566844a707078b8dd1cc787b7f5eddafa6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-14-7.laz": {
+      "bytes": 1317015,
+      "sha256": "6a14005adbfcb4126242db4c937d6b2fe72e7321bdb962a0b875a9c40e9be0d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-15-7.laz": {
+      "bytes": 171392,
+      "sha256": "cc7f6c18861e2334aabe2f30231392dae3ad1ff9b6e1a0c93f8ebb5596fd4163",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-7-7.laz": {
+      "bytes": 593388,
+      "sha256": "c181c5ccc62a31175b551bbcda77fa9f340e3093255d8a81edfd9190f3e08369",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-8-7.laz": {
+      "bytes": 1461361,
+      "sha256": "c6c3ca5699f9bffb275e558bcac980f6422ca347258f4ba7ba66e50e74d7ddaa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-9-7.laz": {
+      "bytes": 1383166,
+      "sha256": "ed9db77cc3dc114ea6d1ae7950b7217d6db2e8eab77baeb704f129d651618627",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-10-7.laz": {
+      "bytes": 1493481,
+      "sha256": "a0824b3ab75c09e2112fa54510f858e96771e7f7814eaa1641a78b165b2920c2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-11-7.laz": {
+      "bytes": 681872,
+      "sha256": "d3771b220b07a8516b5d7dff2ae62d9341dc9cebd062d41dfc4b6790abf96634",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-12-7.laz": {
+      "bytes": 47742,
+      "sha256": "699a0d57c6e0b335fca132dc10f8880e677bf86ee28eea71adea29b252d3506d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-13-7.laz": {
+      "bytes": 435187,
+      "sha256": "224ccfd04a27eeff9324450186fae500c757054f04a16f59d48bf38c0d9df53a",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-14-7.laz": {
+      "bytes": 139500,
+      "sha256": "5d7868daa6f64365661b7cbc1c9d289799c1d9dcfab4e779dfef24f747ffd633",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-6-7.laz": {
+      "bytes": 226502,
+      "sha256": "caa4c326411d0316ad2d1f80c5e97bee482acd7813c1e360b72f64f2210649f6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-7-7.laz": {
+      "bytes": 1409972,
+      "sha256": "1aea749cb165b2a3f68a7c44fb373b1f3534ee2e7bb5feb503df5d4dd0488da8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-8-7.laz": {
+      "bytes": 1617155,
+      "sha256": "03b9a43cc3972a160df029a49f11def4a28deef0eae309739ec775a42d535717",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-9-7.laz": {
+      "bytes": 1567950,
+      "sha256": "2135cb5c50a5677f67a9d27ad13388035f41d0180f6d8564f9c7c55b99e98935",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-10-7.laz": {
+      "bytes": 1336140,
+      "sha256": "853889714f3e32e11c0204b766d67bd47642133c8afc7aa380c3215e96875a54",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-11-7.laz": {
+      "bytes": 152755,
+      "sha256": "18c2ad0cc556ad0fbb6f93401abe5dba27e27aa5386e246918fd803dd70fe0a0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-5-7.laz": {
+      "bytes": 86959,
+      "sha256": "336162098b2f6da8d7b5acb2f687fc8a24201cdd68b7db43b5cc266388df3b63",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-6-7.laz": {
+      "bytes": 1218962,
+      "sha256": "6e5274b8c85b77304862f9ee85511488e93d98eeb2275df8e1b0a69f0e634a70",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-7-7.laz": {
+      "bytes": 1362386,
+      "sha256": "a46e5300bd2b0dc587640ff90dbc56e01e6998b21299f790ce68748b49eeb97a",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-8-7.laz": {
+      "bytes": 1562588,
+      "sha256": "6b8b6f43f539c6cd89ddfc0650c2cba51d36658579ee86f015661e8712b0e7db",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-9-7.laz": {
+      "bytes": 1611407,
+      "sha256": "12624fbb0d05978fe21875c2696007da2a8a46148dbf2924781b232dc53c66b9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-10-7.laz": {
+      "bytes": 704529,
+      "sha256": "456d4cf1f70b571b91967a4e6aea32eae4141e28f8f8bb88fa2309637cbfd497",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-4-7.laz": {
+      "bytes": 12815,
+      "sha256": "84fa25660b76c386134f3d66e9d380d073734f7d651f02ceb611711eda6e7ad7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-5-7.laz": {
+      "bytes": 785034,
+      "sha256": "dd623f81226c7c2082a49497b1629dc57b78600811e2de589e1ec88a0e99e54d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-6-7.laz": {
+      "bytes": 1484422,
+      "sha256": "2cd6697bfc792f8b39fe2f587accac138d1fdb43d3bbbd74f725591da63794cb",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-7-7.laz": {
+      "bytes": 1237464,
+      "sha256": "0f13ddea100ce0dcf6c35c5139aa52f747a1bc01b3a5feb0b0a6d490abd6ff25",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-8-7.laz": {
+      "bytes": 1071594,
+      "sha256": "f6d838e2a046a8b5bea655f7113443cad13cf128d76781ee21a9bea4177b4d24",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-9-7.laz": {
+      "bytes": 1305000,
+      "sha256": "0982fd82c34cfddc8e9d6efb978006e7ec3830cd8f4ebecf143c18e9f5a1555b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-10-7.laz": {
+      "bytes": 954436,
+      "sha256": "6933e82f48c4d7fed6f6b3ab477ae7b00d2a90555a813dafed8e08bea79ff6a7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-11-7.laz": {
+      "bytes": 61628,
+      "sha256": "ecc93d7d2bdb66125216f24f20b3058dc6292e45c34a29553cdda7458b91f381",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-4-7.laz": {
+      "bytes": 432581,
+      "sha256": "cc87fa4c97f996a74c9b1e0927259a685c2dd1d1699401cb38c8bbf5fb11ad57",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-5-7.laz": {
+      "bytes": 1201196,
+      "sha256": "1f28b8d11a8a8e39f60089b406a35e97facd1f37e3d558911f46c4cff81c84ad",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-6-7.laz": {
+      "bytes": 1404171,
+      "sha256": "83da81b4a4018dc24e2c834f424cd23a38acb832d260a39b20e41d9a4be7bc2c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-7-7.laz": {
+      "bytes": 659849,
+      "sha256": "aa99c54441341985f7ab76f2943ac2aad47b161655bc1da328d05631d2601e89",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-9-7.laz": {
+      "bytes": 145771,
+      "sha256": "2e3713b1f5c80eebc452c67a3f4734043329e6b564c0989759fe01a7ce8ed12b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-10-7.laz": {
+      "bytes": 212810,
+      "sha256": "079cdf0499a8c36561bbf4a79dcfdc034d553b9655fa8444de6475d8a20abe99",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-11-7.laz": {
+      "bytes": 104315,
+      "sha256": "d9dfc15f3f36f00ac5c55bdd63aee4af09377bdae74c6e2d35b07c157ed51a63",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-3-7.laz": {
+      "bytes": 254820,
+      "sha256": "152c6195dd1d8df2fc4b5f7006a214585f6de405651345583b26ce5736e6fb5f",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-4-7.laz": {
+      "bytes": 1300636,
+      "sha256": "76d6281629eeb7e9143ea698e5fd7ef9485a34e74423ef61aef2e22bb0ca8e23",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-5-7.laz": {
+      "bytes": 1451994,
+      "sha256": "d58b88fee0483e89f165b1f4dabbcb62447a8726aaceee8d240655e357bea0d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-6-7.laz": {
+      "bytes": 1244195,
+      "sha256": "a662d1093bd4b3669016f9470eb0b77a0fb07541fc546efb93c91817803e1b61",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-7-7.laz": {
+      "bytes": 219746,
+      "sha256": "510334148251a28e39e049ed5d08a281214644db37f0a10e6eba1d45dbbb5304",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "bytes": 2688,
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9",
+      "source": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "bytes": 47261499,
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/copernicus-brisbane-2x2.tif": {
+      "bytes": 142910919,
+      "sha256": "6825aad59c1f4411d81f32bc258c7a11ad5174b3551a5012d68d9568d103a4c6",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/copernicus-s28e152-utm56s.tif": {
+      "bytes": 41239550,
+      "sha256": "80a90f59f86c225aaed07cfd7a4ebd086ee7add6d1592185dd058b3e08e39957",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "tiles-1.1/MetadataGranularities/COPYRIGHT.md": {
+      "bytes": 1065,
+      "sha256": "3aabf955cbd95961f1ed441e7cd0406d8b0ba362a06e78d31821696c59f407ff",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-3-0.glb": {
+      "bytes": 52420,
+      "sha256": "204ed64deb11a443397574122338d88964b49ea091ffece271eede37b6f7f37a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-4-2.glb": {
+      "bytes": 34660,
+      "sha256": "bcefc0e28d414f7344ec41f0df8218490305b00b80379eedd957594dd7b78bfc",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-5-3.glb": {
+      "bytes": 63000,
+      "sha256": "86731ee2434d93072a0c52254bf4b923e277bf07ce687cb5f654ed317eb8c6bb",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house1-1.glb": {
+      "bytes": 34236,
+      "sha256": "dca9a2733a762e0d95ce08ca0cb7416cc775097bc9550a120ba1237823bd322d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tileset.json": {
+      "bytes": 9653,
+      "sha256": "332bff6d2cd99f6d295a915340841eea82d63f684e6a09b245afe8e044ecb140",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-0.glb": {
+      "bytes": 159192,
+      "sha256": "a0003f1b13d29facbcc945eca32b8e71de1691fb2811a74f98ce6d5bdcb5e65b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-1.glb": {
+      "bytes": 159192,
+      "sha256": "75abcefb164ac69c3ed5091b3bfc8dbb8b47af9294a7bb8693be288271d470e0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-2.glb": {
+      "bytes": 159192,
+      "sha256": "f83468ceddd79346a51074e67f725afb0daf109b0ec6d4dd2ebd5e26f9c93f10",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-3.glb": {
+      "bytes": 159192,
+      "sha256": "cb1365d3975e00ada813bcf95b0ca228bb1b965bbcd9ba58be5ea3843f741831",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-0.glb": {
+      "bytes": 233076,
+      "sha256": "592e97e5b143b995629c97a8f82fc8baaaccc56627749ff51909dd8b58a33e61",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-1.glb": {
+      "bytes": 233072,
+      "sha256": "32314c479676bb470c845e53a230d8b4cd9e88694037648e867f6254392b82c3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-2.glb": {
+      "bytes": 233076,
+      "sha256": "dbf3d7e97fe6fc2c1d94ed53957b9c91f19099ae75c086599b302a5e4c981658",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-3.glb": {
+      "bytes": 233076,
+      "sha256": "e2bc0bc4a37143f42f3ecb7d29aefe8f667d2146fa4aeff5e4e9f145b6b14832",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-0.glb": {
+      "bytes": 233072,
+      "sha256": "ccc5154931cd34570eb5aa0e3e0118978b23cae0f3150199356deb3fef6ac2a9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-1.glb": {
+      "bytes": 233072,
+      "sha256": "d475b5c798c52e953ab253f5963fa825173ab711fe2d8396dbb371e7d3dc7192",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-2.glb": {
+      "bytes": 233072,
+      "sha256": "16bd4d4f70300dcb4ffec502a2c6eb1b271804b585ce69f10ce4d1072b4975d4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-3.glb": {
+      "bytes": 233072,
+      "sha256": "2fc1e6b92790f81a2c135d1a871892fdb13bc0ea8635758bdcacd4b523feba27",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-0.glb": {
+      "bytes": 165680,
+      "sha256": "d2fd203f14b37266c23b14113b11d713ee567934b44f6e719ed535cdbcd1340a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-1.glb": {
+      "bytes": 165680,
+      "sha256": "c2d06a01ca19f37d635aedd89670109d6485a952acd074207c3e5e8e599d8c5c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-2.glb": {
+      "bytes": 165680,
+      "sha256": "04602fcb97bf6479c651caf1418318d5d5e417dfa69864bcf53a61c53fdc1324",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-3.glb": {
+      "bytes": 165680,
+      "sha256": "87827aca24ee3b0ca3d8bdecdf099d9340375cc7d0a07cfe7a0a493d68d62cd4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/planePoints.glb": {
+      "bytes": 267140,
+      "sha256": "a7145466460ddf8795cd22171aa168a446207c3b1ad50f3f487f3c8edbc5673c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/planeTriangles.glb": {
+      "bytes": 113332,
+      "sha256": "3a4ba6fbaf39db1a421339b56c82b30daf92c16317a940f91d88feb512ecb27e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/tileset.json": {
+      "bytes": 392,
+      "sha256": "bb6db5235483121e0a35049280a939c39bbffe57996bf4944f41b98dfaa2f1d2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_1__0_0_0.glb": {
+      "bytes": 1812,
+      "sha256": "a84bbe22244eba93ad5e85ff2e85b24fe78a3f75b9580348b2705eed8bdde14a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_2__2_0_0.glb": {
+      "bytes": 1816,
+      "sha256": "47eb137020428228879382a50b88fa6780c8af161001226d9fb9056a445e7c33",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_2__3_1_1.glb": {
+      "bytes": 1816,
+      "sha256": "ef08ff0db5e32ae8957e114e182ba0e29826a45658d9bf08a060feca5523133e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__0_4_0.glb": {
+      "bytes": 1820,
+      "sha256": "f03e373508ff51eb5ab4df9e17a54e3f25797da4eeccf710a82bb9eab77ea313",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__1_5_1.glb": {
+      "bytes": 1824,
+      "sha256": "e4de57b6246f761bd7975001e4e0d699051951b88c356542c8f241cf18c3fab4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__2_6_2.glb": {
+      "bytes": 1824,
+      "sha256": "da24c0865913ca7009d79be96e46a4fe6d2fab4df99a68cb52123e44efa285f9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__3_7_3.glb": {
+      "bytes": 1820,
+      "sha256": "f6d2bd317ef311d740c3a8620c9e27afec96d84cad80fb6e5ac67f576722f9d9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__10_10_2.glb": {
+      "bytes": 1828,
+      "sha256": "ee666c4da3696ed0f661157bece6ecc31f498dae20f27a8bb52ce797ee6f5c5d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__11_11_3.glb": {
+      "bytes": 1824,
+      "sha256": "2bf4a0703f7d69a5f93da086946173e3c1aba879b0abe274d55f29cc812f1e3d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__12_12_4.glb": {
+      "bytes": 1824,
+      "sha256": "90edeb649bfe9ea79ca32825a27058d33e509f2491b07cadad32ce32bb399ab9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__13_13_5.glb": {
+      "bytes": 1828,
+      "sha256": "4fe99a995b42eb15210c1efb670d83434bd0dd7187402ae3dbfb3f114c1c7276",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__14_14_6.glb": {
+      "bytes": 1828,
+      "sha256": "04aaebd677eb7d34b4d844ffffa1b2cbcaffa2bbdfbc043363abf00b32788a2f",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__15_15_7.glb": {
+      "bytes": 1824,
+      "sha256": "e9818757072f06ddbe509eebbe75559d8a5f2ae79da0116b4105709930cb05b4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__8_8_0.glb": {
+      "bytes": 1824,
+      "sha256": "825ff6004d4c1fa9d3d3b66684ccd976088023ee4a7b5fbe6569490643176aff",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__9_9_1.glb": {
+      "bytes": 1828,
+      "sha256": "d14350a71d659f1240de7e4a5988dcf474da37863806bc03cfc5b21b2812d70b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__16_16_16.glb": {
+      "bytes": 1824,
+      "sha256": "4854fc2bf2f9707c8b200dd377a1f5a7f00b5027a096567ce2deaa40cb46465b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__17_17_17.glb": {
+      "bytes": 1836,
+      "sha256": "86f1c9f981fd002f9441ae55e83f4916353e1a4c56bf953e39c477abb09b73ee",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__18_18_18.glb": {
+      "bytes": 1836,
+      "sha256": "074686b0237280222a2121f1d098130f322cd237ec9e467e7e67438570b92f02",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__19_19_19.glb": {
+      "bytes": 1832,
+      "sha256": "37f747be61e6e8623a2e0d4f4d71144ee5251134cc3c134b31ed0b13c27515e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__20_20_20.glb": {
+      "bytes": 1832,
+      "sha256": "91d45e53bfa261c42fe9aa438b5dff46d526ba53791dfc264feabf14bc0b9f10",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__21_21_21.glb": {
+      "bytes": 1836,
+      "sha256": "36f24ae0347b0630741deb2f124a623e6ca69b3a6bf01b5b5150235955b6ac83",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__22_22_22.glb": {
+      "bytes": 1836,
+      "sha256": "85ca3a909c2db19a692f1e19702362f6635b8cff1175fae8701314469b849bb0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__23_23_23.glb": {
+      "bytes": 1828,
+      "sha256": "144b3f3306a61b846eb9fad8674b64d32feed56d775121a1fa37e31731390e53",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__24_24_24.glb": {
+      "bytes": 1828,
+      "sha256": "847f9928d1300e659c29b0fe2b5658ceda33560802929e1c492a892f4b1ecb31",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__25_25_25.glb": {
+      "bytes": 1836,
+      "sha256": "dab6594def6f9e8060a8b41f0844c0be6c8938a823b780d24076c00ecb65be66",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__26_26_26.glb": {
+      "bytes": 1836,
+      "sha256": "bf656a0c6e6d17ca0cbf6273306a012989e9a1922eb6f5e89efe7d53dce74440",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__27_27_27.glb": {
+      "bytes": 1832,
+      "sha256": "7efd3998b6d5984cfbda549de6601d43218bf2a6a482fbb7ae4d4c650e028c55",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__28_28_28.glb": {
+      "bytes": 1832,
+      "sha256": "691acdf0699a84d3b02a4a5a388c4c27976b573913deb5107d5705fe1a2e15f3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__29_29_29.glb": {
+      "bytes": 1836,
+      "sha256": "328b0ee173e42c137204ea8126eb70a251a73510c859af86165fb8579905caf3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__30_30_30.glb": {
+      "bytes": 1836,
+      "sha256": "452e9fc96b05d99b9986f52d0adad37cf59f1cf5fa4c92b69b7a02d81f6b4f61",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__31_31_31.glb": {
+      "bytes": 1824,
+      "sha256": "be920478f6329046e011be90b321f9492e36d25d803a3f933df16f6fcd292331",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/0.0.0.0.subtree": {
+      "bytes": 480,
+      "sha256": "84e184f6e64081d2927815ecdee9063b98e0558c0c1d6658141e752ddfd3c8a3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.0.4.0.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.1.5.1.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.2.6.2.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.3.7.3.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.4.4.0.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.4.4.4.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.5.5.1.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.5.5.5.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.6.6.2.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.6.6.6.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.7.7.3.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.7.7.7.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/tileset.json": {
+      "bytes": 541,
+      "sha256": "536fb0ab8d7da26d01828333f89ad46a274ff1c5d24e01611417db1203fe35f0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__0_21.glb": {
+      "bytes": 1212,
+      "sha256": "eada4e4aa97a2a5fcf48562197b41230e3fd28ec26cbf38b1e10c506ebf07919",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__10_31.glb": {
+      "bytes": 1212,
+      "sha256": "6ceae9264f2c6b20280eb720e56aade39c4e9d41eab2a8c4d8f7278d4c8e6519",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__11_30.glb": {
+      "bytes": 1216,
+      "sha256": "612cd9483e2b6fab1cef61f30458d17a741a62f68ff0c2bce45d6d365d2d29a0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__12_25.glb": {
+      "bytes": 1216,
+      "sha256": "f1ec8e3049649f9ee5dc184803b8c37955d5e742c50bee7e6f2eced66d3c14e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__13_24.glb": {
+      "bytes": 1212,
+      "sha256": "3255065da4ecf9dec5a0db5f7d67ebf6eff9708e415ec8424f0c0f11f7aa5a95",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__14_27.glb": {
+      "bytes": 1216,
+      "sha256": "ccdd833e1793465ec3b90d35a7a6bcfe6780387eba766a087f1bf2e54ffff0b9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__15_26.glb": {
+      "bytes": 1212,
+      "sha256": "469c7becc9ef143a5cc5b2319a315f175244f7022ee11b77ea02c3e55eee6775",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__16_5.glb": {
+      "bytes": 1212,
+      "sha256": "764f7bb0ac38ffe2498096f62b61838977509a74d5802ae950114eccab01dfa2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__17_4.glb": {
+      "bytes": 1216,
+      "sha256": "ed0bedaef538c92819647d6c353ea4a5ee3991a5fd725dca8c85d5021e3946b8",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__18_7.glb": {
+      "bytes": 1212,
+      "sha256": "c9a902f6b6fc4ce52849722a20f389fdfafaff61fec0b6c5f9ee510a30f3291b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__19_6.glb": {
+      "bytes": 1216,
+      "sha256": "a5e8a070e70e925f66ca2c7b8e67914b1efb74636d6d5aa64ebba3af5d7a8a81",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__1_20.glb": {
+      "bytes": 1216,
+      "sha256": "83165e43769d88ad9100572055b8beb5c0e2c10408b4db690a5d9014353f3f4a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__20_1.glb": {
+      "bytes": 1216,
+      "sha256": "3a941af6c4e2d0c2589d9c670c38a4178ff4908a436274f1be0debb3d98f3785",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__21_0.glb": {
+      "bytes": 1212,
+      "sha256": "2aba3fcc440a4de17bee60cff2524eda44856bf57ae03428b5840e85bcc412a3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__22_3.glb": {
+      "bytes": 1216,
+      "sha256": "62d3f8fbfb7e5b9b5e453d336249cb7eb29f2261295750ffef2cf9c24897dfa0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__23_2.glb": {
+      "bytes": 1212,
+      "sha256": "ea6f541348d3906144e7b8565f0b5255a7c99a29bfde193d774b5ac2bb06e2c1",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__24_13.glb": {
+      "bytes": 1212,
+      "sha256": "2a4c8316fbc634e7121a70bd62eac140431dd0f5939f76bfc244f8116b82466a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__25_12.glb": {
+      "bytes": 1216,
+      "sha256": "c9b3ff948cef4d10eae58282dd5d956edf5d4786157811167dac15cc23a77c7c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__26_15.glb": {
+      "bytes": 1212,
+      "sha256": "ea6e58bd108e8e9a0fb4b62154fbeee9f9f8a0452fb62ca2753275475724bf0e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__27_14.glb": {
+      "bytes": 1216,
+      "sha256": "7327415c2d844574b135ea297f59add1dc4e3fed7926be7bc68321d15e37d503",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__28_9.glb": {
+      "bytes": 1216,
+      "sha256": "9be0df999baec442b46f03b750813a166969f022ccd749e177d27fff84bbec6f",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__29_8.glb": {
+      "bytes": 1212,
+      "sha256": "cb9de5738eb6de7326d7a2e1b324d992e1875f66ae35a54c51a11d15770cc643",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__2_23.glb": {
+      "bytes": 1212,
+      "sha256": "113c0e917104561e099e8ad4065dade0c3eb6413f616b744b97b0daaaf5922a9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__30_11.glb": {
+      "bytes": 1216,
+      "sha256": "4110982f3355bd7e77be0e23603aabf4d9473c63b480ecfd5c6ab50adfe1096c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__31_10.glb": {
+      "bytes": 1212,
+      "sha256": "2a40242d8fe8d5ec100c3ecd633ebac312ba8481c52b0cc811e1aba7c37765b2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__3_22.glb": {
+      "bytes": 1216,
+      "sha256": "010b378923ea0907c2d3b1dbf2160bbda4e3a71c3bdaf549d498bf9ab6f4b893",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__4_17.glb": {
+      "bytes": 1216,
+      "sha256": "8b25c7b92272d9860e344b34781b69be52b8381d26cf5f721915de855650bfbc",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__5_16.glb": {
+      "bytes": 1212,
+      "sha256": "3c0a66f6403757c388023adf262568234afacad15baf0b08102da097497a141c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__6_19.glb": {
+      "bytes": 1216,
+      "sha256": "d0c97eff5a9c3d8d5f81041b967bb0a53342e64b70e318190f2aaeb373dd8d03",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__7_18.glb": {
+      "bytes": 1212,
+      "sha256": "be7f5fc71bec0ca2ca6ebb8ba048042bee3563dd89246b018d0e4ce551978aec",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__8_29.glb": {
+      "bytes": 1212,
+      "sha256": "c3961c4bb662cabaac3804c911039b603ce007d1370c5022413f2064850e6071",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__9_28.glb": {
+      "bytes": 1216,
+      "sha256": "fea2a9901f20e7adfffb48c481dfa7e939d62545d91eed89237205b7d420b2e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/0.0.0.subtree": {
+      "bytes": 352,
+      "sha256": "aedc86583f9fb27acffa2da55f9617dc8af6aa87c8c86b771976980edb1d90d0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.0.5.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.1.4.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.2.7.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.3.6.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.4.1.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.5.0.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.6.3.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.7.2.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/tileset.json": {
+      "bytes": 543,
+      "sha256": "85156fb54fd75e4b6c2573f8a7cf6ab8848bc5a29218f71d63c072cb323262da",
+      "source": "tiles-1.1/"
+    },
+    "vector/brisbane-roads-3d.gpkg": {
+      "bytes": 106496,
+      "sha256": "7625383096b92a887ca2826924e7aab6350ce1f335323bf25b8e8d5e4ab52d62",
+      "source": ".downloads/ne_10m_roads.zip"
+    },
+    "vector/natural-earth-10m-places.gpkg": {
+      "bytes": 6270976,
+      "sha256": "720af176b03e8f6a2fcc989a17e56d92e4ec600b2a30ed4e8fc6aa0b3db1ea8c",
+      "source": ".downloads/ne_10m_populated_places.zip"
+    },
+    "vector/natural-earth-110m.gpkg": {
+      "bytes": 806912,
+      "sha256": "4627561610d0211e38d93ac9687553fc2f9fa2473e95c61974f622b9425c0969",
+      "source": ".downloads/ne_110m_admin_0_countries.zip"
+    },
+    "vector/natural-earth-roads.gpkg": {
+      "bytes": 26169344,
+      "sha256": "6b7bd310edd1678d0c9f066953d1a202de74bde8c54d64563ba31f1bd80d6bd0",
+      "source": ".downloads/ne_10m_roads.zip"
+    }
+  },
+  "manifestSha256": "cee7c76b3700c1d1368b3f46471f232a526f81960e33fcc86954bb2a03c96e93",
+  "measurement": "Warm filesystem cache; one warmup and rotated serial runs. Conversion process wall/CPU time and largest-process peak RSS; audits and preparation excluded. Native CLI PATH empty, PROJ_NETWORK OFF. CPU/RSS unavailable on non-Unix.",
+  "methods": {
+    "current": {
+      "binarySha256": "cfd5450f2f56c697b5a5a9fd4f9ed70ec034f1867f3a7745e6abe2bc1b823531",
+      "doctor": {
+        "commands": {
+          "convert": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "createTilesetJson": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "glb-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "mesh-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "point-cloud": {
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "local": {
+              "ready": true
+            },
+            "note": "Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it.",
+            "reader": "native LAS/LAZ",
+            "ready": true,
+            "requires": []
+          },
+          "preview": {
+            "backend": "native Rust",
+            "cesium": {
+              "found": false,
+              "note": "No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium.",
+              "path": "target/preview-runtime/node_modules/cesium/Build/Cesium"
+            },
+            "ready": true,
+            "requires": []
+          },
+          "raster": {
+            "backend": "native GDAL",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native COG, display and tiling APIs; no Python or GDAL executable required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12 with raster tile algorithm",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ],
+            "tiling": {
+              "ready": true
+            }
+          },
+          "terrain": {
+            "backend": "native GDAL/Rust",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native terrain sampling and encoding; conversion validates the source-specific CRS operation.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ]
+          },
+          "validate": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "vector": {
+            "backend": "native GDAL/GEOS",
+            "geometry": {
+              "ready": true
+            },
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "GEOS >= 3.10",
+              "SQLite",
+              "PROJ >= 9.2"
+            ]
+          }
+        },
+        "nativeGeospatial": {
+          "ready": true,
+          "versions": {
+            "gdal": "3.13.3",
+            "geos": [
+              3,
+              15,
+              0
+            ],
+            "proj": [
+              9,
+              8,
+              1
+            ]
+          }
+        },
+        "ok": true,
+        "proj": {
+          "availableGrids": [
+            "$PROJ_USER_DATA/nl_nsgi_nlgeo2018.tif",
+            "$PROJ_USER_DATA/nl_nsgi_rdtrans2018.tif",
+            "$PROJ_USER_DATA/us_noaa_WO.tif"
+          ],
+          "dataDirectories": [
+            "$PROJ_USER_DATA",
+            "/usr/share/proj"
+          ],
+          "database": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "inventoryErrors": [],
+          "networkEnabled": false,
+          "note": "Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."
+        },
+        "ready": true,
+        "selectedCommands": [
+          "convert",
+          "createTilesetJson",
+          "glb-to-3tz",
+          "mesh-to-3tz",
+          "point-cloud",
+          "preview",
+          "raster",
+          "terrain",
+          "validate",
+          "vector"
+        ]
+      },
+      "version": "rusty-tiles 0.3.0"
+    }
+  },
+  "ok": true,
+  "payloadComparison": "SHA-256 over output names and member/file hashes, excluding conversion.json and the ZIP index; timing diagnostics excluded, geometry and metadata retained.",
+  "platform": {
+    "arch": "x86_64",
+    "availableParallelism": 20,
+    "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "memoryKiB": 65658268,
+    "os": "linux"
+  },
+  "recordedUnixSeconds": 1791449143,
+  "repeats": 3,
+  "version": 1,
+  "pathAliases": {
+    "$RUSTY_TILES_BIN": "release native CLI under test",
+    "$OUTPUT": "fresh private benchmark directory",
+    "$DEMODATA": "existing pinned corpus",
+    "$CHECKOUT": "rusty-tiles source checkout",
+    "$PROJ_USER_DATA": "installed user PROJ data directory"
+  }
+}

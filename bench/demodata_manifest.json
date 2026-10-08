@@ -1,0 +1,2813 @@
+{
+  "version": 1,
+  "assembled": "2026-10-08",
+  "sources": {
+    "mesh/Lantern.glb": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/glTF-Binary/Lantern.glb",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 9564264,
+      "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1"
+    },
+    "mesh/Corset.glb": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/glTF-Binary/Corset.glb",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 13491364,
+      "sha256": "9582c0dc0dee813be77f60e6ddf7213987c7e11497bf3cc66fd7b18957ae0d26"
+    },
+    "mesh/CesiumMilkTruck.glb": {
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumMilkTruck/CesiumMilkTruck.glb",
+      "license": "CC-BY-4.0",
+      "attribution": "Cesium",
+      "bytes": 441972,
+      "sha256": "31dc008a7b0adc3349888a9bf2d9acc01323a70a301d2936aef3711b36a3f72d"
+    },
+    "mesh/flight-helmet/FlightHelmet.gltf": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/glTF/FlightHelmet.gltf",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 18698,
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3"
+    },
+    "point-cloud/autzen-classified.laz": {
+      "url": "https://media.githubusercontent.com/media/PDAL/data/main/autzen/autzen-classified.laz",
+      "license": "CC-BY-4.0",
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 74416814,
+      "sha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51"
+    },
+    "point-cloud/autzen_trim.las": {
+      "url": "https://github.com/PDAL/PDAL/raw/master/test/data/las/autzen_trim.las",
+      "license": "CC-BY-4.0",
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 3742038,
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75"
+    },
+    ".downloads/ne_110m_admin_0_countries.zip": {
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "bytes": 214976,
+      "sha256": "0f243aeac8ac6cf26f0417285b0bd33ac47f1b5bdb719fd3e0df37d03ea37110"
+    },
+    ".downloads/ne_110m_populated_places.zip": {
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_populated_places.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "bytes": 126591,
+      "sha256": "29b901a2ae0a745741c0642123480e31101ed723086c4d0cae657a8d722c3b28"
+    },
+    ".downloads/ne_10m_roads.zip": {
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "bytes": 9075919,
+      "sha256": "880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9"
+    },
+    ".downloads/NE1_50M_SR_W.zip": {
+      "url": "https://naciscdn.org/naturalearth/50m/raster/NE1_50M_SR_W.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "bytes": 88413091,
+      "sha256": "9e85417223414bbed425aea5dca0f0b4c5661fc94d4f14494140a21a08dfa450"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E152_00_DEM/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+      "license": "Copernicus DEM free licence, attribution required",
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47261499,
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip": {
+      "url": "https://catalogue.data.wa.gov.au/dataset/59e33118-4b23-4dbd-940f-106a9a173dae/resource/ac51dfd4-b872-4ff1-ab51-c04fa411c592/download/floreat-f2-2022_simplified_3d_mesh.zip",
+      "license": "CC-BY-4.0",
+      "attribution": "Cambridge Coastcare via DataWA; EPSG:7850, offset E 382368 N 6466878 A 5",
+      "bytes": 41242406,
+      "sha256": "1b2533fc5c339a2a3e5646a5344c0932fe809c2c4ff0fe37e80d9cece39f89e9"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json": {
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz",
+      "license": "CC-BY-4.0",
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 12815571,
+      "sha256": "d38c6a3d19a2faa9078527b0ec93b54824c50d3aecfb1c78d8d55a264aa73565"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg": {
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz",
+      "license": "CC-BY-4.0",
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 29278208,
+      "sha256": "a69be7ea5886a1ad0dd049fba2e6b9a946892502988d285129d22f6cef5fc891"
+    },
+    "city-model/3dbag-delft/9-280-564-obj.zip": {
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564-obj.zip",
+      "license": "CC-BY-4.0",
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2661385,
+      "sha256": "cd7f88a883cd5635ccd71a9e2c4df492eaa83d16da0e712a1e262af5ec787f44"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept.json": {
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept.json",
+      "license": "Public domain",
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 2426,
+      "sha256": "811ad38e3e2d43cf0dd74f9df734f92e41789ccc8b4e6e7df0ff179114c3ad37"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/0/0.glb": {
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/0/0.glb",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "bytes": 7499156,
+      "sha256": "9ef9d8d0756d1f423cd6aa8bd99f7dd26957f96df03dcbcec6e37103e39350b4"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/0/0.glb",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "bytes": 2688,
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9"
+    },
+    "splats/niantic-spz/hornedlizard.spz": {
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/hornedlizard.spz",
+      "license": "MIT",
+      "attribution": "Niantic Labs",
+      "bytes": 18143098,
+      "sha256": "a076ca6aeb9f1a8fe52526f4a7c381fe8fffec60c0d7eb64b45532189b64bc6a"
+    },
+    "splats/niantic-spz/racoonfamily.spz": {
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/racoonfamily.spz",
+      "license": "MIT",
+      "attribution": "Niantic Labs",
+      "bytes": 24202962,
+      "sha256": "2e068d893730955c09aee324ff170c559f71c0e8758c1b14c3811a5969333cfe"
+    },
+    "tiles-1.1/": {
+      "url": "https://github.com/CesiumGS/3d-tiles-samples 1.1",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "files": 159,
+      "bytes": 4163733,
+      "sha256_of_file_list": "62ffd375deb9bf8a8ed22f50c4f7640dea5a2dc37e2d39e133c1edfd4e574ac6"
+    },
+    "gltf-extensions/": {
+      "url": "https://github.com/CesiumGS/3d-tiles-samples glTF",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "files": 65,
+      "bytes": 5173473,
+      "sha256_of_file_list": "c72d9d9a88d04581b290316856f7944b499637cce5c33fb4cb63e6e542754195"
+    },
+    "mesh/CesiumMilkTruck.README.upstream.md": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMilkTruck/README.md",
+      "license": "CC-BY-4.0",
+      "attribution": "Cesium",
+      "bytes": 1198,
+      "sha256": "72795225ebbbbd09138dfe0a911fadd7b9dbaeddaf134175cc3c9546383be1cb"
+    },
+    "mesh/Lantern.README.upstream.md": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/README.md",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 1080,
+      "sha256": "58a4903ae9c0bbb7d3f6ff1b9263b3b480edb7ca82109afdb06723275835a6c7"
+    },
+    "mesh/Corset.README.upstream.md": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/README.md",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 955,
+      "sha256": "437e4a46f008ed20326d9681b36b381db1ac6ef6730a94bc26f61ca366e12384"
+    },
+    "mesh/flight-helmet/README.upstream.md": {
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/README.md",
+      "license": "CC0-1.0",
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 3348,
+      "sha256": "7724b64fb4fae1135ddec3738d1eb9320d3bb9c890f599c423a09e205fb7257f"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json.gz": {
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz",
+      "license": "CC-BY-4.0",
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2206100,
+      "sha256": "d1985cc8222f7257c7251b45466daaca165bfe2010fdc60fc99a60c08578969d"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg.gz": {
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz",
+      "license": "CC-BY-4.0",
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 4854412,
+      "sha256": "9e85aeda7295d3ca9393c29d16c8115030bb877681b4a351542f15bf159f1da9"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-hierarchy/0-0-0-0.json": {
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept-hierarchy/0-0-0-0.json",
+      "license": "Public domain",
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 252231,
+      "sha256": "139c335cec73e9c075096ca30dbfdc0903e3b3ddd3682024547b949db3832ab8"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/tileset.json": {
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/tileset.json",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "bytes": 1322,
+      "sha256": "a29517618aef75aaf47191949660bc8fed3f121d09555dbc1bbe9e4dfe26b493"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/tileset.json": {
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/tileset.json",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "bytes": 540,
+      "sha256": "bedf1ad764aa1f99908fc66616872e5e4480fb12121b2c9d0182fbf0ae509e01"
+    },
+    "splats/niantic-spz/LICENSE": {
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/LICENSE",
+      "license": "MIT",
+      "attribution": "Niantic Labs",
+      "bytes": 1069,
+      "sha256": "d2b852220d1043148f523c4154e8bf7d9c5e419aede33b4c94115cfc457e4714"
+    },
+    "tiles-1.1/CesiumVoxels/": {
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/Cesium3DTiles/Voxel",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "files": 28,
+      "bytes": 33472,
+      "sha256_of_file_list": "156f8760ba6cc0aeb8a91c0920fdf15ee556d97bd28aac05d28d0869c89aa307"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/": {
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/BoxInstanced",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "files": 4,
+      "bytes": 6503,
+      "sha256_of_file_list": "e7f8e8bfa80d96f22c6f596a818f82ede0b4e445a61d95e02054027cb50519ca"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/": {
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/PrimitiveRestart",
+      "license": "Apache-2.0",
+      "attribution": "CesiumJS Contributors",
+      "files": 6,
+      "bytes": 20606,
+      "sha256_of_file_list": "fdf79f3b36480b0156f950082a5df89112df69a1c580aac2791c1846e28fe7bc"
+    },
+    ".downloads/ne_10m_populated_places.zip": {
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places.zip",
+      "license": "Public domain",
+      "attribution": "Natural Earth",
+      "bytes": 2811199,
+      "sha256": "cd149186f03d2603e0410da399b980a4357d0ac32d3a2305a49ed3dffcc41d7b"
+    },
+    "imagery/S2A_56JMQ_20250704_TCI.tif": {
+      "url": "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/56/J/MQ/2025/7/S2A_56JMQ_20250704_0_L2A/TCI.tif",
+      "license": "Copernicus Sentinel data, free and open under the Sentinel Data Legal Notice",
+      "attribution": "Contains modified Copernicus Sentinel data 2025, processed by Element 84 / AWS sentinel-cogs",
+      "bytes": 326477076,
+      "sha256": "84b3e211ab135fb4eb9aac6faf923d1d6e2268ac77e35d0fceee73affd784d1a"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif": {
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E153_00_DEM/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif",
+      "license": "Copernicus DEM free licence, attribution required",
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 15824152,
+      "sha256": "dea0be928bddde7158a1ba8d6d9dffde62d0f8d2c9b3a6eef13dcea94069e196"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif": {
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E152_00_DEM/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif",
+      "license": "Copernicus DEM free licence, attribution required",
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47965852,
+      "sha256": "24ac3224821f3d2b0e3933bd7d6d64b54eb11ab5dae363aef3c64d83d57bf47f"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif": {
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E153_00_DEM/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif",
+      "license": "Copernicus DEM free licence, attribution required",
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 5894466,
+      "sha256": "783d5dfa1108d3fb95c107e55dd2623f3268fbbacf9229793b42c3d42da9fa5a"
+    }
+  },
+  "files": {
+    "city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb": {
+      "bytes": 8409780,
+      "sha256": "3a25632979497420ad6d75198194943c5cc58f4d24e547f284f55695fc40ba00",
+      "source": "city-model/3dbag-delft/9-280-564-obj.zip"
+    },
+    "city-model/3dbag-delft/9-280-564-obj.zip": {
+      "bytes": 2661385,
+      "sha256": "cd7f88a883cd5635ccd71a9e2c4df492eaa83d16da0e712a1e262af5ec787f44",
+      "source": "city-model/3dbag-delft/9-280-564-obj.zip"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json": {
+      "bytes": 12815571,
+      "sha256": "d38c6a3d19a2faa9078527b0ec93b54824c50d3aecfb1c78d8d55a264aa73565",
+      "source": "city-model/3dbag-delft/9-280-564.city.json"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json.gz": {
+      "bytes": 2206100,
+      "sha256": "d1985cc8222f7257c7251b45466daaca165bfe2010fdc60fc99a60c08578969d",
+      "source": "city-model/3dbag-delft/9-280-564.city.json.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg": {
+      "bytes": 29278208,
+      "sha256": "a69be7ea5886a1ad0dd049fba2e6b9a946892502988d285129d22f6cef5fc891",
+      "source": "city-model/3dbag-delft/9-280-564.gpkg"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg.gz": {
+      "bytes": 4854412,
+      "sha256": "9e85aeda7295d3ca9393c29d16c8115030bb877681b4a351542f15bf159f1da9",
+      "source": "city-model/3dbag-delft/9-280-564.gpkg.gz"
+    },
+    "city-model/3dbag-delft/offset.txt": {
+      "bytes": 36,
+      "sha256": "bc9245ada1ffb31d1ff0085bbfc45b40da4c1d82ad62711fae731b069eba4884",
+      "source": "city-model/3dbag-delft/9-280-564-obj.zip"
+    },
+    "gltf-extensions/CESIUM_primitive_outline/BoxPrimitiveOutline/BoxPrimitiveOutline.gltf": {
+      "bytes": 3162,
+      "sha256": "34fd88b5a5d1f96c1abdfe8fae026fb3a54086285e94c8151bced2091559d107",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/CESIUM_primitive_outline/BoxPrimitiveOutline/screenshot/BoxPrimitiveOutline.png": {
+      "bytes": 19552,
+      "sha256": "e122b9d3f2f1d8cd53004136230c92fb684e33a25068f4c4a7c7a38cde0df7f5",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/CESIUM_primitive_outline/BoxPrimitiveOutline/tileset.json": {
+      "bytes": 355,
+      "sha256": "fa312a2be4bb1d27156793818a077c78f3c9e0e58138ec32bb3aeb61c25a6549",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdAttribute/FeatureIdAttribute.gltf": {
+      "bytes": 2748,
+      "sha256": "e05ad5958ae719663542b8338a7b479e15c5db6dc867e50039dabebcf6c68270",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdAttribute/screenshot/FeatureIdAttribute.gif": {
+      "bytes": 73002,
+      "sha256": "274d7a947a1e85269c8cad02321a5576c725948fa336533e34b2189e4ecb4b10",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdAttribute/tileset.json": {
+      "bytes": 351,
+      "sha256": "b771756f5dc866f6f69884fb770b8811bfbaea7ab8d976d326dd4fbdb8a970a8",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdTexture/FeatureIdTexture.gltf": {
+      "bytes": 5962,
+      "sha256": "7afe15c55c452e445e2f5d711154e2b44f24354ee15d06b4fa8b7afb376e4451",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdTexture/screenshot/FeatureIdTexture.gif": {
+      "bytes": 75326,
+      "sha256": "5d75e7753e4068f926956b0c9cdf52c86a48932349413a30832a7089decac199",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdTexture/screenshot/featureIdTexture_documentation.png": {
+      "bytes": 1735,
+      "sha256": "5b61fd31e0db6b82a8969e87a0647b9dc78b115203b52c8666e179ce2d18bad0",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_features/FeatureIdTexture/tileset.json": {
+      "bytes": 349,
+      "sha256": "35561a1586ef855f61f78842179e3455fa0d0a82d67536f6afd460aa55c4e4ff",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/BoxInstanced.gltf": {
+      "bytes": 5575,
+      "sha256": "a6cfb2da49cfbf28c258d0fc79dc13cc355f697110dd112705b202c4df0a3a29",
+      "source": "gltf-extensions/EXT_mesh_gpu_instancing/"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/geometry.bin": {
+      "bytes": 648,
+      "sha256": "0c3398d9b244c4a54ce64196448e6c07323f875cb78ecd534d7fc273a28d20ba",
+      "source": "gltf-extensions/EXT_mesh_gpu_instancing/"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/instances.bin": {
+      "bytes": 176,
+      "sha256": "d43f7f7f14a3d6831d08e83b63ede553eac38a760afe0718bea7362d4e51887d",
+      "source": "gltf-extensions/EXT_mesh_gpu_instancing/"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/metadata.bin": {
+      "bytes": 104,
+      "sha256": "c9044669b9167bebc9018f6f90d1b8db4ee168faaf15f67c065e56dfea961745",
+      "source": "gltf-extensions/EXT_mesh_gpu_instancing/"
+    },
+    "gltf-extensions/EXT_structural_metadata/ComplexTypes/ComplexTypes.gltf": {
+      "bytes": 6528,
+      "sha256": "d14a7239aa187563148db8f1cdda94c2f132530dd96b977605938c3b5562976f",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/ComplexTypes/screenshot/ComplexTypes.png": {
+      "bytes": 106131,
+      "sha256": "099a93c996fbdb2d2d767885a2b0a5b4cfa419b6a4337c2736bf143f761bc532",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/ComplexTypes/tileset.json": {
+      "bytes": 345,
+      "sha256": "00e217a459bc742118d20c81750d001f63549dc8cfd15b8422b08dc4e69a1ae5",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdAttributeAndPropertyTable/FeatureIdAttributeAndPropertyTable.gltf": {
+      "bytes": 3946,
+      "sha256": "f5e93a9b9be7ca41e62ce270c17d9ec0685f2952e8027405fd4898f886aa1f38",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdAttributeAndPropertyTable/screenshot/FeatureIdAttributeAndPropertyTable.png": {
+      "bytes": 111183,
+      "sha256": "188cd87bb146e1cc2c5564863fe1301163d82de75cea54de64a672c60e1d255d",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdAttributeAndPropertyTable/tileset.json": {
+      "bytes": 367,
+      "sha256": "736d9f1ef77c18ab17be0ee94a720278edc15018d3cdb9f90a30b7cfae58825c",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdTextureAndPropertyTable/FeatureIdTextureAndPropertyTable.gltf": {
+      "bytes": 7308,
+      "sha256": "445bbb91c721cbeaf5d8bf9a2212ece817e2be0005036678ffd6dc0466382b1b",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdTextureAndPropertyTable/screenshot/FeatureIdTextureAndPropertyTable.gif": {
+      "bytes": 730548,
+      "sha256": "3149514bb3a447d15fc662873ffc669dcad96789100ec01dd902aa8b0aa90bf2",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdTextureAndPropertyTable/screenshot/featureIdTexture_documentation.png": {
+      "bytes": 1735,
+      "sha256": "5b61fd31e0db6b82a8969e87a0647b9dc78b115203b52c8666e179ce2d18bad0",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/FeatureIdTextureAndPropertyTable/tileset.json": {
+      "bytes": 365,
+      "sha256": "02181453e6449e3c219054bc413e8ceee4a69da06e314da699137a2a574f4313",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleClasses/MultipleClasses.gltf": {
+      "bytes": 6474,
+      "sha256": "4a64890d9fe8dabeeeca0e79e767d0d36c764ccd1d1ee65f51d79ba30a562b92",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleClasses/screenshot/MultipleClasses.gif": {
+      "bytes": 443987,
+      "sha256": "40cce54c25fd7051772bf6eb9eac2d4c79ee6a5fb6994096f9c2a887b5b37259",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleClasses/tileset.json": {
+      "bytes": 348,
+      "sha256": "f7e637624d3eb18bff0114e0bcb7555c0bbcd99d6253a3f6db93f92c6fb08c67",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleFeatureIdsAndProperties/MultipleFeatureIdsAndProperties.gltf": {
+      "bytes": 4966,
+      "sha256": "c77bf516e4c97d8db0fed9ce782d6011df732a6d4243558b4fb9da4105064bab",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleFeatureIdsAndProperties/screenshot/MultipleFeatureIdsAndProperties.gif": {
+      "bytes": 343547,
+      "sha256": "27fcb2f00f92bf17f9693c8da29ef3f200078179671fe33aa1e2561eadda3c14",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/MultipleFeatureIdsAndProperties/tileset.json": {
+      "bytes": 364,
+      "sha256": "7889a2a2222b778d624b4052372eb4b8922f8a48c09c8f8c45b615c01e1e287b",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/MetadataSchema.json": {
+      "bytes": 1016,
+      "sha256": "43fd8b5c9633237819c335044fd5bf1d5b7335002d25b50a07d882df61be84f1",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/PropertyAttributesPointCloudHouse.bin": {
+      "bytes": 718784,
+      "sha256": "9edcee4d9d5b1165fbc4806f1cdac0c09138454b8eccd35041579616e2f84861",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/PropertyAttributesPointCloudHouse.gltf": {
+      "bytes": 2525,
+      "sha256": "f0890519fd4fa639756b92f5d5078a8a10c6c74ff816d98b818758d9db11f499",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/PropertyAttributesPointCloudTree.bin": {
+      "bytes": 220032,
+      "sha256": "83307690b7406d2758006e246e9d44c02fe5fadec6c50551bcbcde64bbfb7a07",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/PropertyAttributesPointCloudTree.gltf": {
+      "bytes": 2504,
+      "sha256": "a459285737e3fd48f6726d51879a5ab2b384bcd95a0f57e84dcea90bfe180603",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/screenshot/PropertyAttributesPointCloud.gif": {
+      "bytes": 624369,
+      "sha256": "4fc3b2d1d162a1a5946b4a33884d79345506ea840d87eaa1e0c2e0879d0ce052",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/PropertyAttributesPointCloud/tileset.json": {
+      "bytes": 1772,
+      "sha256": "7389fd24b4a630b460d8bcbedf4da694f0d1423a102c02a27a6f713a83dff32b",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SharedPropertyTable/SharedPropertyTable.gltf": {
+      "bytes": 6258,
+      "sha256": "9e52c37b642a529ef37b41b553dd9c07f809ee7455d5b1e6aa4b58542e6fef7a",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SharedPropertyTable/screenshot/SharedPropertyTable.png": {
+      "bytes": 103325,
+      "sha256": "73525ee4b19d02c9c4bcfc9ff32bda477a71e0f6f8fd461523954cf8ace1a37a",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SharedPropertyTable/tileset.json": {
+      "bytes": 353,
+      "sha256": "eb8950beb9b5f65fe0a57e68b5e2d1fe64538069f2187eb47c00436e20b324b9",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SimplePropertyTexture/SimplePropertyTexture.gltf": {
+      "bytes": 7537,
+      "sha256": "a2a282a39f62378d306d805235a1ef955277d4fc01fec60fbb8bd3fe38b41d26",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SimplePropertyTexture/screenshot/SimplePropertyTexture.gif": {
+      "bytes": 565209,
+      "sha256": "1cab7ae5fc5b0abdd33ab0078f0d0715545c9f425dbd0e66d1f5bf9f65ff9e34",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/EXT_structural_metadata/SimplePropertyTexture/tileset.json": {
+      "bytes": 351,
+      "sha256": "b2d6fa4ac4fbd708c5b9a14afddc6aa8bd84f78305ba9a7d0d8836d550cd7a12",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/GpuInstancesMetadata/GpuInstancesMetadata.gltf": {
+      "bytes": 5604,
+      "sha256": "1615e3167487e85cd71a5a006873a55b5d5d25b33916cb161a04414e36925210",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/GpuInstancesMetadata/screenshot/GpuInstancesMetadata.gif": {
+      "bytes": 900538,
+      "sha256": "8c814e4f28c0f729d75147d562ec9d7c71acfc2d69c5e63c995fb55a176e6750",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/GpuInstancesMetadata/tileset.json": {
+      "bytes": 399,
+      "sha256": "849d24488508346e62a20f129b1285c3f04ab1db5f49284262f81b03b18fb404",
+      "source": "gltf-extensions/"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/PrimitiveRestartLineStrip.glb": {
+      "bytes": 11472,
+      "sha256": "59a8d278b6127618d6fa46583bcca99327d485958aa8c2a60b53a2210a1b0411",
+      "source": "gltf-extensions/KHR_mesh_primitive_restart/"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/primitive-restart-line-loop.glb": {
+      "bytes": 2052,
+      "sha256": "9aec5f2ad112bc81a08366cd5533ec8575e91e3884a9474cdc17dd2a25cdf4e7",
+      "source": "gltf-extensions/KHR_mesh_primitive_restart/"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/primitive-restart-line-strip.glb": {
+      "bytes": 2052,
+      "sha256": "5b4ffa92be9787bb0272545d9b92cef14daedf6077d47ff8aadddadb47074c8e",
+      "source": "gltf-extensions/KHR_mesh_primitive_restart/"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/primitive-restart-triangle-fan.glb": {
+      "bytes": 2180,
+      "sha256": "445498f6421058f3c886d2f3297d44ec73613cda714269ad82323dcd90d559b3",
+      "source": "gltf-extensions/KHR_mesh_primitive_restart/"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/primitive-restart-triangle-strip.glb": {
+      "bytes": 2144,
+      "sha256": "f718cccc1e149fa68b345dc1bae73a63cd44bd575ed9154257c2f0bb76b92e81",
+      "source": "gltf-extensions/KHR_mesh_primitive_restart/"
+    },
+    "imagery/NE1_50M_SR_W.tfw": {
+      "bytes": 173,
+      "sha256": "7f1cc97126a52814c874ec326a8275c7ded3edc4d7bced417f76d71a995069bd",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/NE1_50M_SR_W.tif": {
+      "bytes": 175041354,
+      "sha256": "22a4d66193002df6d4f1fa59655196cde48eba232fd7f60ed2f3bba5004a65ee",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/NE1_50M_SR_W_australia.tif": {
+      "bytes": 2591831,
+      "sha256": "4dbd398f03514dfa269410e09f6cc2c00f09087968d36a01e7dcc781601ea0a9",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/Read_me.txt": {
+      "bytes": 92,
+      "sha256": "88ecca208b41e4a891484986482bab87fcb8be05c9083ac755a0b4395ee145dd",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "imagery/S2A_56JMQ_20250704_TCI.tif": {
+      "bytes": 326477076,
+      "sha256": "84b3e211ab135fb4eb9aac6faf923d1d6e2268ac77e35d0fceee73affd784d1a",
+      "source": "imagery/S2A_56JMQ_20250704_TCI.tif"
+    },
+    "mesh/CesiumMilkTruck-static.glb": {
+      "bytes": 441716,
+      "sha256": "1f2c376b54a5d9eff35408a38bf4991f91f91f81cba33af3a99f89108b33f744",
+      "source": "mesh/CesiumMilkTruck.glb"
+    },
+    "mesh/CesiumMilkTruck.README.upstream.md": {
+      "bytes": 1198,
+      "sha256": "72795225ebbbbd09138dfe0a911fadd7b9dbaeddaf134175cc3c9546383be1cb",
+      "source": "mesh/CesiumMilkTruck.README.upstream.md"
+    },
+    "mesh/CesiumMilkTruck.glb": {
+      "bytes": 441972,
+      "sha256": "31dc008a7b0adc3349888a9bf2d9acc01323a70a301d2936aef3711b36a3f72d",
+      "source": "mesh/CesiumMilkTruck.glb"
+    },
+    "mesh/Corset-static.glb": {
+      "bytes": 13491252,
+      "sha256": "91865e9792c9a7d5ab5c8721a56f4f8b3b85b4b886b42d664c5504a5b7000e2c",
+      "source": "mesh/Corset.glb"
+    },
+    "mesh/Corset.README.upstream.md": {
+      "bytes": 955,
+      "sha256": "437e4a46f008ed20326d9681b36b381db1ac6ef6730a94bc26f61ca366e12384",
+      "source": "mesh/Corset.README.upstream.md"
+    },
+    "mesh/Corset.glb": {
+      "bytes": 13491364,
+      "sha256": "9582c0dc0dee813be77f60e6ddf7213987c7e11497bf3cc66fd7b18957ae0d26",
+      "source": "mesh/Corset.glb"
+    },
+    "mesh/Lantern-static.glb": {
+      "bytes": 9564128,
+      "sha256": "422492d46ca5ba0e03073141e5bfdb3ca45d377c0b2c7e6386513c05327925b0",
+      "source": "mesh/Lantern.glb"
+    },
+    "mesh/Lantern.README.upstream.md": {
+      "bytes": 1080,
+      "sha256": "58a4903ae9c0bbb7d3f6ff1b9263b3b480edb7ca82109afdb06723275835a6c7",
+      "source": "mesh/Lantern.README.upstream.md"
+    },
+    "mesh/Lantern.glb": {
+      "bytes": 9564264,
+      "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1",
+      "source": "mesh/Lantern.glb"
+    },
+    "mesh/flight-helmet/FlightHelmet.bin": {
+      "bytes": 3227148,
+      "sha256": "9e623a27f837e1cc995d1380da5fd3becf4d29586fefba882fc0ba76b49f94bf",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet.gltf": {
+      "bytes": 18698,
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_BaseColor.png": {
+      "bytes": 2306649,
+      "sha256": "0914544aabe161046f417274051e34ecc85163cfce6698581b3e1e18c96fe4f1",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_Normal.png": {
+      "bytes": 2648815,
+      "sha256": "c297f18f3b4259fc8b411cdc843a4a44b8cef3e3a53b21cec7b53574e5ef6872",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.png": {
+      "bytes": 3696183,
+      "sha256": "d4519704f15395c7138421a5814b478df549a2411bc6fa97dd6d02ba62dc6c54",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_BaseColor.png": {
+      "bytes": 5478748,
+      "sha256": "c9346ac6daa3ad34d0b36c1e7cf311ccbcc298710ea453cdf3b6ad40dc60013f",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_Normal.png": {
+      "bytes": 5675531,
+      "sha256": "7fb69b26f80c67df41e87d7344bde9d24dda0be77546b0a6acabc4040694872a",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.png": {
+      "bytes": 4375686,
+      "sha256": "b77e60f175e4632cd3d892bc9f0e748f522c9288a469585d5cb90270cd68910e",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_BaseColor.png": {
+      "bytes": 696304,
+      "sha256": "b55f6561f8adabc907360443aab010f3effaf05074fdccea46d8c2d66247cf16",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_Normal.png": {
+      "bytes": 5575,
+      "sha256": "430775894001933044c89070b1bfd4f9b8489f74780b1ab7079efb0afca95d8d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.png": {
+      "bytes": 601603,
+      "sha256": "35d81a71ab184f9b50f63ff8f3e0f90cfb6c99f9b2d9ed9d9887a902c16a458d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_BaseColor.png": {
+      "bytes": 2680488,
+      "sha256": "8e26add3ad1b2398d58638580bb1fe56f2fbae3572b4a682b6595a5a26fb1b40",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_Normal.png": {
+      "bytes": 3273483,
+      "sha256": "a833fcc12718c02bcba97cbc9760d06c4a711ce7f36c23076e7cf6d4393a80e7",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.png": {
+      "bytes": 2976508,
+      "sha256": "17f3e27b51011b8f98751dae25958e2b850fcf1467f1019bec812553e0e5eb1d",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_BaseColor.png": {
+      "bytes": 3594300,
+      "sha256": "f751d643d1f220b300705d9ad57ed284a883eb7d3788469199b752f4381dcc37",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_Normal.png": {
+      "bytes": 3327566,
+      "sha256": "bb70753c836c59db7e245e5fe2c9db8eee833d29d67e03da348f6adb1e95142a",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.png": {
+      "bytes": 3809284,
+      "sha256": "2727d4638514f75fcbd29777bf03db6bd2f0f1ad926e2976cf2346aa22c0bd19",
+      "source": "mesh/flight-helmet/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/README.upstream.md": {
+      "bytes": 3348,
+      "sha256": "7724b64fb4fae1135ddec3738d1eb9320d3bb9c890f599c423a09e205fb7257f",
+      "source": "mesh/flight-helmet/README.upstream.md"
+    },
+    "mesh/floreat-dunes/CRS.txt": {
+      "bytes": 125,
+      "sha256": "005f2407e0e4565cc5f21cfd7b385517b0267f18b09b573d74bfd7be4733cd5a",
+      "source": "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022-static.glb": {
+      "bytes": 130309956,
+      "sha256": "0cb65ccc7a825c00adbdbb16869a227d9fa617bc997524744c6401ee309480d3",
+      "source": "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip": {
+      "bytes": 41242406,
+      "sha256": "1b2533fc5c339a2a3e5646a5344c0932fe809c2c4ff0fe37e80d9cece39f89e9",
+      "source": "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "mesh/floreat-dunes/offset.txt": {
+      "bytes": 38,
+      "sha256": "949636e90636a649474474c0ad07a6e11b738a9bf7c7ad27061a145ded814523",
+      "source": "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "point-cloud/autzen-classified.laz": {
+      "bytes": 74416814,
+      "sha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51",
+      "source": "point-cloud/autzen-classified.laz"
+    },
+    "point-cloud/autzen_trim.las": {
+      "bytes": 3742038,
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75",
+      "source": "point-cloud/autzen_trim.las"
+    },
+    "point-cloud/usgs-3dep-brookscamp/LICENSE.txt": {
+      "bytes": 919,
+      "sha256": "3c055dbcfb9ed95bf6bf04fa98eb8ca53e271cd2ead33acff08e9a3416e31e9f",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz": {
+      "bytes": 243245,
+      "sha256": "bda94e290319eb03f2cccc35edb52da2f739d971d424d4c2bf09d6a4250471c2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-0-0.laz": {
+      "bytes": 83778,
+      "sha256": "f1cd60225ee9248c78627dc2adfb106740788bab3e5b97e84b031638e1641922",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-1-0.laz": {
+      "bytes": 532454,
+      "sha256": "1124dbfad1f24dfda66c4df32a7e7d93a757f458f06bd46c5857cf1678e106e7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-0-1-1.laz": {
+      "bytes": 1422,
+      "sha256": "e287e3563b03ae8fa08a6477e3c78a9c4319f891c5d0d8cb1a934195b707cbe7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-1-0-0.laz": {
+      "bytes": 395718,
+      "sha256": "bb12e66bc1a6b8bd924c3c014a22cd6da11a70cc3df8607c0f1b6064fd0709e9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/1-1-1-0.laz": {
+      "bytes": 28983,
+      "sha256": "51c5b5c2cacd56d75410bcb2ddd75a986cdca5c51e06fc93dbfaa89ba08ef279",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-2-1.laz": {
+      "bytes": 548736,
+      "sha256": "206d8897abf9280003ac9f33fb59d9392eb6e3647abe0444c0b0d2b33ed022d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-3-1.laz": {
+      "bytes": 747646,
+      "sha256": "b128eff75dd6b860682dc40f6eec3bca0229fae816cd597fd4dc05435fc4f322",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-0-3-2.laz": {
+      "bytes": 2728,
+      "sha256": "f29352c7b962722f76f2fef4efac144e66178036e5d95879967feb561774dcdd",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-1-1.laz": {
+      "bytes": 505567,
+      "sha256": "14f6c4ce909f05e7021d9d2c7d6756414a3486ce3ce2cb71aad7c80d4425b456",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-2-1.laz": {
+      "bytes": 1034390,
+      "sha256": "85b14798067613ba1803e9c39f7d2789cc24b998d26d108229ac30830485c2f2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-1-3-1.laz": {
+      "bytes": 201094,
+      "sha256": "202d187e41ae292779201264247e62052de0e604923f8fb457a20bfe0b500862",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-0-1.laz": {
+      "bytes": 220975,
+      "sha256": "3f3d795965edbb6aa192d410e2db2d089ac30f694099b7e795d085e4136c2986",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-1-1.laz": {
+      "bytes": 721063,
+      "sha256": "fb8441d30617cb5f5818b63c8efef7c3b9cd6d1150c82b480960d5d993c3cb34",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-2-2-1.laz": {
+      "bytes": 97666,
+      "sha256": "12d863695ac764488ea94b2d89b3ce5fa7ed6906548284cba35ba5727530c010",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-3-0-1.laz": {
+      "bytes": 532142,
+      "sha256": "e4c2d08ea4a341d3cdcd67d9b27d1fb3e33fd897d45ab462e73d31c9c363e14b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/2-3-1-1.laz": {
+      "bytes": 108845,
+      "sha256": "778be29e5a50b04bb08d9629235fda1c741251270635f68522f95a487c8b35e1",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-5-3.laz": {
+      "bytes": 704703,
+      "sha256": "754abc976a5c09651fe23ea7fb839b1870f6910956fb1b7c713afe4c64961c6e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-6-3.laz": {
+      "bytes": 1244715,
+      "sha256": "31070a16fe6e345ca7143d8af1b3a55af1a4369c2141f93facf3f07c049857e9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-7-3.laz": {
+      "bytes": 229992,
+      "sha256": "721264d61260a0363fa63b96cb5cc27a70d9cd5ead25dedb2dd87524cdbd4b0e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-0-7-4.laz": {
+      "bytes": 6819,
+      "sha256": "466be58d00b4f3322c1637b526e959cd57433f10f91ecf2280326180ec149ad6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-4-3.laz": {
+      "bytes": 561827,
+      "sha256": "3c4f9590b250fe511c6efd47a8b9e803f26be7298c05b01df3d1b770385cc0f6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-5-3.laz": {
+      "bytes": 1188191,
+      "sha256": "209702ba63d78c74039877a54cbc8af4cdd02dd670a33ebaa99f7c3508b2ca27",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-6-3.laz": {
+      "bytes": 1336276,
+      "sha256": "d357207292e6f357fc4fd04e404a862e5d6a6afb6246f3651d619c9cb67384eb",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-1-7-3.laz": {
+      "bytes": 491970,
+      "sha256": "8a5707ec835d99ef419518d7c618c71c2b11f3828da500c2a90ef3e2555a95c6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-3-3.laz": {
+      "bytes": 513886,
+      "sha256": "a2b88fdde052e27213788bb09fa4faca98e5ac2b672059eb7bcb3e98438aa2af",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-4-3.laz": {
+      "bytes": 1310311,
+      "sha256": "46f1d1f0d3e6036aab51527318aa65ef1fac4332c9e188733c8039797a5d390e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-5-3.laz": {
+      "bytes": 986030,
+      "sha256": "eca521913b1b3b9d576998343d57138a8a7d3d7c6c0dabe4ac579cdb1b92db06",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-6-3.laz": {
+      "bytes": 513316,
+      "sha256": "94f09430942734ed3b29469a07eda64115a82fbcb803c1b5e805891a85c93083",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-2-7-3.laz": {
+      "bytes": 343486,
+      "sha256": "7a7d0154d071495ab2e5f96ab4c304834fddcb8c9af754ebcf21fc00df630c3b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-2-3.laz": {
+      "bytes": 192249,
+      "sha256": "21b197561f39712a66aa7f81be28227d7b5e7a4bea3333b755ecf93c25ad9f82",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-3-3.laz": {
+      "bytes": 1284572,
+      "sha256": "427d0d446c05f89f4b97a90598b5f00e0bf1347cd7b6120400a551bc8170de6e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-4-3.laz": {
+      "bytes": 1235877,
+      "sha256": "71b096707ea9f402d56b682fef6832401c725bb8d7371dbd12cea75efff4159b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-3-5-3.laz": {
+      "bytes": 504580,
+      "sha256": "ed5ca09508ed8b0a449f80798abe2aa8f9d58b02e86b1c714a19e75ef7d8fc0c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-1-3.laz": {
+      "bytes": 63240,
+      "sha256": "ee88c49229a8cb51df6c60a07f628f093a4341a7d0dd33aab93f713b622303cd",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-2-3.laz": {
+      "bytes": 1077433,
+      "sha256": "3b07e5a4cbc0ff98da523b5db4f606d2d3c8e5d61d9d786e326302ea31d8cd69",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-3-3.laz": {
+      "bytes": 832234,
+      "sha256": "6121bb263a6ff43b0648f7c4fae78a1901eb92bc6bea7fdfc524bf1c1c4a41ac",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-4-3.laz": {
+      "bytes": 42850,
+      "sha256": "34cd66ad2bec160f3aceac1627c4f7a5ca2cd4cf4cb63409340431e3b50454ea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-4-5-3.laz": {
+      "bytes": 336429,
+      "sha256": "456313d45ad588b1f5cb3cf275333c68998eb0d0d479ec16dfe541bbf4186005",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-0-3.laz": {
+      "bytes": 52510,
+      "sha256": "68b5710da83bced6bc01e39c4a2e0627e309fd681dd72db201b445b336880f0c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-1-3.laz": {
+      "bytes": 832953,
+      "sha256": "1a5628e7e19006502696717fe316d86a3e7edf563ba9032e36fe6cc389a5b044",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-2-3.laz": {
+      "bytes": 1149899,
+      "sha256": "eff6b31f2639e1b3b19bb3922fe41dcc409d3efc38c2af3716f129f17eea9ca4",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-5-3-3.laz": {
+      "bytes": 106424,
+      "sha256": "55026fe21a3df1c440da567abaf6f4f949c140816189e8c03e7f8eea455fc372",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-0-3.laz": {
+      "bytes": 301895,
+      "sha256": "bf478bb1068b0596854c21790e709af3197fdb59cf0900f2b1169228e90fbf0d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-1-3.laz": {
+      "bytes": 1280682,
+      "sha256": "b91ca6a1dc3acad2485aedb119e5b860050008963bd461efb180a617d21a7802",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-6-2-3.laz": {
+      "bytes": 485891,
+      "sha256": "2760ad73bdc9f85529d169c0b5a30f0bfc40035280dd7cfb4f6218db19456ba0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-7-0-3.laz": {
+      "bytes": 486499,
+      "sha256": "5e29b95b3bcfebb1162dc87e593b814aaa85545038511de0abe58127a428799e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/3-7-1-3.laz": {
+      "bytes": 362072,
+      "sha256": "c5e8403c5330ede2b730ffe4d11674aa27abb253d46cc2563361af54e9293414",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-10-7.laz": {
+      "bytes": 238794,
+      "sha256": "e563ba6f12a283b92a54224a842676974415258d9154a3912f669b7cc9c7ed43",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-11-7.laz": {
+      "bytes": 1193310,
+      "sha256": "2ed84fa51532fc976cdf75d02952b2dfcec6cedec09b9c4ce793dedd6c89b801",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-12-7.laz": {
+      "bytes": 1316207,
+      "sha256": "58d1f0e75ef3d61ed1274593f724054b125112ebb701f190206bc079d23d2e6f",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-13-7.laz": {
+      "bytes": 1190818,
+      "sha256": "7b403a88ae20d94510770ed0a2195a383f4b7b6d9e687ad7410cfbbf39dc4113",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-14-7.laz": {
+      "bytes": 324269,
+      "sha256": "1c75193616cad10232b4a072ba706841dbc453b5bf9a3e2d98f008e9451fea04",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-0-14-8.laz": {
+      "bytes": 19272,
+      "sha256": "5f0b7723418c1a79fcbd174f99fb8a608c485f8613b18b5b7c5b6e18db1e57e0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-10-7.laz": {
+      "bytes": 96185,
+      "sha256": "8860fed2c19ddebdfd6ec40c588c76c2ff049efcad85f612bff286f1b6433214",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-11-7.laz": {
+      "bytes": 1259047,
+      "sha256": "d4381836c3873bddfac18f608ad22cbe062e72e406f25e4dd6a19ca77054ec08",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-12-7.laz": {
+      "bytes": 1471544,
+      "sha256": "5d34d5765c10a1ebd0bfbd267a8fc1c1716657ac06ff70cd8f7e076397baf42c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-13-7.laz": {
+      "bytes": 1294645,
+      "sha256": "f8f7d3c865cf7fb0c818d4eda3f55073fe1c73ce7ad52980895ec6c9a1e67dae",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-1-14-7.laz": {
+      "bytes": 494018,
+      "sha256": "69ad4709b7d979fe579eb7f82128f89b89bee4096731bc5f5b43bc687a84f089",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-2-7.laz": {
+      "bytes": 81585,
+      "sha256": "07581baf96fa09d2b9453d8f2ac2a20d0ba3d9eccf63f0f07424a4bfaa636105",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-3-7.laz": {
+      "bytes": 1061930,
+      "sha256": "07fe407f4b3ded15644541544016df12a89e29cae3b3bf8f1111f059b145eac7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-4-7.laz": {
+      "bytes": 1340061,
+      "sha256": "9c68dc45c12b66b87cfd8a9fddb945ea7c72e624ba51a3e27aeb74ae0be8d9ea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-5-7.laz": {
+      "bytes": 1281536,
+      "sha256": "fd3cf40bc16e99fe405857dad0857fcc0681397c721dc450111f608dea495df8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-10-6-7.laz": {
+      "bytes": 402529,
+      "sha256": "8f3b9da5d7dde7292cff4067f3a912d9e8664773f86964cfb421022585497a69",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-2-7.laz": {
+      "bytes": 883553,
+      "sha256": "83800b1dc03a6d2065f50eb44d1d9d36edc0c3eb96d0f3f091e01467e3bbb800",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-3-7.laz": {
+      "bytes": 1262275,
+      "sha256": "1ee31f95c337f80c411dab965a81ecc335c6b605c30a61c8d8b1315d8269706e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-4-7.laz": {
+      "bytes": 1448976,
+      "sha256": "3ca3fbccce4884e02a7160a0efa1ac4e7266c8413a4e8217da26820c3152b0da",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-5-7.laz": {
+      "bytes": 813774,
+      "sha256": "992d2a52ca49c555573ee7aa205297b68c0337a1d9cb572b1b12c6daa85de8d5",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-11-6-7.laz": {
+      "bytes": 52021,
+      "sha256": "c4864c266da6b7f9ff3eba2205d20d3bebdb7ecaa5f0db65eaad1c9d6427a868",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-1-7.laz": {
+      "bytes": 438419,
+      "sha256": "6a57824c1e271ecf83c76183fd34934eef433424efb0df2a76728ffd9f5f414c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-2-7.laz": {
+      "bytes": 1416666,
+      "sha256": "332210506c95cd03f9e795ffc3113b5d04f57482c92b07bff2f1696159decd66",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-3-7.laz": {
+      "bytes": 1496416,
+      "sha256": "049d7441b1d057e2f52ecf313196d6abe0c557299e0097d7a3d45140ccebb645",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-4-7.laz": {
+      "bytes": 1403072,
+      "sha256": "7bd7f0c9554a4415906e764664e62ab4c7e9dc21024c7f2af9364a584023e054",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-12-5-7.laz": {
+      "bytes": 341299,
+      "sha256": "58340e41d1e1980936ac19548629bb1b445f8e8668fedbf3ee24c169e13deb09",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-1-7.laz": {
+      "bytes": 809114,
+      "sha256": "fc67d2ff466eeed40d0256d84e1c44bb9b79fc399111381e40292ba9965708fa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-2-7.laz": {
+      "bytes": 1307333,
+      "sha256": "72ea016afcb2d407e18ddb354724ab100dd385b7965b817e1dfba7e0b23deb08",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-3-7.laz": {
+      "bytes": 1289783,
+      "sha256": "df9a1f4529cd360bfe4274f1df63a0533d33801dcd3f1e7195c19f37a5dbe605",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-13-4-7.laz": {
+      "bytes": 347141,
+      "sha256": "d895cab70f3143b53cf95a0a2fc50c2f8912e6ad3d1364cae225ca7ea40edf65",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-1-7.laz": {
+      "bytes": 1077567,
+      "sha256": "e38046666195da11cd3f106b58a15ad2914a3e8517164af688499a0bac59b63d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-2-7.laz": {
+      "bytes": 1166122,
+      "sha256": "8d7a26944ff20f288d636eb89ba7f9f488ab2c00a2c833819183c5b668ac2c4d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-14-3-7.laz": {
+      "bytes": 237105,
+      "sha256": "09ff1321a7d7fac641e8aca7a913ea349fcb744ce120773e03e6eb8e102a922b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-0-7.laz": {
+      "bytes": 18511,
+      "sha256": "413a659fc574d833b7e5c74836c743d646f184c4a1afa4d6d3ad39ecd1f851cc",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-1-7.laz": {
+      "bytes": 1041780,
+      "sha256": "643b20004caebf717f5b0b93a5e310ec5318490e930186e27db06804e7ca0279",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-15-2-7.laz": {
+      "bytes": 147919,
+      "sha256": "22aab2d6a967f8ac0857ed303f2a10d69fcd7b0a41dbb37295d30104c4613d60",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-10-7.laz": {
+      "bytes": 463472,
+      "sha256": "2b96476676f0b60ecff0e0fd9512ff420dfd46ea4e4f3e04f772ff00f93bf5e3",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-11-7.laz": {
+      "bytes": 1353283,
+      "sha256": "45202e15c8aa0d64fd0834bc3250f62a71690c4cc68d7d407864ec63192816b4",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-12-7.laz": {
+      "bytes": 1480552,
+      "sha256": "d577d43c14be42a317a535aeba4777dbb2cf92bfc891ffeaef268b0cc296a805",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-13-7.laz": {
+      "bytes": 1420544,
+      "sha256": "8e344e28673cb8773da6797a06ec1a13340784e77a31656b893272b6dcc32d6d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-14-7.laz": {
+      "bytes": 749888,
+      "sha256": "892678837e5c78e9316eb0a00fc716ef5cdd06c775628123d929eb85c10d1bf2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-8-7.laz": {
+      "bytes": 18434,
+      "sha256": "e58ace506e5f9bb972d7110f95b1eae3f7dd28a4b70b8dcceccc4bd28236bfea",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-2-9-7.laz": {
+      "bytes": 52076,
+      "sha256": "40a6bdce9e3523fbe1d771d264bb9f7f50148d2b8d57bbf27e499cf5b3072727",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-10-7.laz": {
+      "bytes": 1647021,
+      "sha256": "9e8c3a4ef46a95d1df393e3388f4bad40739cf48e65b974af65d38fa752da916",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-11-7.laz": {
+      "bytes": 1486021,
+      "sha256": "735173e2ce69de354f65c39ad65453996c534f115c2941d87fc6895e85507c41",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-12-7.laz": {
+      "bytes": 1313027,
+      "sha256": "5d78b04cba99eb2651b5f1268569e575c5801763e207de6a11138f29ab426ac0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-13-7.laz": {
+      "bytes": 1664283,
+      "sha256": "89d0a049ac06a6a3abb6f46c17722a786abb4bf26b4a3e22080549c073c8fdb0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-14-7.laz": {
+      "bytes": 1317567,
+      "sha256": "18598ddf3604b8a5498ddee8183138946e06be2c5fa80c110b2ac22b79a2e548",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-8-7.laz": {
+      "bytes": 838952,
+      "sha256": "2aee1a8d4d5d51450c7ec3a7a060bc4163463855d7c289c31fa66dfab863d0aa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-3-9-7.laz": {
+      "bytes": 1322617,
+      "sha256": "a4bd2ad4731159f75c92cd0c30f5acd15829cd4229ce924cf85e80f7e6b1ffe0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-10-7.laz": {
+      "bytes": 1358516,
+      "sha256": "6631019012077ba7b53700781ecafd2a44a8f856d90274e5659ae1324bd64427",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-11-7.laz": {
+      "bytes": 630814,
+      "sha256": "2e590784aefa257fb2b1f0e7e69898e3902424429a360731ff6706a488480f15",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-12-7.laz": {
+      "bytes": 227096,
+      "sha256": "a0f9bd8a001ce06df2a08c39d5f6b04dfc312fc57993ef08a08df7335a55392e",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-13-7.laz": {
+      "bytes": 1481719,
+      "sha256": "2ef23ffd38c2caa59431c36b309e0c566844a707078b8dd1cc787b7f5eddafa6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-14-7.laz": {
+      "bytes": 1317015,
+      "sha256": "6a14005adbfcb4126242db4c937d6b2fe72e7321bdb962a0b875a9c40e9be0d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-15-7.laz": {
+      "bytes": 171392,
+      "sha256": "cc7f6c18861e2334aabe2f30231392dae3ad1ff9b6e1a0c93f8ebb5596fd4163",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-7-7.laz": {
+      "bytes": 593388,
+      "sha256": "c181c5ccc62a31175b551bbcda77fa9f340e3093255d8a81edfd9190f3e08369",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-8-7.laz": {
+      "bytes": 1461361,
+      "sha256": "c6c3ca5699f9bffb275e558bcac980f6422ca347258f4ba7ba66e50e74d7ddaa",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-4-9-7.laz": {
+      "bytes": 1383166,
+      "sha256": "ed9db77cc3dc114ea6d1ae7950b7217d6db2e8eab77baeb704f129d651618627",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-10-7.laz": {
+      "bytes": 1493481,
+      "sha256": "a0824b3ab75c09e2112fa54510f858e96771e7f7814eaa1641a78b165b2920c2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-11-7.laz": {
+      "bytes": 681872,
+      "sha256": "d3771b220b07a8516b5d7dff2ae62d9341dc9cebd062d41dfc4b6790abf96634",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-12-7.laz": {
+      "bytes": 47742,
+      "sha256": "699a0d57c6e0b335fca132dc10f8880e677bf86ee28eea71adea29b252d3506d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-13-7.laz": {
+      "bytes": 435187,
+      "sha256": "224ccfd04a27eeff9324450186fae500c757054f04a16f59d48bf38c0d9df53a",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-14-7.laz": {
+      "bytes": 139500,
+      "sha256": "5d7868daa6f64365661b7cbc1c9d289799c1d9dcfab4e779dfef24f747ffd633",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-6-7.laz": {
+      "bytes": 226502,
+      "sha256": "caa4c326411d0316ad2d1f80c5e97bee482acd7813c1e360b72f64f2210649f6",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-7-7.laz": {
+      "bytes": 1409972,
+      "sha256": "1aea749cb165b2a3f68a7c44fb373b1f3534ee2e7bb5feb503df5d4dd0488da8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-8-7.laz": {
+      "bytes": 1617155,
+      "sha256": "03b9a43cc3972a160df029a49f11def4a28deef0eae309739ec775a42d535717",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-5-9-7.laz": {
+      "bytes": 1567950,
+      "sha256": "2135cb5c50a5677f67a9d27ad13388035f41d0180f6d8564f9c7c55b99e98935",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-10-7.laz": {
+      "bytes": 1336140,
+      "sha256": "853889714f3e32e11c0204b766d67bd47642133c8afc7aa380c3215e96875a54",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-11-7.laz": {
+      "bytes": 152755,
+      "sha256": "18c2ad0cc556ad0fbb6f93401abe5dba27e27aa5386e246918fd803dd70fe0a0",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-5-7.laz": {
+      "bytes": 86959,
+      "sha256": "336162098b2f6da8d7b5acb2f687fc8a24201cdd68b7db43b5cc266388df3b63",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-6-7.laz": {
+      "bytes": 1218962,
+      "sha256": "6e5274b8c85b77304862f9ee85511488e93d98eeb2275df8e1b0a69f0e634a70",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-7-7.laz": {
+      "bytes": 1362386,
+      "sha256": "a46e5300bd2b0dc587640ff90dbc56e01e6998b21299f790ce68748b49eeb97a",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-8-7.laz": {
+      "bytes": 1562588,
+      "sha256": "6b8b6f43f539c6cd89ddfc0650c2cba51d36658579ee86f015661e8712b0e7db",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-6-9-7.laz": {
+      "bytes": 1611407,
+      "sha256": "12624fbb0d05978fe21875c2696007da2a8a46148dbf2924781b232dc53c66b9",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-10-7.laz": {
+      "bytes": 704529,
+      "sha256": "456d4cf1f70b571b91967a4e6aea32eae4141e28f8f8bb88fa2309637cbfd497",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-4-7.laz": {
+      "bytes": 12815,
+      "sha256": "84fa25660b76c386134f3d66e9d380d073734f7d651f02ceb611711eda6e7ad7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-5-7.laz": {
+      "bytes": 785034,
+      "sha256": "dd623f81226c7c2082a49497b1629dc57b78600811e2de589e1ec88a0e99e54d",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-6-7.laz": {
+      "bytes": 1484422,
+      "sha256": "2cd6697bfc792f8b39fe2f587accac138d1fdb43d3bbbd74f725591da63794cb",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-7-7.laz": {
+      "bytes": 1237464,
+      "sha256": "0f13ddea100ce0dcf6c35c5139aa52f747a1bc01b3a5feb0b0a6d490abd6ff25",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-8-7.laz": {
+      "bytes": 1071594,
+      "sha256": "f6d838e2a046a8b5bea655f7113443cad13cf128d76781ee21a9bea4177b4d24",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-7-9-7.laz": {
+      "bytes": 1305000,
+      "sha256": "0982fd82c34cfddc8e9d6efb978006e7ec3830cd8f4ebecf143c18e9f5a1555b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-10-7.laz": {
+      "bytes": 954436,
+      "sha256": "6933e82f48c4d7fed6f6b3ab477ae7b00d2a90555a813dafed8e08bea79ff6a7",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-11-7.laz": {
+      "bytes": 61628,
+      "sha256": "ecc93d7d2bdb66125216f24f20b3058dc6292e45c34a29553cdda7458b91f381",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-4-7.laz": {
+      "bytes": 432581,
+      "sha256": "cc87fa4c97f996a74c9b1e0927259a685c2dd1d1699401cb38c8bbf5fb11ad57",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-5-7.laz": {
+      "bytes": 1201196,
+      "sha256": "1f28b8d11a8a8e39f60089b406a35e97facd1f37e3d558911f46c4cff81c84ad",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-6-7.laz": {
+      "bytes": 1404171,
+      "sha256": "83da81b4a4018dc24e2c834f424cd23a38acb832d260a39b20e41d9a4be7bc2c",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-7-7.laz": {
+      "bytes": 659849,
+      "sha256": "aa99c54441341985f7ab76f2943ac2aad47b161655bc1da328d05631d2601e89",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-8-9-7.laz": {
+      "bytes": 145771,
+      "sha256": "2e3713b1f5c80eebc452c67a3f4734043329e6b564c0989759fe01a7ce8ed12b",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-10-7.laz": {
+      "bytes": 212810,
+      "sha256": "079cdf0499a8c36561bbf4a79dcfdc034d553b9655fa8444de6475d8a20abe99",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-11-7.laz": {
+      "bytes": 104315,
+      "sha256": "d9dfc15f3f36f00ac5c55bdd63aee4af09377bdae74c6e2d35b07c157ed51a63",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-3-7.laz": {
+      "bytes": 254820,
+      "sha256": "152c6195dd1d8df2fc4b5f7006a214585f6de405651345583b26ce5736e6fb5f",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-4-7.laz": {
+      "bytes": 1300636,
+      "sha256": "76d6281629eeb7e9143ea698e5fd7ef9485a34e74423ef61aef2e22bb0ca8e23",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-5-7.laz": {
+      "bytes": 1451994,
+      "sha256": "d58b88fee0483e89f165b1f4dabbcb62447a8726aaceee8d240655e357bea0d8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-6-7.laz": {
+      "bytes": 1244195,
+      "sha256": "a662d1093bd4b3669016f9470eb0b77a0fb07541fc546efb93c91817803e1b61",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/4-9-7-7.laz": {
+      "bytes": 219746,
+      "sha256": "510334148251a28e39e049ed5d08a281214644db37f0a10e6eba1d45dbbb5304",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-hierarchy/0-0-0-0.json": {
+      "bytes": 252231,
+      "sha256": "139c335cec73e9c075096ca30dbfdc0903e3b3ddd3682024547b949db3832ab8",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept-hierarchy/0-0-0-0.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept.json": {
+      "bytes": 2426,
+      "sha256": "811ad38e3e2d43cf0dd74f9df734f92e41789ccc8b4e6e7df0ff179114c3ad37",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/nodes.txt": {
+      "bytes": 135,
+      "sha256": "c96db9a9acbfdfe9fb0575b7fb45b02391fb1f3ea2fdb2d5ea35a3389fe4f721",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "bytes": 2688,
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9",
+      "source": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/tileset.json": {
+      "bytes": 540,
+      "sha256": "bedf1ad764aa1f99908fc66616872e5e4480fb12121b2c9d0182fbf0ae509e01",
+      "source": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/tileset.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/0/0.glb": {
+      "bytes": 7499156,
+      "sha256": "9ef9d8d0756d1f423cd6aa8bd99f7dd26957f96df03dcbcec6e37103e39350b4",
+      "source": "splats/cesium-fixtures/GaussianSplats/tower/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/tileset.json": {
+      "bytes": 1322,
+      "sha256": "a29517618aef75aaf47191949660bc8fed3f121d09555dbc1bbe9e4dfe26b493",
+      "source": "splats/cesium-fixtures/GaussianSplats/tower/tileset.json"
+    },
+    "splats/niantic-spz/LICENSE": {
+      "bytes": 1069,
+      "sha256": "d2b852220d1043148f523c4154e8bf7d9c5e419aede33b4c94115cfc457e4714",
+      "source": "splats/niantic-spz/LICENSE"
+    },
+    "splats/niantic-spz/hornedlizard.spz": {
+      "bytes": 18143098,
+      "sha256": "a076ca6aeb9f1a8fe52526f4a7c381fe8fffec60c0d7eb64b45532189b64bc6a",
+      "source": "splats/niantic-spz/hornedlizard.spz"
+    },
+    "splats/niantic-spz/racoonfamily.spz": {
+      "bytes": 24202962,
+      "sha256": "2e068d893730955c09aee324ff170c559f71c0e8758c1b14c3811a5969333cfe",
+      "source": "splats/niantic-spz/racoonfamily.spz"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif": {
+      "bytes": 47965852,
+      "sha256": "24ac3224821f3d2b0e3933bd7d6d64b54eb11ab5dae363aef3c64d83d57bf47f",
+      "source": "terrain/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif": {
+      "bytes": 5894466,
+      "sha256": "783d5dfa1108d3fb95c107e55dd2623f3268fbbacf9229793b42c3d42da9fa5a",
+      "source": "terrain/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "bytes": 47261499,
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif": {
+      "bytes": 15824152,
+      "sha256": "dea0be928bddde7158a1ba8d6d9dffde62d0f8d2c9b3a6eef13dcea94069e196",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif"
+    },
+    "terrain/copernicus-brisbane-2x2.tif": {
+      "bytes": 142910919,
+      "sha256": "6825aad59c1f4411d81f32bc258c7a11ad5174b3551a5012d68d9568d103a4c6",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/copernicus-s28e152-utm56s.tif": {
+      "bytes": 41239550,
+      "sha256": "80a90f59f86c225aaed07cfd7a4ebd086ee7add6d1592185dd058b3e08e39957",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-1_1_2/0_0_0-1_1_2.glb": {
+      "bytes": 1816,
+      "sha256": "01ba72cd57e8c882f721306c82111cda9ce23cef29a4d23f94b5f539240ba7b1",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-1_1_2/tileset.json": {
+      "bytes": 306,
+      "sha256": "df9f184fd179048754e0814c433fe9faa177bf553bb91a3436f4711c590906ac",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-1_2_1/0_0_0-1_2_1.glb": {
+      "bytes": 1816,
+      "sha256": "b4ce510130238df87ac0e0f65fdc072dda13493e7fe5769c499473aff12bfa07",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-1_2_1/tileset.json": {
+      "bytes": 306,
+      "sha256": "670105f79d79a39802ce3c709567fc00f8527f46b5b1f85421e58195a246b879",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-2_1_1/0_0_0-2_1_1.glb": {
+      "bytes": 1816,
+      "sha256": "eeeb99f6d61f96b08cbc24e89fb7338ff2c5104256a9eb9464bf258096318bb6",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_0-2_1_1/tileset.json": {
+      "bytes": 306,
+      "sha256": "b3cd0d981a40c1f05368226d85d37a0b40c2f4de2f4978af13b699ccb58290de",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_2-1_1_4/0_0_2-1_1_4.glb": {
+      "bytes": 1816,
+      "sha256": "698716fd9f93b6feae395f30005653dedb2701a10691c478a973dfca113797f8",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_0_2-1_1_4/tileset.json": {
+      "bytes": 306,
+      "sha256": "e4fa9880cc06167e3f6514db8d9b28dac32315bf1dcf1bd98aaec204b5b848b3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_2_0-1_4_1/0_2_0-1_4_1.glb": {
+      "bytes": 1816,
+      "sha256": "2c14ac790b7d4032ed4fdebd845f7cba602174c68fd1520a9253830a716432a7",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/0_2_0-1_4_1/tileset.json": {
+      "bytes": 306,
+      "sha256": "a1ed315b74c80d356cdf2fdf0a78f1a47da6d52fe1086ff73943af928ad80e94",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/2_0_0-4_1_1/2_0_0-4_1_1.glb": {
+      "bytes": 1816,
+      "sha256": "8c65eb80659f8f2937700b22a38e7071bbb6501ef4a86134cf494665eb6b42e5",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/BoundingBoxTests/2_0_0-4_1_1/tileset.json": {
+      "bytes": 306,
+      "sha256": "b46e94fa9e91a4dd4cf7f00487aee1a589b1f1aadab95c56fe87fd4b972801f7",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelBox3DTiles/subtrees/0/0/0/0.json": {
+      "bytes": 157,
+      "sha256": "3a40b28a079523da9898d566edf9438d625719c809ee2bb441ce153941f974e6",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelBox3DTiles/tiles/0/0/0/0.gltf": {
+      "bytes": 1759,
+      "sha256": "05f2840cd89c92f4f5f46df34fb36d115478104be7c948ab188a595208d6c362",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelBox3DTiles/tiles/0/0/0/a.bin": {
+      "bytes": 384,
+      "sha256": "993f245bc78596c529d6337b84025b972e1b65daddec202b88f6902a6207e043",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelBox3DTiles/tileset.json": {
+      "bytes": 1389,
+      "sha256": "a17441fb681f74958fba5909c5ae6674fd5160ef2c77e1f0d51393ea77e6a2a0",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/subtrees/0/0/0/0.json": {
+      "bytes": 157,
+      "sha256": "3a40b28a079523da9898d566edf9438d625719c809ee2bb441ce153941f974e6",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/0/0/0/0.gltf": {
+      "bytes": 2157,
+      "sha256": "0a7aa87554e713e6578bc3ce3dff0208f6fecf0bcf5f40ee73555f7e6edf18e8",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/0/0/0/a.bin": {
+      "bytes": 384,
+      "sha256": "f086d80205ff0b91b01757fe2e3dca6d6b27d1f26c1075d0631f030952444506",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/0/0.gltf": {
+      "bytes": 2371,
+      "sha256": "9867977cffcf96f8fa3b2172c37ed9057cfe59883e6594e82316e52f0090ce55",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/0/1.gltf": {
+      "bytes": 2370,
+      "sha256": "f175afe69de7e6d6a4283b42e43dee5d463b1dffa08753408839720a4f0807fc",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/0/a0.bin": {
+      "bytes": 384,
+      "sha256": "0473027931141dbec711e476d462cb10b235fd3e2660493d02a6ddfe2b58902a",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/0/a1.bin": {
+      "bytes": 384,
+      "sha256": "facf408582ec8521e27e49d5b3c31e50f2290dfd6fa0a5d58a96799477caf685",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/1/0.gltf": {
+      "bytes": 2370,
+      "sha256": "5f6faa1a9aee0288dbe2c1ff53bfb1a546b35eead2a56be8006e7eb370e92852",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/1/1.gltf": {
+      "bytes": 2369,
+      "sha256": "d92ffe6a4d3db01b5c274162ea58315a349297ffa0db16676ae49bd70ee7f5bd",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/1/a0.bin": {
+      "bytes": 384,
+      "sha256": "6a9c88ef721978269f703d04c16f795d0395983d33481189cbbbe6fe36bfef31",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/0/1/a1.bin": {
+      "bytes": 384,
+      "sha256": "e8dc21e2dd352fae1880492d0ae80778c4e26a838b1ee2bd46c8d07c36672759",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/0/0.gltf": {
+      "bytes": 2371,
+      "sha256": "54a691a52dc57755be99e2cd3f5464055c19920197ee3a296d6cb7436e93d69d",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/0/1.gltf": {
+      "bytes": 2369,
+      "sha256": "6a4271eaadd221eace5eaaa3b5e826a78fdd215decd6c10eaf99259ed6cfd047",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/0/a0.bin": {
+      "bytes": 384,
+      "sha256": "09594b8051836d9f2d01433be6851a24abf5cb3655abdcae03e61d302fec1d1b",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/0/a1.bin": {
+      "bytes": 384,
+      "sha256": "1596c609b731d4ad3eb08dbd1e8779f492dc5b603efcead13c8c051c399bfaa0",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/1/0.gltf": {
+      "bytes": 2370,
+      "sha256": "6e04efe38cdd1729ae392af683ec909cec9fc377c6d2e148ea68ee10b2847b5c",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/1/1.gltf": {
+      "bytes": 2369,
+      "sha256": "6a4271eaadd221eace5eaaa3b5e826a78fdd215decd6c10eaf99259ed6cfd047",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/1/a0.bin": {
+      "bytes": 384,
+      "sha256": "8837fa700e56683aa6af1c561dfe1fa47a206a32cfbcf127872b8126ace30ff1",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tiles/1/1/1/a1.bin": {
+      "bytes": 384,
+      "sha256": "c981319f78b82004cfd6ad8095caf187f059ee8f048177a8b3204aa49fc84f2c",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelCylinder3DTiles/tileset.json": {
+      "bytes": 1452,
+      "sha256": "d82bf4d2e021bab9312f78b9026549fd99f4f213e157294a92edc05c78361af2",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelEllipsoid3DTiles/subtrees/0/0/0/0.json": {
+      "bytes": 157,
+      "sha256": "3a40b28a079523da9898d566edf9438d625719c809ee2bb441ce153941f974e6",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelEllipsoid3DTiles/tiles/0/0/0/0.gltf": {
+      "bytes": 1759,
+      "sha256": "05f2840cd89c92f4f5f46df34fb36d115478104be7c948ab188a595208d6c362",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelEllipsoid3DTiles/tiles/0/0/0/a.bin": {
+      "bytes": 384,
+      "sha256": "0f0c682003d8ad3ba8a2ede82d8b34d50e516c2b6054c5c7a4aacac1e138b78a",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/CesiumVoxels/VoxelEllipsoid3DTiles/tileset.json": {
+      "bytes": 1302,
+      "sha256": "993036039ad32c230471a4e6a0ea55a665b69523db046c6e0a27380035d5ba75",
+      "source": "tiles-1.1/CesiumVoxels/"
+    },
+    "tiles-1.1/MetadataGranularities/COPYRIGHT.md": {
+      "bytes": 1065,
+      "sha256": "3aabf955cbd95961f1ed441e7cd0406d8b0ba362a06e78d31821696c59f407ff",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-3-0.glb": {
+      "bytes": 52420,
+      "sha256": "204ed64deb11a443397574122338d88964b49ea091ffece271eede37b6f7f37a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-4-2.glb": {
+      "bytes": 34660,
+      "sha256": "bcefc0e28d414f7344ec41f0df8218490305b00b80379eedd957594dd7b78bfc",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house-5-3.glb": {
+      "bytes": 63000,
+      "sha256": "86731ee2434d93072a0c52254bf4b923e277bf07ce687cb5f654ed317eb8c6bb",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/house1-1.glb": {
+      "bytes": 34236,
+      "sha256": "dca9a2733a762e0d95ce08ca0cb7416cc775097bc9550a120ba1237823bd322d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tileset.json": {
+      "bytes": 9653,
+      "sha256": "332bff6d2cd99f6d295a915340841eea82d63f684e6a09b245afe8e044ecb140",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-0.glb": {
+      "bytes": 159192,
+      "sha256": "a0003f1b13d29facbcc945eca32b8e71de1691fb2811a74f98ce6d5bdcb5e65b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-1.glb": {
+      "bytes": 159192,
+      "sha256": "75abcefb164ac69c3ed5091b3bfc8dbb8b47af9294a7bb8693be288271d470e0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-2.glb": {
+      "bytes": 159192,
+      "sha256": "f83468ceddd79346a51074e67f725afb0daf109b0ec6d4dd2ebd5e26f9c93f10",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-beech-1-3.glb": {
+      "bytes": 159192,
+      "sha256": "cb1365d3975e00ada813bcf95b0ca228bb1b965bbcd9ba58be5ea3843f741831",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-0.glb": {
+      "bytes": 233076,
+      "sha256": "592e97e5b143b995629c97a8f82fc8baaaccc56627749ff51909dd8b58a33e61",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-1.glb": {
+      "bytes": 233072,
+      "sha256": "32314c479676bb470c845e53a230d8b4cd9e88694037648e867f6254392b82c3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-2.glb": {
+      "bytes": 233076,
+      "sha256": "dbf3d7e97fe6fc2c1d94ed53957b9c91f19099ae75c086599b302a5e4c981658",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-2-3.glb": {
+      "bytes": 233076,
+      "sha256": "e2bc0bc4a37143f42f3ecb7d29aefe8f667d2146fa4aeff5e4e9f145b6b14832",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-0.glb": {
+      "bytes": 233072,
+      "sha256": "ccc5154931cd34570eb5aa0e3e0118978b23cae0f3150199356deb3fef6ac2a9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-1.glb": {
+      "bytes": 233072,
+      "sha256": "d475b5c798c52e953ab253f5963fa825173ab711fe2d8396dbb371e7d3dc7192",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-2.glb": {
+      "bytes": 233072,
+      "sha256": "16bd4d4f70300dcb4ffec502a2c6eb1b271804b585ce69f10ce4d1072b4975d4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-lime-3-3.glb": {
+      "bytes": 233072,
+      "sha256": "2fc1e6b92790f81a2c135d1a871892fdb13bc0ea8635758bdcacd4b523feba27",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-0.glb": {
+      "bytes": 165680,
+      "sha256": "d2fd203f14b37266c23b14113b11d713ee567934b44f6e719ed535cdbcd1340a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-1.glb": {
+      "bytes": 165680,
+      "sha256": "c2d06a01ca19f37d635aedd89670109d6485a952acd074207c3e5e8e599d8c5c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-2.glb": {
+      "bytes": 165680,
+      "sha256": "04602fcb97bf6479c651caf1418318d5d5e417dfa69864bcf53a61c53fdc1324",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MetadataGranularities/tree-spruce-0-3.glb": {
+      "bytes": 165680,
+      "sha256": "87827aca24ee3b0ca3d8bdecdf099d9340375cc7d0a07cfe7a0a493d68d62cd4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/planePoints.glb": {
+      "bytes": 267140,
+      "sha256": "a7145466460ddf8795cd22171aa168a446207c3b1ad50f3f487f3c8edbc5673c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/planeTriangles.glb": {
+      "bytes": 113332,
+      "sha256": "3a4ba6fbaf39db1a421339b56c82b30daf92c16317a940f91d88feb512ecb27e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/MultipleContents/tileset.json": {
+      "bytes": 392,
+      "sha256": "bb6db5235483121e0a35049280a939c39bbffe57996bf4944f41b98dfaa2f1d2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_1__0_0_0.glb": {
+      "bytes": 1812,
+      "sha256": "a84bbe22244eba93ad5e85ff2e85b24fe78a3f75b9580348b2705eed8bdde14a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_2__2_0_0.glb": {
+      "bytes": 1816,
+      "sha256": "47eb137020428228879382a50b88fa6780c8af161001226d9fb9056a445e7c33",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_2__3_1_1.glb": {
+      "bytes": 1816,
+      "sha256": "ef08ff0db5e32ae8957e114e182ba0e29826a45658d9bf08a060feca5523133e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__0_4_0.glb": {
+      "bytes": 1820,
+      "sha256": "f03e373508ff51eb5ab4df9e17a54e3f25797da4eeccf710a82bb9eab77ea313",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__1_5_1.glb": {
+      "bytes": 1824,
+      "sha256": "e4de57b6246f761bd7975001e4e0d699051951b88c356542c8f241cf18c3fab4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__2_6_2.glb": {
+      "bytes": 1824,
+      "sha256": "da24c0865913ca7009d79be96e46a4fe6d2fab4df99a68cb52123e44efa285f9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_3__3_7_3.glb": {
+      "bytes": 1820,
+      "sha256": "f6d2bd317ef311d740c3a8620c9e27afec96d84cad80fb6e5ac67f576722f9d9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__10_10_2.glb": {
+      "bytes": 1828,
+      "sha256": "ee666c4da3696ed0f661157bece6ecc31f498dae20f27a8bb52ce797ee6f5c5d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__11_11_3.glb": {
+      "bytes": 1824,
+      "sha256": "2bf4a0703f7d69a5f93da086946173e3c1aba879b0abe274d55f29cc812f1e3d",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__12_12_4.glb": {
+      "bytes": 1824,
+      "sha256": "90edeb649bfe9ea79ca32825a27058d33e509f2491b07cadad32ce32bb399ab9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__13_13_5.glb": {
+      "bytes": 1828,
+      "sha256": "4fe99a995b42eb15210c1efb670d83434bd0dd7187402ae3dbfb3f114c1c7276",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__14_14_6.glb": {
+      "bytes": 1828,
+      "sha256": "04aaebd677eb7d34b4d844ffffa1b2cbcaffa2bbdfbc043363abf00b32788a2f",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__15_15_7.glb": {
+      "bytes": 1824,
+      "sha256": "e9818757072f06ddbe509eebbe75559d8a5f2ae79da0116b4105709930cb05b4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__8_8_0.glb": {
+      "bytes": 1824,
+      "sha256": "825ff6004d4c1fa9d3d3b66684ccd976088023ee4a7b5fbe6569490643176aff",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_4__9_9_1.glb": {
+      "bytes": 1828,
+      "sha256": "d14350a71d659f1240de7e4a5988dcf474da37863806bc03cfc5b21b2812d70b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__16_16_16.glb": {
+      "bytes": 1824,
+      "sha256": "4854fc2bf2f9707c8b200dd377a1f5a7f00b5027a096567ce2deaa40cb46465b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__17_17_17.glb": {
+      "bytes": 1836,
+      "sha256": "86f1c9f981fd002f9441ae55e83f4916353e1a4c56bf953e39c477abb09b73ee",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__18_18_18.glb": {
+      "bytes": 1836,
+      "sha256": "074686b0237280222a2121f1d098130f322cd237ec9e467e7e67438570b92f02",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__19_19_19.glb": {
+      "bytes": 1832,
+      "sha256": "37f747be61e6e8623a2e0d4f4d71144ee5251134cc3c134b31ed0b13c27515e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__20_20_20.glb": {
+      "bytes": 1832,
+      "sha256": "91d45e53bfa261c42fe9aa438b5dff46d526ba53791dfc264feabf14bc0b9f10",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__21_21_21.glb": {
+      "bytes": 1836,
+      "sha256": "36f24ae0347b0630741deb2f124a623e6ca69b3a6bf01b5b5150235955b6ac83",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__22_22_22.glb": {
+      "bytes": 1836,
+      "sha256": "85ca3a909c2db19a692f1e19702362f6635b8cff1175fae8701314469b849bb0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__23_23_23.glb": {
+      "bytes": 1828,
+      "sha256": "144b3f3306a61b846eb9fad8674b64d32feed56d775121a1fa37e31731390e53",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__24_24_24.glb": {
+      "bytes": 1828,
+      "sha256": "847f9928d1300e659c29b0fe2b5658ceda33560802929e1c492a892f4b1ecb31",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__25_25_25.glb": {
+      "bytes": 1836,
+      "sha256": "dab6594def6f9e8060a8b41f0844c0be6c8938a823b780d24076c00ecb65be66",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__26_26_26.glb": {
+      "bytes": 1836,
+      "sha256": "bf656a0c6e6d17ca0cbf6273306a012989e9a1922eb6f5e89efe7d53dce74440",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__27_27_27.glb": {
+      "bytes": 1832,
+      "sha256": "7efd3998b6d5984cfbda549de6601d43218bf2a6a482fbb7ae4d4c650e028c55",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__28_28_28.glb": {
+      "bytes": 1832,
+      "sha256": "691acdf0699a84d3b02a4a5a388c4c27976b573913deb5107d5705fe1a2e15f3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__29_29_29.glb": {
+      "bytes": 1836,
+      "sha256": "328b0ee173e42c137204ea8126eb70a251a73510c859af86165fb8579905caf3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__30_30_30.glb": {
+      "bytes": 1836,
+      "sha256": "452e9fc96b05d99b9986f52d0adad37cf59f1cf5fa4c92b69b7a02d81f6b4f61",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/content/content_5__31_31_31.glb": {
+      "bytes": 1824,
+      "sha256": "be920478f6329046e011be90b321f9492e36d25d803a3f933df16f6fcd292331",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/0.0.0.0.subtree": {
+      "bytes": 480,
+      "sha256": "84e184f6e64081d2927815ecdee9063b98e0558c0c1d6658141e752ddfd3c8a3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.0.4.0.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.1.5.1.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.2.6.2.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.3.7.3.subtree": {
+      "bytes": 368,
+      "sha256": "bead5ee1553406b598d12b08d09026b33386f0afe52d2bcdaff62e1373f1ef4e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.4.4.0.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.4.4.4.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.5.5.1.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.5.5.5.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.6.6.2.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.6.6.6.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.7.7.3.subtree": {
+      "bytes": 368,
+      "sha256": "f0f1c244f84ade37fa318b96883b8665a354a44cc4c49ac484165e32f4241589",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/subtrees/3.7.7.7.subtree": {
+      "bytes": 368,
+      "sha256": "cfb734f0af32ceae14a77022595f86ebef765fd93977b1bdbd4a63a49171633a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitOctree/tileset.json": {
+      "bytes": 541,
+      "sha256": "536fb0ab8d7da26d01828333f89ad46a274ff1c5d24e01611417db1203fe35f0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__0_21.glb": {
+      "bytes": 1212,
+      "sha256": "eada4e4aa97a2a5fcf48562197b41230e3fd28ec26cbf38b1e10c506ebf07919",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__10_31.glb": {
+      "bytes": 1212,
+      "sha256": "6ceae9264f2c6b20280eb720e56aade39c4e9d41eab2a8c4d8f7278d4c8e6519",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__11_30.glb": {
+      "bytes": 1216,
+      "sha256": "612cd9483e2b6fab1cef61f30458d17a741a62f68ff0c2bce45d6d365d2d29a0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__12_25.glb": {
+      "bytes": 1216,
+      "sha256": "f1ec8e3049649f9ee5dc184803b8c37955d5e742c50bee7e6f2eced66d3c14e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__13_24.glb": {
+      "bytes": 1212,
+      "sha256": "3255065da4ecf9dec5a0db5f7d67ebf6eff9708e415ec8424f0c0f11f7aa5a95",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__14_27.glb": {
+      "bytes": 1216,
+      "sha256": "ccdd833e1793465ec3b90d35a7a6bcfe6780387eba766a087f1bf2e54ffff0b9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__15_26.glb": {
+      "bytes": 1212,
+      "sha256": "469c7becc9ef143a5cc5b2319a315f175244f7022ee11b77ea02c3e55eee6775",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__16_5.glb": {
+      "bytes": 1212,
+      "sha256": "764f7bb0ac38ffe2498096f62b61838977509a74d5802ae950114eccab01dfa2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__17_4.glb": {
+      "bytes": 1216,
+      "sha256": "ed0bedaef538c92819647d6c353ea4a5ee3991a5fd725dca8c85d5021e3946b8",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__18_7.glb": {
+      "bytes": 1212,
+      "sha256": "c9a902f6b6fc4ce52849722a20f389fdfafaff61fec0b6c5f9ee510a30f3291b",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__19_6.glb": {
+      "bytes": 1216,
+      "sha256": "a5e8a070e70e925f66ca2c7b8e67914b1efb74636d6d5aa64ebba3af5d7a8a81",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__1_20.glb": {
+      "bytes": 1216,
+      "sha256": "83165e43769d88ad9100572055b8beb5c0e2c10408b4db690a5d9014353f3f4a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__20_1.glb": {
+      "bytes": 1216,
+      "sha256": "3a941af6c4e2d0c2589d9c670c38a4178ff4908a436274f1be0debb3d98f3785",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__21_0.glb": {
+      "bytes": 1212,
+      "sha256": "2aba3fcc440a4de17bee60cff2524eda44856bf57ae03428b5840e85bcc412a3",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__22_3.glb": {
+      "bytes": 1216,
+      "sha256": "62d3f8fbfb7e5b9b5e453d336249cb7eb29f2261295750ffef2cf9c24897dfa0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__23_2.glb": {
+      "bytes": 1212,
+      "sha256": "ea6f541348d3906144e7b8565f0b5255a7c99a29bfde193d774b5ac2bb06e2c1",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__24_13.glb": {
+      "bytes": 1212,
+      "sha256": "2a4c8316fbc634e7121a70bd62eac140431dd0f5939f76bfc244f8116b82466a",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__25_12.glb": {
+      "bytes": 1216,
+      "sha256": "c9b3ff948cef4d10eae58282dd5d956edf5d4786157811167dac15cc23a77c7c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__26_15.glb": {
+      "bytes": 1212,
+      "sha256": "ea6e58bd108e8e9a0fb4b62154fbeee9f9f8a0452fb62ca2753275475724bf0e",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__27_14.glb": {
+      "bytes": 1216,
+      "sha256": "7327415c2d844574b135ea297f59add1dc4e3fed7926be7bc68321d15e37d503",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__28_9.glb": {
+      "bytes": 1216,
+      "sha256": "9be0df999baec442b46f03b750813a166969f022ccd749e177d27fff84bbec6f",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__29_8.glb": {
+      "bytes": 1212,
+      "sha256": "cb9de5738eb6de7326d7a2e1b324d992e1875f66ae35a54c51a11d15770cc643",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__2_23.glb": {
+      "bytes": 1212,
+      "sha256": "113c0e917104561e099e8ad4065dade0c3eb6413f616b744b97b0daaaf5922a9",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__30_11.glb": {
+      "bytes": 1216,
+      "sha256": "4110982f3355bd7e77be0e23603aabf4d9473c63b480ecfd5c6ab50adfe1096c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__31_10.glb": {
+      "bytes": 1212,
+      "sha256": "2a40242d8fe8d5ec100c3ecd633ebac312ba8481c52b0cc811e1aba7c37765b2",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__3_22.glb": {
+      "bytes": 1216,
+      "sha256": "010b378923ea0907c2d3b1dbf2160bbda4e3a71c3bdaf549d498bf9ab6f4b893",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__4_17.glb": {
+      "bytes": 1216,
+      "sha256": "8b25c7b92272d9860e344b34781b69be52b8381d26cf5f721915de855650bfbc",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__5_16.glb": {
+      "bytes": 1212,
+      "sha256": "3c0a66f6403757c388023adf262568234afacad15baf0b08102da097497a141c",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__6_19.glb": {
+      "bytes": 1216,
+      "sha256": "d0c97eff5a9c3d8d5f81041b967bb0a53342e64b70e318190f2aaeb373dd8d03",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__7_18.glb": {
+      "bytes": 1212,
+      "sha256": "be7f5fc71bec0ca2ca6ebb8ba048042bee3563dd89246b018d0e4ce551978aec",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__8_29.glb": {
+      "bytes": 1212,
+      "sha256": "c3961c4bb662cabaac3804c911039b603ce007d1370c5022413f2064850e6071",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/content/content_5__9_28.glb": {
+      "bytes": 1216,
+      "sha256": "fea2a9901f20e7adfffb48c481dfa7e939d62545d91eed89237205b7d420b2e4",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/0.0.0.subtree": {
+      "bytes": 352,
+      "sha256": "aedc86583f9fb27acffa2da55f9617dc8af6aa87c8c86b771976980edb1d90d0",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.0.5.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.1.4.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.2.7.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.3.6.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.4.1.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.5.0.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.6.3.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/subtrees/3.7.2.subtree": {
+      "bytes": 352,
+      "sha256": "9f0ce9a280cf5b5d6464468fa8c68025b0bb03c693adf8992bf2e83660bf3488",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/SparseImplicitQuadtree/tileset.json": {
+      "bytes": 543,
+      "sha256": "85156fb54fd75e4b6c2573f8a7cf6ab8848bc5a29218f71d63c072cb323262da",
+      "source": "tiles-1.1/"
+    },
+    "tiles-1.1/TilesetWithFullMetadata/tileset.json": {
+      "bytes": 253633,
+      "sha256": "ec57c69d6635f4c0e88ddaef56eab8a3884540d6010eed937e0c507e3deed030",
+      "source": "tiles-1.1/"
+    },
+    "vector/brisbane-roads-3d.gpkg": {
+      "bytes": 106496,
+      "sha256": "7625383096b92a887ca2826924e7aab6350ce1f335323bf25b8e8d5e4ab52d62",
+      "source": ".downloads/ne_10m_roads.zip"
+    },
+    "vector/natural-earth-10m-places.gpkg": {
+      "bytes": 6270976,
+      "sha256": "720af176b03e8f6a2fcc989a17e56d92e4ec600b2a30ed4e8fc6aa0b3db1ea8c",
+      "source": ".downloads/ne_10m_populated_places.zip"
+    },
+    "vector/natural-earth-110m-countries.geojson": {
+      "bytes": 995223,
+      "sha256": "514133eaeeb87f94c585d7c071c0565964f093bc70e6d809b9478c4a319da8eb",
+      "source": ".downloads/ne_110m_admin_0_countries.zip"
+    },
+    "vector/natural-earth-110m-populated-places.geojson": {
+      "bytes": 644190,
+      "sha256": "f631c2f0801436749f0d63304c0d437555546ee8a5308868301ad562d37dbb07",
+      "source": ".downloads/ne_110m_populated_places.zip"
+    },
+    "vector/natural-earth-110m.gpkg": {
+      "bytes": 806912,
+      "sha256": "4627561610d0211e38d93ac9687553fc2f9fa2473e95c61974f622b9425c0969",
+      "source": ".downloads/ne_110m_admin_0_countries.zip"
+    },
+    "vector/natural-earth-roads.gpkg": {
+      "bytes": 26169344,
+      "sha256": "6b7bd310edd1678d0c9f066953d1a202de74bde8c54d64563ba31f1bd80d6bd0",
+      "source": ".downloads/ne_10m_roads.zip"
+    }
+  },
+  "cases": [
+    {
+      "id": "mesh-milktruck",
+      "category": "mesh",
+      "profile": "smoke",
+      "input": "mesh/CesiumMilkTruck-static.glb",
+      "command": "mesh-to-3tz",
+      "args": [
+        "--maxTriangles",
+        "10000",
+        "--maxBytes",
+        "0",
+        "--tileSize",
+        "512"
+      ],
+      "audit": "mesh",
+      "expect": "success"
+    },
+    {
+      "id": "autzen-trim",
+      "category": "point-cloud",
+      "profile": "smoke",
+      "input": "point-cloud/autzen_trim.las",
+      "command": "point-cloud",
+      "args": [
+        "--sourceCrs",
+        "local",
+        "--maxPoints",
+        "20000"
+      ],
+      "audit": "points",
+      "expect": "success",
+      "prepare": "decompress-las",
+      "notes": "Original horizontal foot coordinates tested as local numeric XYZ; no metre conversion, georeference or vertical datum claim."
+    },
+    {
+      "id": "usgs-root",
+      "category": "point-cloud",
+      "profile": "smoke",
+      "input": "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz",
+      "command": "point-cloud",
+      "args": [
+        "--sourceCrs",
+        "EPSG:3857",
+        "--heightOffset",
+        "0",
+        "--maxPoints",
+        "5000"
+      ],
+      "audit": "points",
+      "expect": "success",
+      "prepare": "decompress-las",
+      "notes": "Known fixture horizontal metre CRS; supplied Z treated as ellipsoidal for this encoding test, without a vertical datum conversion."
+    },
+    {
+      "id": "places",
+      "category": "vector",
+      "profile": "smoke",
+      "input": "vector/natural-earth-110m.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "populated_places",
+        "--maxFeatures",
+        "64",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "features": 243
+    },
+    {
+      "id": "countries",
+      "category": "vector",
+      "profile": "smoke",
+      "input": "vector/natural-earth-110m.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "countries",
+        "--repair",
+        "--skipInvalid",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "features": 177
+    },
+    {
+      "id": "imagery-australia",
+      "category": "imagery",
+      "profile": "smoke",
+      "input": "imagery/NE1_50M_SR_W_australia.tif",
+      "command": "raster",
+      "args": [
+        "--minZoom",
+        "2",
+        "--maxZoom",
+        "4"
+      ],
+      "audit": "raster",
+      "expect": "success"
+    },
+    {
+      "id": "terrain-brisbane",
+      "category": "terrain",
+      "profile": "smoke",
+      "input": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+      "command": "terrain",
+      "args": [
+        "--maxZoom",
+        "8",
+        "--heightOffset",
+        "0",
+        "--fillHeight",
+        "0"
+      ],
+      "audit": "terrain",
+      "expect": "success",
+      "notes": "Source EGM2008 orthometric elevations retained as numeric test heights; no vertical datum conversion."
+    },
+    {
+      "id": "splats-unsupported",
+      "category": "splats",
+      "profile": "smoke",
+      "input": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+      "command": "glb-to-3tz",
+      "args": [],
+      "audit": "archive",
+      "expect": "KHR_gaussian_splatting"
+    },
+    {
+      "id": "global-imagery-refused",
+      "category": "imagery",
+      "profile": "core",
+      "input": "imagery/NE1_50M_SR_W.tif",
+      "command": "raster",
+      "args": [
+        "--maxZoom",
+        "2"
+      ],
+      "audit": "raster",
+      "expect": "polar"
+    },
+    {
+      "id": "flight-helmet-external",
+      "category": "mesh",
+      "profile": "core",
+      "input": "mesh/flight-helmet/FlightHelmet.gltf",
+      "command": "mesh-to-3tz",
+      "args": [],
+      "audit": "archive",
+      "expect": "cannot yet preserve source glTF extensions"
+    },
+    {
+      "id": "mesh-lantern",
+      "category": "mesh",
+      "profile": "core",
+      "input": "mesh/Lantern-static.glb",
+      "command": "mesh-to-3tz",
+      "args": [
+        "--maxTriangles",
+        "10000",
+        "--maxBytes",
+        "0",
+        "--tileSize",
+        "512"
+      ],
+      "audit": "mesh",
+      "expect": "success"
+    },
+    {
+      "id": "mesh-corset",
+      "category": "mesh",
+      "profile": "core",
+      "input": "mesh/Corset-static.glb",
+      "command": "mesh-to-3tz",
+      "args": [
+        "--maxTriangles",
+        "10000",
+        "--maxBytes",
+        "0",
+        "--tileSize",
+        "512"
+      ],
+      "audit": "mesh",
+      "expect": "success"
+    },
+    {
+      "id": "mesh-floreat",
+      "category": "mesh",
+      "profile": "core",
+      "input": "mesh/floreat-dunes/floreat-f2-2022-static.glb",
+      "command": "mesh-to-3tz",
+      "args": [
+        "--maxTriangles",
+        "10000",
+        "--maxBytes",
+        "0",
+        "--tileSize",
+        "512",
+        "--cartographicPositionDegrees",
+        "115.755644",
+        "-31.927922",
+        "5"
+      ],
+      "audit": "mesh",
+      "expect": "success"
+    },
+    {
+      "id": "mesh-delft",
+      "category": "mesh",
+      "profile": "core",
+      "input": "city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb",
+      "command": "mesh-to-3tz",
+      "args": [
+        "--maxTriangles",
+        "10000",
+        "--maxBytes",
+        "0",
+        "--tileSize",
+        "512",
+        "--cartographicPositionDegrees",
+        "4.352914",
+        "52.015809",
+        "0"
+      ],
+      "audit": "mesh",
+      "expect": "success"
+    },
+    {
+      "id": "roads",
+      "category": "vector",
+      "profile": "core",
+      "input": "vector/natural-earth-roads.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "roads",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "features": 56600
+    },
+    {
+      "id": "delft-buildings-local",
+      "category": "vector",
+      "profile": "core",
+      "input": "city-model/3dbag-delft/9-280-564.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "lod22_3d",
+        "--sourceCrs",
+        "local",
+        "--repair",
+        "--skipInvalid",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "notes": "RD New/NAP coordinates treated as local numeric XYZ to audit encoding without optional datum grids; output is not georeferenced.",
+      "features": 2290
+    },
+    {
+      "id": "autzen-full",
+      "category": "point-cloud",
+      "profile": "scale",
+      "input": "point-cloud/autzen-classified.laz",
+      "command": "point-cloud",
+      "args": [
+        "--sourceCrs",
+        "local",
+        "--maxPoints",
+        "50000"
+      ],
+      "audit": "points",
+      "expect": "success",
+      "prepare": "local-feet",
+      "notes": "Horizontal international feet and vertical US survey feet converted to local metres; no datum transformation or ellipsoidal placement."
+    },
+    {
+      "id": "usgs-all-nodes",
+      "category": "point-cloud",
+      "profile": "scale",
+      "input": "point-cloud/usgs-3dep-brookscamp/ept-data",
+      "command": "point-cloud",
+      "args": [
+        "--sourceCrs",
+        "EPSG:3857",
+        "--heightOffset",
+        "0",
+        "--maxPoints",
+        "50000"
+      ],
+      "audit": "points",
+      "expect": "success",
+      "prepare": "merge-las",
+      "notes": "All LAZ nodes merged in sorted filename order outside timing; original records preserved, no vertical datum conversion."
+    },
+    {
+      "id": "sentinel-brisbane",
+      "category": "imagery",
+      "profile": "scale",
+      "input": "imagery/S2A_56JMQ_20250704_TCI.tif",
+      "command": "raster",
+      "args": [
+        "--minZoom",
+        "8",
+        "--maxZoom",
+        "13"
+      ],
+      "audit": "raster",
+      "expect": "success"
+    },
+    {
+      "id": "terrain-mosaic",
+      "category": "terrain",
+      "profile": "scale",
+      "input": "terrain/copernicus-brisbane-2x2.tif",
+      "command": "terrain",
+      "args": [
+        "--maxZoom",
+        "11",
+        "--heightOffset",
+        "0",
+        "--fillHeight",
+        "0"
+      ],
+      "audit": "terrain",
+      "expect": "success",
+      "notes": "Source orthometric heights retained for numeric encoding benchmarks."
+    },
+    {
+      "id": "terrain-projected",
+      "category": "terrain",
+      "profile": "scale",
+      "input": "terrain/copernicus-s28e152-utm56s.tif",
+      "command": "terrain",
+      "args": [
+        "--maxZoom",
+        "10",
+        "--heightOffset",
+        "0",
+        "--fillHeight",
+        "0"
+      ],
+      "audit": "terrain",
+      "expect": "success",
+      "notes": "Prepared UTM 56S raster; source orthometric heights retained."
+    },
+    {
+      "id": "places-dense",
+      "category": "vector",
+      "profile": "scale",
+      "input": "vector/natural-earth-10m-places.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "populated_places",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "features": 7342
+    },
+    {
+      "id": "roads-3d",
+      "category": "vector",
+      "profile": "scale",
+      "input": "vector/brisbane-roads-3d.gpkg",
+      "command": "vector",
+      "args": [
+        "--layer",
+        "roads_3d",
+        "--heightOffset",
+        "0",
+        "--reproducible"
+      ],
+      "audit": "archive",
+      "expect": "success",
+      "notes": "Source was draped over the orthometric DEM; Z preserved for encoding, without vertical datum conversion.",
+      "features": 14
+    },
+    {
+      "id": "reference-quadtree",
+      "category": "tiles-1.1",
+      "profile": "core",
+      "input": "tiles-1.1/SparseImplicitQuadtree",
+      "command": "convert",
+      "args": [],
+      "audit": "archive",
+      "expect": "success",
+      "prepare": "tileset-resources",
+      "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue."
+    },
+    {
+      "id": "reference-octree",
+      "category": "tiles-1.1",
+      "profile": "core",
+      "input": "tiles-1.1/SparseImplicitOctree",
+      "command": "convert",
+      "args": [],
+      "audit": "archive",
+      "expect": "success",
+      "prepare": "tileset-resources",
+      "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue."
+    },
+    {
+      "id": "reference-multiple-content",
+      "category": "tiles-1.1",
+      "profile": "core",
+      "input": "tiles-1.1/MultipleContents",
+      "command": "convert",
+      "args": [],
+      "audit": "archive",
+      "expect": "success",
+      "prepare": "tileset-resources",
+      "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue."
+    },
+    {
+      "id": "reference-metadata",
+      "category": "tiles-1.1",
+      "profile": "core",
+      "input": "tiles-1.1/MetadataGranularities",
+      "command": "convert",
+      "args": [],
+      "audit": "archive",
+      "expect": "success",
+      "prepare": "tileset-resources",
+      "notes": "Pack only runtime resources, validate the foreign reference tileset and preserve every source member byte-for-byte. README/copyright attribution is retained in the corpus and results catalogue."
+    }
+  ],
+  "referenceCategories": [
+    "tiles-1.1",
+    "gltf-extensions",
+    "splats",
+    "city-model"
+  ]
+}

@@ -1,0 +1,2057 @@
+{
+  "attribution": {
+    ".downloads/NE1_50M_SR_W.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 88413091,
+      "license": "Public domain",
+      "sha256": "9e85417223414bbed425aea5dca0f0b4c5661fc94d4f14494140a21a08dfa450",
+      "url": "https://naciscdn.org/naturalearth/50m/raster/NE1_50M_SR_W.zip"
+    },
+    ".downloads/ne_10m_populated_places.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 2811199,
+      "license": "Public domain",
+      "sha256": "cd149186f03d2603e0410da399b980a4357d0ac32d3a2305a49ed3dffcc41d7b",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places.zip"
+    },
+    ".downloads/ne_10m_roads.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 9075919,
+      "license": "Public domain",
+      "sha256": "880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip"
+    },
+    ".downloads/ne_110m_admin_0_countries.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 214976,
+      "license": "Public domain",
+      "sha256": "0f243aeac8ac6cf26f0417285b0bd33ac47f1b5bdb719fd3e0df37d03ea37110",
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+    },
+    ".downloads/ne_110m_populated_places.zip": {
+      "attribution": "Natural Earth",
+      "bytes": 126591,
+      "license": "Public domain",
+      "sha256": "29b901a2ae0a745741c0642123480e31101ed723086c4d0cae657a8d722c3b28",
+      "url": "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_populated_places.zip"
+    },
+    "city-model/3dbag-delft/9-280-564-obj.zip": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2661385,
+      "license": "CC-BY-4.0",
+      "sha256": "cd7f88a883cd5635ccd71a9e2c4df492eaa83d16da0e712a1e262af5ec787f44",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564-obj.zip"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json": {
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 12815571,
+      "license": "CC-BY-4.0",
+      "sha256": "d38c6a3d19a2faa9078527b0ec93b54824c50d3aecfb1c78d8d55a264aa73565",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.city.json.gz": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 2206100,
+      "license": "CC-BY-4.0",
+      "sha256": "d1985cc8222f7257c7251b45466daaca165bfe2010fdc60fc99a60c08578969d",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.city.json.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg": {
+      "attribution": "3D BAG, TU Delft 3D geoinformation; gunzipped",
+      "bytes": 29278208,
+      "license": "CC-BY-4.0",
+      "sha256": "a69be7ea5886a1ad0dd049fba2e6b9a946892502988d285129d22f6cef5fc891",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz"
+    },
+    "city-model/3dbag-delft/9-280-564.gpkg.gz": {
+      "attribution": "3D BAG, 3D geoinformation research group, TU Delft, https://3dbag.nl",
+      "bytes": 4854412,
+      "license": "CC-BY-4.0",
+      "sha256": "9e85aeda7295d3ca9393c29d16c8115030bb877681b4a351542f15bf159f1da9",
+      "url": "https://data.3dbag.nl/v20240420/tiles/9/280/564/9-280-564.gpkg.gz"
+    },
+    "gltf-extensions/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 5173473,
+      "files": 65,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "c72d9d9a88d04581b290316856f7944b499637cce5c33fb4cb63e6e542754195",
+      "url": "https://github.com/CesiumGS/3d-tiles-samples glTF"
+    },
+    "gltf-extensions/EXT_mesh_gpu_instancing/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 6503,
+      "files": 4,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "e7f8e8bfa80d96f22c6f596a818f82ede0b4e445a61d95e02054027cb50519ca",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/BoxInstanced"
+    },
+    "gltf-extensions/KHR_mesh_primitive_restart/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 20606,
+      "files": 6,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "fdf79f3b36480b0156f950082a5df89112df69a1c580aac2791c1846e28fe7bc",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/models/PrimitiveRestart"
+    },
+    "imagery/S2A_56JMQ_20250704_TCI.tif": {
+      "attribution": "Contains modified Copernicus Sentinel data 2025, processed by Element 84 / AWS sentinel-cogs",
+      "bytes": 326477076,
+      "license": "Copernicus Sentinel data, free and open under the Sentinel Data Legal Notice",
+      "sha256": "84b3e211ab135fb4eb9aac6faf923d1d6e2268ac77e35d0fceee73affd784d1a",
+      "url": "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/56/J/MQ/2025/7/S2A_56JMQ_20250704_0_L2A/TCI.tif"
+    },
+    "mesh/CesiumMilkTruck.README.upstream.md": {
+      "attribution": "Cesium",
+      "bytes": 1198,
+      "license": "CC-BY-4.0",
+      "sha256": "72795225ebbbbd09138dfe0a911fadd7b9dbaeddaf134175cc3c9546383be1cb",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMilkTruck/README.md"
+    },
+    "mesh/CesiumMilkTruck.glb": {
+      "attribution": "Cesium",
+      "bytes": 441972,
+      "license": "CC-BY-4.0",
+      "sha256": "31dc008a7b0adc3349888a9bf2d9acc01323a70a301d2936aef3711b36a3f72d",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumMilkTruck/CesiumMilkTruck.glb"
+    },
+    "mesh/Corset.README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 955,
+      "license": "CC0-1.0",
+      "sha256": "437e4a46f008ed20326d9681b36b381db1ac6ef6730a94bc26f61ca366e12384",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/README.md"
+    },
+    "mesh/Corset.glb": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 13491364,
+      "license": "CC0-1.0",
+      "sha256": "9582c0dc0dee813be77f60e6ddf7213987c7e11497bf3cc66fd7b18957ae0d26",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corset/glTF-Binary/Corset.glb"
+    },
+    "mesh/Lantern.README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 1080,
+      "license": "CC0-1.0",
+      "sha256": "58a4903ae9c0bbb7d3f6ff1b9263b3b480edb7ca82109afdb06723275835a6c7",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/README.md"
+    },
+    "mesh/Lantern.glb": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 9564264,
+      "license": "CC0-1.0",
+      "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/glTF-Binary/Lantern.glb"
+    },
+    "mesh/flight-helmet/FlightHelmet.gltf": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 18698,
+      "license": "CC0-1.0",
+      "sha256": "c9c16c8b85749f62f38ec6069700e5388c6894d8e566f51a35cc270255402cd3",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/glTF/FlightHelmet.gltf"
+    },
+    "mesh/flight-helmet/README.upstream.md": {
+      "attribution": "Khronos glTF-Sample-Assets contributors, see README beside the model",
+      "bytes": 3348,
+      "license": "CC0-1.0",
+      "sha256": "7724b64fb4fae1135ddec3738d1eb9320d3bb9c890f599c423a09e205fb7257f",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/README.md"
+    },
+    "mesh/floreat-dunes/floreat-f2-2022_simplified_3d_mesh.zip": {
+      "attribution": "Cambridge Coastcare via DataWA; EPSG:7850, offset E 382368 N 6466878 A 5",
+      "bytes": 41242406,
+      "license": "CC-BY-4.0",
+      "sha256": "1b2533fc5c339a2a3e5646a5344c0932fe809c2c4ff0fe37e80d9cece39f89e9",
+      "url": "https://catalogue.data.wa.gov.au/dataset/59e33118-4b23-4dbd-940f-106a9a173dae/resource/ac51dfd4-b872-4ff1-ab51-c04fa411c592/download/floreat-f2-2022_simplified_3d_mesh.zip"
+    },
+    "point-cloud/autzen-classified.laz": {
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 74416814,
+      "license": "CC-BY-4.0",
+      "sha256": "c8828215facfb4c9465c9a7db9d45cf2c0e9175a6eb5b21e89417978cc85cd51",
+      "url": "https://media.githubusercontent.com/media/PDAL/data/main/autzen/autzen-classified.laz"
+    },
+    "point-cloud/autzen_trim.las": {
+      "attribution": "Aaron Reyna / Watershed Sciences (2010); classifications Max Sampson / Hobu (2021)",
+      "bytes": 3742038,
+      "license": "CC-BY-4.0",
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75",
+      "url": "https://github.com/PDAL/PDAL/raw/master/test/data/las/autzen_trim.las"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-hierarchy/0-0-0-0.json": {
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 252231,
+      "license": "Public domain",
+      "sha256": "139c335cec73e9c075096ca30dbfdc0903e3b3ddd3682024547b949db3832ab8",
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept-hierarchy/0-0-0-0.json"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept.json": {
+      "attribution": "U.S. Geological Survey 3DEP via AWS Open Data usgs-lidar-public",
+      "bytes": 2426,
+      "license": "Public domain",
+      "sha256": "811ad38e3e2d43cf0dd74f9df734f92e41789ccc8b4e6e7df0ff179114c3ad37",
+      "url": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 2688,
+      "license": "Apache-2.0",
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/tileset.json": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 540,
+      "license": "Apache-2.0",
+      "sha256": "bedf1ad764aa1f99908fc66616872e5e4480fb12121b2c9d0182fbf0ae509e01",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/tileset.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/0/0.glb": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 7499156,
+      "license": "Apache-2.0",
+      "sha256": "9ef9d8d0756d1f423cd6aa8bd99f7dd26957f96df03dcbcec6e37103e39350b4",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/0/0.glb"
+    },
+    "splats/cesium-fixtures/GaussianSplats/tower/tileset.json": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 1322,
+      "license": "Apache-2.0",
+      "sha256": "a29517618aef75aaf47191949660bc8fed3f121d09555dbc1bbe9e4dfe26b493",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/main/Specs/Data/Cesium3DTiles/GaussianSplats/tower/tileset.json"
+    },
+    "splats/niantic-spz/LICENSE": {
+      "attribution": "Niantic Labs",
+      "bytes": 1069,
+      "license": "MIT",
+      "sha256": "d2b852220d1043148f523c4154e8bf7d9c5e419aede33b4c94115cfc457e4714",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/LICENSE"
+    },
+    "splats/niantic-spz/hornedlizard.spz": {
+      "attribution": "Niantic Labs",
+      "bytes": 18143098,
+      "license": "MIT",
+      "sha256": "a076ca6aeb9f1a8fe52526f4a7c381fe8fffec60c0d7eb64b45532189b64bc6a",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/hornedlizard.spz"
+    },
+    "splats/niantic-spz/racoonfamily.spz": {
+      "attribution": "Niantic Labs",
+      "bytes": 24202962,
+      "license": "MIT",
+      "sha256": "2e068d893730955c09aee324ff170c559f71c0e8758c1b14c3811a5969333cfe",
+      "url": "https://raw.githubusercontent.com/nianticlabs/spz/main/samples/racoonfamily.spz"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47965852,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "24ac3224821f3d2b0e3933bd7d6d64b54eb11ab5dae363aef3c64d83d57bf47f",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E152_00_DEM/Copernicus_DSM_COG_10_S27_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 5894466,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "783d5dfa1108d3fb95c107e55dd2623f3268fbbacf9229793b42c3d42da9fa5a",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S27_00_E153_00_DEM/Copernicus_DSM_COG_10_S27_00_E153_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 47261499,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E152_00_DEM/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif": {
+      "attribution": "\u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bytes": 15824152,
+      "license": "Copernicus DEM free licence, attribution required",
+      "sha256": "dea0be928bddde7158a1ba8d6d9dffde62d0f8d2c9b3a6eef13dcea94069e196",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S28_00_E153_00_DEM/Copernicus_DSM_COG_10_S28_00_E153_00_DEM.tif"
+    },
+    "tiles-1.1/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 4163733,
+      "files": 159,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "62ffd375deb9bf8a8ed22f50c4f7640dea5a2dc37e2d39e133c1edfd4e574ac6",
+      "url": "https://github.com/CesiumGS/3d-tiles-samples 1.1"
+    },
+    "tiles-1.1/CesiumVoxels/": {
+      "attribution": "CesiumJS Contributors",
+      "bytes": 33472,
+      "files": 28,
+      "license": "Apache-2.0",
+      "sha256_of_file_list": "156f8760ba6cc0aeb8a91c0920fdf15ee556d97bd28aac05d28d0869c89aa307",
+      "url": "https://github.com/CesiumGS/cesium Apps/SampleData/Cesium3DTiles/Voxel"
+    }
+  },
+  "benchmark": true,
+  "cases": [
+    {
+      "checks": {
+        "baseline": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-milktruck/baseline.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 162,
+            "entries": 164,
+            "ok": true,
+            "tiles": 162
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 132,
+          "leafTriangles": 3624,
+          "outputBytes": 4200493,
+          "sourceTriangles": 3624
+        },
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/mesh-milktruck/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 346,
+            "entries": 398,
+            "ok": true,
+            "tiles": 346
+          },
+          "fidelity": "Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit.",
+          "leafContents": 270,
+          "leafTriangles": 3624,
+          "outputBytes": 5494680,
+          "sourceTriangles": 3624
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/CesiumMilkTruck-static.glb",
+          "-o",
+          "$OUTPUT/mesh-milktruck/baseline.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "mesh-to-3tz",
+          "-i",
+          "$DEMODATA/mesh/CesiumMilkTruck-static.glb",
+          "-o",
+          "$OUTPUT/mesh-milktruck/current.3tz",
+          "--force",
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ]
+      },
+      "id": "mesh-milktruck",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 1.256524,
+          "peakRssMiB": 193.44140625,
+          "wallSeconds": 0.206689005
+        },
+        "current": {
+          "cpuSeconds": 1.881609,
+          "peakRssMiB": 156.609375,
+          "wallSeconds": 0.375840111
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "7692ace165402043f5a7b923afc8250649f317c3df437662f96a7a70201f374c",
+        "current": "8ab2c146b5bd4b562165b1ea98313190af0e6732a9e9bdb789afe0b1aebddd59"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxTriangles",
+          "10000",
+          "--maxBytes",
+          "0",
+          "--tileSize",
+          "512"
+        ],
+        "audit": "mesh",
+        "category": "mesh",
+        "command": "mesh-to-3tz",
+        "expect": "success",
+        "id": "mesh-milktruck",
+        "input": "mesh/CesiumMilkTruck-static.glb",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 1.256524,
+            "exit_code": 0,
+            "peakRssMiB": 195.46484375,
+            "wallSeconds": 0.209307078
+          },
+          {
+            "cpuSeconds": 1.241964,
+            "exit_code": 0,
+            "peakRssMiB": 193.44140625,
+            "wallSeconds": 0.206689005
+          },
+          {
+            "cpuSeconds": 1.270191,
+            "exit_code": 0,
+            "peakRssMiB": 187.44140625,
+            "wallSeconds": 0.201597179
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 1.888071,
+            "exit_code": 0,
+            "peakRssMiB": 148.9296875,
+            "wallSeconds": 0.383706539
+          },
+          {
+            "cpuSeconds": 1.8296130000000002,
+            "exit_code": 0,
+            "peakRssMiB": 156.609375,
+            "wallSeconds": 0.365318839
+          },
+          {
+            "cpuSeconds": 1.881609,
+            "exit_code": 0,
+            "peakRssMiB": 157.59765625,
+            "wallSeconds": 0.375840111
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/autzen-trim/baseline.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 17,
+            "entries": 20,
+            "ok": true,
+            "tiles": 17
+          },
+          "auditedColumns": [
+            "X",
+            "Y",
+            "Z",
+            "blue",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "green",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "red",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 9,
+          "leafPoints": 110000,
+          "outputBytes": 12120420,
+          "sourcePoints": 110000
+        },
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/autzen-trim/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 31,
+            "entries": 35,
+            "ok": true,
+            "tiles": 31
+          },
+          "auditedColumns": [
+            "X",
+            "Y",
+            "Z",
+            "blue",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "green",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "red",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 27,
+          "leafPoints": 110000,
+          "outputBytes": 11640192,
+          "sourcePoints": 110000
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/autzen-trim/input.las",
+          "-o",
+          "$OUTPUT/autzen-trim/baseline.3tz",
+          "--force",
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "20000"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/autzen-trim/input.las",
+          "-o",
+          "$OUTPUT/autzen-trim/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "20000"
+        ]
+      },
+      "id": "autzen-trim",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.081634,
+          "peakRssMiB": 39.21484375,
+          "wallSeconds": 0.090880984
+        },
+        "current": {
+          "cpuSeconds": 0.072485,
+          "peakRssMiB": 39.5390625,
+          "wallSeconds": 0.082981865
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "9413593df039594859f7be452d3ec8890dce0aeb6cf0b0175046e42d23a078f6",
+        "current": "5e4b127880b8a083853a528ede4398bf745577114e3d1561d9d1033a180bed71"
+      },
+      "preparedInput": {
+        "bytes": 3742038,
+        "sha256": "21ca4173751bcf0a6986bb28ace57a03416577ad58ae6c11054e724c54bb7176"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "local",
+          "--maxPoints",
+          "20000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "autzen-trim",
+        "input": "point-cloud/autzen_trim.las",
+        "notes": "Original horizontal foot coordinates tested as local numeric XYZ; no metre conversion, georeference or vertical datum claim.",
+        "prepare": "decompress-las",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.081328,
+            "exit_code": 0,
+            "peakRssMiB": 39.21484375,
+            "wallSeconds": 0.089916048
+          },
+          {
+            "cpuSeconds": 0.084504,
+            "exit_code": 0,
+            "peakRssMiB": 39.29296875,
+            "wallSeconds": 0.092821441
+          },
+          {
+            "cpuSeconds": 0.081634,
+            "exit_code": 0,
+            "peakRssMiB": 39.09765625,
+            "wallSeconds": 0.090880984
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.070694,
+            "exit_code": 0,
+            "peakRssMiB": 39.70703125,
+            "wallSeconds": 0.081341051
+          },
+          {
+            "cpuSeconds": 0.072485,
+            "exit_code": 0,
+            "peakRssMiB": 39.5390625,
+            "wallSeconds": 0.105480584
+          },
+          {
+            "cpuSeconds": 0.074613,
+            "exit_code": 0,
+            "peakRssMiB": 39.453125,
+            "wallSeconds": 0.082981865
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/usgs-root/baseline.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 13,
+            "entries": 16,
+            "ok": true,
+            "tiles": 13
+          },
+          "auditedColumns": [
+            "OriginId",
+            "X",
+            "Y",
+            "Z",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 7,
+          "leafPoints": 19873,
+          "outputBytes": 1940307,
+          "sourcePoints": 19873
+        },
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/usgs-root/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 20,
+            "entries": 24,
+            "ok": true,
+            "tiles": 20
+          },
+          "auditedColumns": [
+            "OriginId",
+            "X",
+            "Y",
+            "Z",
+            "classification",
+            "edge_of_flight_line",
+            "gps_time",
+            "intensity",
+            "key_point",
+            "number_of_returns",
+            "point_source_id",
+            "return_number",
+            "scan_angle_rank",
+            "scan_direction_flag",
+            "source_index",
+            "source_x",
+            "source_y",
+            "source_z",
+            "synthetic",
+            "user_data",
+            "withheld"
+          ],
+          "fidelity": "Every staged LAS record exactly once, with every declared scalar metadata column byte-exact; world placement is validated separately by the archive validator.",
+          "leafContents": 17,
+          "leafPoints": 19873,
+          "outputBytes": 1892658,
+          "sourcePoints": 19873
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/usgs-root/input.las",
+          "-o",
+          "$OUTPUT/usgs-root/baseline.3tz",
+          "--force",
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "5000"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "point-cloud",
+          "-i",
+          "$OUTPUT/usgs-root/input.las",
+          "-o",
+          "$OUTPUT/usgs-root/current.3tz",
+          "--force",
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "5000"
+        ]
+      },
+      "id": "usgs-root",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.048902,
+          "peakRssMiB": 42.8984375,
+          "wallSeconds": 0.058360255
+        },
+        "current": {
+          "cpuSeconds": 0.048096,
+          "peakRssMiB": 43.06640625,
+          "wallSeconds": 0.053204837
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "ee28c7efd38f5e514f912eb6753ebf97d66fb89b0dcc677ec39e968fb3a890c1",
+        "current": "6451d9d80dca7e3be44bdf79e33e2b76e2990db00248e0f35d653cd453f80f64"
+      },
+      "preparedInput": {
+        "bytes": 636720,
+        "sha256": "4b086436de639bc74847739c215089d762672778d0cdddbeb667b3293d9600c3"
+      },
+      "recipe": {
+        "args": [
+          "--sourceCrs",
+          "EPSG:3857",
+          "--heightOffset",
+          "0",
+          "--maxPoints",
+          "5000"
+        ],
+        "audit": "points",
+        "category": "point-cloud",
+        "command": "point-cloud",
+        "expect": "success",
+        "id": "usgs-root",
+        "input": "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz",
+        "notes": "Known fixture horizontal metre CRS; supplied Z treated as ellipsoidal for this encoding test, without a vertical datum conversion.",
+        "prepare": "decompress-las",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.046359,
+            "exit_code": 0,
+            "peakRssMiB": 43.1328125,
+            "wallSeconds": 0.050853664
+          },
+          {
+            "cpuSeconds": 0.048902,
+            "exit_code": 0,
+            "peakRssMiB": 42.8984375,
+            "wallSeconds": 0.06390909
+          },
+          {
+            "cpuSeconds": 0.053957,
+            "exit_code": 0,
+            "peakRssMiB": 42.65625,
+            "wallSeconds": 0.058360255
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.048096,
+            "exit_code": 0,
+            "peakRssMiB": 43.06640625,
+            "wallSeconds": 0.053204837
+          },
+          {
+            "cpuSeconds": 0.050438,
+            "exit_code": 0,
+            "peakRssMiB": 43.3671875,
+            "wallSeconds": 0.054849229
+          },
+          {
+            "cpuSeconds": 0.046984,
+            "exit_code": 0,
+            "peakRssMiB": 42.91796875,
+            "wallSeconds": 0.051529741
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/places/baseline.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 12,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 1740667,
+          "sourceFeatureAccounting": {
+            "encoded": 243,
+            "skipped": 0,
+            "source": 243
+          }
+        },
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/places/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 20,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 3472378,
+          "sourceFeatureAccounting": {
+            "encoded": 243,
+            "skipped": 0,
+            "source": 243
+          }
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/places/baseline.3tz",
+          "--force",
+          "--layer",
+          "populated_places",
+          "--maxFeatures",
+          "64",
+          "--reproducible"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/places/current.3tz",
+          "--force",
+          "--layer",
+          "populated_places",
+          "--maxFeatures",
+          "64",
+          "--reproducible"
+        ]
+      },
+      "id": "places",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.1588,
+          "peakRssMiB": 70.1171875,
+          "wallSeconds": 0.111624666
+        },
+        "current": {
+          "cpuSeconds": 0.158972,
+          "peakRssMiB": 71.68359375,
+          "wallSeconds": 0.113890269
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "75459cb93032ba39f406a1ff8b7ba89fe49d303dc91a7c4123822f5adb2dcd81",
+        "current": "e1b777749011c8aaa134f0056212af855dfb8cb1f00164c21686a20d81dc0283"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "populated_places",
+          "--maxFeatures",
+          "64",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 243,
+        "id": "places",
+        "input": "vector/natural-earth-110m.gpkg",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.1588,
+            "exit_code": 0,
+            "peakRssMiB": 72.10546875,
+            "wallSeconds": 0.111624666
+          },
+          {
+            "cpuSeconds": 0.153317,
+            "exit_code": 0,
+            "peakRssMiB": 70.1171875,
+            "wallSeconds": 0.109100423
+          },
+          {
+            "cpuSeconds": 0.164475,
+            "exit_code": 0,
+            "peakRssMiB": 69.59375,
+            "wallSeconds": 0.115331167
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.161039,
+            "exit_code": 0,
+            "peakRssMiB": 71.68359375,
+            "wallSeconds": 0.115813448
+          },
+          {
+            "cpuSeconds": 0.156495,
+            "exit_code": 0,
+            "peakRssMiB": 69.41015625,
+            "wallSeconds": 0.113890269
+          },
+          {
+            "cpuSeconds": 0.158972,
+            "exit_code": 0,
+            "peakRssMiB": 73.13671875,
+            "wallSeconds": 0.113381131
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/countries/baseline.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 12,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 2700567,
+          "sourceFeatureAccounting": {
+            "encoded": 176,
+            "skipped": 1,
+            "source": 177
+          }
+        },
+        "current": {
+          "archiveValidation": {
+            "archive": "$OUTPUT/countries/current.3tz",
+            "checks": [
+              "index",
+              "crc",
+              "contentHashes",
+              "structure",
+              "bounds",
+              "geometricError",
+              "references",
+              "budgets"
+            ],
+            "contentReferences": 7,
+            "entries": 20,
+            "ok": true,
+            "tiles": 7
+          },
+          "outputBytes": 5236837,
+          "sourceFeatureAccounting": {
+            "encoded": 176,
+            "skipped": 1,
+            "source": 177
+          }
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/countries/baseline.3tz",
+          "--force",
+          "--layer",
+          "countries",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "vector",
+          "-i",
+          "$DEMODATA/vector/natural-earth-110m.gpkg",
+          "-o",
+          "$OUTPUT/countries/current.3tz",
+          "--force",
+          "--layer",
+          "countries",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ]
+      },
+      "id": "countries",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.399355,
+          "peakRssMiB": 78.26953125,
+          "wallSeconds": 0.263615995
+        },
+        "current": {
+          "cpuSeconds": 0.407817,
+          "peakRssMiB": 83.3359375,
+          "wallSeconds": 0.277411199
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "27f851409af90811b64dbd86412df93eb72df4478b1ff98c428f56a040011f6c",
+        "current": "fd602ee63fee9a0e747c343ba8bf6901894be4ea455d239e5a1050ff3db756e7"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--layer",
+          "countries",
+          "--repair",
+          "--skipInvalid",
+          "--reproducible"
+        ],
+        "audit": "archive",
+        "category": "vector",
+        "command": "vector",
+        "expect": "success",
+        "features": 177,
+        "id": "countries",
+        "input": "vector/natural-earth-110m.gpkg",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.399355,
+            "exit_code": 0,
+            "peakRssMiB": 78.26953125,
+            "wallSeconds": 0.263447716
+          },
+          {
+            "cpuSeconds": 0.397896,
+            "exit_code": 0,
+            "peakRssMiB": 83.5390625,
+            "wallSeconds": 0.263615995
+          },
+          {
+            "cpuSeconds": 0.403702,
+            "exit_code": 0,
+            "peakRssMiB": 77.51953125,
+            "wallSeconds": 0.26620078
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.407817,
+            "exit_code": 0,
+            "peakRssMiB": 83.515625,
+            "wallSeconds": 0.277411199
+          },
+          {
+            "cpuSeconds": 0.403432,
+            "exit_code": 0,
+            "peakRssMiB": 82.73046875,
+            "wallSeconds": 0.270095075
+          },
+          {
+            "cpuSeconds": 0.426586,
+            "exit_code": 0,
+            "peakRssMiB": 83.3359375,
+            "wallSeconds": 0.283182123
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "decodedPngTiles": 17,
+          "outputBytes": 4203441,
+          "scheme": "xyz",
+          "tileDimensions": [
+            256,
+            256
+          ]
+        },
+        "current": {
+          "decodedPngTiles": 17,
+          "outputBytes": 4203441,
+          "scheme": "xyz",
+          "tileDimensions": [
+            256,
+            256
+          ]
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "raster",
+          "-i",
+          "$DEMODATA/imagery/NE1_50M_SR_W_australia.tif",
+          "-o",
+          "$OUTPUT/imagery-australia/baseline",
+          "--force",
+          "--minZoom",
+          "2",
+          "--maxZoom",
+          "4"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "raster",
+          "-i",
+          "$DEMODATA/imagery/NE1_50M_SR_W_australia.tif",
+          "-o",
+          "$OUTPUT/imagery-australia/current",
+          "--force",
+          "--minZoom",
+          "2",
+          "--maxZoom",
+          "4"
+        ]
+      },
+      "id": "imagery-australia",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.367156,
+          "peakRssMiB": 145.328125,
+          "wallSeconds": 0.27697041
+        },
+        "current": {
+          "cpuSeconds": 0.372766,
+          "peakRssMiB": 145.73828125,
+          "wallSeconds": 0.279515826
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "b108ebf36eb3248ce991a3854dbf073da8fde0dc073bdbc43c7ba20571403189",
+        "current": "b108ebf36eb3248ce991a3854dbf073da8fde0dc073bdbc43c7ba20571403189"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--minZoom",
+          "2",
+          "--maxZoom",
+          "4"
+        ],
+        "audit": "raster",
+        "category": "imagery",
+        "command": "raster",
+        "expect": "success",
+        "id": "imagery-australia",
+        "input": "imagery/NE1_50M_SR_W_australia.tif",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.367156,
+            "exit_code": 0,
+            "peakRssMiB": 145.58984375,
+            "wallSeconds": 0.27697041
+          },
+          {
+            "cpuSeconds": 0.37305,
+            "exit_code": 0,
+            "peakRssMiB": 145.01171875,
+            "wallSeconds": 0.278383653
+          },
+          {
+            "cpuSeconds": 0.366858,
+            "exit_code": 0,
+            "peakRssMiB": 145.328125,
+            "wallSeconds": 0.274724023
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.372766,
+            "exit_code": 0,
+            "peakRssMiB": 145.9453125,
+            "wallSeconds": 0.339255782
+          },
+          {
+            "cpuSeconds": 0.363454,
+            "exit_code": 0,
+            "peakRssMiB": 145.48046875,
+            "wallSeconds": 0.275205726
+          },
+          {
+            "cpuSeconds": 0.37836,
+            "exit_code": 0,
+            "peakRssMiB": 145.73828125,
+            "wallSeconds": 0.279515826
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "decodedTerrainTiles": 13,
+          "fidelity": "Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence.",
+          "heightOverlays": 13,
+          "outputBytes": 1393770,
+          "scheme": "tms",
+          "triangles": 105472,
+          "vertices": 54413
+        },
+        "current": {
+          "decodedTerrainTiles": 13,
+          "fidelity": "Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence.",
+          "heightOverlays": 13,
+          "outputBytes": 1393770,
+          "scheme": "tms",
+          "triangles": 105472,
+          "vertices": 54413
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "terrain",
+          "-i",
+          "$DEMODATA/terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+          "-o",
+          "$OUTPUT/terrain-brisbane/baseline",
+          "--force",
+          "--maxZoom",
+          "8",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "terrain",
+          "-i",
+          "$DEMODATA/terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+          "-o",
+          "$OUTPUT/terrain-brisbane/current",
+          "--force",
+          "--maxZoom",
+          "8",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ]
+      },
+      "id": "terrain-brisbane",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.257818,
+          "peakRssMiB": 122.953125,
+          "wallSeconds": 0.215614811
+        },
+        "current": {
+          "cpuSeconds": 0.253074,
+          "peakRssMiB": 123.51171875,
+          "wallSeconds": 0.214452928
+        }
+      },
+      "payloadFingerprints": {
+        "baseline": "fa766f8e1537e5501bfc3d12c34f6456ddf5dba5e52d6999c46d8ccc6f4d4bf2",
+        "current": "fa766f8e1537e5501bfc3d12c34f6456ddf5dba5e52d6999c46d8ccc6f4d4bf2"
+      },
+      "preparedInput": null,
+      "recipe": {
+        "args": [
+          "--maxZoom",
+          "8",
+          "--heightOffset",
+          "0",
+          "--fillHeight",
+          "0"
+        ],
+        "audit": "terrain",
+        "category": "terrain",
+        "command": "terrain",
+        "expect": "success",
+        "id": "terrain-brisbane",
+        "input": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
+        "notes": "Source EGM2008 orthometric elevations retained as numeric test heights; no vertical datum conversion.",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.257961,
+            "exit_code": 0,
+            "peakRssMiB": 122.3984375,
+            "wallSeconds": 0.222872021
+          },
+          {
+            "cpuSeconds": 0.253044,
+            "exit_code": 0,
+            "peakRssMiB": 122.953125,
+            "wallSeconds": 0.213909893
+          },
+          {
+            "cpuSeconds": 0.257818,
+            "exit_code": 0,
+            "peakRssMiB": 123.2421875,
+            "wallSeconds": 0.215614811
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.253074,
+            "exit_code": 0,
+            "peakRssMiB": 123.76171875,
+            "wallSeconds": 0.214780196
+          },
+          {
+            "cpuSeconds": 0.244294,
+            "exit_code": 0,
+            "peakRssMiB": 123.51171875,
+            "wallSeconds": 0.206016626
+          },
+          {
+            "cpuSeconds": 0.255579,
+            "exit_code": 0,
+            "peakRssMiB": 123.50390625,
+            "wallSeconds": 0.214452928
+          }
+        ]
+      }
+    },
+    {
+      "checks": {
+        "baseline": {
+          "expectedRejection": "KHR_gaussian_splatting",
+          "unpublished": true
+        },
+        "current": {
+          "expectedRejection": "KHR_gaussian_splatting",
+          "unpublished": true
+        }
+      },
+      "commands": {
+        "baseline": [
+          "$BASELINE_BIN",
+          "--json",
+          "glb-to-3tz",
+          "-i",
+          "$DEMODATA/splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+          "-o",
+          "$OUTPUT/splats-unsupported/baseline.3tz",
+          "--force"
+        ],
+        "current": [
+          "$RUSTY_TILES_BIN",
+          "--json",
+          "glb-to-3tz",
+          "-i",
+          "$DEMODATA/splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+          "-o",
+          "$OUTPUT/splats-unsupported/current.3tz",
+          "--force"
+        ]
+      },
+      "id": "splats-unsupported",
+      "medians": {
+        "baseline": {
+          "cpuSeconds": 0.011961,
+          "peakRssMiB": 28.5859375,
+          "wallSeconds": 0.012134637
+        },
+        "current": {
+          "cpuSeconds": 0.011671,
+          "peakRssMiB": 28.63671875,
+          "wallSeconds": 0.011844753
+        }
+      },
+      "payloadFingerprints": {},
+      "preparedInput": null,
+      "recipe": {
+        "args": [],
+        "audit": "archive",
+        "category": "splats",
+        "command": "glb-to-3tz",
+        "expect": "KHR_gaussian_splatting",
+        "id": "splats-unsupported",
+        "input": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb",
+        "profile": "smoke"
+      },
+      "samples": {
+        "baseline": [
+          {
+            "cpuSeconds": 0.012311,
+            "exit_code": 3,
+            "peakRssMiB": 28.49609375,
+            "wallSeconds": 0.012473474
+          },
+          {
+            "cpuSeconds": 0.01126,
+            "exit_code": 3,
+            "peakRssMiB": 29.0625,
+            "wallSeconds": 0.011403628
+          },
+          {
+            "cpuSeconds": 0.011961,
+            "exit_code": 3,
+            "peakRssMiB": 28.5859375,
+            "wallSeconds": 0.012134637
+          }
+        ],
+        "current": [
+          {
+            "cpuSeconds": 0.01185,
+            "exit_code": 3,
+            "peakRssMiB": 28.8125,
+            "wallSeconds": 0.011981393
+          },
+          {
+            "cpuSeconds": 0.011594,
+            "exit_code": 3,
+            "peakRssMiB": 28.47265625,
+            "wallSeconds": 0.011748725
+          },
+          {
+            "cpuSeconds": 0.011671,
+            "exit_code": 3,
+            "peakRssMiB": 28.63671875,
+            "wallSeconds": 0.011844753
+          }
+        ]
+      }
+    }
+  ],
+  "inputFiles": {
+    "imagery/NE1_50M_SR_W_australia.tif": {
+      "bytes": 2591831,
+      "sha256": "4dbd398f03514dfa269410e09f6cc2c00f09087968d36a01e7dcc781601ea0a9",
+      "source": ".downloads/NE1_50M_SR_W.zip"
+    },
+    "mesh/CesiumMilkTruck-static.glb": {
+      "bytes": 441716,
+      "sha256": "1f2c376b54a5d9eff35408a38bf4991f91f91f81cba33af3a99f89108b33f744",
+      "source": "mesh/CesiumMilkTruck.glb"
+    },
+    "point-cloud/autzen_trim.las": {
+      "bytes": 3742038,
+      "sha256": "3d351885f3aa03d5ac92358037ba0b850ea4f56f644ffcc56d57cd5d830aaf75",
+      "source": "point-cloud/autzen_trim.las"
+    },
+    "point-cloud/usgs-3dep-brookscamp/ept-data/0-0-0-0.laz": {
+      "bytes": 243245,
+      "sha256": "bda94e290319eb03f2cccc35edb52da2f739d971d424d4c2bf09d6a4250471c2",
+      "source": "point-cloud/usgs-3dep-brookscamp/ept.json"
+    },
+    "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb": {
+      "bytes": 2688,
+      "sha256": "55b3e768cc81164c5415da918b16954ab4600cf8116f5a94906c0acef3ea15b9",
+      "source": "splats/cesium-fixtures/GaussianSplats/sh_unit_cube/0/0.glb"
+    },
+    "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif": {
+      "bytes": 47261499,
+      "sha256": "18ab9419d9beacbdac6e8397f41affe5b76fce6a1ac101fd1b1dfcd88fe462fc",
+      "source": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif"
+    },
+    "vector/natural-earth-110m.gpkg": {
+      "bytes": 806912,
+      "sha256": "4627561610d0211e38d93ac9687553fc2f9fa2473e95c61974f622b9425c0969",
+      "source": ".downloads/ne_110m_admin_0_countries.zip"
+    }
+  },
+  "manifestSha256": "cee7c76b3700c1d1368b3f46471f232a526f81960e33fcc86954bb2a03c96e93",
+  "measurement": "Warm filesystem cache; one warmup and rotated serial runs. Conversion process wall/CPU time and largest-process peak RSS; audits and preparation excluded. Native CLI PATH empty, PROJ_NETWORK OFF. CPU/RSS unavailable on non-Unix.",
+  "methods": {
+    "baseline": {
+      "binarySha256": "51c5c6cb0171f4fed0544923287151d2aac13aa0c6c50f9afcd5aeafeba91963",
+      "doctor": {
+        "commands": {
+          "convert": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "createTilesetJson": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "glb-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "mesh-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "point-cloud": {
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "local": {
+              "ready": true
+            },
+            "note": "Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it.",
+            "reader": "native LAS/LAZ",
+            "ready": true,
+            "requires": []
+          },
+          "preview": {
+            "backend": "native Rust",
+            "cesium": {
+              "found": false,
+              "note": "No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium.",
+              "path": "target/preview-runtime/node_modules/cesium/Build/Cesium"
+            },
+            "ready": true,
+            "requires": []
+          },
+          "raster": {
+            "backend": "native GDAL",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native COG, display and tiling APIs; no Python or GDAL executable required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12 with raster tile algorithm",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ],
+            "tiling": {
+              "ready": true
+            }
+          },
+          "terrain": {
+            "backend": "native GDAL/Rust",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native terrain sampling and encoding; conversion validates the source-specific CRS operation.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ]
+          },
+          "validate": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "vector": {
+            "backend": "native GDAL/GEOS",
+            "geometry": {
+              "ready": true
+            },
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "GEOS >= 3.10",
+              "SQLite",
+              "PROJ >= 9.2"
+            ]
+          }
+        },
+        "nativeGeospatial": {
+          "ready": true,
+          "versions": {
+            "gdal": "3.13.3",
+            "geos": [
+              3,
+              15,
+              0
+            ],
+            "proj": [
+              9,
+              8,
+              1
+            ]
+          }
+        },
+        "ok": true,
+        "proj": {
+          "availableGrids": [
+            "$PROJ_USER_DATA/nl_nsgi_nlgeo2018.tif",
+            "$PROJ_USER_DATA/nl_nsgi_rdtrans2018.tif",
+            "$PROJ_USER_DATA/us_noaa_WO.tif"
+          ],
+          "dataDirectories": [
+            "$PROJ_USER_DATA",
+            "/usr/share/proj"
+          ],
+          "database": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "inventoryErrors": [],
+          "networkEnabled": false,
+          "note": "Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."
+        },
+        "ready": true,
+        "selectedCommands": [
+          "convert",
+          "createTilesetJson",
+          "glb-to-3tz",
+          "mesh-to-3tz",
+          "point-cloud",
+          "preview",
+          "raster",
+          "terrain",
+          "validate",
+          "vector"
+        ]
+      },
+      "version": "rusty-tiles 0.3.0"
+    },
+    "current": {
+      "binarySha256": "cfd5450f2f56c697b5a5a9fd4f9ed70ec034f1867f3a7745e6abe2bc1b823531",
+      "doctor": {
+        "commands": {
+          "convert": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "createTilesetJson": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "glb-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "mesh-to-3tz": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "point-cloud": {
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "local": {
+              "ready": true
+            },
+            "note": "Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it.",
+            "reader": "native LAS/LAZ",
+            "ready": true,
+            "requires": []
+          },
+          "preview": {
+            "backend": "native Rust",
+            "cesium": {
+              "found": false,
+              "note": "No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium.",
+              "path": "target/preview-runtime/node_modules/cesium/Build/Cesium"
+            },
+            "ready": true,
+            "requires": []
+          },
+          "raster": {
+            "backend": "native GDAL",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native COG, display and tiling APIs; no Python or GDAL executable required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12 with raster tile algorithm",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ],
+            "tiling": {
+              "ready": true
+            }
+          },
+          "terrain": {
+            "backend": "native GDAL/Rust",
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native terrain sampling and encoding; conversion validates the source-specific CRS operation.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "PROJ >= 9.2",
+              "local PROJ database/grids"
+            ]
+          },
+          "validate": {
+            "backend": "native Rust",
+            "ready": true,
+            "requires": []
+          },
+          "vector": {
+            "backend": "native GDAL/GEOS",
+            "geometry": {
+              "ready": true
+            },
+            "geospatial": {
+              "ready": true,
+              "versions": {
+                "gdal": "3.13.3",
+                "geos": [
+                  3,
+                  15,
+                  0
+                ],
+                "proj": [
+                  9,
+                  8,
+                  1
+                ]
+              }
+            },
+            "note": "Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required.",
+            "ready": true,
+            "requires": [
+              "native GDAL >= 3.12",
+              "GEOS >= 3.10",
+              "SQLite",
+              "PROJ >= 9.2"
+            ]
+          }
+        },
+        "nativeGeospatial": {
+          "ready": true,
+          "versions": {
+            "gdal": "3.13.3",
+            "geos": [
+              3,
+              15,
+              0
+            ],
+            "proj": [
+              9,
+              8,
+              1
+            ]
+          }
+        },
+        "ok": true,
+        "proj": {
+          "availableGrids": [
+            "$PROJ_USER_DATA/nl_nsgi_nlgeo2018.tif",
+            "$PROJ_USER_DATA/nl_nsgi_rdtrans2018.tif",
+            "$PROJ_USER_DATA/us_noaa_WO.tif"
+          ],
+          "dataDirectories": [
+            "$PROJ_USER_DATA",
+            "/usr/share/proj"
+          ],
+          "database": {
+            "ready": true,
+            "versions": {
+              "gdal": "3.13.3",
+              "geos": [
+                3,
+                15,
+                0
+              ],
+              "proj": [
+                9,
+                8,
+                1
+              ]
+            }
+          },
+          "inventoryErrors": [],
+          "networkEnabled": false,
+          "note": "Read-only top-level local grid inventory is not proof that a source-specific height operation is available; conversion validates that operation offline."
+        },
+        "ready": true,
+        "selectedCommands": [
+          "convert",
+          "createTilesetJson",
+          "glb-to-3tz",
+          "mesh-to-3tz",
+          "point-cloud",
+          "preview",
+          "raster",
+          "terrain",
+          "validate",
+          "vector"
+        ]
+      },
+      "version": "rusty-tiles 0.3.0"
+    }
+  },
+  "ok": true,
+  "payloadComparison": "SHA-256 over output names and member/file hashes, excluding conversion.json and the ZIP index; timing diagnostics excluded, geometry and metadata retained.",
+  "platform": {
+    "arch": "x86_64",
+    "availableParallelism": 20,
+    "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "memoryKiB": 65658268,
+    "os": "linux"
+  },
+  "recordedUnixSeconds": 1791449689,
+  "repeats": 3,
+  "version": 1,
+  "pathAliases": {
+    "$RUSTY_TILES_BIN": "current release native CLI under test",
+    "$BASELINE_BIN": "native release CLI built from 99b9605",
+    "$OUTPUT": "fresh private benchmark directory",
+    "$DEMODATA": "existing pinned corpus",
+    "$CHECKOUT": "rusty-tiles source checkout",
+    "$PROJ_USER_DATA": "installed user PROJ data directory"
+  },
+  "comparisonNotes": "Same input and CLI options; baseline 99b9605 uses explicit spatial tiling by default, current uses implicit tiling. Both retain source geometry and metadata, while partitions, parent content, archive sizes and timings can differ."
+}

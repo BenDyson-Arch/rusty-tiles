@@ -243,5 +243,6 @@ println!("wrote {} (archive: {})", result.output.display(), result.archive);
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.
 - [Terrain guide](docs/TERRAIN.md): height decisions, sidecars and viewer setup.
 - [Contributing](CONTRIBUTING.md): build, test and release.
+- [Demo-data suite](CONTRIBUTING.md#demo-data-acceptance-and-benchmarks): opt-in native acceptance and benchmarks against the pinned public corpus.
 
 Licensed under [MIT](LICENSE).

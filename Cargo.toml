@@ -21,6 +21,11 @@ pkg-fmt = "zip"
 name = "rusty-tiles"
 path = "src/main.rs"
 
+[[example]]
+name = "demodata-suite"
+path = "bench/demodata_suite.rs"
+required-features = ["native-geospatial"]
+
 [features]
 default = []
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config", "dep:rusqlite"]
@@ -61,3 +66,6 @@ pkg-config = { version = "0.3", optional = true }
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
