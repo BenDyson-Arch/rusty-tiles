@@ -33,7 +33,8 @@ fn safe_name(name: &str) -> bool {
 }
 
 /// Convert an eligible rusty-tiles point/vector `.3tz` without decoding or
-/// changing its GLB/b3dm bytes. Binary median trees are accepted only when each
+/// changing its GLB/b3dm bytes. Each content tile owns its replacement descendants.
+/// Binary median trees are accepted only when each
 /// child fits one distinct regular cell. General kd-trees and LOD chains fail.
 pub fn convert_to_implicit(
     input: &Path,
@@ -65,10 +66,11 @@ pub fn convert_to_implicit_reported(
     if manifest["root"].get("implicitTiling").is_some() {
         return Err(invalid("archive is already implicit"));
     }
-    if zip
-        .file_names()
-        .any(|name| name.starts_with("implicit-") || name.starts_with("subtrees/"))
-    {
+    if zip.file_names().any(|name| {
+        name.starts_with("implicit-")
+            || name.starts_with("subtrees/")
+            || name.starts_with("t/owned-")
+    }) {
         return Err(invalid("archive contains reserved implicit output paths"));
     }
     if manifest.get("schemaUri").is_some() {
@@ -160,25 +162,19 @@ pub fn convert_to_implicit_reported(
         std::io::copy(&mut entry, &mut fs::File::create(target)?)?;
     }
     reporter.progress("implicit", 0, count as u64);
-    let header = manifest.clone();
-    let mut wrappers = 0;
-    wrap_contents(
-        &mut manifest["root"],
-        &original_root,
-        [0.; 3],
-        true,
+    let mut header = manifest.clone();
+    header.as_object_mut().unwrap().remove("root");
+    let mut roots = 0;
+    let mut retained = BTreeSet::new();
+    manifest = owned_document(
         &header,
+        &manifest["root"],
+        &original_root,
         &staging,
-        &mut wrappers,
+        scheme,
+        &mut roots,
+        &mut retained,
     )?;
-    crate::implicit::write_tileset(&mut manifest, &staging, scheme, false)?;
-    // Original tile metadata schemas remain in external content wrappers. Merge
-    // their classes into the main schema too, without replacing semantic classes.
-    if header.get("schema").is_some() {
-        let class = manifest["schema"]["classes"]["rustyTile"].clone();
-        manifest["schema"] = header["schema"].clone();
-        manifest["schema"]["classes"]["rustyTile"] = class;
-    }
     fs::write(
         staging.join("tileset.json"),
         serde_json::to_vec_pretty(&manifest)?,
@@ -186,7 +182,8 @@ pub fn convert_to_implicit_reported(
     let mut report = json!({
         "operation":"convert-to-implicit", "encoder":"rusty-tiles-explicit-to-implicit-v1",
         "tiling":"implicit", "subdivisionScheme":scheme.as_str(), "tiles":count,
-        "contentWrappers":wrappers, "contentBytesPreserved":true,
+        "externalTilesetRoots":roots.saturating_sub(1), "contentBytesPreserved":true,
+        "retainedContentUris":retained,
         "sourceReport":source_report,
     });
     if let Some(name) = source_report.get("geometryReports") {
@@ -255,6 +252,22 @@ fn check_tree(
     if node.get("viewerRequestVolume").is_some() {
         return Err(irregular("viewer request volumes are unsupported", command));
     }
+    if node.get("metadata").is_some() {
+        return Err(irregular(
+            "explicit tile metadata requires unsupported subtree property tables",
+            command,
+        ));
+    }
+    let headers = node["contents"]
+        .as_array()
+        .cloned()
+        .unwrap_or_else(|| node.get("content").cloned().into_iter().collect());
+    if headers.iter().any(|c| c.get("boundingVolume").is_some()) {
+        return Err(irregular(
+            "content bounding volumes require unsupported subtree content metadata",
+            command,
+        ));
+    }
     let axes = if scheme == SubdivisionScheme::Octree {
         3
     } else {
@@ -318,92 +331,180 @@ fn check_tree(
     Ok(())
 }
 
-fn wrap_contents(
-    node: &mut Value,
-    original: &Value,
-    delta: [f64; 3],
-    root: bool,
+/// Each original content tile owns its complete replacement descendants. A
+/// separate content-only external root would be a sibling of implicit children,
+/// and Cesium would continue selecting the parent proxy after refinement.
+/// The 1.1 implicit-root external-content restriction applies at level zero:
+/// its JSON slot is unavailable, and actual links only occupy terminal level-one
+/// cells. They have neither implicit descendants nor child subtree availability.
+#[allow(clippy::too_many_arguments)]
+fn owned_document(
     header: &Value,
+    checked: &Value,
+    original: &Value,
     directory: &Path,
-    count: &mut usize,
-) -> Result<(), Error> {
-    let command = "point-cloud/vector";
-    let delta = if root {
-        delta
+    scheme: SubdivisionScheme,
+    roots: &mut usize,
+    retained: &mut BTreeSet<String>,
+) -> Result<Value, Error> {
+    use crate::implicit::{Coordinates, Subtree, TileMetadata};
+    let id = *roots;
+    *roots += 1;
+    let children = original["children"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let has_children = !children.is_empty();
+    let mut contents = original["contents"]
+        .as_array()
+        .cloned()
+        .unwrap_or_else(|| original.get("content").cloned().into_iter().collect());
+    let template = if scheme == SubdivisionScheme::Octree {
+        "{level}-{x}-{y}-{z}"
     } else {
-        let offset = offset(original, command)?;
-        std::array::from_fn(|i| delta[i] + offset[i])
+        "{level}-{x}-{y}"
     };
-    if original.get("content").is_some()
-        || original.get("contents").is_some()
-        || original.get("metadata").is_some()
-        || original.get("extensions").is_some()
-        || original["extras"].get("vertices").is_some()
-        || original["extras"].get("encodedBytes").is_some()
-    {
-        let mut wrapper = header.clone();
-        let mut tile = original.clone();
-        tile.as_object_mut().unwrap().remove("children");
-        tile["transform"] = crate::tileset_node::translation(delta);
-        let contents: Vec<Value> = original
-            .get("contents")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_else(|| original.get("content").cloned().into_iter().collect());
-        let mut fixed = Vec::new();
-        for mut content in contents {
-            let uri = content["uri"]
-                .as_str()
-                .ok_or_else(|| invalid("content has no URI"))?;
-            if !safe_name(uri)
-                || !uri.starts_with("t/")
-                || !matches!(
-                    Path::new(uri).extension().and_then(|s| s.to_str()),
-                    Some("glb" | "b3dm")
-                )
-            {
-                return Err(invalid(
-                    "only original local t/ GLB/b3dm content is supported",
-                ));
-            }
-            content["uri"] = json!(format!("../{uri}"));
-            fixed.push(content);
-        }
-        tile.as_object_mut().unwrap().remove("content");
-        tile.as_object_mut().unwrap().remove("contents");
-        if fixed.is_empty() {
-            // Routing metadata can be carried by an empty external root.
-        } else if fixed.len() == 1 {
-            tile["content"] = fixed.remove(0);
-        } else {
-            tile["contents"] = json!(fixed);
-        }
-        wrapper["root"] = tile;
-        wrapper["geometricError"] = original["geometricError"].clone();
-        wrapper["asset"].as_object_mut().unwrap().remove("extras");
-        let name = format!("implicit-source-{count}.json");
-        *count += 1;
-        fs::write(directory.join(&name), serde_json::to_vec(&wrapper)?)?;
-        node.as_object_mut().unwrap().remove("contents");
-        node["content"] = json!({"uri":name});
-    }
-    node["boundingVolume"]["box"] = json!(bounds(original, delta, command)?);
-    if !root {
-        node.as_object_mut().unwrap().remove("transform");
-    }
-    if let Some(extras) = node.get_mut("extras").and_then(Value::as_object_mut) {
-        // Payload statistics on the external-content root refer to the original
-        // bytes; implicit routing nodes have JSON content instead.
-        extras.remove("vertices");
-        extras.remove("encodedBytes");
-    }
-    if let Some(children) = node.get_mut("children").and_then(Value::as_array_mut) {
-        for (child, original) in children
-            .iter_mut()
-            .zip(original["children"].as_array().unwrap())
+    let zero_key = if scheme == SubdivisionScheme::Octree {
+        "0-0-0-0"
+    } else {
+        "0-0-0"
+    };
+    for (slot, content) in contents.iter_mut().enumerate() {
+        let uri = content["uri"]
+            .as_str()
+            .ok_or_else(|| invalid("content has no URI"))?;
+        if !safe_name(uri)
+            || !uri.starts_with("t/")
+            || !matches!(
+                Path::new(uri).extension().and_then(|s| s.to_str()),
+                Some("glb" | "b3dm")
+            )
         {
-            wrap_contents(child, original, delta, false, header, directory, count)?;
+            return Err(invalid(
+                "only original local t/ GLB/b3dm content is supported",
+            ));
         }
+        retained.insert(uri.to_owned());
+        let suffix = Path::new(uri).extension().unwrap().to_str().unwrap();
+        let parent = uri.rsplit_once('/').unwrap().0;
+        let alias = format!("{parent}/owned-{id}-{zero_key}-{slot}.{suffix}");
+        let target = directory.join(&alias);
+        if target.exists() {
+            return Err(invalid(format!(
+                "generated content alias collides with source member: {alias}"
+            )));
+        }
+        fs::copy(directory.join(uri), target)?;
+        content["uri"] = json!(format!("{parent}/owned-{id}-{template}-{slot}.{suffix}"));
     }
-    Ok(())
+    let payloads = contents.len();
+    if has_children {
+        contents.push(json!({"uri":format!("implicit-owned-{id}-{template}.json")}));
+    }
+    let levels = if has_children { 2 } else { 1 };
+    let mut tree = Subtree::new(scheme, levels, contents.len())?;
+    let zero = Coordinates {
+        level: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    };
+    let mut flags = vec![true; payloads];
+    if has_children {
+        flags.push(false);
+    }
+    tree.set_tile(zero, &flags)?;
+    tree.set_metadata(
+        zero,
+        TileMetadata {
+            bounding_box: bounds(original, [0.; 3], "point-cloud/vector")?,
+            geometric_error: original["geometricError"].as_f64().unwrap(),
+            extras: original.get("extras").cloned().unwrap_or_else(|| json!({})),
+        },
+    )?;
+    for (index, child) in children.iter().enumerate() {
+        let checked_child = &checked["children"][index];
+        let slot = checked_child["_rustyImplicitChildIndex"].as_u64().unwrap() as u32;
+        let coord = Coordinates {
+            level: 1,
+            x: slot & 1,
+            y: (slot >> 1) & 1,
+            z: if scheme == SubdivisionScheme::Octree {
+                (slot >> 2) & 1
+            } else {
+                0
+            },
+        };
+        let mut flags = vec![false; contents.len()];
+        flags[payloads] = true;
+        tree.set_tile(coord, &flags)?;
+        tree.set_metadata(
+            coord,
+            TileMetadata {
+                bounding_box: bounds(
+                    child,
+                    offset(child, "point-cloud/vector")?,
+                    "point-cloud/vector",
+                )?,
+                geometric_error: child["geometricError"].as_f64().unwrap(),
+                // Actual tile extras, payload statistics and metadata remain on its
+                // external root, whose content is the original unmodified bytes.
+                extras: json!({}),
+            },
+        )?;
+        let child_document = owned_document(
+            header,
+            checked_child,
+            child,
+            directory,
+            scheme,
+            roots,
+            retained,
+        )?;
+        let coordinate = if scheme == SubdivisionScheme::Octree {
+            format!("1-{}-{}-{}", coord.x, coord.y, coord.z)
+        } else {
+            format!("1-{}-{}", coord.x, coord.y)
+        };
+        fs::write(
+            directory.join(format!("implicit-owned-{id}-{coordinate}.json")),
+            serde_json::to_vec(&child_document)?,
+        )?;
+    }
+    fs::create_dir_all(directory.join("subtrees"))?;
+    fs::write(
+        directory.join(format!("subtrees/owned-{id}-{zero_key}.subtree")),
+        tree.to_bytes()?,
+    )?;
+    let mut root = Value::Object(
+        original
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(key, _)| key.as_str() != "children")
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    );
+    let root_object = root.as_object_mut().unwrap();
+    root_object.remove("children");
+    root_object.remove("content");
+    root_object.remove("contents");
+    root["implicitTiling"] = json!({"subdivisionScheme":scheme.as_str(),"subtreeLevels":levels,"availableLevels":levels,"subtrees":{"uri":format!("subtrees/owned-{id}-{template}.subtree")}});
+    if contents.len() == 1 {
+        root["content"] = contents.remove(0);
+    } else if !contents.is_empty() {
+        root["contents"] = json!(contents);
+    }
+    let mut document = header.clone();
+    document["root"] = root;
+    if id > 0 {
+        document["geometricError"] = original["geometricError"].clone();
+        document["asset"].as_object_mut().unwrap().remove("extras");
+    }
+    let semantic_schema = serde_json::to_value(crate::metadata::tile_schema())?;
+    if document.get("schema").is_none() {
+        document["schema"] = semantic_schema.clone();
+    }
+    document["schema"]["classes"]["rustyTile"] = semantic_schema["classes"]["rustyTile"].clone();
+    Ok(document)
 }

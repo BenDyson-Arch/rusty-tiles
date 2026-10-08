@@ -44,6 +44,7 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `output.rs` | The conversion `Job`: preflight, private work directory, no-clobber publication |
 | `error.rs` | `Error` and its stable exit-code categories |
 | `pack.rs` | Stored ZIP/ZIP64 with the 3TZ index, and `convert` |
+| `convert_implicit.rs` | Eligibility, unchanged payload aliases and owned implicit roots for `convert-to-implicit` |
 | `validate.rs` | Read-only `.3tz` validation |
 | `tileset.rs` | `createTilesetJson` and `glb-to-3tz` |
 | `tileset_node.rs` | Shared 3D Tiles node pieces for tilers |
@@ -133,7 +134,7 @@ Doctor, machine results, native diagnostics, preview, force replacement and arch
 ### Python acceptance
 
 The Python extension has its own dependency-free suite. It installs an actual
-wheel into a fresh virtual environment and runs the README example, all five
+wheel into a fresh virtual environment and runs the README example, all six
 entry points, callbacks, concurrent calls, errors and force replacement with an
 empty executable `PATH`:
 

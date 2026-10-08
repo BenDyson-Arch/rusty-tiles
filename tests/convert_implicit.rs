@@ -150,6 +150,10 @@ fn audit(files: &BTreeMap<String, Vec<u8>>) -> (Vec<Vec<u8>>, Vec<[f64; 3]>) {
             let name = resolve(base, c["uri"].as_str().unwrap());
             if name.ends_with(".json") {
                 let external = document(files, &name);
+                let external = rusty_tiles::implicit::expand_tileset(&external, |n| {
+                    Ok(files[&resolve(&name, n)].clone())
+                })
+                .unwrap();
                 walk(files, &external["root"], &name, matrix, bins, points, leaf);
             } else if leaf {
                 let glb = gltf::Glb::from_slice(&files[&name]).unwrap();
@@ -264,13 +268,9 @@ fn point_conversion_keeps_bytes_metadata_extras_and_world_positions() {
     ]);
     manifest["root"]["transform"] = placed.clone();
     manifest["schema"] = json!({"id":"original","enums":{"label":{"valueType":"UINT8","values":[{"name":"KEEP","value":1}]}},"classes":{"user":{"properties":{"label":{"type":"ENUM","enumType":"label"}}}}});
-    manifest["root"]["children"][0]["metadata"] =
-        json!({"class":"user","properties":{"label":"KEEP"}});
     manifest["root"]["children"][0]["extras"] = json!({"user":{"tag":"preserved"}});
     manifest["root"]["children"][1]["extras"] = json!(["array extras", 42]);
     manifest["root"]["children"][0]["content"]["extras"] = json!({"source":"keep"});
-    manifest["root"]["children"][0]["content"]["boundingVolume"] =
-        manifest["root"]["children"][0]["boundingVolume"].clone();
     source.insert(
         "tileset.json".into(),
         serde_json::to_vec(&manifest).unwrap(),
@@ -415,10 +415,20 @@ fn irregular_foreign_mesh_and_corrupt_archives_refuse_without_publication() {
         ("rotation", "child transform"),
         ("index", "index"),
         ("missing", "missing archive entry"),
+        ("tile-metadata", "explicit tile metadata"),
+        ("content-bounds", "content bounding volumes"),
     ] {
         let mut files = source.clone();
         let mut manifest = document(&files, "tileset.json");
         match label {
+            "tile-metadata" => {
+                manifest["root"]["children"][0]["metadata"] =
+                    json!({"class":"user","properties":{"label":"KEEP"}});
+            }
+            "content-bounds" => {
+                manifest["root"]["children"][0]["content"]["boundingVolume"] =
+                    manifest["root"]["children"][0]["boundingVolume"].clone();
+            }
             "foreign" => {
                 files.remove("conversion.json");
             }
@@ -543,7 +553,7 @@ fn padded_vector_cells_use_bounded_external_subtree_roots() {
     convert(&explicit, &output, false).unwrap();
     let source = members(&explicit);
     let target = members(&output);
-    assert!(target.keys().any(|n| n.starts_with("implicit-tileset-")));
+    assert!(target.keys().any(|n| n.starts_with("implicit-owned-")));
     assert_eq!(audit(&source).0, audit(&target).0);
     rusty_tiles::validate::archive(&output, None).unwrap();
 }
@@ -640,16 +650,17 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
     }
     assert!(uris.iter().any(|n| n.ends_with(".b3dm")));
     assert!(uris.iter().any(|n| n.ends_with(".glb")));
-    let wrapper = converted
-        .iter()
-        .find(|(name, _)| name.starts_with("implicit-content/") && name.ends_with(".json"))
-        .unwrap();
-    let wrapper: Value = serde_json::from_slice(wrapper.1).unwrap();
-    let mut expected = root["contents"].clone();
-    for content in expected.as_array_mut().unwrap() {
-        content["uri"] = json!(format!("../{}", content["uri"].as_str().unwrap()));
+    let wrapper = document(&converted, "tileset.json");
+    let mut actual = wrapper["root"]["contents"].clone();
+    for (content, original) in actual
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .zip(root["contents"].as_array().unwrap())
+    {
+        content["uri"] = original["uri"].clone();
     }
-    assert_eq!(wrapper["root"]["contents"], expected);
+    assert_eq!(actual, root["contents"]);
     assert_eq!(wrapper["root"]["extras"], root["extras"]);
     for uri in &uris {
         let bytes = &files[uri];
@@ -714,4 +725,173 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
         .to_string()
         .contains("unaligned b3dm payload"));
     assert_eq!(fs::read(&output).unwrap(), original_output);
+}
+
+#[test]
+fn owned_roots_have_compliant_templates_and_only_terminal_external_links() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source.las");
+    cloud(&source, false);
+    let explicit = tmp.path().join("explicit.3tz");
+    call(
+        "point-cloud",
+        &source,
+        &explicit,
+        &["--explicit", "--source-crs", "local", "--max-points", "8"],
+    );
+    let output = tmp.path().join("implicit.3tz");
+    convert(&explicit, &output, false).unwrap();
+    let files = members(&output);
+    let mut documents = 0;
+    for (name, bytes) in files
+        .iter()
+        .filter(|(name, _)| name.as_str() == "tileset.json" || name.starts_with("implicit-owned-"))
+    {
+        let doc: Value = serde_json::from_slice(bytes).unwrap();
+        let root = &doc["root"];
+        assert!(root.get("metadata").is_none());
+        assert!(root.get("children").is_none());
+        let templates = root["contents"]
+            .as_array()
+            .cloned()
+            .unwrap_or_else(|| root.get("content").cloned().into_iter().collect());
+        let subtree_template = root["implicitTiling"]["subtrees"]["uri"].as_str().unwrap();
+        for uri in templates
+            .iter()
+            .map(|c| c["uri"].as_str().unwrap())
+            .chain(std::iter::once(subtree_template))
+        {
+            for variable in ["{level}", "{x}", "{y}", "{z}"] {
+                assert!(uri.contains(variable), "{name}: {uri}");
+            }
+        }
+        let actual_subtree = subtree_template
+            .replace("{level}", "0")
+            .replace("{x}", "0")
+            .replace("{y}", "0")
+            .replace("{z}", "0");
+        let subtree = &files[&actual_subtree];
+        let json_len = u64::from_le_bytes(subtree[8..16].try_into().unwrap()) as usize;
+        let header: Value = serde_json::from_slice(&subtree[24..24 + json_len]).unwrap();
+        let binary = &subtree[24 + json_len..];
+        let bit = |availability: &Value, index: usize| -> bool {
+            if let Some(constant) = availability["constant"].as_u64() {
+                return constant == 1;
+            }
+            let view = &header["bufferViews"][availability["bitstream"].as_u64().unwrap() as usize];
+            let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+            binary[offset + index / 8] & (1 << (index % 8)) != 0
+        };
+        assert_eq!(header["childSubtreeAvailability"]["constant"], 0);
+        for (slot, template) in templates.iter().enumerate() {
+            assert!(template.get("boundingVolume").is_none());
+            let availability = &header["contentAvailability"][slot];
+            if template["uri"].as_str().unwrap().ends_with(".json") {
+                // The root has no external tileset content. Its only actual
+                // external references are terminal level-one child cells.
+                assert!(!bit(availability, 0));
+            } else {
+                assert!(bit(availability, 0));
+                for index in 1..9 {
+                    if root["implicitTiling"]["subtreeLevels"] == 2 {
+                        assert!(!bit(availability, index));
+                    }
+                }
+            }
+        }
+        let expanded =
+            rusty_tiles::implicit::expand_tileset(&doc, |uri| Ok(files[uri].clone())).unwrap();
+        for content in expanded["root"]["contents"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .chain(expanded["root"].get("content"))
+        {
+            assert!(!content["uri"].as_str().unwrap().ends_with(".json"));
+        }
+        for child in expanded["root"]["children"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            assert!(child.get("children").is_none());
+            assert!(child["content"]["uri"].as_str().unwrap().ends_with(".json"));
+        }
+        documents += 1;
+    }
+    assert_eq!(documents, 3);
+}
+
+#[test]
+fn nested_payload_aliases_preserve_relative_metadata_schema_resources() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("source.las");
+    cloud(&input, false);
+    let explicit = tmp.path().join("explicit.3tz");
+    call(
+        "point-cloud",
+        &input,
+        &explicit,
+        &[
+            "--explicit",
+            "--source-crs",
+            "local",
+            "--max-points",
+            "8",
+            "--metadata-attributes",
+        ],
+    );
+    let mut files = members(&explicit);
+    let mut manifest = document(&files, "tileset.json");
+    let glbs: Vec<_> = files
+        .keys()
+        .filter(|n| n.ends_with(".glb"))
+        .cloned()
+        .collect();
+    for uri in glbs {
+        let bytes = files.remove(&uri).unwrap();
+        let mut glb = gltf::Glb::from_slice(&bytes).unwrap();
+        let mut doc: Value = serde_json::from_slice(&glb.json).unwrap();
+        let metadata = &mut doc["extensions"]["EXT_structural_metadata"];
+        let schema = metadata.as_object_mut().unwrap().remove("schema").unwrap();
+        metadata["schemaUri"] = json!("schema.json");
+        glb.json = std::borrow::Cow::Owned(serde_json::to_vec(&doc).unwrap());
+        let encoded = glb.to_vec().unwrap();
+        let new_uri = uri.replace("t/", "t/nested/");
+        files.insert(new_uri.clone(), encoded);
+        files.insert(
+            "t/nested/schema.json".into(),
+            serde_json::to_vec(&schema).unwrap(),
+        );
+        fn replace(node: &mut Value, old: &str, new: &str) {
+            if node["content"]["uri"] == old {
+                node["content"]["uri"] = json!(new);
+            }
+            if let Some(children) = node.get_mut("children").and_then(Value::as_array_mut) {
+                for child in children {
+                    replace(child, old, new);
+                }
+            }
+        }
+        replace(&mut manifest["root"], &uri, &new_uri);
+    }
+    files.insert(
+        "tileset.json".into(),
+        serde_json::to_vec(&manifest).unwrap(),
+    );
+    let nested = tmp.path().join("nested.3tz");
+    repackage(&files, &nested);
+    let output = tmp.path().join("converted.3tz");
+    convert(&nested, &output, false).unwrap();
+    let target = members(&output);
+    assert!(target
+        .keys()
+        .any(|name| name.starts_with("t/nested/owned-")));
+    for (name, bytes) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("t/nested/"))
+    {
+        assert_eq!(&target[name], bytes);
+    }
+    rusty_tiles::validate::archive(&output, None).unwrap();
 }
