@@ -197,11 +197,11 @@ fn data_and_environment_errors_have_distinct_codes() {
 fn doctor_failure_keeps_inventory_in_single_result() {
     let root = tempfile::tempdir().unwrap();
     let (result, report) = call(
-        &["doctor".as_ref(), "--command".as_ref(), "vector".as_ref()],
+        &["doctor".as_ref(), "--command".as_ref(), "raster".as_ref()],
         &[("PROJ_DATA", root.path()), ("PROJ_LIB", root.path())],
     );
     assert_eq!(result.status.code(), Some(4));
     assert_eq!(report["ok"], false);
     assert_eq!(report["error"]["code"], "environment");
-    assert!(report["commands"]["vector"].is_object());
+    assert!(report["commands"]["raster"].is_object());
 }

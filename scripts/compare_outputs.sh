@@ -29,6 +29,9 @@ fi
 BASE_REF=$1
 HEAD_REF=${2:-}
 FEATURES=${FEATURES-native-geospatial}
+if [[ ${FEATURES//,/ } =~ (^|[[:space:]])native-geospatial($|[[:space:]]) ]]; then
+  export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
+fi
 REPO=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
 WORK=${COMPARE_WORK:-$(mktemp -d "${TMPDIR:-/tmp}/rusty-tiles-compare.XXXXXX")}
 TARGET_ROOT=${COMPARE_TARGET_ROOT:-$REPO/target/compare}

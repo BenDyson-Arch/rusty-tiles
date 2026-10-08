@@ -545,10 +545,7 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
     );
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report["commands"]["point-cloud"]["ready"], true);
-    assert_eq!(
-        report["commands"]["vector"]["ready"],
-        cfg!(feature = "native-geospatial")
-    );
+    assert_eq!(report["commands"]["vector"]["ready"], true);
 }
 
 #[cfg(not(feature = "native-geospatial"))]

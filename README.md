@@ -83,6 +83,11 @@ cargo install --path . --locked
 
 Add `--features native-geospatial` to enable every converter. This build needs GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite, development headers, `pkg-config` and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. PROJ's database and any datum grids must be installed locally; conversion never downloads them.
 
+For native builds, set `LIBSQLITE3_SYS_USE_PKG_CONFIG=1` in the Cargo environment
+so Rust, GDAL and PROJ use the same system SQLite. The build rejects a missing
+override to prevent incompatible SQLite copies from sharing symbols. Leave it
+unset when building portable binaries or wheels, which bundle SQLite.
+
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
 The default build uses the portable Rust JPEG encoder. Add `--features native-jpeg` to use system libjpeg-turbo instead; this needs `pkg-config` at build time and libjpeg-turbo at runtime. `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides that feature for portable packaging.

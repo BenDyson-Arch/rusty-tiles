@@ -74,13 +74,18 @@ fn encoder(explicit: bool) -> String {
     #[cfg(feature = "native-geospatial")]
     for source in [
         include_str!("source_native.rs"),
+        include_str!("geometry/native.rs"),
         include_str!("../../geospatial.rs"),
     ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
     }
     #[cfg(not(feature = "native-geospatial"))]
-    for source in [include_str!("../portable.rs"), include_str!("../../crs.rs")] {
+    for source in [
+        include_str!("../portable.rs"),
+        include_str!("geometry/portable.rs"),
+        include_str!("../../crs.rs"),
+    ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
     }

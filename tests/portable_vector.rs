@@ -437,7 +437,9 @@ fn polygons_preserve_holes_and_opt_in_repair_reports() {
                 [primitive["attributes"]["POSITION"].as_u64().unwrap() as usize];
             let bytes = view(&document, &binary, &position["bufferView"]);
             let positions: Vec<_> = bytes
-                .chunks_exact(12)
+                .as_chunks::<12>()
+                .0
+                .iter()
                 .take(position["count"].as_u64().unwrap() as usize)
                 .map(|p| {
                     [
@@ -451,11 +453,13 @@ fn polygons_preserve_holes_and_opt_in_repair_reports() {
             let bytes = view(&document, &binary, &indices["bufferView"]);
             assert_eq!(indices["componentType"], 5125);
             let values: Vec<_> = bytes
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .take(indices["count"].as_u64().unwrap() as usize)
-                .map(|p| u32::from_le_bytes(p.try_into().unwrap()) as usize)
+                .map(|p| u32::from_le_bytes(*p) as usize)
                 .collect();
-            for triangle in values.chunks_exact(3) {
+            for triangle in values.as_chunks::<3>().0 {
                 let [a, b, c] = [
                     positions[triangle[0]],
                     positions[triangle[1]],
