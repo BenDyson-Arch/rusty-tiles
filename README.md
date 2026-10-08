@@ -6,7 +6,9 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 
 ![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
-**MIT licensed** · **Runs locally** · **Version 0.3.0, in development** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
+**MIT licensed** · **Runs locally** · **0.4.0 development documentation** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
+
+This branch describes the upcoming 0.4.0 release. Build `develop` to use its new capabilities; published 0.3.0 downloads have the feature set documented at that tag.
 
 ## Choose a command
 
@@ -20,11 +22,13 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 | Elevation rasters | `terrain` | Prototype quantized-mesh terrain with height sidecars | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 
-Every option for every command is in the [command reference](docs/CLI.md).
+Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
 
-`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling by default. Add `--explicit` to keep the earlier explicit hierarchy and output bytes, including for applications that inspect `tileset.json` directly.
+`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling by default. Add `--explicit` for applications that inspect the explicit `children` hierarchy. Vector archives from earlier encoder versions need a fresh conversion after the 0.4 geometry fixes, including in explicit mode.
 
 ## Install
+
+The [installation guide](docs/INSTALL.md) compares the released downloads, current source builds and Python wheels, and explains how to check the installed build.
 
 The default build supports mesh tiling, local and grid-free georeferenced point clouds, GeoJSON and GeoPackage vector conversion, packaging, validation and preview. Vector conversion includes polygons with holes, repair, level of detail, metadata, compression and archive reuse, using bundled SQLite and Rust geometry libraries. For other vector formats, CRS operations outside the grid-free tier, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo). See the [vector input limits](docs/VECTOR.md#requirements) and [point-cloud CRS limits](docs/FORMATS.md#point-clouds).
 
@@ -222,7 +226,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 | Input | Rule |
 | --- | --- |
-| Mesh | Local model coordinates are placed with `--cartographic-position-degrees lon lat height`. Metashape-style geographic and EPSG:3857 exports are also read. See [mesh placement](docs/FORMATS.md#mesh-placement). |
+| Mesh | Local model coordinates are placed with `--cartographic-position-degrees lon lat height`. Geographic and EPSG:3857 export adapters use specific axis conventions; arbitrary projected mesh CRSs are not yet supported. See [mesh placement](docs/FORMATS.md#mesh-placement). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
@@ -231,11 +235,13 @@ A constant height offset is not a geoid transformation. Point clouds and default
 
 ## Library use
 
-Python and Blender addons can call the default converters directly:
+Python and Blender addons can call the default converters directly. After the first PyPI publication, install a released wheel with:
 
 ```sh
 python -m pip install rusty-tiles
 ```
+
+For the current development API, [build and install a wheel from `develop`](docs/INSTALL.md#python-and-blender).
 
 ```python
 import rusty_tiles
@@ -263,6 +269,8 @@ The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_me
 
 ## Where to go next
 
+- [Installation guide](docs/INSTALL.md): released downloads, development builds and Python wheels.
+- [Converter guide](docs/CONVERTERS.md): choose a command, build and placement policy.
 - [Command reference](docs/CLI.md): every option, exit codes, JSON output and progress events.
 - [Mesh, point cloud and imagery guide](docs/FORMATS.md): fidelity, limits and advanced options.
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.

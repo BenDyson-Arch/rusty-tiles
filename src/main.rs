@@ -475,7 +475,7 @@ struct MeshArgs {
         default_value = "auto"
     )]
     source_crs: String,
-    /// Metashape Shift E N [A] in metres (Pseudo-Mercator). Added in f64, not f32.
+    /// Source shift E N [A] in metres (EPSG:3857). Added in double precision.
     #[arg(
         long = "sourceOffset",
         visible_alias = "source-offset",
@@ -483,7 +483,7 @@ struct MeshArgs {
         allow_hyphen_values = true
     )]
     source_offset: Vec<f64>,
-    /// Metashape offset.txt (`E: …` / `N: …` / `A: …`).
+    /// Source offset text file with `E:`, `N:` and optional `A:` metre values.
     #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
     source_offset_file: Option<PathBuf>,
     /// Disable lossless meshopt compression. Both modes retain float32 geometry.

@@ -58,7 +58,7 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `vec3.rs` | Small `[f64; 3]` helpers |
 | `point_cloud.rs`, `point_cloud/` | LAS/LAZ reading and disk-backed tiling |
 | `point_sampling.rs` | Voxel grid shared by point clouds and vector aggregation |
-| `vector.rs`, `vector/native/` | OGR ingestion, SQLite store, LOD, encoding and reuse |
+| `vector.rs`, `vector/portable.rs`, `vector/pipeline/` | Portable and OGR ingestion, shared SQLite store, LOD, encoding and reuse |
 | `vector_encoding.rs` | Lossless vector buffer compression |
 | `raster.rs`, `raster/native.rs` | COG and XYZ imagery |
 | `terrain.rs`, `terrain/` | DEM sampling, quantized-mesh encoding and simplification |

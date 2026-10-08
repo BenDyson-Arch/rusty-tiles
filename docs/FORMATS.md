@@ -65,12 +65,12 @@ Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, ima
 | `--source-crs auto` | The default. Detects the position convention from coordinate values. |
 | `--source-crs geographic` | Positions are longitude, height and negative latitude |
 | `--source-crs epsg:3857` | Positions are easting, height and negative northing |
-| `--source-offset E N [A]` | Restore a Metashape shifted export |
-| `--source-offset-file offset.txt` | Read that shift from a Metashape `offset.txt` |
+| `--source-offset E N [A]` | Restore an EPSG:3857 source shift in metres |
+| `--source-offset-file offset.txt` | Read that shift from `E:`, `N:` and optional `A:` lines |
 | `--cartographic-position-degrees lon lat [height]` | Place a local model on the globe |
 | `--rotation-degrees heading pitch roll` | Orient a placed model |
 
-Choose an explicit `--source-crs` when you know the export's reference. These adapters cover Metashape-style exports only. They do not read arbitrary CRS metadata. Float32 degree coordinates may already have lost precision that conversion cannot recover.
+Choose an explicit `--source-crs` when you know the export's reference. These adapters use the axis conventions in the table, including compatibility with existing shifted exports. They do not read arbitrary CRS metadata or accept other projected mesh CRSs. Float32 degree coordinates may already have lost precision that conversion cannot recover.
 
 Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `name` and `node_index`. Instances with the same name remain separate features; unnamed nodes use `node_<index>`. The option authors new tile content even for small inputs and keeps node boundaries through parent simplification. It may increase primitive counts and metadata size.
 

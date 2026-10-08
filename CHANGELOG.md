@@ -2,7 +2,7 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.4.0 - Unreleased
 
 ### Added
 
@@ -25,6 +25,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Changed
 
+- Installation and converter guides distinguish development capabilities from published releases, explain build selection, and retain the existing mesh offset options with application-neutral help.
 - JPEG uses the portable Rust encoder by default. System libjpeg-turbo now requires the explicit `native-jpeg` feature; `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` still overrides it for portable builds.
 - README installation starts with prebuilt downloads. A simpler header figure and an invented mesh example make the quick start work with the default build.
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
@@ -69,7 +70,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - `glb-to-3tz`, and small `mesh-to-3tz` inputs, no longer stage in a fixed `<output>.tileset-work` folder, which deleted any existing folder of that name.
 - An output created by another process during a conversion is reported as an output conflict, exit 5, instead of an I/O error.
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-07
 
 ### Added
 
