@@ -1,4 +1,12 @@
-//! Conservative, grid-free point-cloud CRS operations. EPSG definitions are an
+//! Shared horizontal-CRS to WGS84 ECEF operations, initially used by point clouds.
+//!
+//! Input coordinates use traditional GIS axis order (easting/northing or
+//! longitude/latitude). Source Z and the explicit height offset are metres;
+//! source horizontal units never rescale Z. Callers own source-specific CRS and
+//! height selection, including any decision to leave coordinates local.
+//!
+//! Conservative, grid-free operations with strict native fallback when enabled.
+//! EPSG definitions are an
 //! explicit allowlist, not an old PROJ-string database with implicit datum shifts.
 //! The WKT parser is used only for syntax: proj4wkt's formatter assumes a zero
 //! datum shift and drops vertical/unknown metadata, so it is deliberately unused.
@@ -7,14 +15,14 @@ use proj4rs::Proj;
 use proj4wkt::parser::{Attribute, Processor};
 use std::collections::BTreeMap;
 
-pub(super) enum Transform {
+pub(crate) enum Transform {
     Pure(Box<PureTransform>),
     #[cfg(feature = "native-geospatial")]
     Native(Box<NativeTransform>),
 }
 
 #[cfg(feature = "native-geospatial")]
-pub(super) struct NativeTransform {
+pub(crate) struct NativeTransform {
     ecef: crate::geospatial::EcefTransform,
     albers: Option<(crate::geospatial::StrictTransform, f64)>,
 }
@@ -38,6 +46,9 @@ fn albers_outside_domain(index: usize) -> Error {
 }
 
 impl Transform {
+    /// Resolve a 2D horizontal source CRS and an ellipsoidal height offset.
+    /// Unsupported portable operations use strict native PROJ when available;
+    /// invalid data never falls back to a more permissive operation.
     pub fn new(definition: &str, height_offset: f64) -> Result<Self, Error> {
         match PureTransform::new(definition, height_offset) {
             Ok(operation) => Ok(Self::Pure(Box::new(operation))),
@@ -61,6 +72,9 @@ impl Transform {
         Ok(Self::Native(Box::new(NativeTransform { ecef, albers })))
     }
 
+    /// Convert a complete batch to ECEF metres, retaining its input on failure.
+    /// A point-dependent native fallback retries every point and is retained
+    /// for subsequent batches. No partial result is returned to the caller.
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
         let result = match self {
             Self::Pure(operation) => operation.transform(points),
@@ -89,7 +103,7 @@ fn horizontal_required() -> Error {
     Error::Data("use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported".into())
 }
 
-pub(super) struct PureTransform {
+pub(crate) struct PureTransform {
     source: Proj,
     target: Proj,
     angular_units: f64,
@@ -1290,12 +1304,10 @@ mod tests {
 
     const WGS_WKT: &str = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
     const UTM_WKT2: &str = r#"PROJCRS["WGS 84 / UTM zone 56S",BASEGEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["UTM zone 56S",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",153,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",0.9996,SCALEUNIT["unity",1]],PARAMETER["False easting",500000,LENGTHUNIT["metre",1]],PARAMETER["False northing",10000000,LENGTHUNIT["metre",1]]],CS[Cartesian,2],AXIS["easting (E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["northing (N)",north,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",32756]]"#;
-    const INCOMPLETE_LCC: &str =
-        include_str!("../../tests/fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    const INCOMPLETE_LCC: &str = include_str!("../tests/fixtures/crs/lcc-2sp-missing-parallel.wkt");
     const MERCATOR_ALIASES: &str =
-        include_str!("../../tests/fixtures/crs/mercator-redundant-origin.wkt");
-    const MICHIGAN_LCC: &str =
-        include_str!("../../tests/fixtures/crs/lcc-michigan-near-equator.wkt");
+        include_str!("../tests/fixtures/crs/mercator-redundant-origin.wkt");
+    const MICHIGAN_LCC: &str = include_str!("../tests/fixtures/crs/lcc-michigan-near-equator.wkt");
     const DMS_TMERC: &str = r#"+proj=tmerc +lon_0=2d20'14.025"E +datum=WGS84 +type=crs"#;
 
     fn projection_wkts(
@@ -1457,7 +1469,7 @@ mod tests {
         let mut definitions = vec![
             INCOMPLETE_LCC.to_owned(),
             MERCATOR_ALIASES.to_owned(),
-            include_str!("../../tests/fixtures/crs/mercator-wrong-parallel.wkt").to_owned(),
+            include_str!("../tests/fixtures/crs/mercator-wrong-parallel.wkt").to_owned(),
         ];
         for definition in conic_wkts("lcc", 33., 45.) {
             definitions.push(definition.replace(r#",PARAMETER["standard_parallel_2",45]"#, "")
@@ -2889,5 +2901,290 @@ mod tests {
             geodetic_to_ecef(Cartographic::new(153., -27., 130.)),
             definition,
         );
+    }
+}
+
+// Keep these numerical oracles separate from the native-comparison tests above.
+// Neither forward coordinates nor expected ECEF call either CRS implementation
+// or crate::georef: agreement between inverse libraries is not an accuracy proof.
+#[cfg(test)]
+mod accuracy_tests {
+    use super::{PureTransform, Transform};
+    use crate::Error;
+    use std::f64::consts::FRAC_PI_4;
+
+    const A: f64 = 6_378_137.;
+    const RF: f64 = 298.257223563;
+    const OFFSET: f64 = 7.;
+    const UNITS: [(&str, f64); 4] = [
+        ("m", 1.),
+        ("ft", 0.3048),
+        ("us-ft", 1200. / 3937.),
+        ("km", 1000.),
+    ];
+
+    fn ecef(a: f64, rf: f64, point: [f64; 3]) -> [f64; 3] {
+        let f = 1. / rf;
+        let e2 = f * (2. - f);
+        let (s, c) = point[1].to_radians().sin_cos();
+        let (sl, cl) = point[0].to_radians().sin_cos();
+        let n = a / (1. - e2 * s * s).sqrt();
+        let h = point[2] + OFFSET;
+        [(n + h) * c * cl, (n + h) * c * sl, (n * (1. - e2) + h) * s]
+    }
+
+    fn assert_mm(actual: [f64; 3], expected: [f64; 3], label: &str) {
+        let error = actual
+            .iter()
+            .zip(expected)
+            .map(|(a, e)| (a - e).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(
+            error < 0.001,
+            "{label}: {error} m; {actual:?} != {expected:?}"
+        );
+    }
+
+    fn check(definition: &str, input: &[[f64; 3]], expected: &[[f64; 3]]) {
+        let mut transform = Transform::new(definition, OFFSET).unwrap();
+        assert!(matches!(transform, Transform::Pure(_)), "{definition}");
+        let actual = transform.transform(input).unwrap();
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert_mm(actual, *expected, definition);
+        }
+        #[cfg(feature = "native-geospatial")]
+        {
+            // Force native selection too: ordinary creation prefers Pure.
+            let actual = Transform::native(definition, OFFSET)
+                .unwrap()
+                .transform(input)
+                .unwrap();
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.into_iter().zip(expected) {
+                assert_mm(actual, *expected, definition);
+            }
+        }
+    }
+
+    #[test]
+    fn geographic_and_mercator_positions_have_independent_ecef_truth() {
+        let points = [[153., -27., 123.], [-179.5, 75., -30.], [12., 0., 4500.]];
+        let expected = points.map(|p| ecef(A, RF, p));
+        check("EPSG:4326", &points, &expected);
+        for (projection, eccentricity) in [
+            ("merc", (2. / RF - 1. / RF.powi(2)).sqrt()),
+            ("webmerc", 0.),
+        ] {
+            for (units, factor) in UNITS {
+                // Mercator's isometric latitude, including ellipsoidal correction.
+                let projected = points.map(|p| {
+                    let phi = p[1].to_radians();
+                    let es = eccentricity * phi.sin();
+                    let y = A
+                        * ((FRAC_PI_4 + phi / 2.).tan()
+                            * ((1. - es) / (1. + es)).powf(eccentricity / 2.))
+                        .ln();
+                    [
+                        (A * p[0].to_radians() + 5000.) / factor,
+                        (y - 6000.) / factor,
+                        p[2],
+                    ]
+                });
+                check(
+                    &format!("+proj={projection} +x_0=5000 +y_0=-6000 +datum=WGS84 +units={units}"),
+                    &projected,
+                    &expected,
+                );
+            }
+        }
+    }
+
+    fn utm_forward(point: [f64; 3], central: f64, south: bool) -> [f64; 3] {
+        let e2 = (1. / RF) * (2. - 1. / RF);
+        let ep2 = e2 / (1. - e2);
+        let phi = point[1].to_radians();
+        let (sin, cos) = phi.sin_cos();
+        let n = A / (1. - e2 * sin * sin).sqrt();
+        let t = phi.tan().powi(2);
+        let c = ep2 * cos * cos;
+        let alpha = (point[0] - central).to_radians() * cos;
+        // Integrate meridional radius directly instead of using the library's
+        // meridional coefficients. Simpson quadrature error here is below 1 um.
+        let steps = 2048;
+        let step = phi / steps as f64;
+        let radius = |lat: f64| A * (1. - e2) / (1. - e2 * lat.sin().powi(2)).powf(1.5);
+        let mut m = radius(0.) + radius(phi);
+        for index in 1..steps {
+            m += radius(index as f64 * step) * if index % 2 == 0 { 2. } else { 4. };
+        }
+        m *= step / 3.;
+        // Snyder transverse Mercator series, restricted to <= 0.5 degree from
+        // the meridian in this test (omitted terms contribute below 1 um).
+        let x = 500000.
+            + 0.9996
+                * n
+                * (alpha
+                    + (1. - t + c) * alpha.powi(3) / 6.
+                    + (5. - 18. * t + t * t + 72. * c - 58. * ep2) * alpha.powi(5) / 120.);
+        let y = if south { 10000000. } else { 0. }
+            + 0.9996
+                * (m + n
+                    * phi.tan()
+                    * (alpha.powi(2) / 2.
+                        + (5. - t + 9. * c + 4. * c * c) * alpha.powi(4) / 24.
+                        + (61. - 58. * t + t * t + 600. * c - 330. * ep2) * alpha.powi(6) / 720.));
+        [x, y, point[2]]
+    }
+
+    #[test]
+    fn utm_in_both_hemispheres_preserves_horizontal_units_and_metre_heights() {
+        for (zone, central, sign) in [(32, 9., 1.), (56, 153., -1.)] {
+            let points = [
+                [central - 0.5, sign * 27., 123.],
+                [central + 0.5, sign * 52., -30.],
+            ];
+            let expected = points.map(|p| ecef(A, RF, p));
+            let metres = points.map(|p| utm_forward(p, central, sign < 0.));
+            check(
+                &format!("EPSG:{}{zone:02}", if sign < 0. { 327 } else { 326 }),
+                &metres,
+                &expected,
+            );
+            for (units, factor) in UNITS {
+                let input = metres.map(|p| [p[0] / factor, p[1] / factor, p[2]]);
+                check(
+                    &format!(
+                        "+proj=utm +zone={zone} {} +datum=WGS84 +units={units}",
+                        if sign < 0. { "+south" } else { "" }
+                    ),
+                    &input,
+                    &expected,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn local_lcc_with_seven_parameter_helmert_has_independent_position_vector_truth() {
+        let a = 6377563.396;
+        let rf: f64 = 299.3249646;
+        let f = 1. / rf;
+        let e2 = f * (2. - f);
+        let e = e2.sqrt();
+        let m = |lat: f64| {
+            let phi = lat.to_radians();
+            phi.cos() / (1. - e2 * phi.sin().powi(2)).sqrt()
+        };
+        let t = |lat: f64| {
+            let phi = lat.to_radians();
+            let es = e * phi.sin();
+            (FRAC_PI_4 - phi / 2.).tan() / ((1. - es) / (1. + es)).powf(e / 2.)
+        };
+        let n = (m(33.) / m(45.)).ln() / (t(33.) / t(45.)).ln();
+        let constant = m(33.) / (n * t(33.).powf(n));
+        let rho0 = a * constant * t(39.).powf(n);
+        let points = [[-97., 37., 123.], [-92., 43., -30.]];
+        let projected = points.map(|p| {
+            let rho = a * constant * t(p[1]).powf(n);
+            let (s, c) = (n * (p[0] + 96.).to_radians()).sin_cos();
+            [5000. + rho * s, -6000. + rho0 - rho * c, p[2]]
+        });
+        let expected = points.map(|p| {
+            let [x, y, z] = ecef(a, rf, p);
+            // Explicit +towgs84 uses the position-vector convention. Rotations
+            // are arcseconds and scale is ppm; height is applied before shift.
+            let arcsecond = std::f64::consts::PI / (180. * 3600.);
+            let (rx, ry, rz) = (0.15 * arcsecond, 0.247 * arcsecond, 0.842 * arcsecond);
+            let scale = 1. - 20.489e-6;
+            [
+                446.448 + scale * (x - rz * y + ry * z),
+                -125.157 + scale * (rz * x + y - rx * z),
+                542.06 + scale * (-ry * x + rx * y + z),
+            ]
+        });
+        for (units, factor) in UNITS {
+            let input = projected.map(|p| [p[0] / factor, p[1] / factor, p[2]]);
+            check(&format!("+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=5000 +y_0=-6000 +ellps=airy +towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +units={units}"), &input, &expected);
+        }
+    }
+
+    #[test]
+    fn spherical_stereographic_fallback_retries_both_batch_orders_against_analytic_truth() {
+        let radius = 6370997.;
+        let definition = "+proj=stere +lat_0=45 +ellps=sphere +towgs84=12,-34,56";
+        let points = [[15_f64, 50_f64, 123.], [-20., 85., -30.]];
+        let origin = 45_f64.to_radians();
+        let input = points.map(|p| {
+            let lon = p[0].to_radians();
+            let lat = p[1].to_radians();
+            let k = 2. * radius
+                / (1. + origin.sin() * lat.sin() + origin.cos() * lat.cos() * lon.cos());
+            [
+                k * lat.cos() * lon.sin(),
+                k * (origin.cos() * lat.sin() - origin.sin() * lat.cos() * lon.cos()),
+                p[2],
+            ]
+        });
+        let expected = points.map(|p| {
+            let mut xyz = ecef(radius, f64::INFINITY, p);
+            for (v, shift) in xyz.iter_mut().zip([12., -34., 56.]) {
+                *v += shift;
+            }
+            xyz
+        });
+        let safe = (input[0], expected[0]);
+        for (input, expected) in [
+            (input, expected),
+            ([input[1], input[0]], [expected[1], expected[0]]),
+        ] {
+            let mut transform = Transform::new(definition, OFFSET).unwrap();
+            assert!(matches!(transform, Transform::Pure(_)));
+            assert!(matches!(
+                PureTransform::new(definition, OFFSET)
+                    .unwrap()
+                    .transform(&input),
+                Err(Error::Environment(_))
+            ));
+            #[cfg(not(feature = "native-geospatial"))]
+            {
+                let _ = expected;
+                assert!(matches!(
+                    transform.transform(&input),
+                    Err(Error::Environment(_))
+                ));
+                assert!(matches!(transform, Transform::Pure(_)));
+            }
+            #[cfg(feature = "native-geospatial")]
+            {
+                let actual = transform.transform(&input).unwrap();
+                assert_eq!(actual.len(), 2);
+                for (a, e) in actual.into_iter().zip(expected) {
+                    assert_mm(a, e, definition);
+                }
+                assert!(matches!(transform, Transform::Native(_)));
+                assert_mm(
+                    transform.transform(&[input[0]]).unwrap()[0],
+                    expected[0],
+                    "subsequent native batch",
+                );
+            }
+            // A later invalid coordinate must fail the entire retry, without
+            // committing Native state or poisoning a subsequent portable batch.
+            let mut failed = Transform::new(definition, OFFSET).unwrap();
+            let result = failed.transform(&[input[0], input[1], [f64::NAN, 0., 123.]]);
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(matches!(result, Err(Error::Environment(_))));
+            #[cfg(feature = "native-geospatial")]
+            assert!(matches!(result, Err(Error::Data(_))));
+            assert!(matches!(failed, Transform::Pure(_)));
+            assert_mm(
+                failed.transform(&[safe.0]).unwrap()[0],
+                safe.1,
+                "portable batch after failed retry",
+            );
+            assert!(matches!(failed, Transform::Pure(_)));
+        }
     }
 }

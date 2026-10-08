@@ -5,6 +5,13 @@
 
 use std::path::Path;
 
+// Native ingestion currently consumes these shared reader foundations. They are
+// also compiled and tested without GDAL before portable readers are wired in.
+#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+mod model;
+#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+mod source_fields;
+
 #[cfg(feature = "native-geospatial")]
 mod native;
 
