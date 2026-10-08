@@ -1,6 +1,7 @@
 """Completion evidence shared by the installed-wheel acceptance runners."""
 import json
 import shutil
+import subprocess
 
 
 def clear_requested_report(path, wheel):
@@ -25,9 +26,27 @@ def require_completion(evidence, wheel_sha256, *, require_blender=False):
         raise RuntimeError("The API suite did not provide Blender runtime identity")
 
 
-def copy_evidence(evidence, destination):
+def failure_reason(error):
+    if isinstance(error, subprocess.CalledProcessError):
+        return f"Acceptance subprocess exited with status {error.returncode}"
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "Acceptance subprocess timed out"
+    return str(error) or type(error).__name__
+
+
+def copy_evidence(evidence, destination, *, runner_error=None):
     # Preserve current failure evidence when the suite wrote it, but never copy
     # a report left over from an earlier invocation.
     if destination is not None and evidence.is_file():
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(evidence, destination)
+        if runner_error is None:
+            shutil.copyfile(evidence, destination)
+            return
+        try:
+            report = json.loads(evidence.read_text())
+        except (ValueError, UnicodeError):
+            report = {}
+        if not isinstance(report, dict):
+            report = {}
+        report.update(ok=False, runner_error=runner_error)
+        destination.write_text(json.dumps(report, indent=2) + "\n")

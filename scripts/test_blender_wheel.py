@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import venv
 
-from wheel_acceptance import clear_requested_report, copy_evidence, require_completion
+from wheel_acceptance import clear_requested_report, copy_evidence, failure_reason, require_completion
 
 
 def main():
@@ -46,6 +46,8 @@ def main():
         env["RUSTY_TILES_ACCEPTANCE_PACKAGE_ROOT"] = str(work / "packages")
         env["RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256"] = wheel_sha256
         env["RUSTY_TILES_ACCEPTANCE_REPORT"] = str(evidence)
+        completed = False
+        runner_error = "Acceptance did not complete"
         try:
             for phase in ("install", "test"):
                 subprocess.run(
@@ -59,8 +61,12 @@ def main():
                     timeout=240,
                 )
             require_completion(evidence, wheel_sha256, require_blender=True)
+            completed = True
+        except BaseException as error:
+            runner_error = failure_reason(error)
+            raise
         finally:
-            copy_evidence(evidence, requested_report)
+            copy_evidence(evidence, requested_report, runner_error=None if completed else runner_error)
 
 
 if __name__ == "__main__":

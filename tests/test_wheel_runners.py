@@ -92,25 +92,32 @@ class WheelRunnerEvidence(unittest.TestCase):
                 self.assertIn(expected, result.stderr)
                 if expected == "no completion evidence":
                     self.assertFalse(self.report.exists())
+                else:
+                    evidence = json.loads(self.report.read_text())
+                    self.assertIs(evidence["ok"], False)
+                    self.assertIn(expected, evidence["runner_error"])
 
     @unittest.skipIf(os.name == "nt", "The test launcher uses a POSIX executable script")
     def test_current_failure_report_is_preserved(self):
         launcher = self.root / "blender"
-        launcher.write_text(
-            f"#!{sys.executable}\n"
-            "import json, os, sys\nfrom pathlib import Path\n"
-            "if sys.argv[sys.argv.index('--') + 1] == 'test':\n"
-            "    Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
-            "json.dumps({'ok': False, 'tests_run': 12, "
-            "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
-            "    sys.exit(1)\n"
-        )
-        launcher.chmod(0o755)
-        result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher))
-        self.assertNotEqual(result.returncode, 0)
-        evidence = json.loads(self.report.read_text())
-        self.assertIs(evidence["ok"], False)
-        self.assertEqual(evidence["tests_run"], 12)
+        for claimed_success in (False, True):
+            with self.subTest(claimed_success=claimed_success):
+                launcher.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os, sys\nfrom pathlib import Path\n"
+                    "if sys.argv[sys.argv.index('--') + 1] == 'test':\n"
+                    "    Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
+                    f"json.dumps({{'ok': {claimed_success!r}, 'tests_run': 12, "
+                    "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
+                    "    sys.exit(1)\n"
+                )
+                launcher.chmod(0o755)
+                result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher))
+                self.assertNotEqual(result.returncode, 0)
+                evidence = json.loads(self.report.read_text())
+                self.assertIs(evidence["ok"], False)
+                self.assertEqual(evidence["tests_run"], 12)
+                self.assertEqual(evidence["runner_error"], "Acceptance subprocess exited with status 1")
 
 
 if __name__ == "__main__":

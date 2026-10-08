@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import venv
 
-from wheel_acceptance import clear_requested_report, copy_evidence, require_completion
+from wheel_acceptance import clear_requested_report, copy_evidence, failure_reason, require_completion
 
 
 def main():
@@ -35,6 +35,8 @@ def main():
         env["RUSTY_TILES_ACCEPTANCE_PACKAGE_ROOT"] = str(env_dir)
         env["RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256"] = wheel_sha256
         env["RUSTY_TILES_ACCEPTANCE_REPORT"] = str(evidence)
+        completed = False
+        runner_error = "Acceptance did not complete"
         try:
             subprocess.run(
                 [str(python), "-I", str(root / "bindings/python/tests/test_api.py"), str(root)],
@@ -44,8 +46,12 @@ def main():
                 timeout=180,
             )
             require_completion(evidence, wheel_sha256)
+            completed = True
+        except BaseException as error:
+            runner_error = failure_reason(error)
+            raise
         finally:
-            copy_evidence(evidence, requested_report)
+            copy_evidence(evidence, requested_report, runner_error=None if completed else runner_error)
 
 
 if __name__ == "__main__":
