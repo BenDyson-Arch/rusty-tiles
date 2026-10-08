@@ -278,6 +278,22 @@ struct Check<'a> {
     active: HashSet<String>,
     schema: jsonschema::Validator,
 }
+enum ValidationTask {
+    Tileset {
+        name: String,
+        parent: Option<Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+    },
+    Node {
+        node: Value,
+        base: String,
+        parent: Option<Volume>,
+        parent_error: f64,
+        depth: usize,
+    },
+    ExitTileset(String),
+}
 impl Check<'_> {
     fn reference(&mut self, name: String) -> Result<(), Error> {
         if !self.names.contains(&name) {
@@ -304,14 +320,63 @@ impl Check<'_> {
         parent_error: Option<f64>,
         depth: usize,
     ) -> Result<(), Error> {
-        if depth > 128 {
-            return Err(invalid("hierarchy exceeds validation depth limit"));
+        let mut pending = vec![ValidationTask::Tileset {
+            name: name.into(),
+            parent: parent.cloned(),
+            parent_error,
+            depth,
+        }];
+        while let Some(task) = pending.pop() {
+            match task {
+                ValidationTask::Tileset {
+                    name,
+                    parent,
+                    parent_error,
+                    depth,
+                } => {
+                    if depth > 128 {
+                        return Err(invalid("hierarchy exceeds validation depth limit"));
+                    }
+                    if !self.active.insert(name.clone()) {
+                        return Err(invalid("cyclic external tileset reference"));
+                    }
+                    let (mut doc, error) = self.prepare_tileset(&name)?;
+                    pending.push(ValidationTask::ExitTileset(name.clone()));
+                    pending.push(ValidationTask::Node {
+                        node: doc["root"].take(),
+                        base: name,
+                        parent,
+                        parent_error: parent_error.map_or(error, |parent| parent.min(error)),
+                        depth,
+                    });
+                }
+                ValidationTask::Node {
+                    node,
+                    base,
+                    parent,
+                    parent_error,
+                    depth,
+                } => {
+                    self.node(
+                        node,
+                        &base,
+                        parent.as_ref(),
+                        parent_error,
+                        depth,
+                        &mut pending,
+                    )?;
+                }
+                ValidationTask::ExitTileset(name) => {
+                    self.active.remove(&name);
+                }
+            }
         }
-        if !self.active.insert(name.into()) {
-            return Err(invalid("cyclic external tileset reference"));
-        }
+        Ok(())
+    }
+
+    fn prepare_tileset(&mut self, name: &str) -> Result<(Value, f64), Error> {
         self.reference(name.into())?;
-        let mut doc = read_json(self.zip, name)?;
+        let doc = read_json(self.zip, name)?;
         self.schema
             .validate(&doc)
             .map_err(|error| invalid(format!("tileset schema: {error}")))?;
@@ -320,6 +385,11 @@ impl Check<'_> {
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         self.metadata_schema(name, &doc)?;
+        let doc = self.expand_implicit(name, doc)?;
+        Ok((doc, error))
+    }
+
+    fn expand_implicit(&mut self, name: &str, mut doc: Value) -> Result<Value, Error> {
         if doc["root"].get("implicitTiling").is_some() {
             // Raw immutable vector payloads remain reachable through the native
             // reuse state; display content uses implicit URI templates.
@@ -353,25 +423,16 @@ impl Check<'_> {
                 Ok(bytes)
             })?;
         }
-        // Each use has its own placement and constraints, even when the JSON
-        // file was already visited under another referring tile.
-        let result = self.node(
-            &doc["root"],
-            name,
-            parent,
-            parent_error.map_or(error, |parent| parent.min(error)),
-            depth,
-        );
-        self.active.remove(name);
-        result
+        Ok(doc)
     }
     fn node(
         &mut self,
-        node: &Value,
+        mut node: Value,
         base: &str,
         parent: Option<&Volume>,
         parent_error: f64,
         depth: usize,
+        pending: &mut Vec<ValidationTask>,
     ) -> Result<(), Error> {
         if depth > 128 {
             return Err(invalid("hierarchy exceeds validation depth limit"));
@@ -390,7 +451,7 @@ impl Check<'_> {
             }
         }
         let bounds = volume(&node["boundingVolume"])?;
-        let m = transform(node)?;
+        let m = transform(&node)?;
         if let Some(parent) = parent {
             if !contains(parent, &bounds, &m)? {
                 return Err(invalid(format!(
@@ -407,6 +468,7 @@ impl Check<'_> {
         self.tiles += 1;
         let mut bytes = 0u64;
         let mut vertices = 0u64;
+        let mut descendants = Vec::new();
         if node.get("content").is_some() && node.get("contents").is_some() {
             return Err(invalid("tile has both content and contents"));
         }
@@ -433,7 +495,12 @@ impl Check<'_> {
             }
             bytes += self.zip.by_name(&name)?.size();
             if name.ends_with(".json") {
-                self.tileset(&name, Some(&bounds), Some(error), depth + 1)?;
+                descendants.push(ValidationTask::Tileset {
+                    name,
+                    parent: Some(bounds.clone()),
+                    parent_error: Some(error),
+                    depth: depth + 1,
+                });
                 continue;
             }
             if let Some(doc) = gltf(self.zip, &name)? {
@@ -490,14 +557,21 @@ impl Check<'_> {
                 }
             }
         }
-        if let Some(children) = node.get("children") {
-            for child in children
-                .as_array()
-                .ok_or_else(|| invalid("children must be an array"))?
-            {
-                self.node(child, base, Some(&bounds), error, depth + 1)?;
+        if let Some(children) = node.as_object_mut().unwrap().remove("children") {
+            let Value::Array(children) = children else {
+                return Err(invalid("children must be an array"));
+            };
+            for child in children {
+                descendants.push(ValidationTask::Node {
+                    node: child,
+                    base: base.into(),
+                    parent: Some(bounds.clone()),
+                    parent_error: error,
+                    depth: depth + 1,
+                });
             }
         }
+        pending.extend(descendants.into_iter().rev());
         Ok(())
     }
 }
@@ -730,6 +804,14 @@ mod tests {
     }
     #[test]
     fn external_cycles_fail_and_depth_continues_across_files() {
+        std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(check_external_cycles_and_depth)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+    fn check_external_cycles_and_depth() {
         let mut root = tile(1., 0.);
         root["content"] = json!({"uri":"nested/external.json"});
         let mut child = tile(1., 0.);
