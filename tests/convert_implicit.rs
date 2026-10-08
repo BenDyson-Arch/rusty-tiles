@@ -585,21 +585,28 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
     );
     let mut files = members(&full);
     let mut manifest = document(&files, "tileset.json");
-    fn leaf(node: &Value) -> Option<Value> {
+    fn leaf(node: &Value, files: &BTreeMap<String, Vec<u8>>) -> Option<Value> {
         if let Some(children) = node["children"].as_array() {
             for child in children {
-                if let Some(node) = leaf(child) {
+                if let Some(node) = leaf(child, files) {
                     return Some(node);
                 }
             }
-        } else if node["contents"].as_array().is_some_and(|c| c.len() == 2) {
+        } else if node["contents"].as_array().is_some_and(|c| {
+            c.len() == 2
+                && c.iter().all(|v| {
+                    !v["uri"].as_str().unwrap().ends_with(".b3dm")
+                        || files[v["uri"].as_str().unwrap()].len().is_multiple_of(8)
+                })
+        }) {
             return Some(node.clone());
         }
         None
     }
     // A selected original converter leaf is already one regular root. Its
     // fragment payloads exercise the original two-slot GLB/b3dm declarations.
-    let mut root = leaf(&manifest["root"]).expect("fragmented source has a mixed-content leaf");
+    let mut root = leaf(&manifest["root"], &files)
+        .expect("fragmented source has an aligned mixed-content leaf");
     root["transform"] =
         json!([1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 100., 200., 300., 1.]);
     for (index, content) in root["contents"]
@@ -667,4 +674,44 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
     rusty_tiles::validate::archive(&output, None).unwrap();
     export(&explicit, "vector-fragment-explicit");
     export(&output, "vector-fragment-converted");
+    // Deliberately reproduce the older explicit encoder's legal GLB framing
+    // inside a b3dm whose total length is only four-byte aligned. Preserve all
+    // framing/checksums so refusal specifically diagnoses byte-preserving
+    // migration of malformed source content, rather than unrelated corruption.
+    use sha2::Digest;
+    let old_uri = uris.iter().find(|u| u.ends_with(".b3dm")).unwrap();
+    let mut bytes = files.remove(old_uri).unwrap();
+    let offset = (3..7).fold(28, |n, i| {
+        n + u32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap()) as usize
+    });
+    let json_length = u32::from_le_bytes(bytes[offset + 12..offset + 16].try_into().unwrap());
+    bytes.splice(
+        offset + 20 + json_length as usize..offset + 20 + json_length as usize,
+        [b' '; 4],
+    );
+    let total = bytes.len() as u32;
+    bytes[8..12].copy_from_slice(&total.to_le_bytes());
+    bytes[offset + 8..offset + 12].copy_from_slice(&(total - offset as u32).to_le_bytes());
+    bytes[offset + 12..offset + 16].copy_from_slice(&(json_length + 4).to_le_bytes());
+    let new_uri = format!("t/{:x}.b3dm", sha2::Sha256::digest(&bytes));
+    files.insert(new_uri.clone(), bytes);
+    for c in manifest["root"]["contents"].as_array_mut().unwrap() {
+        if c["uri"] == *old_uri {
+            c["uri"] = json!(new_uri);
+        }
+    }
+    manifest["root"]["extras"]["encodedBytes"] =
+        json!(root["extras"]["encodedBytes"].as_u64().unwrap() + 4);
+    files.insert(
+        "tileset.json".into(),
+        serde_json::to_vec(&manifest).unwrap(),
+    );
+    let malformed = tmp.path().join("unaligned.3tz");
+    repackage(&files, &malformed);
+    let original_output = fs::read(&output).unwrap();
+    assert!(convert(&malformed, &output, true)
+        .unwrap_err()
+        .to_string()
+        .contains("unaligned b3dm payload"));
+    assert_eq!(fs::read(&output).unwrap(), original_output);
 }
