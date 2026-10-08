@@ -5,7 +5,7 @@ use encoding::Candidate;
 use rayon::prelude::*;
 use reuse::{Cut, Reuse};
 use rusqlite::{params, Connection};
-use source::{Frame, Reader};
+use source::Reader;
 use std::{
     cell::{Cell, RefCell},
     io::Write,

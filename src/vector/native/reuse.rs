@@ -1,6 +1,5 @@
 //! Versioned native encoder identity, immutable content and subtree invalidation.
 use super::*;
-use source::Frame;
 use std::fs::File;
 use store::{Counters, Node};
 
@@ -46,6 +45,8 @@ fn encoder(explicit: bool) -> String {
     let mut hasher = Sha256::new();
     for source in [
         include_str!("../native.rs"),
+        include_str!("../model.rs"),
+        include_str!("../source_fields.rs"),
         include_str!("geometry.rs"),
         include_str!("source.rs"),
         include_str!("encoding.rs"),

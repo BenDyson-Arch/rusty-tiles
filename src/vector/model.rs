@@ -1,0 +1,171 @@
+//! Owned vector values shared by readers and the tiling pipeline.
+//!
+//! These types contain no native handles. Keep their serialized representation
+//! stable: feature spools and reuse state persist these values.
+use crate::vec3::{dot, sub};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
+
+pub(super) type Point = [f64; 3];
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", content = "coordinates")]
+pub(super) enum Geometry {
+    Point(Point),
+    MultiPoint(Vec<Point>),
+    LineString(Vec<Point>),
+    MultiLineString(Vec<Vec<Point>>),
+    Polygon(Vec<Vec<Point>>),
+    MultiPolygon(Vec<Vec<Vec<Point>>>),
+}
+impl Geometry {
+    pub(super) fn paths(&self) -> Vec<&[Point]> {
+        match self {
+            Self::Point(p) => vec![std::slice::from_ref(p)],
+            Self::MultiPoint(p) | Self::LineString(p) => vec![p],
+            Self::MultiLineString(p) | Self::Polygon(p) => p.iter().map(Vec::as_slice).collect(),
+            Self::MultiPolygon(p) => p.iter().flatten().map(Vec::as_slice).collect(),
+        }
+    }
+    pub(super) fn points(&self) -> impl Iterator<Item = &Point> {
+        self.paths().into_iter().flatten()
+    }
+    pub(super) fn size(&self) -> usize {
+        self.points().count()
+    }
+    pub(super) fn map(&mut self, mut f: impl FnMut(Point) -> Point) {
+        match self {
+            Self::Point(p) => *p = f(*p),
+            Self::MultiPoint(p) | Self::LineString(p) => p.iter_mut().for_each(|p| *p = f(*p)),
+            Self::MultiLineString(p) | Self::Polygon(p) => {
+                p.iter_mut().flatten().for_each(|p| *p = f(*p))
+            }
+            Self::MultiPolygon(p) => p.iter_mut().flatten().flatten().for_each(|p| *p = f(*p)),
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(super) struct Feature {
+    pub(super) properties: BTreeMap<String, Value>,
+    pub(super) geometry: Geometry,
+    #[serde(
+        default,
+        rename = "_surface_fragment",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub(super) surface_fragment: bool,
+    #[serde(
+        default,
+        rename = "_triangle_boundaries",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub(super) triangle_boundaries: Vec<Vec<Vec<Point>>>,
+    #[serde(
+        default,
+        rename = "_fragment_path",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub(super) fragment_path: String,
+}
+impl Feature {
+    pub(super) fn estimate(&self) -> usize {
+        self.geometry.size() * 32
+            + serde_json::to_vec(&self.properties).map_or(0, |p| p.len())
+            + 2048
+    }
+    pub(super) fn source_id(&self) -> &Value {
+        &self.properties["_source_id"]
+    }
+    pub(super) fn layer(&self) -> &str {
+        self.properties["_source_layer"].as_str().unwrap()
+    }
+}
+#[derive(Clone, Serialize, Deserialize)]
+pub(super) struct Frame {
+    pub(super) anchor: Point,
+    pub(super) axes: [Point; 3],
+}
+impl Frame {
+    pub(super) fn local(anchor: Point) -> Self {
+        Self {
+            anchor,
+            axes: [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]],
+        }
+    }
+    pub(super) fn project(&self, p: Point) -> Point {
+        let d = sub(p, self.anchor);
+        [
+            dot(d, self.axes[0]),
+            dot(d, self.axes[2]),
+            -dot(d, self.axes[1]),
+        ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn geometry_mapping_preserves_all_paths_and_serialized_variants() {
+        let cases = [
+            json!({"type":"Point","coordinates":[1,2,3]}),
+            json!({"type":"MultiPoint","coordinates":[[1,2,3],[4,5,6]]}),
+            json!({"type":"LineString","coordinates":[[1,2,3],[4,5,6]]}),
+            json!({"type":"MultiLineString","coordinates":[[[1,2,3]],[[4,5,6]]]}),
+            json!({"type":"Polygon","coordinates":[[[1,2,3]],[[4,5,6]]]}),
+            json!({"type":"MultiPolygon","coordinates":[[[[1,2,3]]],[[[4,5,6]]]]}),
+        ];
+        for source in cases {
+            let mut geometry: Geometry = serde_json::from_value(source.clone()).unwrap();
+            let before: Vec<_> = geometry.points().copied().collect();
+            assert_eq!(geometry.size(), before.len());
+            assert_eq!(
+                serde_json::to_value(&geometry).unwrap()["type"],
+                source["type"]
+            );
+            geometry.map(|p| [p[0] + 10., p[1] + 20., p[2] + 30.]);
+            assert_eq!(
+                geometry.points().copied().collect::<Vec<_>>(),
+                before
+                    .iter()
+                    .map(|p| [p[0] + 10., p[1] + 20., p[2] + 30.])
+                    .collect::<Vec<_>>()
+            );
+            let serialized = serde_json::to_vec(&geometry).unwrap();
+            assert_eq!(
+                serde_json::from_slice::<Geometry>(&serialized).unwrap(),
+                geometry
+            );
+        }
+    }
+
+    #[test]
+    fn spool_features_retain_default_and_fragment_serialization() {
+        let source = json!({"properties":{"_source_id":"\"id\"","_source_layer":"layer","large":u64::MAX},"geometry":{"type":"Point","coordinates":[1.,2.,3.]}});
+        let mut feature: Feature = serde_json::from_value(source.clone()).unwrap();
+        assert_eq!(feature.source_id(), &json!("\"id\""));
+        assert_eq!(feature.layer(), "layer");
+        assert_eq!(serde_json::to_value(&feature).unwrap(), source);
+        feature.surface_fragment = true;
+        feature.triangle_boundaries = vec![vec![vec![[1., 2., 3.], [4., 5., 6.]]]];
+        feature.fragment_path = "01".into();
+        let persisted = serde_json::to_value(&feature).unwrap();
+        assert_eq!(persisted["_surface_fragment"], true);
+        assert_eq!(persisted["_fragment_path"], "01");
+        let restored: Feature = serde_json::from_value(persisted.clone()).unwrap();
+        assert_eq!(serde_json::to_value(restored).unwrap(), persisted);
+    }
+
+    #[test]
+    fn reused_frames_preserve_anchor_axes_and_y_up_projection() {
+        let local = Frame::local([10., 20., 30.]);
+        assert_eq!(local.project([11., 22., 33.]), [1., 3., -2.]);
+        let source = json!({"anchor":[10.,20.,30.],"axes":[[0.,1.,0.],[0.,0.,1.],[1.,0.,0.]]});
+        let frame: Frame = serde_json::from_value(source.clone()).unwrap();
+        assert_eq!(frame.project([11., 22., 33.]), [2., 1., -3.]);
+        assert_eq!(serde_json::to_value(frame).unwrap(), source);
+    }
+}
