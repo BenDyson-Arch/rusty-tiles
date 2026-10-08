@@ -42,6 +42,7 @@ staging and atomic archive replacement.
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage |
 | `convert_to_3tz(input, output, ...)` | `force=False` |
+| `convert_to_implicit(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
 
 `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
@@ -158,3 +159,5 @@ The release workflow reuses these wheel checks; its default run omits the
 separate distribution Blender check.
 Only completed runs establish acceptance; Blender on other platforms and
 official bundled Blender distributions need their own runner evidence.
+
+`convert_to_implicit(input, output, *, force=False)` rewrites an eligible rusty-tiles explicit point-cloud/vector `.3tz` as implicit tiling, returning `ConversionResult`. It preserves original GLB/b3dm bytes through external content roots. Eligibility requires distinct regular midpoint cells, with only recorded rounding/minimum-thickness padding; many older binary trees and vector LOD chains need a fresh source conversion. Meshes, foreign and already implicit archives are refused. See [command eligibility and publication semantics](../../docs/CLI.md#convert-to-implicit).

@@ -4,6 +4,7 @@
 //! Raster, quantized-mesh terrain and draft glTF vector paths are GDAL-backed lab tools.
 
 pub mod bbox;
+pub mod convert_implicit;
 mod crs;
 pub mod error;
 pub mod fixtures;
@@ -33,6 +34,9 @@ mod tileset_node;
 mod vec3;
 pub mod vector;
 
+pub use convert_implicit::{
+    convert_to_implicit, convert_to_implicit_reported, ConvertToImplicitOptions,
+};
 pub use error::Error;
 pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};

@@ -399,6 +399,25 @@ fn convert_to_3tz(
     })
 }
 
+/// Rewrite an eligible rusty-tiles explicit point/vector archive as implicit tiling.
+#[pyfunction]
+#[pyo3(signature = (input, output, *, force=false))]
+fn convert_to_implicit(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    force: bool,
+) -> PyResult<ConversionResult> {
+    run_conversion(py, None, |reporter| {
+        tiles_core::convert_to_implicit_reported(
+            &input,
+            &output,
+            &tiles_core::ConvertToImplicitOptions { force },
+            reporter,
+        )
+    })
+}
+
 /// Check an archive's index, schema, bounds, references, hashes and budgets.
 #[pyfunction]
 fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
@@ -433,6 +452,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(point_cloud_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(convert_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(convert_to_implicit, module)?)?;
     module.add_function(wrap_pyfunction!(validate, module)?)?;
     Ok(())
 }

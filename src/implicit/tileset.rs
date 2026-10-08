@@ -14,8 +14,10 @@ fn content_suffix(uri: &str) -> Result<String, Error> {
         .and_then(|s| s.to_str())
         .ok_or_else(|| invalid("content has no extension"))?
         .to_ascii_lowercase();
-    if !matches!(suffix.as_str(), "glb" | "gltf" | "b3dm") {
-        return Err(invalid("implicit converter content must be glTF or b3dm"));
+    if !matches!(suffix.as_str(), "glb" | "gltf" | "b3dm" | "json") {
+        return Err(invalid(
+            "implicit converter content must be glTF, b3dm or an external tileset",
+        ));
     }
     Ok(suffix)
 }
@@ -114,7 +116,9 @@ fn collect(
         .flatten()
         .enumerate()
     {
-        let slot = node["extras"]["implicitChildIndex"]
+        let slot = node
+            .get("_rustyImplicitChildIndex")
+            .unwrap_or(&node["extras"]["implicitChildIndex"])
             .as_u64()
             .unwrap_or(index as u64) as usize;
         if !slots.insert(slot) {
