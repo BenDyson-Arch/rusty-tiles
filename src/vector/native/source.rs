@@ -1,4 +1,5 @@
 //! Streaming OGR features; explicit axes, heights, filters and exact typed fields.
+use super::super::source_fields;
 use super::*;
 use crate::geospatial::{
     self,
@@ -14,27 +15,6 @@ impl Drop for Row {
         unsafe {
             gdal_sys::OGR_F_Destroy(self.0.as_ptr());
         }
-    }
-}
-#[derive(Clone, Serialize, Deserialize)]
-pub(super) struct Frame {
-    pub anchor: Point,
-    pub axes: [Point; 3],
-}
-impl Frame {
-    pub fn local(anchor: Point) -> Self {
-        Self {
-            anchor,
-            axes: [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]],
-        }
-    }
-    pub fn project(&self, p: Point) -> Point {
-        let d = sub(p, self.anchor);
-        [
-            dot(d, self.axes[0]),
-            dot(d, self.axes[2]),
-            -dot(d, self.axes[1]),
-        ]
     }
 }
 pub(super) struct Reader {
@@ -139,22 +119,6 @@ impl Reader {
             })
         }
     }
-    fn register(&mut self, name: &str, kind: &str) -> Result<(), Error> {
-        let kind = match self.schemas.get(name).map(String::as_str) {
-            Some(previous) if previous != kind => {
-                if matches!(previous, "integer" | "real") && matches!(kind, "integer" | "real") {
-                    "real"
-                } else {
-                    return Err(data(format!(
-                        "incompatible scalar schemas for {name:?}; convert these layers separately"
-                    )));
-                }
-            }
-            _ => kind,
-        };
-        self.schemas.insert(name.into(), kind.into());
-        Ok(())
-    }
     pub fn read(
         &mut self,
         options: &VectorOptions,
@@ -219,14 +183,10 @@ impl Reader {
                 let definition = gdal_sys::OGR_L_GetLayerDefn(layer);
                 let mut fields = Vec::new();
                 let mut json_fields = BTreeSet::new();
-                let keep = |name: &str| {
-                    (options.fields.is_empty() || options.fields.iter().any(|f| f == name))
-                        && !options.drop_fields.iter().any(|f| f == name)
-                };
                 for i in 0..gdal_sys::OGR_FD_GetFieldCount(definition) {
                     let field = gdal_sys::OGR_FD_GetFieldDefn(definition, i);
                     let key = geospatial::string(gdal_sys::OGR_Fld_GetNameRef(field));
-                    if !keep(&key) {
+                    if !source_fields::keep(options, &key) {
                         continue;
                     }
                     if matches!(key.as_str(), "_source_id" | "_source_layer") {
@@ -257,7 +217,7 @@ impl Reader {
                             }
                         }
                     };
-                    self.register(&key, scalar)?;
+                    source_fields::register(&mut self.schemas, &key, scalar)?;
                     fields.push((i, key, scalar, kind));
                 }
                 let mut accepted = 0;
@@ -284,12 +244,7 @@ impl Reader {
                     } else {
                         None
                     };
-                    let id = native
-                        .as_ref()
-                        .and_then(|v| v.get("id"))
-                        .cloned()
-                        .unwrap_or(json!(fid));
-                    let id = serde_json::to_string(&id)?;
+                    let id = source_fields::source_id(native.as_ref(), fid)?;
                     let g = gdal_sys::OGR_F_GetGeometryRef(raw);
                     if g.is_null() || gdal_sys::OGR_G_IsEmpty(g) != 0 {
                         without += 1;
@@ -320,42 +275,12 @@ impl Reader {
                             read_geometry(g, &mut count, options.max_source_vertices)?;
                         let mut properties = BTreeMap::new();
                         if let Some(native) = &native {
-                            if let Some(props) = native["properties"].as_object() {
-                                for (key, value) in props {
-                                    if !keep(key) {
-                                        continue;
-                                    }
-                                    if matches!(key.as_str(), "_source_id" | "_source_layer") {
-                                        return Err(data(format!(
-                                            "reserved source property: {key}"
-                                        )));
-                                    }
-                                    let value = if value.is_array() && options.list_fields == "json"
-                                    {
-                                        json_fields.insert(key.clone());
-                                        json!(serde_json::to_string(value)?)
-                                    } else {
-                                        value.clone()
-                                    };
-                                    if !value.is_null() {
-                                        let kind = if value.is_boolean() {
-                                            "boolean"
-                                        } else if value.is_i64() || value.is_u64() {
-                                            "integer"
-                                        } else if value.is_f64() {
-                                            "real"
-                                        } else if value.is_string() {
-                                            "string"
-                                        } else {
-                                            return Err(data(format!(
-                                                "unsupported complex property: {key}"
-                                            )));
-                                        };
-                                        self.register(key, kind)?;
-                                    }
-                                    properties.insert(key.clone(), value);
-                                }
-                            }
+                            properties = source_fields::geojson_properties(
+                                native,
+                                options,
+                                &mut self.schemas,
+                                &mut json_fields,
+                            )?;
                         } else {
                             for (index, key, scalar, kind) in &fields {
                                 let value = if gdal_sys::OGR_F_IsFieldSetAndNotNull(raw, *index)

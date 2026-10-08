@@ -7,7 +7,10 @@ mod reuse;
 mod source;
 mod store;
 
-use super::VectorOptions;
+use super::{
+    model::{Feature, Frame, Geometry, Point},
+    VectorOptions,
+};
 use crate::vec3::{add, dot, mul, norm, sub, y_up_to_z_up as zup};
 use crate::Error;
 use serde::{Deserialize, Serialize};
@@ -18,7 +21,6 @@ use std::{
     path::Path,
 };
 
-type Point = [f64; 3];
 type PointKey = [u64; 3];
 fn key(point: Point) -> PointKey {
     point.map(|v| if v == 0. { 0 } else { v.to_bits() })
@@ -39,78 +41,6 @@ fn data(message: impl Into<String>) -> Error {
     Error::Data(message.into())
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", content = "coordinates")]
-enum Geometry {
-    Point(Point),
-    MultiPoint(Vec<Point>),
-    LineString(Vec<Point>),
-    MultiLineString(Vec<Vec<Point>>),
-    Polygon(Vec<Vec<Point>>),
-    MultiPolygon(Vec<Vec<Vec<Point>>>),
-}
-impl Geometry {
-    fn paths(&self) -> Vec<&[Point]> {
-        match self {
-            Self::Point(p) => vec![std::slice::from_ref(p)],
-            Self::MultiPoint(p) | Self::LineString(p) => vec![p],
-            Self::MultiLineString(p) | Self::Polygon(p) => p.iter().map(Vec::as_slice).collect(),
-            Self::MultiPolygon(p) => p.iter().flatten().map(Vec::as_slice).collect(),
-        }
-    }
-    fn points(&self) -> impl Iterator<Item = &Point> {
-        self.paths().into_iter().flatten()
-    }
-    fn size(&self) -> usize {
-        self.points().count()
-    }
-    fn map(&mut self, mut f: impl FnMut(Point) -> Point) {
-        match self {
-            Self::Point(p) => *p = f(*p),
-            Self::MultiPoint(p) | Self::LineString(p) => p.iter_mut().for_each(|p| *p = f(*p)),
-            Self::MultiLineString(p) | Self::Polygon(p) => {
-                p.iter_mut().flatten().for_each(|p| *p = f(*p))
-            }
-            Self::MultiPolygon(p) => p.iter_mut().flatten().flatten().for_each(|p| *p = f(*p)),
-        }
-    }
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Feature {
-    properties: BTreeMap<String, Value>,
-    geometry: Geometry,
-    #[serde(
-        default,
-        rename = "_surface_fragment",
-        skip_serializing_if = "std::ops::Not::not"
-    )]
-    surface_fragment: bool,
-    #[serde(
-        default,
-        rename = "_triangle_boundaries",
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    triangle_boundaries: Vec<Vec<Vec<Point>>>,
-    #[serde(
-        default,
-        rename = "_fragment_path",
-        skip_serializing_if = "String::is_empty"
-    )]
-    fragment_path: String,
-}
-impl Feature {
-    fn estimate(&self) -> usize {
-        self.geometry.size() * 32
-            + serde_json::to_vec(&self.properties).map_or(0, |p| p.len())
-            + 2048
-    }
-    fn source_id(&self) -> &Value {
-        &self.properties["_source_id"]
-    }
-    fn layer(&self) -> &str {
-        self.properties["_source_layer"].as_str().unwrap()
-    }
-}
 fn bounds<'a>(points: impl Iterator<Item = &'a Point>) -> Result<(Point, Point), Error> {
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
