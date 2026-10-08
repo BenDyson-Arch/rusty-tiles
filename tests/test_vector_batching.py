@@ -27,6 +27,36 @@ class VectorBatchingTests(unittest.TestCase):
         vector.emit(items,path,lambda p:np.asarray(p,dtype=float),encoding_report=report,**kwargs)
         return path,report
 
+    def test_vector_content_markers_are_optional_in_both_tiling_modes(self):
+        # The c48ebdc schema requires vector:true on vector content; it does
+        # not require the extension for clients that use triangle fallback.
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);source=root/'markers.geojson'
+            source.write_text(json.dumps(dict(type='FeatureCollection',features=[
+                dict(type='Feature',id=i,properties=dict(name=str(i)),
+                    geometry=dict(type='LineString',coordinates=[[i*10,0,0],[i*10+1,1,0]]))
+                for i in range(4)])))
+            for explicit in (False,True):
+                out=root/str(explicit)
+                vector.run(types.SimpleNamespace(input=str(source),output=str(out),
+                    source_crs='local',max_features=2,explicit=explicit))
+                checked=[]
+                def check(node):
+                    for content in node.get('contents',[node['content']] if 'content' in node else []):
+                        marker=content['extensions']['3DTILES_content_gltf_vector']
+                        self.assertIs(marker['vector'],True)
+                        self.assertNotIn('clip',marker) # default false, no buffer clipping promise
+                        checked.append(content['uri'])
+                    for child in node.get('children',[]):check(child)
+                for path in out.rglob('*.json'):
+                    manifest=json.loads(path.read_text())
+                    if 'root' not in manifest:continue
+                    self.assertEqual(manifest['asset']['version'],'1.1')
+                    self.assertIn('3DTILES_content_gltf_vector',manifest['extensionsUsed'])
+                    self.assertNotIn('3DTILES_content_gltf_vector',manifest.get('extensionsRequired',[]))
+                    check(manifest['root'])
+                self.assertTrue(checked)
+
     def test_polygon_batch_offsets_holes_multipart_and_feature_ids(self):
         items=[feature(10,'Polygon',[square(0),square(2,2,2)]),
             feature(11,'MultiPolygon',[[square(20)],[square(40)]])]
@@ -36,11 +66,31 @@ class VectorBatchingTests(unittest.TestCase):
         self.assertEqual(ext['count'],3)
         offsets=decode(ext['indicesOffsets']);loops=decode(ext['loopIndices']);starts=decode(ext['loopIndicesOffsets'])
         indices=decode(prim['indices']);pos=decode(prim['attributes']['POSITION']);ids=decode(prim['attributes']['_FEATURE_ID_0'])
+        # EXT_mesh_polygon c1a0354 requires one unsigned SCALAR offset per
+        # polygon and only TRIANGLES on the primitive. Cesium 1.146 reads
+        # these same fields; its legacy LINE_LOOP path is not our contract.
+        self.assertEqual(prim['mode'],4)
+        self.assertEqual(set(ext),{'count','indicesOffsets','loopIndices','loopIndicesOffsets'})
+        self.assertIn('EXT_mesh_polygon',doc['extensionsUsed'])
+        self.assertNotIn('EXT_mesh_polygon',doc.get('extensionsRequired',[]))
+        for field in ('indicesOffsets','loopIndices','loopIndicesOffsets'):
+            accessor=doc['accessors'][ext[field]]
+            self.assertEqual(accessor['type'],'SCALAR')
+            self.assertIn(accessor['componentType'],(5121,5123,5125))
+            if field!='loopIndices':self.assertEqual(accessor['count'],ext['count'])
         self.assertEqual(len(offsets),3);self.assertEqual(len(starts),3)
         self.assertEqual(np.count_nonzero(loops==0xffffffff),3) # one hole plus two polygon separators
         self.assertNotEqual(int(loops[-1]),0xffffffff)
         areas=[]
         for fid,tri,loop in zip([0,1,1],np.split(indices,offsets[1:]),np.split(loops,starts[1:])):
+            # Ring closure is implicit, and every boundary vertex must be
+            # referenced by that polygon's triangles (draft restrictions).
+            for ring in np.split(loop,np.flatnonzero(loop==0xffffffff)):
+                ring=ring[ring!=0xffffffff]
+                if not len(ring):continue # separator before the next polygon
+                self.assertEqual(len(ring),len(np.unique(ring)))
+                self.assertGreaterEqual(len(ring),3)
+                self.assertTrue(set(ring).issubset(set(tri)))
             self.assertTrue(np.all(ids[tri]==fid))
             self.assertTrue(np.all(ids[loop[loop!=0xffffffff]]==fid))
             xyz=pos[tri.reshape(-1,3)]
@@ -69,6 +119,7 @@ class VectorBatchingTests(unittest.TestCase):
         self.assertIn('KHR_mesh_primitive_restart',doc['extensionsUsed'])
         self.assertIn('KHR_mesh_primitive_restart',doc['extensionsRequired'])
         self.assertNotIn('KHR_mesh_primitive_restart',prim['extensions'])
+        self.assertNotIn('KHR_mesh_primitive_restart',doc.get('extensions',{}))
         self.assertEqual(decode(prim['indices']).tolist(),[0,1,0xffffffff,2,3,4,0xffffffff,5,6])
         decoded=parts(path);self.assertEqual([fid for _,fid,_ in decoded],[0,1,1])
         for (_,_,actual),expected in zip(decoded,lines):np.testing.assert_array_equal(to_source(path,actual),expected)

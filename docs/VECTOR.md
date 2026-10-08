@@ -135,6 +135,12 @@ A split polygon has two kinds of content. Fills are standard unlit, double-sided
 
 Buffered grid clipping and coverage-wide edge reconciliation are not implemented.
 
+### Plain fill GLB limitation
+
+The wrapper remains necessary in CesiumJS 1.146.0. The issue [#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75) browser regression removes only the wrapper and changes its URI suffix to `.glb`. Cesium selects its vector decoder from the tileset-wide `3DTILES_content_gltf_vector` declaration, including for ordinary triangle fills. That decoder expects polygon loop data and fails with `Cannot read properties of undefined (reading 'loopIndices')`. The corresponding wrapped fills load, pick and style. This also affects fragmented Sudan and Antarctica source rings and compressed fills.
+
+Plain fill output is deferred until a runtime passes this test. There is no plain-fill CLI or Python option, and these archives do not claim compatibility with the proposed 3D Tiles 2.0 removal of `b3dm`. See [the recorded results](../bench/vector_fill_glb_results.json) and [CONTRIBUTING.md](../CONTRIBUTING.md#plain-fill-glb-regression) for reproduction.
+
 ### Memory and scratch disk
 
 Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. The portable GeoJSON reader also spools collection members to disk. Memory depends on one source feature, one candidate tile per worker, the hierarchy and, in native builds, the OGR driver. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
@@ -249,7 +255,7 @@ The archive is never updated in place. Publish the new archive, and keep the pre
 
 ## Compatibility
 
-Use CesiumJS 1.143.0 for batched vector content. It is the tested runtime and the preview baseline. Pin your runtime and repeat the browser check when you upgrade, because draft support can change.
+Use CesiumJS 1.146.0 for the audited draft vector contract. Pin your runtime and repeat the browser check when you upgrade, because draft support can change.
 
 | CesiumJS | Result with unbatched fixtures, 2026-10-05 |
 | --- | --- |
@@ -257,17 +263,19 @@ Use CesiumJS 1.143.0 for batched vector content. It is the tested runtime and th
 | 1.142.0 | Native vector rendering, styling and picking. The oldest working release. |
 | 1.143.0, 1.146.0 | Native vector rendering, styling and picking |
 
-Batched content was checked on 1.143.0 on 2026-10-06. The combined `--quantize --meshopt` format was checked on 1.142.0, 1.143.0 and 1.146.0. Other engines are untested. Rendering triangles alone does not prove compatibility.
+Batched content was checked on 1.143.0 on 2026-10-06. On 2026-10-09, 1.146.0 passed both batched and batched `--quantize --meshopt` fixtures, including point aggregates, holes, fragmentation, LOD, styling and picking after initial load and hard refresh. The combined format was also checked previously on 1.142.0 and 1.143.0. [Recorded results](../bench/vector_draft_compatibility.json) include the validator's unsupported primitive-restart limitation. Other engines are untested. Rendering triangles alone does not prove compatibility.
 
-The encoder follows these draft revisions.
+The encoder follows these draft revisions, audited against CesiumJS 1.146.0 on 2026-10-09. The SHAs remain unchanged: they are still the draft PR heads. The [compatibility audit and schema provenance](vector-schema/README.md) records the fields read by that runtime and the distinction from the 3D Tiles 2.0 RFC. The ratification recheck is tracked in [#87](https://github.com/BenDyson-Arch/rusty-tiles/issues/87).
 
 | Extension | Reference |
 | --- | --- |
-| `KHR_mesh_primitive_restart` | [glTF revision `9811e84`](https://github.com/KhronosGroup/glTF/tree/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart), [PR 2569](https://github.com/KhronosGroup/glTF/pull/2569) |
-| `EXT_mesh_polygon` | [glTF revision `c1a0354`](https://github.com/KhronosGroup/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570) |
+| `KHR_mesh_primitive_restart` | [Cesium glTF fork revision `9811e84`](https://github.com/CesiumGS/glTF/tree/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart), [PR 2569](https://github.com/KhronosGroup/glTF/pull/2569) |
+| `EXT_mesh_polygon` | [Cesium glTF fork revision `c1a0354`](https://github.com/CesiumGS/glTF/tree/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon), [PR 2570](https://github.com/KhronosGroup/glTF/pull/2570) |
 | `3DTILES_content_gltf_vector` | [3D Tiles revision `c48ebdc`](https://github.com/CesiumGS/3d-tiles/blob/c48ebdc8db43dc00917b4f200eff5e2131d7e493/extensions/3DTILES_content_gltf_vector/README.md), [PR 838](https://github.com/CesiumGS/3d-tiles/pull/838) |
 
 Feature metadata uses `EXT_mesh_features` and `EXT_structural_metadata`. Cesium added experimental support for these vector extensions in [PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
+
+CesiumJS 1.146.0 selects its vector GLB decoder from the tileset-wide declaration. Fragmented triangle fills therefore retain b3dm wrappers; a plain fill GLB in the same vector tileset fails to load. This runtime limitation is included in the audit.
 
 ## Style and pick features
 
