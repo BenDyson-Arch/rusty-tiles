@@ -6,6 +6,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- `convert-to-implicit` and Rust/Python APIs migrate eligible explicit point-cloud/vector archives into regular implicit hierarchies while retaining GLB/b3dm payload bytes, placement and metadata. Irregular trees, unsupported content and malformed historical b3dm alignment are refused before publication; converted vector archives require a fresh source conversion before reuse.
 - GeoJSON and GeoPackage vector conversion in the default binary and Python wheel, using streaming Rust readers, bundled SQLite, grid-free CRS transforms and constrained polygon triangulation. Both builds share tiling, metadata, LOD, compression and reuse; `native-geospatial` retains OGR/GEOS/PROJ for all vector inputs. Python adds `vector_to_3tz`, and `doctor` reports supported inputs and CRS limits.
 - Grid-free point-cloud CRS transforms in the default binary and Python wheel using `proj4rs`: WGS84 geographic, UTM, Mercator and supported WKT/PROJ local projections with explicit Helmert datum shifts. Unsupported grids, epochs or unverified datums require strict native GDAL/PROJ; shifts are never silently discarded. `doctor` lists CRS classes and native fallback readiness. Python point-cloud conversion adds `source_crs` and `height_offset` keywords.
 - Shared public `metadata` types and aligned GLB/property-table authoring for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile bounds/error semantics. Vector payloads and default converter output bytes are preserved.

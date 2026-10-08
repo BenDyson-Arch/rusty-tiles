@@ -147,6 +147,23 @@ These commands package existing content without building spatial level of detail
 
 `createTilesetJson` and `convert` match the argument style of `3d-tiles-tools@0.5.4`.
 
+### convert-to-implicit
+
+Rewrites an eligible rusty-tiles explicit point-cloud or vector `.3tz` archive into 3D Tiles 1.1 implicit tiling. Takes `-i/--input`, `-o/--output` and `-f/--force`; both paths must end in `.3tz` and must identify different files.
+
+```sh
+rusty-tiles convert-to-implicit -i explicit.3tz -o implicit.3tz
+rusty-tiles --json convert-to-implicit -i explicit.3tz -o implicit.3tz --force
+```
+
+Eligibility is deliberately narrower than the source converters. Earlier explicit clouds use binary midpoint splits; explicit vectors use binary median splits and may include successive LOD nodes in the same cell. They are not automatically octrees or quadtrees. This command accepts a tree only when every child fits one distinct midpoint cell derived from the root box at its depth. Clouds use octants and vectors use quadrants in local XY. Bounds may exceed a cell only by documented minimum thickness and recorded float32/quantization padding. Same-cell LOD chains, cells crossed by content bounds, non-translation child transforms, request volumes, depths beyond 31, external `schemaUri` declarations, foreign provenance, already implicit archives and mesh archives are refused. Meshes remain outside this command's scope even when their current source converter produces octrees. Errors identify the offending eligibility rule and the source command to re-run without `--explicit`.
+
+Older explicit vector archives can contain b3dm payloads whose total byte length is not a multiple of eight. These malformed payloads are refused: repairing their alignment would change the bytes. Re-run `vector` from source without `--explicit`; its implicit emitter supplies valid alignment.
+
+The command verifies the existing 3TZ index, archive paths, content checksums, resource references and bounds. It writes standard external tileset content roots to preserve local translations, content declarations, tile metadata and `extras`, while retaining every original GLB/b3dm payload byte-for-byte. The shared subtree writer preserves actual padded bounds and geometric errors as semantic metadata, including external roots at subtree boundaries where regular culling cells are insufficient. These content roots add tileset requests; their layout differs from a fresh implicit source conversion. Conversion never re-partitions content or recomputes source LODs.
+
+`conversion.json` records the operation, scheme, source tile count, wrapper count and byte preservation, with the original report under `sourceReport`. The candidate archive is validated before atomic publication. A failure leaves an existing output intact, including with `--force`. Vector build state is preserved as provenance; converted archives are not a compatible `--reuse-tileset` baseline, so re-run from source to establish a new reusable implicit baseline.
+
 ## Checking and viewing
 
 ### validate
@@ -306,20 +323,3 @@ Events report work units, not time remaining.
 | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
-
-### convert-to-implicit
-
-Rewrites an eligible rusty-tiles explicit point-cloud or vector `.3tz` archive into 3D Tiles 1.1 implicit tiling. Takes `-i/--input`, `-o/--output` and `-f/--force`; both paths must end in `.3tz` and must identify different files.
-
-```sh
-rusty-tiles convert-to-implicit -i explicit.3tz -o implicit.3tz
-rusty-tiles --json convert-to-implicit -i explicit.3tz -o implicit.3tz --force
-```
-
-Eligibility is deliberately narrower than the source converters. Earlier explicit clouds use binary midpoint splits; explicit vectors use binary median splits and may include successive LOD nodes in the same cell. They are not automatically octrees or quadtrees. This command accepts a tree only when every child fits one distinct midpoint cell derived from the root box at its depth. Clouds use octants and vectors use quadrants in local XY. Bounds may exceed a cell only by documented minimum thickness and recorded float32/quantization padding. Same-cell LOD chains, cells crossed by content bounds, non-translation child transforms, request volumes, depths beyond 31, external `schemaUri` declarations, foreign provenance, already implicit archives and mesh archives are refused. Meshes remain outside this command's scope even when their current source converter produces octrees. Errors identify the offending eligibility rule and the source command to re-run without `--explicit`.
-
-Older explicit vector archives can contain b3dm payloads whose total byte length is not a multiple of eight. These malformed payloads are refused: repairing their alignment would change the bytes. Re-run `vector` from source without `--explicit`; its implicit emitter supplies valid alignment.
-
-The command verifies the existing 3TZ index, archive paths, content checksums, resource references and bounds. It writes standard external tileset content roots to preserve local translations, content declarations, tile metadata and `extras`, while retaining every original GLB/b3dm payload byte-for-byte. The shared subtree writer preserves actual padded bounds and geometric errors as semantic metadata, including external roots at subtree boundaries where regular culling cells are insufficient. These content roots add tileset requests; their layout differs from a fresh implicit source conversion. Conversion never re-partitions content or recomputes source LODs.
-
-`conversion.json` records the operation, scheme, source tile count, wrapper count and byte preservation, with the original report under `sourceReport`. The candidate archive is validated before atomic publication. A failure leaves an existing output intact, including with `--force`. Vector build state is preserved as provenance; converted archives are not a compatible `--reuse-tileset` baseline, so re-run from source to establish a new reusable implicit baseline.
