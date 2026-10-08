@@ -9,7 +9,7 @@ use std::{
     io::{BufWriter, Write},
 };
 
-mod crs;
+use crate::crs;
 mod source;
 mod tiles;
 use source::{header_crs, las_error, read_source, Layout, RAW};

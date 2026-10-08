@@ -4,6 +4,7 @@
 //! Raster, quantized-mesh terrain and draft glTF vector paths are GDAL-backed lab tools.
 
 pub mod bbox;
+mod crs;
 pub mod error;
 pub mod fixtures;
 pub mod georef;
