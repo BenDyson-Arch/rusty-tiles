@@ -3,6 +3,260 @@
 mod support;
 
 #[cfg(feature = "native-geospatial")]
+fn register_gdal() {
+    static REGISTER: std::sync::Once = std::sync::Once::new();
+    // SAFETY: Driver registration must finish once before either fixture starts
+    // using GDAL; the Rust test runner constructs these fixtures in parallel.
+    REGISTER.call_once(|| unsafe { gdal_sys::GDALAllRegister() });
+}
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn gray_int16_alpha_intersects_mask_and_nodata_without_executables() {
+    use std::{
+        ffi::CString,
+        process::Command,
+        ptr::{null, null_mut},
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("rendered survey.tif");
+    // Cross a 256-pixel window boundary in both dimensions.
+    let (width, height) = (257usize, 259usize);
+    let mut gray = vec![128i16; width * height];
+    let mut alpha = vec![255i16; width * height];
+    let mut mask = vec![255u8; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            let i = y * width + x;
+            if x < 64 && y < 64 {
+                gray[i] = 0;
+                alpha[i] = 0;
+            }
+            if (64..128).contains(&x) && y < 64 {
+                alpha[i] = 128;
+            }
+            if (128..192).contains(&x) && y < 64 {
+                gray[i] = 0;
+            }
+            if x < 64 && (128..192).contains(&y) {
+                gray[i] = -32768;
+            }
+            if (128..192).contains(&x) && (128..192).contains(&y) {
+                mask[i] = 0;
+            }
+            if x == 256 || y >= 256 {
+                alpha[i] = 0;
+            }
+        }
+    }
+    let filename = CString::new(input.as_os_str().as_encoded_bytes()).unwrap();
+    register_gdal();
+    // SAFETY: Owned dataset/SRS handles and live terminated strings; all IO
+    // buffers match the dataset dimensions and requested Int16/Byte types.
+    unsafe {
+        let dataset = gdal_sys::GDALCreate(
+            gdal_sys::GDALGetDriverByName(c"GTiff".as_ptr()),
+            filename.as_ptr(),
+            width as i32,
+            height as i32,
+            4,
+            gdal_sys::GDALDataType::GDT_Int16,
+            null_mut(),
+        );
+        assert!(!dataset.is_null());
+        let srs = gdal_sys::OSRNewSpatialReference(null());
+        assert_eq!(gdal_sys::OSRSetFromUserInput(srs, c"EPSG:4326".as_ptr()), 0);
+        let mut wkt = null_mut();
+        assert_eq!(gdal_sys::OSRExportToWkt(srs, &mut wkt), 0);
+        assert_eq!(gdal_sys::GDALSetProjection(dataset, wkt), 0);
+        gdal_sys::VSIFree(wkt.cast());
+        gdal_sys::OSRDestroySpatialReference(srs);
+        let mut gt = [12.5, 0.00001, 0., 41.9, 0., -0.00001];
+        assert_eq!(gdal_sys::GDALSetGeoTransform(dataset, gt.as_mut_ptr()), 0);
+        for index in 1..=4 {
+            let band = gdal_sys::GDALGetRasterBand(dataset, index);
+            let pixels = if index == 4 { &mut alpha } else { &mut gray };
+            assert_eq!(gdal_sys::GDALSetRasterNoDataValue(band, -32768.), 0);
+            assert_eq!(
+                gdal_sys::GDALRasterIO(
+                    band,
+                    gdal_sys::GDALRWFlag::GF_Write,
+                    0,
+                    0,
+                    width as i32,
+                    height as i32,
+                    pixels.as_mut_ptr().cast(),
+                    width as i32,
+                    height as i32,
+                    gdal_sys::GDALDataType::GDT_Int16,
+                    0,
+                    0
+                ),
+                0
+            );
+        }
+        assert_eq!(
+            gdal_sys::GDALSetRasterColorInterpretation(
+                gdal_sys::GDALGetRasterBand(dataset, 4),
+                gdal_sys::GDALColorInterp::GCI_AlphaBand
+            ),
+            0
+        );
+        let band = gdal_sys::GDALGetRasterBand(dataset, 1);
+        assert_eq!(
+            gdal_sys::GDALCreateMaskBand(band, 2 /* GMF_PER_DATASET */),
+            0
+        );
+        assert_eq!(
+            gdal_sys::GDALRasterIO(
+                gdal_sys::GDALGetMaskBand(band),
+                gdal_sys::GDALRWFlag::GF_Write,
+                0,
+                0,
+                width as i32,
+                height as i32,
+                mask.as_mut_ptr().cast(),
+                width as i32,
+                height as i32,
+                1,
+                0,
+                0
+            ),
+            0
+        );
+        assert_eq!(gdal_sys::GDALClose(dataset), 0);
+    }
+    let original = std::fs::read(&input).unwrap();
+    let output = work.path().join("gray with alpha");
+    let run = |output: &std::path::Path, alpha_band: &str, force: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
+        command
+            .args(["raster", "--json", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(output)
+            .args([
+                "--minZoom",
+                "16",
+                "--maxZoom",
+                "16",
+                "--display",
+                "gray",
+                "--band",
+                "1",
+                "--displayMin",
+                "0",
+                "--displayMax",
+                "255",
+                "--alphaBand",
+                alpha_band,
+            ])
+            .env("PATH", "");
+        if force {
+            command.arg("--force");
+        }
+        command.output().unwrap()
+    };
+    let result = run(&output, "4", false);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["ok"], true);
+    let recipe: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(output.join("conversion.json")).unwrap()).unwrap();
+    assert_eq!(recipe["alphaBand"], 4);
+    let sample = |x: usize, y: usize| {
+        let lon = 12.5 + (x as f64 + 0.5) * 0.00001;
+        let lat = 41.9 - (y as f64 + 0.5) * 0.00001;
+        let tx = (lon + 180.) / 360. * 65536.;
+        let ty = (1. - lat.to_radians().tan().asinh() / std::f64::consts::PI) / 2. * 65536.;
+        let path = output.join(format!(
+            "tiles/16/{}/{}.png",
+            tx.floor() as u32,
+            ty.floor() as u32
+        ));
+        let image = image::open(path).unwrap().into_rgba8();
+        image
+            .get_pixel((tx.fract() * 256.) as u32, (ty.fract() * 256.) as u32)
+            .0
+    };
+    assert_eq!(sample(32, 32)[3], 0, "explicit alpha-0 surround");
+    assert_eq!(sample(96, 32)[3], 128, "partial opacity is not scaled");
+    assert_eq!(
+        sample(160, 32),
+        [0, 0, 0, 255],
+        "valid black remains opaque"
+    );
+    assert_eq!(sample(32, 160)[3], 0, "NoData with opaque alpha");
+    assert_eq!(sample(160, 160)[3], 0, "masked data with opaque alpha");
+    assert_eq!(sample(224, 224), [128, 128, 128, 255]);
+    assert_eq!(std::fs::read(&input).unwrap(), original);
+    // COG keeps every Int16 band and the dataset mask unchanged.
+    let cog = CString::new(output.join("source.cog.tif").as_os_str().as_encoded_bytes()).unwrap();
+    // SAFETY: Read-only owned dataset and precisely sized typed buffers.
+    unsafe {
+        let dataset = gdal_sys::GDALOpenEx(cog.as_ptr(), 0x02, null(), null(), null());
+        assert!(!dataset.is_null());
+        assert_eq!(gdal_sys::GDALGetRasterCount(dataset), 4);
+        for index in 1..=4 {
+            let band = gdal_sys::GDALGetRasterBand(dataset, index);
+            assert_eq!(
+                gdal_sys::GDALGetRasterDataType(band),
+                gdal_sys::GDALDataType::GDT_Int16
+            );
+            let mut actual = vec![0i16; width * height];
+            assert_eq!(
+                gdal_sys::GDALRasterIO(
+                    band,
+                    gdal_sys::GDALRWFlag::GF_Read,
+                    0,
+                    0,
+                    width as i32,
+                    height as i32,
+                    actual.as_mut_ptr().cast(),
+                    width as i32,
+                    height as i32,
+                    gdal_sys::GDALDataType::GDT_Int16,
+                    0,
+                    0
+                ),
+                0
+            );
+            assert_eq!(actual, if index == 4 { &alpha } else { &gray }.as_slice());
+        }
+        let mut actual = vec![0u8; width * height];
+        assert_eq!(
+            gdal_sys::GDALRasterIO(
+                gdal_sys::GDALGetMaskBand(gdal_sys::GDALGetRasterBand(dataset, 1)),
+                gdal_sys::GDALRWFlag::GF_Read,
+                0,
+                0,
+                width as i32,
+                height as i32,
+                actual.as_mut_ptr().cast(),
+                width as i32,
+                height as i32,
+                1,
+                0,
+                0
+            ),
+            0
+        );
+        assert_eq!(actual, mask);
+        assert_eq!(gdal_sys::GDALClose(dataset), 0);
+    }
+    let before = std::fs::read(output.join("tilejson.json")).unwrap();
+    let result = run(&output, "5", true);
+    assert_eq!(result.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("band does not exist"));
+    assert_eq!(std::fs::read(output.join("tilejson.json")).unwrap(), before);
+    assert_eq!(std::fs::read_dir(&output).unwrap().count(), 4);
+}
+
+#[cfg(feature = "native-geospatial")]
 #[test]
 fn raster_cli_preserves_source_and_coverage_without_executables() {
     use std::{
@@ -14,6 +268,7 @@ fn raster_cli_preserves_source_and_coverage_without_executables() {
     let input = root.path().join("source with spaces.tif");
     let output = root.path().join("result with spaces");
     let filename = CString::new(input.as_os_str().as_encoded_bytes()).unwrap();
+    register_gdal();
     let mut pixels = vec![0u8; 256 * 256];
     let mut mask = vec![255u8; 256 * 256];
     for y in 32..96 {
@@ -24,7 +279,6 @@ fn raster_cli_preserves_source_and_coverage_without_executables() {
     // SAFETY: The fixture owns its dataset/SRS handles until their matching close.
     // Dimensions and IO buffers agree; all strings are terminated and live.
     unsafe {
-        gdal_sys::GDALAllRegister();
         let driver = gdal_sys::GDALGetDriverByName(c"GTiff".as_ptr());
         assert!(!driver.is_null());
         // GDT_Byte / GDT_UInt8 have the stable C enum value 1.

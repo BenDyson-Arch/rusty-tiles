@@ -48,6 +48,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- `glb-to-3tz` bundles referenced local buffers, images and structural metadata schemas from glTF/GLB inputs without rewriting source bytes. Missing, unsupported or escaping resource URIs fail before publication.
+- `raster --display gray --alphaBand` preserves explicit transparency from numeric alpha bands, intersected with the selected band's mask/NoData before resampling.
 - Default implicit mesh output accepts uppercase and mixed-case glTF/GLB extensions consistently with the mesh loader.
 - Archive validation traverses nested external tilesets with a work queue, retaining cycle/depth checks without recursive stack growth.
 - Published `.3tz` files honor the process umask instead of retaining temporary-file mode 0600.

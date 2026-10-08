@@ -192,9 +192,9 @@ Choose a fresh output directory for each invocation. Outputs must not overlap th
 | Profile | Cases | Coverage |
 | --- | ---: | --- |
 | `smoke` | 8 | Milk truck mesh; trimmed Autzen and USGS root points; Natural Earth places/countries; Australian imagery; Brisbane terrain; safe splat rejection |
-| `core` | 20, including smoke | Lantern, Corset, 999,999-triangle Floreat and Delft meshes; 56,600 roads; 3DBAG building geometry; safe FlightHelmet/global imagery rejections; Cesium sparse quadtree/octree, multiple contents and metadata fixtures |
+| `core` | 21, including smoke | Lantern, Corset, 999,999-triangle Floreat and Delft meshes; 56,600 roads; 3DBAG building geometry; FlightHelmet glTF/resource wrapping and mesh-converter refusal; safe global imagery rejection; Cesium sparse quadtree/octree, multiple contents and metadata fixtures |
 | `scale` | 7 | Full Autzen; all 144 USGS EPT nodes; Sentinel-2 imagery; terrain mosaic/projected DEM; dense places; 3D roads |
-| `all` | 27 | All profiles |
+| `all` | 28 | All profiles |
 
 Audits run outside conversion timing. Mesh leaves must retain every oriented float32 position triangle exactly once. Point leaves must retain every staged LAS record exactly once and every declared scalar metadata column byte-for-byte, including flags, RGB and Extra Bytes. Archive validation checks the hierarchies, placement and declared budgets. Vectors account for accepted/skipped source features; this corpus check does not independently compare every feature property or triangulated polygon. Imagery audits decode every 256-square PNG and check geographic XYZ coverage. Terrain audits independently decode quantized attributes and triangle/edge indices and check finite height overlays and tile counts. Packed Cesium reference resources must remain byte-identical. Expected failures must return the structured data-error category, exit 3 and publish nothing.
 
@@ -212,7 +212,7 @@ RUSTY_TILES_DEMODATA="$PWD/../demodata" \
 
 The glTF extension, voxel, SPZ, CityJSON and unused 3D Tiles fixtures remain a hash-pinned reference inventory for future work. Listing or verifying them is not a passing conversion/conformance claim. [Recorded demo-data results](bench/demodata_benchmark_results.json) contain the full acceptance and benchmark evidence; timings describe that machine and recipe only.
 
-Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. All 27 cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
+Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. That 27-case run predates the additional FlightHelmet wrapping case in the current 28-case manifest. All recorded cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
 
 | Recipe | Source size | Wall seconds | Peak RSS MiB |
 | --- | ---: | ---: | ---: |
@@ -223,6 +223,8 @@ Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 
 | Copernicus terrain mosaic | 822 decoded tiles | 6.679 | 136.2 |
 
 [The paired smoke run](bench/demodata_baseline_results.json) also passed all eight cases for current and baseline `99b9605`, with identical payloads within each method's three repetitions. The baseline defaults to explicit tiling and current defaults to implicit tiling. For the 512-pixel atlas milk-truck recipe, current emits 270 leaves versus 132 in the baseline: medians are 0.376 versus 0.207 seconds, with archives of 5,494,680 versus 4,200,493 bytes. This exposes the cost of the changed partition/layout on that recipe; it is not a general speedup claim. Both methods retain all 3,624 source triangles exactly once.
+
+[The additional FlightHelmet wrapping run](bench/demodata_gltf_wrap_results.json) passed an audited warmup and three repetitions on the same machine. Its 48,397,031-byte archive validates and preserves the glTF, one buffer and fifteen PNGs byte-for-byte, with identical repeated payload fingerprints. Median conversion time was 0.067 seconds and peak RSS 30.1 MiB; these are local warm-cache measurements.
 
 
 ## Fixtures and oracles
