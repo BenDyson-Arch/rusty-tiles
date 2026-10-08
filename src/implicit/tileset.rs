@@ -8,6 +8,18 @@ use std::{
 
 const LEVELS: u32 = 4;
 
+fn content_suffix(uri: &str) -> Result<String, Error> {
+    let suffix = Path::new(uri)
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| invalid("content has no extension"))?
+        .to_ascii_lowercase();
+    if !matches!(suffix.as_str(), "glb" | "gltf" | "b3dm") {
+        return Err(invalid("implicit converter content must be glTF or b3dm"));
+    }
+    Ok(suffix)
+}
+
 fn key(c: Coordinates, scheme: SubdivisionScheme) -> String {
     if scheme == SubdivisionScheme::Octree {
         format!("{}-{}-{}-{}", c.level, c.x, c.y, c.z)
@@ -239,14 +251,7 @@ pub(crate) fn write_tileset(
             let uri = content["uri"]
                 .as_str()
                 .ok_or_else(|| invalid("content has no URI"))?;
-            let suffix = Path::new(uri)
-                .extension()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| invalid("content has no extension"))?;
-            if !matches!(suffix, "glb" | "gltf" | "b3dm") {
-                return Err(invalid("implicit converter content must be glTF or b3dm"));
-            }
-            slot_keys.insert((slot, suffix.to_owned()));
+            slot_keys.insert((slot, content_suffix(uri)?));
         }
     }
     let slot_keys: Vec<_> = slot_keys.into_iter().collect();
@@ -257,7 +262,7 @@ pub(crate) fn write_tileset(
                 .iter()
                 .find_map(|tile| {
                     let content = tile.contents.get(*index)?;
-                    (Path::new(content["uri"].as_str()?).extension()?.to_str()? == suffix)
+                    (content_suffix(content["uri"].as_str()?).ok()?.as_str() == suffix)
                         .then(|| content.clone())
                 })
                 .unwrap()
@@ -317,10 +322,10 @@ pub(crate) fn write_tileset(
         let mut bytes_total = 0usize;
         for (index, content) in tile.contents.iter().enumerate() {
             let uri = content["uri"].as_str().unwrap();
-            let suffix = Path::new(uri).extension().unwrap().to_str().unwrap();
+            let suffix = content_suffix(uri)?;
             let slot = slot_keys
                 .iter()
-                .position(|(i, s)| *i == index && s == suffix)
+                .position(|(i, s)| *i == index && s == &suffix)
                 .unwrap();
             let bytes = translate_content(&std::fs::read(directory.join(uri))?, tile.delta)?;
             bytes_total += bytes.len();
@@ -511,10 +516,10 @@ fn write_chunks(
                 let mut size = 0;
                 for (index, content) in tile.contents.iter().enumerate() {
                     let uri = content["uri"].as_str().unwrap();
-                    let suffix = Path::new(uri).extension().unwrap().to_str().unwrap();
+                    let suffix = content_suffix(uri)?;
                     let slot = slots
                         .iter()
-                        .position(|(i, s)| *i == index && s == suffix)
+                        .position(|(i, s)| *i == index && s == &suffix)
                         .unwrap();
                     let bytes =
                         translate_content(&std::fs::read(directory.join(uri))?, tile.delta)?;

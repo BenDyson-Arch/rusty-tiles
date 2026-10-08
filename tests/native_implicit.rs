@@ -311,3 +311,52 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
         "exercise external implicit chunk headers"
     );
 }
+
+#[test]
+fn implicit_mesh_accepts_case_insensitive_extensions() {
+    let work = tempfile::tempdir().unwrap();
+    for extension in ["GLB", "GlB", "gLtF"] {
+        let input = work.path().join(format!("mesh.{extension}"));
+        let source = if extension == "gLtF" {
+            fs::read("tests/fixtures/example.gltf").unwrap()
+        } else {
+            support::textured_grid_glb(2)
+        };
+        fs::write(&input, &source).unwrap();
+        let output = work.path().join(format!("{extension}.3tz"));
+        success(
+            support::rusty_tiles()
+                .args(["mesh-to-3tz", "-i"])
+                .arg(&input)
+                .arg("-o")
+                .arg(&output)
+                .args(["--maxTriangles", "10000"])
+                .output()
+                .unwrap(),
+        );
+        rusty_tiles::validate::archive(&output, None).unwrap();
+        let manifest = document(&output, "tileset.json");
+        let suffix = extension.to_ascii_lowercase();
+        assert!(manifest["root"]["content"]["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!(".{suffix}")));
+        let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        let mut payload = Vec::new();
+        std::io::Read::read_to_end(
+            &mut zip
+                .by_name(&format!("implicit-content/0-0-0-0-0.{suffix}"))
+                .unwrap(),
+            &mut payload,
+        )
+        .unwrap();
+        if suffix == "glb" {
+            assert_eq!(
+                gltf::Glb::from_slice(&payload).unwrap().bin,
+                gltf::Glb::from_slice(&source).unwrap().bin
+            );
+        } else {
+            assert_eq!(payload, source);
+        }
+    }
+}
