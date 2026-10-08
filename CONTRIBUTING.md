@@ -134,7 +134,7 @@ Doctor, machine results, native diagnostics, preview, force replacement and arch
 ### Python acceptance
 
 The Python extension has its own dependency-free suite. It installs an actual
-wheel into a fresh virtual environment and runs the README example, all six
+wheel into a fresh virtual environment and runs the README example, the public
 entry points, callbacks, concurrent calls, errors and force replacement with an
 empty executable `PATH`:
 
