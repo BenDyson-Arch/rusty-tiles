@@ -1,4 +1,12 @@
-//! Conservative, grid-free point-cloud CRS operations. EPSG definitions are an
+//! Shared horizontal-CRS to WGS84 ECEF operations, initially used by point clouds.
+//!
+//! Input coordinates use traditional GIS axis order (easting/northing or
+//! longitude/latitude). Source Z and the explicit height offset are metres;
+//! source horizontal units never rescale Z. Callers own source-specific CRS and
+//! height selection, including any decision to leave coordinates local.
+//!
+//! Conservative, grid-free operations with strict native fallback when enabled.
+//! EPSG definitions are an
 //! explicit allowlist, not an old PROJ-string database with implicit datum shifts.
 //! The WKT parser is used only for syntax: proj4wkt's formatter assumes a zero
 //! datum shift and drops vertical/unknown metadata, so it is deliberately unused.
@@ -7,14 +15,14 @@ use proj4rs::Proj;
 use proj4wkt::parser::{Attribute, Processor};
 use std::collections::BTreeMap;
 
-pub(super) enum Transform {
+pub(crate) enum Transform {
     Pure(Box<PureTransform>),
     #[cfg(feature = "native-geospatial")]
     Native(Box<NativeTransform>),
 }
 
 #[cfg(feature = "native-geospatial")]
-pub(super) struct NativeTransform {
+pub(crate) struct NativeTransform {
     ecef: crate::geospatial::EcefTransform,
     albers: Option<(crate::geospatial::StrictTransform, f64)>,
 }
@@ -38,6 +46,9 @@ fn albers_outside_domain(index: usize) -> Error {
 }
 
 impl Transform {
+    /// Resolve a 2D horizontal source CRS and an ellipsoidal height offset.
+    /// Unsupported portable operations use strict native PROJ when available;
+    /// invalid data never falls back to a more permissive operation.
     pub fn new(definition: &str, height_offset: f64) -> Result<Self, Error> {
         match PureTransform::new(definition, height_offset) {
             Ok(operation) => Ok(Self::Pure(Box::new(operation))),
@@ -61,6 +72,9 @@ impl Transform {
         Ok(Self::Native(Box::new(NativeTransform { ecef, albers })))
     }
 
+    /// Convert a complete batch to ECEF metres, retaining its input on failure.
+    /// A point-dependent native fallback retries every point and is retained
+    /// for subsequent batches. No partial result is returned to the caller.
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
         let result = match self {
             Self::Pure(operation) => operation.transform(points),
@@ -89,7 +103,7 @@ fn horizontal_required() -> Error {
     Error::Data("use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported".into())
 }
 
-pub(super) struct PureTransform {
+pub(crate) struct PureTransform {
     source: Proj,
     target: Proj,
     angular_units: f64,
@@ -1290,12 +1304,10 @@ mod tests {
 
     const WGS_WKT: &str = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]"#;
     const UTM_WKT2: &str = r#"PROJCRS["WGS 84 / UTM zone 56S",BASEGEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["UTM zone 56S",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",153,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",0.9996,SCALEUNIT["unity",1]],PARAMETER["False easting",500000,LENGTHUNIT["metre",1]],PARAMETER["False northing",10000000,LENGTHUNIT["metre",1]]],CS[Cartesian,2],AXIS["easting (E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["northing (N)",north,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",32756]]"#;
-    const INCOMPLETE_LCC: &str =
-        include_str!("../../tests/fixtures/crs/lcc-2sp-missing-parallel.wkt");
+    const INCOMPLETE_LCC: &str = include_str!("../tests/fixtures/crs/lcc-2sp-missing-parallel.wkt");
     const MERCATOR_ALIASES: &str =
-        include_str!("../../tests/fixtures/crs/mercator-redundant-origin.wkt");
-    const MICHIGAN_LCC: &str =
-        include_str!("../../tests/fixtures/crs/lcc-michigan-near-equator.wkt");
+        include_str!("../tests/fixtures/crs/mercator-redundant-origin.wkt");
+    const MICHIGAN_LCC: &str = include_str!("../tests/fixtures/crs/lcc-michigan-near-equator.wkt");
     const DMS_TMERC: &str = r#"+proj=tmerc +lon_0=2d20'14.025"E +datum=WGS84 +type=crs"#;
 
     fn projection_wkts(
@@ -1457,7 +1469,7 @@ mod tests {
         let mut definitions = vec![
             INCOMPLETE_LCC.to_owned(),
             MERCATOR_ALIASES.to_owned(),
-            include_str!("../../tests/fixtures/crs/mercator-wrong-parallel.wkt").to_owned(),
+            include_str!("../tests/fixtures/crs/mercator-wrong-parallel.wkt").to_owned(),
         ];
         for definition in conic_wkts("lcc", 33., 45.) {
             definitions.push(definition.replace(r#",PARAMETER["standard_parallel_2",45]"#, "")
