@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix: &release-platforms
+      matrix:
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -108,42 +108,9 @@ jobs:
           if-no-files-found: error
 
   wheels:
-    name: Python wheel (${{ matrix.target }})
+    name: Python wheel acceptance
     needs: check
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix: *release-platforms
-    env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
-      MACOSX_DEPLOYMENT_TARGET: '15.0'
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.10'
-      - name: Build a portable CPython stable ABI wheel
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          maturin-version: '1.15.0'
-          rust-toolchain: stable
-          target: ${{ matrix.target }}
-          manylinux: '2_28'
-          docker-options: -e RUSTY_TILES_DISABLE_NATIVE_JPEG=1
-          args: --release --locked --out dist
-      - name: Install into a clean venv and convert with an empty PATH
-        run: python scripts/test_python_wheel.py dist/*.whl
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: wheel-${{ matrix.target }}
-          path: dist/*.whl
-          if-no-files-found: error
+    uses: ./.github/workflows/wheel-acceptance.yml
 
   pypi:
     name: Publish Python wheels to PyPI

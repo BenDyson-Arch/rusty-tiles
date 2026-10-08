@@ -39,7 +39,7 @@ staging and atomic archive replacement.
 | --- | --- |
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
+| `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `convert_to_3tz(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
 
@@ -103,3 +103,28 @@ python scripts/test_python_wheel.py target/wheels/*.whl
 
 The smoke test installs the wheel into a fresh virtual environment, then runs
 this README example and the API tests with an empty executable `PATH`.
+
+To test installation and conversion inside Blender's Python without changing
+your Blender installation or user preferences:
+
+```sh
+python scripts/test_blender_wheel.py target/wheels/*.whl --blender /path/to/blender --report-json target/blender-acceptance.json
+```
+
+The runner supplies an isolated pip installer, and Blender's Python checks the
+wheel compatibility and installs into a temporary directory. It then runs the
+same API suite, including georeferenced point clouds and callbacks, with an
+empty `PATH`. `--blender` defaults to `blender` on your `PATH`. The JSON report
+records the actual Blender/Python versions, platform, wheel SHA-256 and test
+counts. The clean-venv runner also accepts `--report-json`.
+Both runners require fresh suite evidence matching the candidate wheel and
+replace any requested prior report; current failure reports are preserved.
+
+The manually dispatched **Wheel acceptance** workflow builds candidate wheels
+for all five release platforms and tests each artifact with CPython 3.10 and
+3.14. It also tests the Linux x86_64 wheel inside distribution Blender. It
+uploads wheels and JSON evidence without publishing packages or a release.
+The release workflow reuses these wheel checks; its default run omits the
+separate distribution Blender check.
+Only completed runs establish acceptance; Blender on other platforms and
+official bundled Blender distributions need their own runner evidence.

@@ -1,0 +1,114 @@
+name: Wheel acceptance
+
+# Run against a candidate commit before creating a release tag. This workflow
+# builds and tests artifacts only; it has no package or release publishing steps.
+on:
+  workflow_dispatch:
+    inputs:
+      test-blender:
+        description: Also run the separate Linux distribution Blender check
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      test-blender:
+        description: Also run the separate Linux distribution Blender check
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wheel-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  wheels:
+    name: Installed wheel (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    env:
+      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10'
+      - name: Build the candidate release wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          maturin-version: '1.15.0'
+          rust-toolchain: stable
+          target: ${{ matrix.target }}
+          manylinux: '2_28'
+          docker-options: -e RUSTY_TILES_DISABLE_NATIVE_JPEG=1
+          args: --release --locked --out dist
+      - name: Test with the minimum Python version
+        run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.10.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - name: Test the same stable ABI wheel with Python 3.14
+        run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.14.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: evidence-wheel-${{ matrix.target }}
+          path: evidence/*.json
+          if-no-files-found: error
+
+  blender:
+    name: Installed wheel in Blender (Linux x86_64)
+    needs: wheels
+    if: inputs.test-blender
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wheel-x86_64-unknown-linux-gnu
+          path: candidate
+      - name: Install distribution Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender
+      - name: Install and test using Blender's embedded Python
+        run: python scripts/test_blender_wheel.py candidate/*.whl --report-json evidence/blender-linux-x86_64.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: blender-wheel-acceptance-linux-x86_64
+          path: evidence/*.json
+          if-no-files-found: error

@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import platform
 import shutil
 import struct
 import sys
@@ -18,19 +19,24 @@ ROOT = Path(sys.argv.pop(1))
 EXAMPLE = ROOT / "tests/fixtures/example.gltf"
 
 
-def write_las(path):
+def write_las(path, *, epsg=None):
     """Invented LAS 1.2, format 0, with four local XYZ points."""
     points = [(0, 0, 0), (100, 0, 0), (0, 100, 0), (100, 100, 100)]
     header = bytearray(227)
     header[:4] = b"LASF"
     header[24:26] = bytes((1, 2))
-    struct.pack_into("<HII", header, 94, 227, 227, 0)
+    vlr = b""
+    if epsg is not None:
+        keys = struct.pack("<12H", 1, 1, 0, 2, 1024, 0, 1, 2, 2048, 0, 1, epsg)
+        vlr = struct.pack("<H16sHH32s", 0, b"LASF_Projection", 34735, len(keys), b"CRS") + keys
+    struct.pack_into("<HII", header, 94, 227, 227 + len(vlr), bool(vlr))
     struct.pack_into("<BHI", header, 104, 0, 20, len(points))
     struct.pack_into("<I", header, 111, len(points))
     struct.pack_into("<3d", header, 131, 0.01, 0.01, 0.01)
     struct.pack_into("<6d", header, 179, 1, 0, 1, 0, 1, 0)
     with path.open("wb") as stream:
         stream.write(header)
+        stream.write(vlr)
         for x, y, z in points:
             stream.write(struct.pack("<iiiHBBbBH", x, y, z, 7, 9, 2, 0, 0, 0))
 
@@ -43,6 +49,8 @@ class WheelAPI(unittest.TestCase):
 
     def test_readme_example_in_clean_environment(self):
         self.assertEqual(os.environ["PATH"], "")
+        installed_root = Path(os.environ["RUSTY_TILES_ACCEPTANCE_PACKAGE_ROOT"]).resolve()
+        self.assertTrue(Path(rusty_tiles.__file__).resolve().is_relative_to(installed_root))
         self.assertEqual(rusty_tiles.__version__, importlib.metadata.version("rusty-tiles"))
         self.assertFalse(importlib.metadata.requires("rusty-tiles"))
         readme = (ROOT / "bindings/python/README.md").read_text()
@@ -136,6 +144,37 @@ class WheelAPI(unittest.TestCase):
                 source, rejected, source_crs="EPSG:26910", height_offset=0,
             )
         self.assertFalse(rejected.exists())
+
+    def test_las_header_crs_matches_explicit_crs(self):
+        source = self.root / "header.las"
+        write_las(source, epsg=4326)
+        documents = []
+        for crs in ("header", "EPSG:4326"):
+            output = self.root / f"{crs.replace(':', '-')}.3tz"
+            result = rusty_tiles.point_cloud_to_3tz(
+                source, output, source_crs=crs, height_offset=7,
+            )
+            self.assertEqual(result.report["resolvedCrs"], "EPSG:4326")
+            self.assertEqual(result.report["heightOffset"], 7)
+            self.assertTrue(rusty_tiles.validate(output)["ok"])
+            with zipfile.ZipFile(output) as archive:
+                documents.append(json.loads(archive.read("tileset.json")))
+        self.assertEqual(documents[0], documents[1])
+
+    def test_georeferenced_points_require_height_decision(self):
+        source = self.root / "points.las"
+        write_las(source)
+        output = self.root / "rejected.3tz"
+        for height in (None, float("nan"), float("inf")):
+            with self.subTest(height=height):
+                with self.assertRaisesRegex(rusty_tiles.DataError, "heightOffset"):
+                    rusty_tiles.point_cloud_to_3tz(
+                        source, output, source_crs="EPSG:4326", height_offset=height,
+                    )
+                self.assertFalse(output.exists())
+        with self.assertRaisesRegex(rusty_tiles.DataError, "no CRS"):
+            rusty_tiles.point_cloud_to_3tz(source, output, source_crs="header", height_offset=0)
+        self.assertFalse(output.exists())
 
     def test_mesh_node_features_are_available_from_python(self):
         source = self.root / "buildings.gltf"
@@ -263,4 +302,28 @@ class WheelAPI(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(WheelAPI)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    evidence = {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "package_version": rusty_tiles.__version__,
+        "package_file": rusty_tiles.__file__,
+        "wheel_sha256": os.environ.get("RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256"),
+        "empty_path": os.environ.get("PATH") == "",
+        "tests_run": result.testsRun,
+        "failures": len(result.failures),
+        "errors": len(result.errors),
+        "skipped": len(result.skipped),
+        "ok": result.wasSuccessful(),
+    }
+    if "bpy" in sys.modules:
+        import bpy
+        evidence["blender"] = bpy.app.version_string
+        evidence["blender_build_hash"] = bpy.app.build_hash.decode("ascii")
+    if report := os.environ.get("RUSTY_TILES_ACCEPTANCE_REPORT"):
+        destination = Path(report)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(evidence, indent=2) + "\n")
+    raise SystemExit(0 if result.wasSuccessful() else 1)

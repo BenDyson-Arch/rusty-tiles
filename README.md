@@ -240,7 +240,7 @@ result = rusty_tiles.mesh_to_3tz(
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-The wheels need CPython 3.10+ and include the default Rust build, with no GDAL, CLI subprocess or extra Python packages. See the [Python API and source build guide](bindings/python/README.md) for supported platforms, path-based options, progress callbacks and exceptions. Point clouds use local LAS/LAZ XYZ metre coordinates.
+The wheels need CPython 3.10+ and include the default Rust build, with no GDAL, CLI subprocess or extra Python packages. See the [Python API and source build guide](bindings/python/README.md) for supported platforms, path-based options, progress callbacks and exceptions. Point clouds accept local LAS/LAZ XYZ metre coordinates or grid-free georeferenced coordinates with an explicit CRS or LAS header CRS and an explicit height offset to ellipsoidal metres.
 
 Each converter has a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
 
