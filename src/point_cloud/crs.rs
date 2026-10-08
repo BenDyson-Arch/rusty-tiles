@@ -160,6 +160,7 @@ fn epsg(definition: &str) -> Result<String, Error> {
         ));
     }
     let code = definition[5..]
+        .trim()
         .parse::<u32>()
         .map_err(|_| Error::Data("invalid source EPSG code".into()))?;
     let projection = match code {
@@ -210,11 +211,14 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
     for token in definition.split_whitespace() {
         let token = token
             .strip_prefix('+')
-            .ok_or_else(|| Error::Data("invalid PROJ CRS parameter".into()))?;
+            .ok_or_else(|| unsupported("PROJ parameter syntax requires native PROJ"))?;
         let (key, value) = token.split_once('=').unwrap_or((token, ""));
         if params.insert(key, value).is_some() {
             return Err(Error::Data(format!("duplicate PROJ CRS parameter: +{key}")));
         }
+    }
+    if params.contains_key("init") {
+        return Err(unsupported("PROJ +init references require native PROJ"));
     }
     let projection = params
         .get("proj")
@@ -344,6 +348,38 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
         return Err(unsupported(
             "oblique stereographic origins at or beyond 80 degrees require native PROJ",
         ));
+    }
+    if projection == "stere"
+        && params.get("lat_0").is_some_and(|value| {
+            finite(value).is_ok_and(|value| (80. ..90.).contains(&value.abs()))
+        })
+    {
+        // The oblique formula becomes unstable near the poles. Exact polar
+        // origins use a separate, verified formula and remain portable.
+        return Err(unsupported(
+            "stereographic origins from 80 degrees to below 90 degrees require native PROJ",
+        ));
+    }
+    if matches!(projection, "lcc" | "aea") {
+        let first = params
+            .get("lat_1")
+            .map(|value| finite(value))
+            .transpose()?
+            .unwrap_or(0.);
+        let second = params
+            .get("lat_2")
+            .map(|value| finite(value))
+            .transpose()?
+            .unwrap_or(first);
+        if first != second && (first - second).abs() < 1. - 1e-10 {
+            // Secant conic constants divide differences of nearly equal
+            // quantities. Keep a generous margin around cancellation; the
+            // exact tangent formula (equal parallels) has no such division.
+            // Allow WKT unit roundoff at the one-degree boundary.
+            return Err(unsupported(
+                "distinct conic parallels less than one degree apart require native PROJ",
+            ));
+        }
     }
     if matches!(projection, "longlat" | "latlong")
         && params
@@ -658,8 +694,11 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
     if quoted || depth != 0 {
         return Err(Error::Data("malformed WKT CRS".into()));
     }
-    let root = proj4wkt::parser::parse(definition, &Tree)
-        .map_err(|error| Error::Data(format!("invalid source WKT CRS: {error}")))?;
+    let root = proj4wkt::parser::parse(definition, &Tree).map_err(|error| {
+        unsupported(&format!(
+            "WKT syntax is outside the portable parser: {error}"
+        ))
+    })?;
     root.validate()?;
     // GDAL's canonical WKT1 Web Mercator uses a PROJ4 extension to distinguish
     // spherical projection maths from its WGS84 datum. Accept exactly that
@@ -948,6 +987,18 @@ mod tests {
 
     fn additional_native_definitions() -> Vec<String> {
         let mut definitions = vec![
+            "+init=epsg:32632".into(),
+            "+proj=utm +zone = 32 +datum=WGS84".into(),
+            "+proj=utm +zone= 32 +datum=WGS84".into(),
+            "+proj=utm +zone =32 +datum=WGS84".into(),
+            format!(
+                "GEOGCS({})",
+                WGS_WKT
+                    .strip_prefix("GEOGCS[")
+                    .unwrap()
+                    .strip_suffix(']')
+                    .unwrap()
+            ),
             "EPSG:32632@2020".into(),
             "EPSG:4326@2020".into(),
             r#"+proj=tmerc +k="0.9996" +datum=WGS84"#.into(),
@@ -972,6 +1023,27 @@ mod tests {
                 Some(1.),
             ));
         }
+        for latitude in [-89.99999999, -85., -80., 80., 85., 89.99999999] {
+            definitions.push(format!("+proj=stere +lat_0={latitude} +datum=WGS84"));
+            definitions.extend(projection_wkts(
+                "Stereographic",
+                "Stereographic",
+                latitude,
+                0.,
+                Some(1.),
+            ));
+        }
+        for projection in ["lcc", "aea"] {
+            for first in [-80., -45., 45., 80.] {
+                for separation in [1e-8, 1e-6, 0.01, 0.999999] {
+                    let second = first + separation;
+                    definitions.push(format!("+proj={projection} +lat_1={first} +lat_2={second} +lat_0={first} +datum=WGS84"));
+                    if separation == 1e-8 {
+                        definitions.extend(conic_wkts(projection, first, second));
+                    }
+                }
+            }
+        }
         // Same projection parameters as EPSG:10601 (GLANCE Oceania), whose
         // inverse LAEA in proj4rs exceeds the 1 mm ECEF accuracy threshold.
         definitions.extend(projection_wkts(
@@ -982,6 +1054,28 @@ mod tests {
             None,
         ));
         definitions
+    }
+
+    fn conic_wkts(projection: &str, first: f64, second: f64) -> [String; 2] {
+        let (method1, method2) = if projection == "lcc" {
+            (
+                "Lambert_Conformal_Conic_2SP",
+                "Lambert Conic Conformal (2SP)",
+            )
+        } else {
+            ("Albers_Conic_Equal_Area", "Albers Equal Area")
+        };
+        let [wkt1, wkt2] = projection_wkts(method1, method2, first, 0., None);
+        [
+            wkt1.replace(
+                r#",UNIT["metre",1],AXIS"#,
+                &format!(r#",PARAMETER["standard_parallel_1",{first}],PARAMETER["standard_parallel_2",{second}],UNIT["metre",1],AXIS"#),
+            ),
+            wkt2.replace(
+                "],CS[Cartesian,2]",
+                &format!(r#",PARAMETER["Latitude of 1st standard parallel",{first},ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Latitude of 2nd standard parallel",{second},ANGLEUNIT["degree",0.0174532925199433]]],CS[Cartesian,2]"#),
+            ),
+        ]
     }
 
     fn assert_mm(actual: [f64; 3], expected: [f64; 3], label: &str) {
@@ -1142,6 +1236,7 @@ mod tests {
         }
         for definition in [
             "+proj=stere +lat_0=45 +k=1 +datum=WGS84",
+            "EPSG: 32632",
             "+proj=utm +zone=32 +datum=WGS84",
             "+proj=tmerc +pm=greenwich +datum=WGS84",
         ] {
@@ -1290,6 +1385,71 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn portable_conic_and_stereographic_boundaries_match_strict_native() {
+        use crate::geospatial::{Crs, EcefTransform};
+        let mut definitions = Vec::new();
+        for projection in ["lcc", "aea"] {
+            for (first, second) in [
+                (-80., -80.),
+                (80., 80.),
+                (-80., -79.),
+                (79., 80.),
+                (-40., 41.),
+                (40., -39.),
+                (-0.5, -0.5),
+                (0.5, 0.5),
+                (1., 2.),
+                (-2., -1.),
+                (33., 45.),
+            ] {
+                definitions.push((
+                    format!(
+                    "+proj={projection} +lat_1={first} +lat_2={second} +lat_0={first} +datum=WGS84"
+                ),
+                    first,
+                ));
+                definitions.extend(
+                    conic_wkts(projection, first, second).map(|definition| (definition, first)),
+                );
+            }
+        }
+        for latitude in [-90., -79.999999, -52., 0., 52., 79.999999, 90.] {
+            definitions.push((
+                format!("+proj=stere +lat_0={latitude} +datum=WGS84"),
+                latitude,
+            ));
+        }
+        for (definition, origin) in definitions {
+            // Keep the far point inside Albers' finite inverse domain by
+            // moving toward the equator from the projection origin.
+            let points = [
+                [0., 0., 123.],
+                [200000., 567890., 123.],
+                [
+                    3000000.,
+                    if origin < 0. { 3000000. } else { -3000000. },
+                    500.,
+                ],
+            ];
+            let mut operation = Transform::new(&definition, 7.).unwrap();
+            assert!(matches!(operation, Transform::Pure(_)), "{definition}");
+            let expected = EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&points)
+                .unwrap_or_else(|error| panic!("{definition}: {error}"));
+            for (actual, expected) in operation
+                .transform(&points)
+                .unwrap()
+                .into_iter()
+                .zip(expected)
+            {
+                assert_mm(actual, expected, &definition);
+            }
+        }
+    }
+
     #[test]
     fn additional_valid_native_crs_are_not_misclassified_as_bad_data() {
         for definition in additional_native_definitions() {
@@ -1316,13 +1476,16 @@ mod tests {
             [0., 0., 123.],
             [1000., 2000., 123.],
             [-300000., 700000., -30.],
+            [200000., 567890., 123.],
+            [3000000., -3000000., 500.],
         ];
         for definition in additional_native_definitions() {
             let geographic_points = [[0., 0., 123.], [153., -27., 123.], [-2., 52., -30.]];
-            let points = if definition.starts_with("EPSG:4326@") {
-                &geographic_points
+            let points = if definition.starts_with("EPSG:4326@") || definition.starts_with("GEOGCS")
+            {
+                &geographic_points[..]
             } else {
-                &points
+                &points[..]
             };
             let mut operation = Transform::new(&definition, 7.)
                 .unwrap_or_else(|error| panic!("{definition}: {error}"));
@@ -1334,7 +1497,7 @@ mod tests {
             let expected = EcefTransform::new(native_source, Some(7.))
                 .unwrap()
                 .transform(points)
-                .unwrap();
+                .unwrap_or_else(|error| panic!("{definition}: {error}"));
             for (actual, expected) in operation
                 .transform(points)
                 .unwrap()

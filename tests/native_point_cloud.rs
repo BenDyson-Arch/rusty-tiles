@@ -788,83 +788,102 @@ fn invalid_projection_parameters_and_units_never_publish() {
 #[test]
 fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
     let work = tempfile::tempdir().unwrap();
-    let input = work.path().join("cloud.las");
-    let header = las::Builder::from((1, 4)).into_header().unwrap();
-    let mut writer = las::Writer::from_path(&input, header).unwrap();
-    writer
-        .write_point(las::Point {
-            x: 1000.,
-            y: 2000.,
-            z: 123.,
-            ..Default::default()
-        })
-        .unwrap();
-    writer.close().unwrap();
-    for (index, definition) in [
-        "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE",
-        "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
-        "+proj=sterea +lat_0=-90 +datum=WGS84",
-        "+proj=sterea +lat_0=90 +datum=WGS84",
-        "+proj=sterea +lat_0=89.99999999 +datum=WGS84",
-        "+proj=sterea +lat_0=-89.99999999 +datum=WGS84",
-        "+proj=sterea +lat_0=80 +datum=WGS84",
-        "+proj=sterea +lat_0=-80 +datum=WGS84",
-        "EPSG:32632@2020",
-        r#"+proj=tmerc +k="0.9996" +datum=WGS84"#,
-        r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#,
-        "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
+    for (point_index, point) in [
+        [1000., 2000., 123.],
+        [200000., 567890., 123.],
+        [3000000., -3000000., 500.],
     ]
     .into_iter()
     .enumerate()
     {
-        let output = work.path().join(format!("{index}.3tz"));
-        let result = call(
-            &input,
-            &output,
-            &["--source-crs", definition, "--height-offset", "7"],
-        );
-        #[cfg(feature = "native-geospatial")]
+        let input = work.path().join(format!("cloud-{point_index}.las"));
+        let mut builder = las::Builder::from((1, 4));
+        builder.transforms.x.scale = 0.01;
+        builder.transforms.y.scale = 0.01;
+        let header = builder.into_header().unwrap();
+        let mut writer = las::Writer::from_path(&input, header).unwrap();
+        writer
+            .write_point(las::Point {
+                x: point[0],
+                y: point[1],
+                z: point[2],
+                ..Default::default()
+            })
+            .unwrap();
+        writer.close().unwrap();
+        for (index, definition) in [
+            "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE",
+            "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
+            "+proj=sterea +lat_0=-90 +datum=WGS84",
+            "+proj=sterea +lat_0=90 +datum=WGS84",
+            "+proj=sterea +lat_0=89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=sterea +lat_0=80 +datum=WGS84",
+            "+proj=sterea +lat_0=-80 +datum=WGS84",
+            "+proj=stere +lat_0=89.99999999 +datum=WGS84",
+            "+proj=stere +lat_0=-89.99999999 +datum=WGS84",
+            "+proj=lcc +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+proj=aea +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+init=epsg:32632",
+            "+proj=utm +zone = 32 +datum=WGS84",
+            "EPSG:32632@2020",
+            r#"+proj=tmerc +k="0.9996" +datum=WGS84"#,
+            r#"+proj=tmerc +ellps=WGS84 +towgs84="1,2,3""#,
+            "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
+        ]
+        .into_iter()
+        .enumerate()
         {
-            use rusty_tiles::geospatial::{Crs, EcefTransform};
-            assert!(
-                result.status.success(),
-                "{definition}: {}",
-                String::from_utf8_lossy(&result.stdout)
+            let output = work.path().join(format!("{point_index}-{index}.3tz"));
+            let result = call(
+                &input,
+                &output,
+                &["--source-crs", definition, "--height-offset", "7"],
             );
-            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
-                .unwrap()
-                .transform(&[[1000., 2000., 123.]])
-                .unwrap()[0];
-            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
-            let manifest = document(&mut zip, "tileset.json");
-            let distance = expected
-                .iter()
-                .enumerate()
-                .map(|(i, expected)| {
-                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
-                })
-                .sum::<f64>()
-                .sqrt();
-            assert!(
-                distance < 0.001,
-                "{definition}: ECEF difference {distance} m"
-            );
-            rusty_tiles::validate::archive(&output, None).unwrap();
-        }
-        #[cfg(not(feature = "native-geospatial"))]
-        {
-            assert_eq!(
-                result.status.code(),
-                Some(4),
-                "{definition}: {}",
-                String::from_utf8_lossy(&result.stdout)
-            );
-            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-            assert!(report["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("--features native-geospatial"));
-            assert!(!output.exists());
+            #[cfg(feature = "native-geospatial")]
+            {
+                use rusty_tiles::geospatial::{Crs, EcefTransform};
+                assert!(
+                    result.status.success(),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let expected =
+                    EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&[point])
+                        .unwrap()[0];
+                let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+                let manifest = document(&mut zip, "tileset.json");
+                let distance = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, expected)| {
+                        (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                    })
+                    .sum::<f64>()
+                    .sqrt();
+                assert!(
+                    distance < 0.001,
+                    "{definition}: ECEF difference {distance} m"
+                );
+                rusty_tiles::validate::archive(&output, None).unwrap();
+            }
+            #[cfg(not(feature = "native-geospatial"))]
+            {
+                assert_eq!(
+                    result.status.code(),
+                    Some(4),
+                    "{definition}: {}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert!(report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("--features native-geospatial"));
+                assert!(!output.exists());
+            }
         }
     }
     assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
