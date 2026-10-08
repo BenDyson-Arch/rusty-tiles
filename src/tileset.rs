@@ -12,6 +12,8 @@ use crate::georef::{root_transform, Cartographic, RotationDegrees};
 use crate::output::Job;
 use crate::report::ConversionResult;
 
+mod resources;
+
 /// Leaf geometric error from 3d-tiles-tools TilesetJsonCreator.
 pub const LEAF_GEOMETRIC_ERROR: f64 = 512.0;
 /// Tileset geometric error from 3d-tiles-tools TilesetJsonCreator.
@@ -132,7 +134,7 @@ fn file_name(p: &Path) -> Result<String, Error> {
         .ok_or_else(|| Error::msg("path has no file name"))
 }
 
-/// Write tileset.json next to the source GLB URI, pack a 3TZ without copying the GLB.
+/// Wrap a GLB or glTF and its local resources in a 3TZ without rewriting them.
 pub fn glb_to_3tz(input: &Path, output: &Path, opts: &CreateTilesetOptions) -> Result<(), Error> {
     glb_to_3tz_reported(input, output, opts).map(drop)
 }
@@ -149,19 +151,17 @@ pub fn glb_to_3tz_reported(
     glb_job(input, Job::begin(output, opts.force)?, opts)
 }
 
-/// Wrap one GLB in an already-begun job: the manifest is staged in the job and
-/// the GLB is packed from its source path.
+/// Wrap one model in an already-begun job. Only the generated manifest is
+/// staged; the model and its referenced resources are packed from source paths.
 pub(crate) fn glb_job(
     input: &Path,
     job: Job,
     opts: &CreateTilesetOptions,
 ) -> Result<ConversionResult, Error> {
+    let mut files = resources::members(input)?;
     let json_path = job.path().join("tileset.json");
     create_tileset_json(input, &json_path, opts)?;
-    let files = [
-        ("tileset.json".to_string(), json_path),
-        (file_name(input)?, input.to_path_buf()),
-    ];
+    files.push(("tileset.json".to_string(), json_path));
     job.publish_3tz(&files, None)
 }
 

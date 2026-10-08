@@ -2515,6 +2515,17 @@
       "expect": "polar"
     },
     {
+      "id": "flight-helmet-wrap",
+      "category": "mesh",
+      "profile": "core",
+      "input": "mesh/flight-helmet/FlightHelmet.gltf",
+      "command": "glb-to-3tz",
+      "args": ["--cartographic-position-degrees", "153.02", "-27.47", "10"],
+      "audit": "archive",
+      "expect": "success",
+      "notes": "Wrap the original glTF, buffer and fifteen PNGs without rewriting them; validate all archive references and compare every model/resource member with its source bytes."
+    },
+    {
       "id": "flight-helmet-external",
       "category": "mesh",
       "profile": "core",

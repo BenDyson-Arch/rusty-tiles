@@ -656,6 +656,22 @@ pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {
             }
             result["unchangedReferenceMembers"] = json!(count);
         }
+        if kind == "archive" && input.is_file() {
+            let mut zip = zip::ZipArchive::new(File::open(output)?)?;
+            let names: Vec<_> = zip
+                .file_names()
+                .filter(|name| !matches!(*name, "tileset.json" | rusty_tiles::pack::TZ_INDEX_NAME))
+                .map(str::to_owned)
+                .collect();
+            for name in &names {
+                let original =
+                    std::fs::read(input.parent().ok_or("missing model directory")?.join(name))?;
+                if original != member(&mut zip, name)? {
+                    return Err(format!("changed packed model resource: {name}").into());
+                }
+            }
+            result["unchangedModelMembers"] = json!(names.len());
+        }
         result["archiveValidation"] = validation;
         Ok(result)
     } else {
