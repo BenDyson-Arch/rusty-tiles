@@ -735,6 +735,130 @@ fn compound_geoid_header_refuses_default_build_without_publishing() {
 }
 
 #[test]
+fn invalid_projection_scales_and_missing_utm_zone_never_publish() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    fixture(&input, 1, false, vec![]);
+    let wkt = r#"PROJCS["Invented invalid scale",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["scale_factor",0],UNIT["metre",1]]"#;
+    for definition in [
+        "+proj=stere +lat_0=45 +k=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k=-1 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=0 +datum=WGS84",
+        "+proj=stere +lat_0=45 +k_0=-1 +datum=WGS84",
+        "+proj=utm +datum=WGS84",
+        "+proj=utm +lon_0=10 +datum=WGS84",
+        wkt,
+    ] {
+        let output = work.path().join("rejected.3tz");
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        assert_eq!(
+            result.status.code(),
+            Some(3),
+            "{definition}: {}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        let message = report["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("positive") || message.contains("explicit +zone"),
+            "{definition}: {message}"
+        );
+        assert!(!output.exists());
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("cloud.las");
+    let header = las::Builder::from((1, 4)).into_header().unwrap();
+    let mut writer = las::Writer::from_path(&input, header).unwrap();
+    writer
+        .write_point(las::Point {
+            x: 1000.,
+            y: 2000.,
+            z: 123.,
+            ..Default::default()
+        })
+        .unwrap();
+    writer.close().unwrap();
+    for (index, definition) in [
+        "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE",
+        "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0",
+        "+proj=sterea +lat_0=-90 +datum=WGS84",
+        "+proj=sterea +lat_0=90 +datum=WGS84",
+        "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let output = work.path().join(format!("{index}.3tz"));
+        let result = call(
+            &input,
+            &output,
+            &["--source-crs", definition, "--height-offset", "7"],
+        );
+        #[cfg(feature = "native-geospatial")]
+        {
+            use rusty_tiles::geospatial::{Crs, EcefTransform};
+            assert!(
+                result.status.success(),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&[[1000., 2000., 123.]])
+                .unwrap()[0];
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let distance = expected
+                .iter()
+                .enumerate()
+                .map(|(i, expected)| {
+                    (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+                })
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                distance < 0.001,
+                "{definition}: ECEF difference {distance} m"
+            );
+            rusty_tiles::validate::archive(&output, None).unwrap();
+        }
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            assert_eq!(
+                result.status.code(),
+                Some(4),
+                "{definition}: {}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert!(report["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("--features native-geospatial"));
+            assert!(!output.exists());
+        }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
 fn metadata_attributes_match_source_tables_through_las_laz_lods() {
     for suffix in ["las", "laz"] {
         let work = tempfile::tempdir().unwrap();

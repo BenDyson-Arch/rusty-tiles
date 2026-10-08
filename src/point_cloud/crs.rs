@@ -73,8 +73,15 @@ impl PureTransform {
                 "expected an EPSG code, WKT or PROJ CRS definition",
             ));
         };
-        let source = Proj::from_proj_string(&definition)
-            .map_err(|error| Error::Data(format!("invalid source CRS: {error}")))?;
+        let source = Proj::from_proj_string(&definition).map_err(|error| match error {
+            // Some proj4rs projections need an ellipsoid, including extended
+            // transverse Mercator. Native PROJ handles their spherical forms;
+            // keep the original definition available to that fallback.
+            proj4rs::errors::Error::EllipsoidRequired => {
+                unsupported("spherical form of this projection requires native PROJ")
+            }
+            error => Error::Data(format!("invalid source CRS: {error}")),
+        })?;
         if source.is_geocent() {
             return Err(horizontal_required());
         }
@@ -175,7 +182,10 @@ fn projection_keys(projection: &str) -> Result<&'static [&'static str], Error> {
         "webmerc" => Ok(&[]),
         "lcc" | "aea" => Ok(&["lat_1", "lat_2"]),
         "stere" => Ok(&["lat_ts"]),
-        "sterea" | "laea" => Ok(&[]),
+        "sterea" => Ok(&[]),
+        "laea" => Err(unsupported(
+            "Lambert azimuthal equal area requires native PROJ for millimetre accuracy",
+        )),
         "geocent" => Err(horizontal_required()),
         _ => Err(unsupported(
             "projection method is outside the verified grid-free tier",
@@ -237,7 +247,9 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
         if key == "type" && value != "crs" {
             return Err(unsupported("only CRS definitions are supported"));
         }
-        if matches!(key, "lon_0" | "lat_0" | "lat_ts" | "lat_1" | "lat_2")
+        let named_greenwich = key == "pm" && value.eq_ignore_ascii_case("greenwich");
+        if matches!(key, "lon_0" | "lat_0" | "lat_ts" | "lat_1" | "lat_2" | "pm")
+            && !named_greenwich
             && value.parse::<f64>().is_err()
         {
             // PROJ supports DMS and directional/radian suffixes. They are
@@ -262,10 +274,33 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
                 | "lat_ts"
                 | "lat_1"
                 | "lat_2"
+                | "pm"
                 | "zone"
-        ) {
-            finite(value)?;
+        ) && !named_greenwich
+        {
+            let number = finite(value)?;
+            if matches!(key, "k" | "k_0") && number <= 0. {
+                return Err(Error::Data(format!(
+                    "projection scale +{key} must be positive"
+                )));
+            }
         }
+    }
+    if projection == "utm" && !params.contains_key("zone") {
+        return Err(Error::Data(
+            "UTM CRS requires an explicit +zone from 1 to 60".into(),
+        ));
+    }
+    if projection == "sterea"
+        && params
+            .get("lat_0")
+            .is_some_and(|value| finite(value).is_ok_and(|value| value.abs() >= 90. - 1e-10))
+    {
+        // inv_gauss fails at the poles in proj4rs. Include the small degree
+        // roundoff introduced by converting WKT angular units before init.
+        return Err(unsupported(
+            "polar oblique stereographic requires native PROJ",
+        ));
     }
     if matches!(projection, "longlat" | "latlong")
         && params
@@ -831,6 +866,63 @@ mod tests {
     const UTM_WKT2: &str = r#"PROJCRS["WGS 84 / UTM zone 56S",BASEGEOGCRS["WGS 84",ENSEMBLE["World Geodetic System 1984 ensemble",MEMBER["World Geodetic System 1984 (Transit)"],MEMBER["World Geodetic System 1984 (G730)"],ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]],ENSEMBLEACCURACY[2]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["UTM zone 56S",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",153,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",0.9996,SCALEUNIT["unity",1]],PARAMETER["False easting",500000,LENGTHUNIT["metre",1]],PARAMETER["False northing",10000000,LENGTHUNIT["metre",1]]],CS[Cartesian,2],AXIS["easting (E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["northing (N)",north,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",32756]]"#;
     const DMS_TMERC: &str = r#"+proj=tmerc +lon_0=2d20'14.025"E +datum=WGS84 +type=crs"#;
 
+    fn projection_wkts(
+        method1: &str,
+        method2: &str,
+        lat: f64,
+        lon: f64,
+        scale: Option<f64>,
+    ) -> [String; 2] {
+        let scale1 = scale
+            .map(|scale| format!(r#",PARAMETER["scale_factor",{scale}]"#))
+            .unwrap_or_default();
+        let scale2 = scale
+            .map(|scale| {
+                format!(
+                    r#",PARAMETER["Scale factor at natural origin",{scale},SCALEUNIT["unity",1]]"#
+                )
+            })
+            .unwrap_or_default();
+        [
+            format!(
+                r#"PROJCS["Invented projection",{WGS_WKT},PROJECTION["{method1}"],PARAMETER["latitude_of_origin",{lat}],PARAMETER["central_meridian",{lon}]{scale1},UNIT["metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]"#
+            ),
+            format!(
+                r#"PROJCRS["Invented projection",BASEGEOGCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["Invented conversion",METHOD["{method2}"],PARAMETER["Latitude of natural origin",{lat},ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",{lon},ANGLEUNIT["degree",0.0174532925199433]]{scale2}],CS[Cartesian,2],AXIS["Easting",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["Northing",north,ORDER[2],LENGTHUNIT["metre",1]]]"#
+            ),
+        ]
+    }
+
+    fn additional_native_definitions() -> Vec<String> {
+        let mut definitions = vec![
+            "+proj=tmerc +ellps=WGS84 +towgs84=0,0,0 +pm=0dE".into(),
+            "+proj=tmerc +a=6371000 +b=6371000 +towgs84=0,0,0".into(),
+            "+proj=tmerc +a=6371000 +f=0 +towgs84=0,0,0".into(),
+            "+proj=sterea +lat_0=-90 +datum=WGS84".into(),
+            "+proj=sterea +lat_0=90 +datum=WGS84".into(),
+            "+proj=laea +lat_0=-15 +lon_0=135 +datum=WGS84".into(),
+        ];
+        for latitude in [-90., 90.] {
+            definitions.extend(projection_wkts(
+                "Oblique_Stereographic",
+                "Oblique Stereographic",
+                latitude,
+                0.,
+                Some(1.),
+            ));
+        }
+        // Same projection parameters as EPSG:10601 (GLANCE Oceania), whose
+        // inverse LAEA in proj4rs exceeds the 1 mm ECEF accuracy threshold.
+        definitions.extend(projection_wkts(
+            "Lambert_Azimuthal_Equal_Area",
+            "Lambert Azimuthal Equal Area",
+            -15.,
+            135.,
+            None,
+        ));
+        definitions
+    }
+
     fn assert_mm(actual: [f64; 3], expected: [f64; 3], label: &str) {
         let distance = actual
             .iter()
@@ -960,6 +1052,102 @@ mod tests {
             assert_eq!(input[0], [0., 0., 0.]);
         }
         assert!(PureTransform::new("EPSG:4326", f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn invalid_scales_and_missing_utm_zone_are_data_errors() {
+        let mut definitions = Vec::new();
+        for key in ["k", "k_0"] {
+            for value in ["0", "-1", "NaN", "inf"] {
+                definitions.push(format!("+proj=stere +lat_0=45 +{key}={value} +datum=WGS84"));
+            }
+        }
+        definitions.push("+proj=utm +datum=WGS84".into());
+        definitions.push("+proj=utm +lon_0=10 +datum=WGS84".into());
+        for scale in [0., -1.] {
+            definitions.extend(projection_wkts(
+                "Transverse_Mercator",
+                "Transverse Mercator",
+                0.,
+                3.,
+                Some(scale),
+            ));
+        }
+        for definition in definitions {
+            assert!(
+                matches!(Transform::new(&definition, 7.), Err(Error::Data(_))),
+                "{definition}"
+            );
+        }
+        for definition in [
+            "+proj=stere +lat_0=45 +k=1 +datum=WGS84",
+            "+proj=utm +zone=32 +datum=WGS84",
+            "+proj=tmerc +pm=greenwich +datum=WGS84",
+        ] {
+            assert!(
+                matches!(Transform::new(definition, 7.), Ok(Transform::Pure(_))),
+                "{definition}"
+            );
+        }
+    }
+
+    #[test]
+    fn additional_valid_native_crs_are_not_misclassified_as_bad_data() {
+        for definition in additional_native_definitions() {
+            assert!(
+                matches!(
+                    PureTransform::new(&definition, 7.),
+                    Err(Error::Environment(_))
+                ),
+                "{definition}"
+            );
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(
+                matches!(Transform::new(&definition, 7.), Err(Error::Environment(_))),
+                "{definition}"
+            );
+        }
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn additional_native_operations_preserve_positions_and_laea_accuracy() {
+        use crate::geospatial::{Crs, EcefTransform};
+        let points = [
+            [0., 0., 123.],
+            [1000., 2000., 123.],
+            [-300000., 700000., -30.],
+        ];
+        for definition in additional_native_definitions() {
+            let mut operation = Transform::new(&definition, 7.).unwrap();
+            assert!(matches!(operation, Transform::Native(_)), "{definition}");
+            let expected = EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                .unwrap()
+                .transform(&points)
+                .unwrap();
+            for (actual, expected) in operation
+                .transform(&points)
+                .unwrap()
+                .into_iter()
+                .zip(expected)
+            {
+                assert_mm(actual, expected, &definition);
+            }
+        }
+        for definition in projection_wkts(
+            "Lambert_Azimuthal_Equal_Area",
+            "Lambert Azimuthal Equal Area",
+            -15.,
+            135.,
+            None,
+        ) {
+            let mut operation = Transform::new(&definition, 7.).unwrap();
+            assert_mm(
+                operation.transform(&points[..1]).unwrap()[0],
+                geodetic_to_ecef(Cartographic::new(135., -15., 130.)),
+                "GLANCE Oceania centre",
+            );
+        }
     }
 
     #[test]
@@ -1095,7 +1283,6 @@ mod tests {
             "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96",
             "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45",
             "+proj=sterea +lat_0=52 +lon_0=5 +k=0.9999",
-            "+proj=laea +lat_0=52 +lon_0=10",
             "+proj=merc +lat_ts=30 +lon_0=12",
         ] {
             cases.push((
