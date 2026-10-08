@@ -48,7 +48,7 @@ impl Default for VectorLodOptions {
     }
 }
 
-/// OGR input selection and hard content budgets. Heights are explicit for 3D
+/// Vector input selection and hard content budgets. Heights are explicit for 3D
 /// horizontal-CRS sources; `local` uses metre XYZ without geospatial placement.
 #[derive(Clone, Debug)]
 pub struct VectorOptions {

@@ -66,6 +66,7 @@ fn encoder(explicit: bool) -> String {
         include_str!("../../georef.rs"),
         include_str!("../../implicit.rs"),
         include_str!("../../implicit/tileset.rs"),
+        include_str!("../../../Cargo.lock"),
     ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
@@ -74,7 +75,6 @@ fn encoder(explicit: bool) -> String {
     for source in [
         include_str!("source_native.rs"),
         include_str!("../../geospatial.rs"),
-        include_str!("../../../Cargo.lock"),
     ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
@@ -136,9 +136,12 @@ impl Reuse {
                 .as_str()
                 .is_some_and(|s| s.starts_with(ENCODER_PREFIX))
             {
-                return Err(data(
-                    "previous encoder differs; run a fresh conversion with this build without reuseTileset",
-                ));
+                #[cfg(feature = "native-geospatial")]
+                let message =
+                    "previous encoder differs; run a fresh native conversion without reuseTileset";
+                #[cfg(not(feature = "native-geospatial"))]
+                let message = "previous encoder differs; run a fresh portable conversion without reuseTileset";
+                return Err(data(message));
             }
             if state["version"] != 1
                 || state["records"]
@@ -228,8 +231,9 @@ impl Reuse {
         #[cfg(feature = "native-geospatial")]
         let versions = crate::geospatial::versions()?;
         #[cfg(not(feature = "native-geospatial"))]
-        let versions = json!({"backend":"portable", "rustyTiles":env!("CARGO_PKG_VERSION"),
-            "proj4rs":"0.2.0", "proj4wkt":"0.1.1", "geo":"0.33.1", "geozero":"0.15.1", "i_overlay":"4.5.2"});
+        // The encoder fingerprint covers the locked Rust dependencies. Portable
+        // reuse never records or queries installed GDAL, GEOS or PROJ versions.
+        let versions = json!({"backend":"portable", "rustyTiles":env!("CARGO_PKG_VERSION")});
         let layers: Vec<_> = reader
             .layer_reports
             .iter()

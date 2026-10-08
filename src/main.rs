@@ -295,10 +295,10 @@ struct VectorArgs {
     /// Omit volatile performance diagnostics for byte-identical archives
     #[arg(long)]
     reproducible: bool,
-    /// Maximum encoding worker processes (defaults to available cores)
+    /// Maximum encoding worker threads (defaults to available cores)
     #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, usize::from))]
     jobs: usize,
-    /// OGR attribute filter applied to every selected layer
+    /// Attribute filter applied to every selected layer (SQLite in the portable build)
     #[arg(long = "where")]
     where_clause: Option<String>,
     /// Encode list-valued properties as JSON strings, or reject them
