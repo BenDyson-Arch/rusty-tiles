@@ -314,8 +314,9 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
 
 #[test]
 fn implicit_mesh_accepts_case_insensitive_extensions() {
-    let work = tempfile::tempdir().unwrap();
     for extension in ["GLB", "GlB", "gLtF"] {
+        // Keep variants separate on case-insensitive filesystems.
+        let work = tempfile::tempdir().unwrap();
         let input = work.path().join(format!("mesh.{extension}"));
         let source = if extension == "gLtF" {
             fs::read("tests/fixtures/example.gltf").unwrap()
