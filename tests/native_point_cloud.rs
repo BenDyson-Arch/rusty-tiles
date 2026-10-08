@@ -753,6 +753,10 @@ fn invalid_projection_parameters_and_units_never_publish() {
         "+proj=merc +lat_ts=-100 +datum=WGS84",
         "+proj=lcc +lat_1=-90 +lat_2=45 +datum=WGS84",
         "+proj=utm +zone=32 +datum=WGS84 +units=degrees",
+        "+proj=stere +lat_0=90 +lat_ts=70 +k=0.99 +datum=WGS84",
+        "+proj=stere +lat_0=-90 +lat_ts=-70 +k_0=2 +datum=WGS84",
+        "+proj=aea +lat_1=30 +lat_2=-29.99999999 +datum=WGS84",
+        "+proj=lcc +lat_1=30 +lat_2=-29.99999999 +lat_0=0 +datum=WGS84",
         wkt,
     ] {
         let output = work.path().join("rejected.3tz");
@@ -773,7 +777,9 @@ fn invalid_projection_parameters_and_units_never_publish() {
             message.contains("positive")
                 || message.contains("explicit +zone")
                 || message.contains("projection latitude")
-                || message.contains("linear +units"),
+                || message.contains("linear +units")
+                || message.contains("conflicts")
+                || message.contains("conic standard parallels"),
             "{definition}: {message}"
         );
         assert!(!output.exists());
@@ -823,6 +829,8 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
             "+proj=stere +lat_0=89.99999999 +datum=WGS84",
             "+proj=stere +lat_0=-89.99999999 +datum=WGS84",
             "+proj=lcc +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
+            "+proj=lcc +lat_1=33 +datum=WGS84",
+            "+proj=lcc +lat_1=-89.999999 +lat_2=-89.999999 +lat_0=-89.999999 +datum=WGS84",
             "+proj=aea +lat_1=-80 +lat_2=-79.99999999 +lat_0=-80 +datum=WGS84",
             "+init=epsg:32632",
             "+proj=utm +zone = 32 +datum=WGS84",
@@ -885,6 +893,74 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
                 assert!(!output.exists());
             }
         }
+    }
+    assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".tiles-work-")));
+}
+
+#[test]
+fn oblique_stereographic_near_pole_point_uses_native_or_refuses_without_publishing() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("polar-point.las");
+    let point = [0.9141389405141953, 5290076.530007198, 123.];
+    let mut builder = las::Builder::from((1, 4));
+    builder.transforms.x.offset = point[0];
+    builder.transforms.y.offset = point[1];
+    builder.transforms.z.offset = point[2];
+    let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+    writer
+        .write_point(las::Point {
+            x: point[0],
+            y: point[1],
+            z: point[2],
+            ..Default::default()
+        })
+        .unwrap();
+    writer.close().unwrap();
+    let output = work.path().join("polar-point.3tz");
+    let definition = "+proj=sterea +lat_0=45 +datum=WGS84";
+    let result = call(
+        &input,
+        &output,
+        &["--source-crs", definition, "--height-offset", "7"],
+    );
+    #[cfg(feature = "native-geospatial")]
+    {
+        use rusty_tiles::geospatial::{Crs, EcefTransform};
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let expected = EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.))
+            .unwrap()
+            .transform(&[point])
+            .unwrap()[0];
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let manifest = document(&mut zip, "tileset.json");
+        let distance = expected
+            .iter()
+            .enumerate()
+            .map(|(i, expected)| {
+                (manifest["root"]["transform"][12 + i].as_f64().unwrap() - expected).powi(2)
+            })
+            .sum::<f64>()
+            .sqrt();
+        assert!(distance < 0.001, "ECEF difference {distance} m");
+        rusty_tiles::validate::archive(&output, None).unwrap();
+    }
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        assert_eq!(result.status.code(), Some(4));
+        let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert!(report["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("80 degrees source latitude"));
+        assert!(!output.exists());
     }
     assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
         .unwrap()

@@ -18,23 +18,40 @@ impl Transform {
         match PureTransform::new(definition, height_offset) {
             Ok(operation) => Ok(Self::Pure(Box::new(operation))),
             #[cfg(feature = "native-geospatial")]
-            Err(Error::Environment(_)) => {
-                let source = crate::geospatial::Crs::from_definition(definition)?;
-                if !source.is_horizontal() {
-                    return Err(horizontal_required());
-                }
-                crate::geospatial::EcefTransform::new(source, Some(height_offset)).map(Self::Native)
-            }
+            Err(Error::Environment(_)) => Self::native(definition, height_offset),
             Err(error) => Err(error),
         }
     }
 
+    #[cfg(feature = "native-geospatial")]
+    fn native(definition: &str, height_offset: f64) -> Result<Self, Error> {
+        let source = crate::geospatial::Crs::from_definition(definition)?;
+        if !source.is_horizontal() {
+            return Err(horizontal_required());
+        }
+        if let Some((first, second)) = source.conic_parallels() {
+            validate_conic_conditioning(first, second)?;
+        }
+        crate::geospatial::EcefTransform::new(source, Some(height_offset)).map(Self::Native)
+    }
+
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
-        match self {
+        let result = match self {
             Self::Pure(operation) => operation.transform(points),
             #[cfg(feature = "native-geospatial")]
             Self::Native(operation) => operation.transform(points),
+        };
+        #[cfg(feature = "native-geospatial")]
+        if matches!(result, Err(Error::Environment(_))) {
+            if let Self::Pure(operation) = self {
+                let mut native = Self::native(&operation.definition, operation.height_offset)?;
+                // Retry the entire batch, so no partial portable result escapes.
+                let output = native.transform(points)?;
+                *self = native;
+                return Ok(output);
+            }
         }
+        result
     }
 }
 
@@ -51,6 +68,9 @@ pub(super) struct PureTransform {
     target: Proj,
     angular_units: f64,
     height_offset: f64,
+    source_geographic: Option<Proj>,
+    #[cfg(feature = "native-geospatial")]
+    definition: String,
 }
 
 impl PureTransform {
@@ -59,11 +79,16 @@ impl PureTransform {
             return Err(Error::Data("height offset must be finite".into()));
         }
         let definition = definition.trim();
+        #[cfg(feature = "native-geospatial")]
+        let original_definition = definition.to_owned();
         if definition.contains('\0') {
             return Err(Error::Data("CRS definition contains a NUL byte".into()));
         }
         let (definition, angular_units) = if definition.starts_with('+') {
-            (validate_proj(definition)?, std::f64::consts::PI / 180.)
+            (
+                validate_proj(definition, false)?,
+                std::f64::consts::PI / 180.,
+            )
         } else if definition.to_ascii_uppercase().starts_with("EPSG:") {
             (epsg(definition)?, std::f64::consts::PI / 180.)
         } else if definition.contains('[') {
@@ -108,11 +133,25 @@ impl PureTransform {
         }
         let target = Proj::from_proj_string("+proj=geocent +datum=WGS84 +units=m")
             .map_err(|error| unsupported(&error.to_string()))?;
+        let source_geographic = if source.projname() == "sterea" {
+            // An unknown target datum deliberately skips datum conversion: this
+            // probe checks latitude in the source projection, before any shift.
+            let (a, b) = source.ellipse_parameters();
+            Some(
+                Proj::from_proj_string(&format!("+proj=longlat +a={a} +b={b}"))
+                    .map_err(|error| unsupported(&error.to_string()))?,
+            )
+        } else {
+            None
+        };
         Ok(Self {
             source,
             target,
             angular_units,
             height_offset,
+            source_geographic,
+            #[cfg(feature = "native-geospatial")]
+            definition: original_definition,
         })
     }
 
@@ -124,6 +163,17 @@ impl PureTransform {
                 return Err(Error::Data(format!(
                     "point {index}: coordinates must be finite XYZ"
                 )));
+            }
+            if let Some(geographic) = &self.source_geographic {
+                let mut probe = p;
+                proj4rs::transform::transform(&self.source, geographic, &mut probe).map_err(
+                    |error| Error::Data(format!("point {index}: CRS transform failed: {error}")),
+                )?;
+                if !probe.1.is_finite() || probe.1.abs() >= 80_f64.to_radians() {
+                    return Err(unsupported(&format!(
+                        "point {index}: oblique stereographic coordinates at or beyond 80 degrees source latitude require native PROJ"
+                    )));
+                }
             }
             if self.source.is_latlong() {
                 p.0 *= self.angular_units;
@@ -197,7 +247,7 @@ fn projection_keys(projection: &str) -> Result<&'static [&'static str], Error> {
     }
 }
 
-fn validate_proj(definition: &str) -> Result<String, Error> {
+fn validate_proj(definition: &str, from_wkt: bool) -> Result<String, Error> {
     // This tokenizer only handles unquoted, whitespace-separated parameters.
     // Defer quoted values (including embedded spaces) before splitting them.
     if definition.split_whitespace().any(|token| {
@@ -337,6 +387,30 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
             "UTM CRS requires an explicit +zone from 1 to 60".into(),
         ));
     }
+    if projection == "stere" {
+        let origin = params
+            .get("lat_0")
+            .map(|value| finite(value))
+            .transpose()?
+            .unwrap_or(0.);
+        let parallel = params
+            .get("lat_ts")
+            .map(|value| finite(value))
+            .transpose()?
+            .unwrap_or(90.);
+        let scale = params
+            .get("k")
+            .or_else(|| params.get("k_0"))
+            .map(|value| finite(value))
+            .transpose()?
+            .unwrap_or(1.);
+        if origin.abs() == 90. && parallel.abs() != 90. && scale != 1. {
+            return Err(Error::Data(
+                "polar stereographic standard parallel conflicts with non-unit projection scale"
+                    .into(),
+            ));
+        }
+    }
     if projection == "sterea"
         && params
             .get("lat_0")
@@ -371,6 +445,12 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
             .map(|value| finite(value))
             .transpose()?
             .unwrap_or(first);
+        validate_conic_conditioning(first, second)?;
+        if first.abs().max(second.abs()) > 80. + 1e-10 {
+            return Err(unsupported(
+                "conic standard parallels beyond 80 degrees latitude require native PROJ",
+            ));
+        }
         if first != second && (first - second).abs() < 1. - 1e-10 {
             // Secant conic constants divide differences of nearly equal
             // quantities. Keep a generous margin around cancellation; the
@@ -379,6 +459,12 @@ fn validate_proj(definition: &str) -> Result<String, Error> {
             return Err(unsupported(
                 "distinct conic parallels less than one degree apart require native PROJ",
             ));
+        }
+        if projection == "lcc"
+            && !from_wkt
+            && (!params.contains_key("lat_0") || !params.contains_key("lat_2"))
+        {
+            return Err(unsupported("omitted LCC origins or second standard parallels require native CRS interpretation"));
         }
     }
     if matches!(projection, "longlat" | "latlong")
@@ -440,6 +526,13 @@ fn finite(value: &str) -> Result<f64, Error> {
         .ok()
         .filter(|value| value.is_finite())
         .ok_or_else(|| Error::Data(format!("invalid finite CRS number: {value}")))
+}
+
+fn validate_conic_conditioning(first: f64, second: f64) -> Result<(), Error> {
+    if !first.is_finite() || !second.is_finite() || (first + second).abs() < 1. - 1e-10 {
+        return Err(Error::Data("conic standard parallels too close to opposite latitudes or the equator for verified point-cloud accuracy".into()));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -942,7 +1035,7 @@ fn wkt(definition: &str) -> Result<(String, f64), Error> {
         }
         // Validate method-specific parameters too, without using the lossy WKT
         // formatter or trusting a root AUTHORITY to override the definition.
-        result = validate_proj(&result)?;
+        result = validate_proj(&result, true)?;
     } else {
         result.push_str(" +proj=longlat");
     }
@@ -987,6 +1080,9 @@ mod tests {
 
     fn additional_native_definitions() -> Vec<String> {
         let mut definitions = vec![
+            "+proj=lcc +lat_1=33 +datum=WGS84".into(),
+            "+proj=lcc +lat_1=33 +lat_2=45 +datum=WGS84".into(),
+            "+proj=lcc +lat_1=49 +lat_0=49 +lon_0=10 +k=0.99 +datum=WGS84".into(),
             "+init=epsg:32632".into(),
             "+proj=utm +zone = 32 +datum=WGS84".into(),
             "+proj=utm +zone= 32 +datum=WGS84".into(),
@@ -1043,6 +1139,12 @@ mod tests {
                     }
                 }
             }
+        }
+        for latitude in [-89.999999, 89.999999] {
+            definitions.push(format!(
+                "+proj=lcc +lat_1={latitude} +lat_2={latitude} +lat_0={latitude} +datum=WGS84"
+            ));
+            definitions.extend(conic_wkts("lcc", latitude, latitude));
         }
         // Same projection parameters as EPSG:10601 (GLANCE Oceania), whose
         // inverse LAEA in proj4rs exceeds the 1 mm ECEF accuracy threshold.
@@ -1347,19 +1449,123 @@ mod tests {
         }
     }
 
+    #[test]
+    fn conflicting_polar_scales_and_ill_conditioned_conics_are_refused() {
+        let mut definitions = Vec::new();
+        for origin in [-90., 90.] {
+            for parallel in [-70., 70.] {
+                for key in ["k", "k_0"] {
+                    for scale in [0.99, 2.] {
+                        definitions.push(format!("+proj=stere +lat_0={origin} +lat_ts={parallel} +{key}={scale} +datum=WGS84"));
+                    }
+                }
+            }
+        }
+        for projection in ["lcc", "aea"] {
+            for (first, second) in [
+                (30., -29.99999999),
+                (-30., 29.99999999),
+                (0.1, 0.1),
+                (-0.1, -0.1),
+            ] {
+                definitions.push(format!(
+                    "+proj={projection} +lat_1={first} +lat_2={second} +lat_0=0 +datum=WGS84"
+                ));
+                definitions.extend(conic_wkts(projection, first, second));
+            }
+        }
+        for definition in definitions {
+            let error = Transform::new(&definition, 7.).err().expect(&definition);
+            assert!(matches!(error, Error::Data(_)), "{definition}: {error}");
+        }
+        // Native parsing must not let alternate syntax bypass the conic limit.
+        for definition in [
+            r#"+proj=aea +lat_1="30" +lat_2="-29.99999999" +datum=WGS84"#,
+            "+proj=aea +lat_1 = 30 +lat_2 = -29.99999999 +datum=WGS84",
+        ] {
+            let error = Transform::new(definition, 7.).err().expect(definition);
+            #[cfg(feature = "native-geospatial")]
+            assert!(matches!(error, Error::Data(_)), "{definition}: {error}");
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(
+                matches!(error, Error::Environment(_)),
+                "{definition}: {error}"
+            );
+        }
+        for definition in [
+            "+proj=stere +lat_0=90 +lat_ts=70 +k=1 +datum=WGS84",
+            "+proj=stere +lat_0=-90 +lat_ts=-90 +k_0=0.99 +datum=WGS84",
+        ] {
+            assert!(matches!(
+                Transform::new(definition, 7.),
+                Ok(Transform::Pure(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn oblique_stereographic_polar_points_require_native_and_retry_whole_batch() {
+        let definition = "+proj=sterea +lat_0=45 +datum=WGS84";
+        let points = [
+            [0., 0., 123.],
+            [0.9141389405141953, 5290076.530007198, 123.],
+        ];
+        let mut operation = Transform::new(definition, 7.).unwrap();
+        assert!(matches!(operation, Transform::Pure(_)));
+        assert!(matches!(
+            PureTransform::new(definition, 7.)
+                .unwrap()
+                .transform(&points),
+            Err(Error::Environment(_))
+        ));
+        #[cfg(not(feature = "native-geospatial"))]
+        {
+            assert!(matches!(
+                operation.transform(&points),
+                Err(Error::Environment(_))
+            ));
+            assert!(matches!(operation, Transform::Pure(_)));
+        }
+        #[cfg(feature = "native-geospatial")]
+        {
+            use crate::geospatial::{Crs, EcefTransform};
+            let mut expected =
+                EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.)).unwrap();
+            for (actual, expected) in operation
+                .transform(&points)
+                .unwrap()
+                .into_iter()
+                .zip(expected.transform(&points).unwrap())
+            {
+                assert_mm(
+                    actual,
+                    expected,
+                    "complete batch after coordinate-dependent fallback",
+                );
+            }
+            assert!(matches!(operation, Transform::Native(_)));
+            assert_mm(
+                operation.transform(&points[..1]).unwrap()[0],
+                geodetic_to_ecef(Cartographic::new(0., 45., 130.)),
+                "subsequent native batch at analytic origin",
+            );
+        }
+    }
+
     #[cfg(feature = "native-geospatial")]
     #[test]
     fn portable_oblique_stereographic_origin_range_matches_strict_native() {
         use crate::geospatial::{Crs, EcefTransform};
-        let points = [
-            [0., 0., 123.],
-            [1000., 2000., 123.],
-            [-300000., 700000., -30.],
-            [3000000., -3000000., 500.],
-        ];
         for latitude in [
             -79.999999, -75., -60., -52., -30., 0., 30., 52., 60., 75., 79.999999,
         ] {
+            let direction = if latitude < 0. { 1. } else { -1. };
+            let points = [
+                [0., 0., 123.],
+                [1000., direction * 2000., 123.],
+                [-300000., direction * 700000., -30.],
+                [3000000., direction * 3000000., 500.],
+            ];
             for longitude in [0., 123.] {
                 for datum in ["+datum=WGS84", "+ellps=airy +towgs84=12,-34,56"] {
                     let definition = format!(
@@ -1380,6 +1586,7 @@ mod tests {
                     {
                         assert_mm(actual, expected, &definition);
                     }
+                    assert!(matches!(operation, Transform::Pure(_)), "{definition}");
                 }
             }
         }
@@ -1435,6 +1642,11 @@ mod tests {
             ];
             let mut operation = Transform::new(&definition, 7.).unwrap();
             assert!(matches!(operation, Transform::Pure(_)), "{definition}");
+            assert_mm(
+                operation.transform(&points[..1]).unwrap()[0],
+                geodetic_to_ecef(Cartographic::new(0., origin, 130.)),
+                "analytic projection origin",
+            );
             let expected = EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
                 .unwrap()
                 .transform(&points)
@@ -1498,6 +1710,13 @@ mod tests {
                 .unwrap()
                 .transform(points)
                 .unwrap_or_else(|error| panic!("{definition}: {error}"));
+            if definition == "+proj=lcc +lat_1=33 +datum=WGS84" {
+                assert_mm(
+                    operation.transform(&points[..1]).unwrap()[0],
+                    geodetic_to_ecef(Cartographic::new(0., 0., 130.)),
+                    "native LCC defaults at analytic origin",
+                );
+            }
             for (actual, expected) in operation
                 .transform(points)
                 .unwrap()
@@ -1661,7 +1880,6 @@ mod tests {
         for projection in [
             "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000",
             "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96",
-            "+proj=lcc +lat_1=49 +lat_0=49 +lon_0=10 +k=0.99",
             "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96",
             "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45",
             "+proj=sterea +lat_0=52 +lon_0=5 +k=0.9999",

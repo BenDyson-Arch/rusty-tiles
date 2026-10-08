@@ -155,6 +155,49 @@ impl Crs {
         }
     }
 
+    /// Normalized conic parallels for point-cloud accuracy checks. Read the
+    /// parsed native CRS, so quotes, aliases and inferred defaults cannot bypass
+    /// the same conditioning limit used by the portable operation.
+    pub(crate) fn conic_parallels(&self) -> Option<(f64, f64)> {
+        let _errors = QuietErrors::new();
+        // SAFETY: All queries borrow this live SRS. Attribute text is copied
+        // before returning; null error pointers request default parameter values.
+        unsafe {
+            let method = string(gdal_sys::OSRGetAttrValue(
+                self.0.as_ptr(),
+                c"PROJECTION".as_ptr(),
+                0,
+            ));
+            if method == "Lambert_Conformal_Conic_1SP" {
+                let origin = gdal_sys::OSRGetNormProjParm(
+                    self.0.as_ptr(),
+                    c"latitude_of_origin".as_ptr(),
+                    0.,
+                    null_mut(),
+                );
+                Some((origin, origin))
+            } else if method.starts_with("Lambert_Conformal_Conic")
+                || method == "Albers_Conic_Equal_Area"
+            {
+                let first = gdal_sys::OSRGetNormProjParm(
+                    self.0.as_ptr(),
+                    c"standard_parallel_1".as_ptr(),
+                    0.,
+                    null_mut(),
+                );
+                let second = gdal_sys::OSRGetNormProjParm(
+                    self.0.as_ptr(),
+                    c"standard_parallel_2".as_ptr(),
+                    0.,
+                    null_mut(),
+                );
+                Some((first, second))
+            } else {
+                None
+            }
+        }
+    }
+
     fn empty() -> Result<Self, Error> {
         // SAFETY: A null definition requests an empty, independently owned SRS.
         NonNull::new(unsafe { gdal_sys::OSRNewSpatialReference(null()) })

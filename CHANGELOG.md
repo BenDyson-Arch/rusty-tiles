@@ -49,6 +49,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Point-cloud LCC definitions with omitted origins or second parallels retain native CRS interpretation. Polar stereographic rejects conflicting scale/standard-parallel parameters. Ill-conditioned nearly opposite conic parallels are refused in both builds; near-pole conic parallels use native PROJ. Oblique stereographic checks each point’s source latitude and retries the whole batch through native PROJ when needed.
 - Point-cloud conic projections with distinct parallels less than one degree apart and ordinary stereographic origins from 80 degrees to below 90 degrees latitude use strict native PROJ for accuracy. Exact polar stereographic remains portable. PROJ `+init`, spaced assignments and additional WKT syntax retain native fallback; spaced EPSG codes are normalized.
 - Point-cloud CRS validation rejects invalid latitude parameters and angular projected PROJ units. Oblique stereographic origins at or beyond 80 degrees latitude use strict native PROJ to avoid near-pole numerical instability. EPSG coordinate epochs and quoted PROJ values retain native fallback.
 - Point-cloud CRS validation rejects nonpositive projection scales and missing UTM zones before publishing. DMS prime meridians, spherical transverse Mercator and polar oblique stereographic retain strict native fallback. Lambert azimuthal equal area uses native PROJ to meet the 1 mm accuracy threshold.
