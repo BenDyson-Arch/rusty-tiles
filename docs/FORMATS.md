@@ -70,6 +70,8 @@ Use `glb-to-3tz` to wrap a richer model unchanged.
 
 Choose an explicit `--source-crs` when you know the export's reference. These adapters cover Metashape-style exports only. They do not read arbitrary CRS metadata. Float32 degree coordinates may already have lost precision that conversion cannot recover.
 
+Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `name` and `node_index`. Instances with the same name remain separate features; unnamed nodes use `node_<index>`. The option authors new tile content even for small inputs and keeps node boundaries through parent simplification. It may increase primitive counts and metadata size.
+
 ## Point clouds
 
 Local metre XYZ data needs no globe placement and works in the default build:

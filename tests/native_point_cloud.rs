@@ -629,3 +629,170 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
         assert!(!output.exists());
     }
 }
+
+#[test]
+fn metadata_attributes_match_source_tables_through_las_laz_lods() {
+    for suffix in ["las", "laz"] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join(format!("source.{suffix}"));
+        fixture(&input, 257, false, vec![]);
+        for explicit in [false, true] {
+            let output = work.path().join(format!("{explicit}.3tz"));
+            let result = call_mode(
+                &input,
+                &output,
+                &[
+                    "--source-crs",
+                    "local",
+                    "--max-points",
+                    "16",
+                    "--chunk-points",
+                    "11",
+                    "--metadata-attributes",
+                ],
+                explicit,
+            );
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let files: Vec<_> = zip
+                .file_names()
+                .filter(|s| s.ends_with(".glb"))
+                .map(str::to_owned)
+                .collect();
+            assert!(files.len() > 1);
+            for file in files {
+                let glb = Glb::read(&mut zip, &file);
+                let metadata = &glb.doc["extensions"]["EXT_structural_metadata"];
+                let primitive = &glb.doc["meshes"][0]["primitives"][0];
+                assert_eq!(
+                    primitive["extensions"]["EXT_structural_metadata"]["propertyAttributes"],
+                    serde_json::json!([0])
+                );
+                let count = metadata["propertyTables"][0]["count"].as_u64().unwrap() as usize;
+                for (name, width, component) in [
+                    ("classification", 1, 5121),
+                    ("intensity", 2, 5123),
+                    ("return_number", 1, 5121),
+                ] {
+                    let attribute = metadata["propertyAttributes"][0]["properties"][name]
+                        ["attribute"]
+                        .as_str()
+                        .unwrap();
+                    let accessor = &glb.doc["accessors"]
+                        [primitive["attributes"][attribute].as_u64().unwrap() as usize];
+                    assert_eq!(accessor["count"], count);
+                    assert_eq!(accessor["componentType"], component);
+                    assert!(accessor.get("normalized").is_none());
+                    let v = accessor["bufferView"].as_u64().unwrap() as usize;
+                    assert_eq!(glb.doc["bufferViews"][v]["byteStride"], 4);
+                    let data = glb.view(v);
+                    let table = glb.column(name);
+                    for i in 0..count {
+                        assert_eq!(
+                            &data[i * 4..i * 4 + width],
+                            &table[i * width..(i + 1) * width]
+                        );
+                    }
+                }
+            }
+            rusty_tiles::validate::archive(&output, None).unwrap();
+            if suffix == "las" {
+                if let Some(dir) = std::env::var_os("RUSTY_TILES_METADATA_ACCEPTANCE_DIR") {
+                    let dir = std::path::PathBuf::from(dir).join(format!("point-{explicit}"));
+                    std::fs::create_dir_all(&dir).unwrap();
+                    zip.extract(dir).unwrap();
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns() {
+    for (format, returns) in [(0, 6), (3, 7), (6, 14), (8, 15)] {
+        let work = tempfile::tempdir().unwrap();
+        let input = work.path().join("source.las");
+        let mut builder = las::Builder::from((1, 4));
+        builder.point_format = las::point::Format::new(format).unwrap();
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        for i in 0..17 {
+            writer
+                .write_point(las::Point {
+                    x: i as f64,
+                    intensity: 65000 + i,
+                    return_number: returns,
+                    number_of_returns: returns,
+                    classification: las::point::Classification::new(17).unwrap(),
+                    is_synthetic: true,
+                    is_key_point: true,
+                    is_withheld: true,
+                    gps_time: (format != 0).then_some(1.),
+                    color: matches!(format, 3 | 8).then_some(las::Color {
+                        red: 1,
+                        green: 2,
+                        blue: 3,
+                    }),
+                    nir: (format == 8).then_some(4),
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        writer.close().unwrap();
+        let output = work.path().join("cloud.3tz");
+        let result = call_mode(
+            &input,
+            &output,
+            &[
+                "--source-crs",
+                "local",
+                "--max-points",
+                "4",
+                "--metadata-attributes",
+            ],
+            false,
+        );
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let files: Vec<_> = zip
+            .file_names()
+            .filter(|s| s.ends_with(".glb"))
+            .map(str::to_owned)
+            .collect();
+        for file in files {
+            let glb = Glb::read(&mut zip, &file);
+            let primitive = &glb.doc["meshes"][0]["primitives"][0];
+            for (i, id) in glb
+                .column("source_index")
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .enumerate()
+            {
+                let source = u64::from_le_bytes(*id) as u16;
+                for (attribute, expected) in [
+                    ("_CLASSIFICATION", 17),
+                    ("_INTENSITY", 65000 + source),
+                    ("_RETURN_NUMBER", returns as u16),
+                ] {
+                    let accessor = &glb.doc["accessors"]
+                        [primitive["attributes"][attribute].as_u64().unwrap() as usize];
+                    let values = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
+                    let actual = if attribute == "_INTENSITY" {
+                        u16::from_le_bytes(values[i * 4..i * 4 + 2].try_into().unwrap())
+                    } else {
+                        values[i * 4] as u16
+                    };
+                    assert_eq!(actual, expected, "LAS format {format}: {attribute}");
+                }
+            }
+        }
+    }
+}

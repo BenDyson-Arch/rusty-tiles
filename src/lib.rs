@@ -18,6 +18,7 @@ pub mod implicit;
 mod jpeg;
 mod lossless;
 pub mod mesh;
+pub mod metadata;
 mod output;
 pub mod pack;
 pub mod point_cloud;

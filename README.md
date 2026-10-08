@@ -234,6 +234,8 @@ let result = mesh_to_3tz_reported("model.glb".as_ref(), "model.3tz".as_ref(), &M
 println!("wrote {} (archive: {})", result.output.display(), result.archive);
 ```
 
+The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
+
 `ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The library's `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
 
 ## Where to go next

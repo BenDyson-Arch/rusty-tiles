@@ -99,6 +99,19 @@ To retain invented linked quadtree/octree archives, run `RUSTY_TILES_IMPLICIT_FI
 
 Upstream validator 0.6.1 validates native single-content cloud, mesh and vector fixtures with zero errors. Draft vector declarations produce a warning. Its pinned `3d-tiles-tools` 0.5.0 [traverser](https://github.com/CesiumGS/3d-tiles-tools/blob/v0.5.0/src/tilesets/traversal/ImplicitTraversedTile.ts) reads only `root.content.uri`, so stock traversal fails on multiple implicit content templates. For complete multiple-content checks, use `node tests/fixtures/implicit_validator.cjs target/validator/node_modules/3d-tiles-validator PATH/tileset.json --fix-multiple-content-traversal`. This explicitly patches only template selection in that pinned traverser; schema, subtree, metadata and content validators remain unchanged. It reports the workaround and fails on validation errors. Deep mesh and fragmented vector fixtures pass with zero errors under this workaround.
 
+`tests/shared_metadata.rs` checks the public metadata API and node identities through instancing, mesh compression and LODs. `native_point_cloud.rs` checks property attributes against every LAS/LAZ tile's source table. The committed output digests cover unchanged defaults and vector payloads.
+
+For the optional issue #79 browser acceptance, install CesiumJS 1.146.0 and Playwright once, then export the invented fixtures and serve them:
+
+```sh
+npm install --prefix target/metadata-browser --no-save --package-lock=false cesium@1.146.0 playwright
+RUSTY_TILES_METADATA_ACCEPTANCE_DIR=target/metadata-fixtures cargo test --locked --features native-geospatial --test shared_metadata --test native_point_cloud
+cargo run --features native-geospatial -- preview --cesium target/metadata-browser/node_modules/cesium/Build/Cesium \
+  --mesh target/metadata-fixtures/mesh-false-true --point-cloud target/metadata-fixtures/point-false --port 9279
+```
+
+In another terminal, run `NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/shared_metadata.cjs http://127.0.0.1:9279`. The probe uses installed Chromium (`CHROMIUM` overrides its path), picks separately instanced buildings, checks their style colors and picks a point with its original LAS metadata. Both explicit and implicit fixtures, including compressed meshes, pass upstream `3d-tiles-validator` 0.6.1 with zero errors and warnings using the validator command above.
+
 Implicit subtrees have four levels. Regular boundaries use child-subtree availability. Boundaries whose actual boxes exceed their regular cells use standard external tileset roots containing bounded implicit subtrees. This preserves tight bounds, measured errors and picking: Cesium otherwise culls an unloaded subtree using its regular cell, even when later tile metadata enlarges it. The coordinate limit is 31 refinements; coincident point/centroid buckets use deterministic assignment with actual bounds retained.
 
 Doctor, machine results, native diagnostics, preview, force replacement and archive validation now run in Rust. Their inputs are generated locally, and the CLI runs with an empty executable `PATH`. The remaining Python tests use independent readers or frozen converter oracles.
