@@ -26,6 +26,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Changed
 
+- Audited the existing draft vector contract against CesiumJS 1.146.0 and corrected its source references. Output bytes and converter identity are unchanged. Repeatable browser checks document why fragmented fills still need b3dm wrappers, and validation evidence distinguishes unsupported primitive-restart checks from producer errors.
 - JPEG uses the portable Rust encoder by default. System libjpeg-turbo now requires the explicit `native-jpeg` feature; `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` still overrides it for portable builds.
 - README installation starts with prebuilt downloads. A simpler header figure and an invented mesh example make the quick start work with the default build.
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
