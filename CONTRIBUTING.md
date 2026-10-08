@@ -284,10 +284,29 @@ node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --r
 | `vector_compat.cjs` | Native vector rendering, LOD, holes, fragment boundaries, picking and aggregates |
 | `vector_metadata.cjs` | Property styling, visibility, source identity, exact INT64 and missing values |
 | `implicit_levels.cjs` | Deep implicit mesh/cloud traversal across every level and boundary, full leaf counts and picking |
+| `convert_implicit.cjs` | Explicit, converted and fresh implicit cloud/vector refinement, world placement, both-cluster picking, original properties, style and visibility |
 
 Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. Add `--batch`, `--quantize`, `--meshopt-helper PATH` or `--aggregate-points` to match the option under test. `tests/fixtures/vector_metadata.py OUTPUT` builds the metadata cases. Omit `--require-native` to inspect fallback behaviour in older Cesium releases.
 
 For the deep probe, export the invented 24×24 textured grid using `RUSTY_TILES_DIGEST_EXPORT=target/implicit-inputs cargo test --locked --features native-geospatial --test output_digests export_recipes -- --ignored --exact`. Convert its `inputs/mesh.glb` with `--max-triangles 2 --max-bytes 0 --tile-size 64 --cartographic-position-degrees 12.1 41.9 200`. Reconvert the preview fixture's `cloud.las` with `--source-crs header --height-offset 10 --max-points 1`. Extract both archives and serve them with a generated annotations layer. Run `node tests/fixtures/implicit_levels.cjs URL`. Cesium 1.143.0 traverses levels 0–5, retains all 1,152 leaf triangles and 257 points, and picks both. The vector probe also checks contiguous instantiated levels, including routing nodes.
+
+For `convert-to-implicit`, export the native Rust fixtures and prepare separate preview copies. The helper requires a new destination directory; it preserves the exported manifests. Install CesiumJS 1.146.0 and Playwright 1.63.0 for the recorded gate:
+
+```sh
+npm install --prefix target/convert-implicit-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
+RUSTY_TILES_CONVERT_IMPLICIT_FIXTURES=target/convert-implicit-fixtures \
+  LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial --test convert_implicit
+python3 tests/fixtures/prepare_convert_implicit_preview.py \
+  target/convert-implicit-fixtures target/convert-implicit-preview
+rusty-tiles preview --point-cloud target/convert-implicit-preview/point \
+  --annotations target/convert-implicit-preview/vector \
+  --cesium target/convert-implicit-browser/node_modules/cesium/Build/Cesium --port 9386
+# In another terminal:
+NODE_PATH="$PWD/target/convert-implicit-browser/node_modules" \
+  node tests/fixtures/convert_implicit.cjs http://127.0.0.1:9386
+```
+
+[The recorded migration gate](bench/convert_implicit_browser_results.json) passes initial load and a cache-disabled reload. All three cloud variants refine from 2 proxy points to 16 leaf points; vectors reach all 8 points. Both source clusters remain pickable with their original properties, cyan styling and hidden visibility. Georeferenced world positions agree within 0.00001 m, with no page, tile or render errors. The report also records the rejected wrapper design, which left 18 cloud points visible by retaining the parent proxy alongside its descendants. The accepted alias layout preserves payload bytes but duplicates their storage; archive migration eligibility remains the regular point/vector subset documented in the command reference.
 
 ## Check byte-identity
 
