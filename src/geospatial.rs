@@ -168,7 +168,12 @@ impl Crs {
                 c"PROJECTION".as_ptr(),
                 0,
             ));
-            if method == "Lambert_Conformal_Conic_1SP" {
+            if method == "Lambert_Conformal_Conic_1SP"
+                || method == "Lambert Conic Conformal (1SP variant B)"
+            {
+                // Variant B separates the natural and false origins. GDAL
+                // normalizes latitude_of_origin to the natural origin, which
+                // determines the tangent cone and its conditioning.
                 let origin = gdal_sys::OSRGetNormProjParm(
                     self.0.as_ptr(),
                     c"latitude_of_origin".as_ptr(),

@@ -133,7 +133,15 @@ impl PureTransform {
         }
         let target = Proj::from_proj_string("+proj=geocent +datum=WGS84 +units=m")
             .map_err(|error| unsupported(&error.to_string()))?;
-        let source_geographic = if source.projname() == "sterea" {
+        let polar_stereographic = source.projname() == "stere"
+            && definition.split_whitespace().any(|parameter| {
+                parameter
+                    .strip_prefix("+lat_0=")
+                    .is_some_and(|value| finite(value).is_ok_and(|value| value.abs() == 90.))
+            });
+        let source_geographic = if source.projname() == "sterea"
+            || (source.projname() == "stere" && !polar_stereographic)
+        {
             // An unknown target datum deliberately skips datum conversion: this
             // probe checks latitude in the source projection, before any shift.
             let (a, b) = source.ellipse_parameters();
@@ -167,11 +175,15 @@ impl PureTransform {
             if let Some(geographic) = &self.source_geographic {
                 let mut probe = p;
                 proj4rs::transform::transform(&self.source, geographic, &mut probe).map_err(
-                    |error| Error::Data(format!("point {index}: CRS transform failed: {error}")),
+                    |error| unsupported(&format!("point {index}: cannot establish portable stereographic coordinate domain: {error}")),
                 )?;
-                if !probe.1.is_finite() || probe.1.abs() >= 80_f64.to_radians() {
+                if ![probe.0, probe.1, probe.2]
+                    .iter()
+                    .all(|value| value.is_finite())
+                    || probe.1.abs() >= 80_f64.to_radians()
+                {
                     return Err(unsupported(&format!(
-                        "point {index}: oblique stereographic coordinates at or beyond 80 degrees source latitude require native PROJ"
+                        "point {index}: stereographic coordinates at or beyond 80 degrees source latitude require native PROJ"
                     )));
                 }
             }
@@ -404,10 +416,19 @@ fn validate_proj(definition: &str, from_wkt: bool) -> Result<String, Error> {
             .map(|value| finite(value))
             .transpose()?
             .unwrap_or(1.);
-        if origin.abs() == 90. && parallel.abs() != 90. && scale != 1. {
+        if origin.abs() == 90. && params.contains_key("lat_ts") && parallel != origin && scale != 1.
+        {
             return Err(Error::Data(
                 "polar stereographic standard parallel conflicts with non-unit projection scale"
                     .into(),
+            ));
+        }
+        if origin.abs() == 90.
+            && params.contains_key("lat_ts")
+            && (parallel == 0. || origin * parallel < 0.)
+        {
+            return Err(unsupported(
+                "conflicting polar stereographic hemispheres or zero standard parallels require native CRS interpretation",
             ));
         }
     }
@@ -1452,8 +1473,11 @@ mod tests {
     #[test]
     fn conflicting_polar_scales_and_ill_conditioned_conics_are_refused() {
         let mut definitions = Vec::new();
-        for origin in [-90., 90.] {
-            for parallel in [-70., 70.] {
+        for origin in [-90_f64, 90.] {
+            for parallel in [-90., -70., 70., 90.] {
+                if origin == parallel {
+                    continue;
+                }
                 for key in ["k", "k_0"] {
                     for scale in [0.99, 2.] {
                         definitions.push(format!("+proj=stere +lat_0={origin} +lat_ts={parallel} +{key}={scale} +datum=WGS84"));
@@ -1495,6 +1519,7 @@ mod tests {
         for definition in [
             "+proj=stere +lat_0=90 +lat_ts=70 +k=1 +datum=WGS84",
             "+proj=stere +lat_0=-90 +lat_ts=-90 +k_0=0.99 +datum=WGS84",
+            "+proj=stere +lat_0=-90 +k=0.99 +datum=WGS84",
         ] {
             assert!(matches!(
                 Transform::new(definition, 7.),
@@ -1504,51 +1529,219 @@ mod tests {
     }
 
     #[test]
-    fn oblique_stereographic_polar_points_require_native_and_retry_whole_batch() {
-        let definition = "+proj=sterea +lat_0=45 +datum=WGS84";
-        let points = [
-            [0., 0., 123.],
-            [0.9141389405141953, 5290076.530007198, 123.],
-        ];
-        let mut operation = Transform::new(definition, 7.).unwrap();
-        assert!(matches!(operation, Transform::Pure(_)));
-        assert!(matches!(
-            PureTransform::new(definition, 7.)
-                .unwrap()
-                .transform(&points),
-            Err(Error::Environment(_))
-        ));
-        #[cfg(not(feature = "native-geospatial"))]
-        {
-            assert!(matches!(
-                operation.transform(&points),
-                Err(Error::Environment(_))
-            ));
-            assert!(matches!(operation, Transform::Pure(_)));
-        }
-        #[cfg(feature = "native-geospatial")]
-        {
-            use crate::geospatial::{Crs, EcefTransform};
-            let mut expected =
-                EcefTransform::new(Crs::from_definition(definition).unwrap(), Some(7.)).unwrap();
-            for (actual, expected) in operation
-                .transform(&points)
-                .unwrap()
-                .into_iter()
-                .zip(expected.transform(&points).unwrap())
-            {
-                assert_mm(
-                    actual,
-                    expected,
-                    "complete batch after coordinate-dependent fallback",
-                );
+    fn opposite_sign_polar_stereographic_parameters_keep_native_hemisphere() {
+        for origin in [-90_f64, 90.] {
+            for parallel in [-origin, -origin.signum() * 70., 0.] {
+                let definition =
+                    format!("+proj=stere +lat_0={origin} +lat_ts={parallel} +datum=WGS84");
+                assert!(matches!(
+                    PureTransform::new(&definition, 7.),
+                    Err(Error::Environment(_))
+                ));
+                #[cfg(not(feature = "native-geospatial"))]
+                assert!(matches!(
+                    Transform::new(&definition, 7.),
+                    Err(Error::Environment(_))
+                ));
+                #[cfg(feature = "native-geospatial")]
+                {
+                    let mut operation = Transform::new(&definition, 7.).unwrap();
+                    assert!(matches!(operation, Transform::Native(_)));
+                    assert_mm(
+                        operation.transform(&[[0., 0., 123.]]).unwrap()[0],
+                        geodetic_to_ecef(Cartographic::new(
+                            0.,
+                            if parallel < 0. { -90. } else { 90. },
+                            130.,
+                        )),
+                        "native polar hemisphere at analytic origin",
+                    );
+                }
             }
-            assert!(matches!(operation, Transform::Native(_)));
-            assert_mm(
-                operation.transform(&points[..1]).unwrap()[0],
-                geodetic_to_ecef(Cartographic::new(0., 45., 130.)),
-                "subsequent native batch at analytic origin",
+        }
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn native_lcc_variant_b_checks_natural_origin_instead_of_false_origin() {
+        use crate::geospatial::Crs;
+        for latitude in [-33., -0.1, -1e-8, 1e-8, 0.1, 33.] {
+            let definition = format!("+proj=lcc +lat_1=\"{latitude}\" +lat_0=5 +datum=WGS84");
+            let source = Crs::from_definition(&definition).unwrap();
+            assert_eq!(source.conic_parallels(), Some((latitude, latitude)));
+            for definition in [definition, source.wkt().unwrap()] {
+                if latitude.abs() < 0.5 {
+                    assert!(
+                        matches!(Transform::new(&definition, 7.), Err(Error::Data(_))),
+                        "{definition}"
+                    );
+                } else {
+                    let mut operation = Transform::new(&definition, 7.).unwrap();
+                    assert!(matches!(operation, Transform::Native(_)));
+                    assert_mm(
+                        operation.transform(&[[0., 0., 123.]]).unwrap()[0],
+                        geodetic_to_ecef(Cartographic::new(0., 5., 130.)),
+                        "well-conditioned variant B at analytic false origin",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stereographic_polar_points_and_failed_probes_retry_whole_batch() {
+        let mut cases = vec![
+            (
+                "+proj=sterea +lat_0=45 +datum=WGS84".to_owned(),
+                [0.9141389405141953, 5290076.530007198, 123.],
+            ),
+            (
+                "+proj=sterea +lat_0=79.999999 +ellps=airy +towgs84=12,-34,56".to_owned(),
+                [0.00112530269295305, 1119554.6907156024, 123.],
+            ),
+            (
+                "+proj=sterea +lat_0=-79.999999 +ellps=airy +towgs84=12,-34,56".to_owned(),
+                [0.00112530269295305, -1119554.6907156024, 123.],
+            ),
+        ];
+        for origin in [-75_f64, 75.] {
+            let point = [0., origin.signum() * 1685039.1152903102, 123.];
+            cases.push((format!("+proj=stere +lat_0={origin} +datum=WGS84"), point));
+            cases.extend(
+                projection_wkts("Stereographic", "Stereographic", origin, 0., None)
+                    .map(|definition| (definition, point)),
             );
+        }
+        for (definition, polar_point) in cases {
+            let points = [[0., 0., 123.], polar_point];
+            // Fresh transforms per case and order: an earlier fallback must not
+            // mask a failed probe or a portable point-domain violation.
+            for points in [points, [polar_point, points[0]]] {
+                let mut operation = Transform::new(&definition, 7.).unwrap();
+                assert!(matches!(operation, Transform::Pure(_)), "{definition}");
+                assert!(
+                    matches!(
+                        PureTransform::new(&definition, 7.)
+                            .unwrap()
+                            .transform(&points),
+                        Err(Error::Environment(_))
+                    ),
+                    "{definition}"
+                );
+                #[cfg(not(feature = "native-geospatial"))]
+                {
+                    assert!(matches!(
+                        operation.transform(&points),
+                        Err(Error::Environment(_))
+                    ));
+                    assert!(matches!(operation, Transform::Pure(_)));
+                }
+                #[cfg(feature = "native-geospatial")]
+                {
+                    use crate::geospatial::{Crs, EcefTransform};
+                    let mut expected =
+                        EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                            .unwrap();
+                    for (actual, expected) in operation
+                        .transform(&points)
+                        .unwrap()
+                        .into_iter()
+                        .zip(expected.transform(&points).unwrap())
+                    {
+                        assert_mm(actual, expected, &definition);
+                    }
+                    assert!(matches!(operation, Transform::Native(_)));
+                    let subsequent = [[0., 0., 123.]];
+                    assert_mm(
+                        operation.transform(&subsequent).unwrap()[0],
+                        expected.transform(&subsequent).unwrap()[0],
+                        "subsequent native batch",
+                    );
+                }
+            }
+            // Also exercise the point alone, before any successful fallback.
+            let mut invalid = Transform::new(&definition, 7.).unwrap();
+            assert!(matches!(
+                invalid.transform(&[[f64::NAN, 0., 123.]]),
+                Err(Error::Data(_))
+            ));
+            assert!(matches!(invalid, Transform::Pure(_)));
+            let mut operation = Transform::new(&definition, 7.).unwrap();
+            let result = operation.transform(&[polar_point]);
+            #[cfg(not(feature = "native-geospatial"))]
+            assert!(matches!(result, Err(Error::Environment(_))));
+            #[cfg(feature = "native-geospatial")]
+            {
+                use crate::geospatial::{Crs, EcefTransform};
+                let expected =
+                    EcefTransform::new(Crs::from_definition(&definition).unwrap(), Some(7.))
+                        .unwrap()
+                        .transform(&[polar_point])
+                        .unwrap()[0];
+                assert_mm(
+                    result.unwrap()[0],
+                    expected,
+                    "fresh transform at polar point",
+                );
+                assert!(matches!(operation, Transform::Native(_)));
+            }
+        }
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn stereographic_coordinate_matrix_uses_fresh_transforms_per_point() {
+        use crate::geospatial::{Crs, EcefTransform, StrictTransform};
+        for projection in ["stere", "sterea"] {
+            for origin in [-79.999999, -75., -45., 0., 45., 75., 79.999999] {
+                for datum in ["+datum=WGS84", "+ellps=airy +towgs84=12,-34,56"] {
+                    let definition =
+                        format!("+proj={projection} +lat_0={origin} +lon_0=10 {datum}");
+                    let source = Crs::from_definition(&definition).unwrap();
+                    let geographic =
+                        Crs::from_definition(&format!("+proj=longlat {datum}")).unwrap();
+                    let mut forward = StrictTransform::new(&geographic, &source).unwrap();
+                    let mut expected = EcefTransform::new(source, Some(7.)).unwrap();
+                    for latitude in [
+                        -89.99999_f64,
+                        -85.,
+                        -80.,
+                        -79.999999,
+                        -75.,
+                        -45.,
+                        0.,
+                        45.,
+                        75.,
+                        79.999999,
+                        80.,
+                        85.,
+                        89.99999,
+                    ] {
+                        for longitude in [-45., 10., 45.] {
+                            let point =
+                                forward.transform(&[[longitude, latitude, 123.]]).unwrap()[0];
+                            let mut operation = Transform::new(&definition, 7.).unwrap();
+                            let result = operation.transform(&[point]).unwrap();
+                            assert_mm(
+                                result[0],
+                                expected.transform(&[point]).unwrap()[0],
+                                &format!("{definition}: {longitude}, {latitude}"),
+                            );
+                            if latitude.abs() > 80. {
+                                assert!(
+                                    matches!(operation, Transform::Native(_)),
+                                    "{definition}: {latitude}"
+                                );
+                            } else if latitude.abs() < 80. - 1e-6 {
+                                assert!(
+                                    matches!(operation, Transform::Pure(_)),
+                                    "{definition}: {latitude}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1633,7 +1826,7 @@ mod tests {
             // moving toward the equator from the projection origin.
             let points = [
                 [0., 0., 123.],
-                [200000., 567890., 123.],
+                [200000., if origin < 0. { 567890. } else { -567890. }, 123.],
                 [
                     3000000.,
                     if origin < 0. { 3000000. } else { -3000000. },
@@ -1659,6 +1852,7 @@ mod tests {
             {
                 assert_mm(actual, expected, &definition);
             }
+            assert!(matches!(operation, Transform::Pure(_)), "{definition}");
         }
     }
 
