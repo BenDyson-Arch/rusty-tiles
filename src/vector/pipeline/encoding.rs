@@ -92,12 +92,12 @@ fn emit(
                     Geometry::MultiPolygon(p) => p.iter().collect(),
                     _ => unreachable!(),
                 };
-                for rings in polygons {
+                for (index, rings) in polygons.into_iter().enumerate() {
                     let local: Vec<Vec<_>> = rings
                         .iter()
                         .map(|r| r.iter().map(|p| sub(*p, center)).collect())
                         .collect();
-                    let polygon = geometry::polygon(&local, repair)?;
+                    let polygon = geometry::polygon_for(feature, &local, index, center, repair)?;
                     let mut report = polygon.report.clone();
                     report["sourceId"] = feature.source_id().clone();
                     reports.push(report);
@@ -551,6 +551,7 @@ mod tests {
     #[test]
     fn float64_metadata_checks_original_signed_and_unsigned_integer_bounds() {
         let feature = |value| Feature {
+            intrinsic: None,
             properties: BTreeMap::from([
                 ("_source_id".into(), json!("0")),
                 ("value".into(), value),

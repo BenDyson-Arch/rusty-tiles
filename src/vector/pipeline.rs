@@ -13,7 +13,7 @@ mod source;
 mod store;
 
 use super::{
-    model::{Feature, Frame, Geometry, Point},
+    model::{Feature, Frame, Geometry, IntrinsicGeometry, Point},
     VectorOptions,
 };
 use crate::vec3::{add, dot, mul, norm, sub, y_up_to_z_up as zup};

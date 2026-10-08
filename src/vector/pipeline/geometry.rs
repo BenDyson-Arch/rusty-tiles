@@ -78,36 +78,107 @@ impl Plane {
     }
 }
 
+fn intrinsic_chart(rings: &[Vec<Point>], geographic: bool) -> Vec<Vec<Point>> {
+    let scale = if geographic {
+        6378137. * std::f64::consts::PI / 180.
+    } else {
+        1.
+    };
+    let origin = rings[0][0];
+    rings
+        .iter()
+        .map(|r| {
+            r.iter()
+                .map(|p| [(p[0] - origin[0]) * scale, (p[1] - origin[1]) * scale, 0.])
+                .collect()
+        })
+        .collect()
+}
+
 pub(super) struct Polygon {
     pub positions: Vec<Point>,
+    pub source_positions: Option<Vec<Point>>,
     pub indices: Vec<u32>,
     pub loops: Vec<u32>,
     pub triangle_offsets: Vec<u32>,
     pub loop_offsets: Vec<u32>,
     pub report: Value,
 }
+#[cfg(test)]
 pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Error> {
+    polygon_in_chart(rings, None, repair)
+}
+
+pub(super) fn polygon_for(
+    feature: &Feature,
+    rings: &[Vec<Point>],
+    index: usize,
+    center: Point,
+    repair: bool,
+) -> Result<Polygon, Error> {
+    let chart = feature
+        .intrinsic
+        .as_ref()
+        .map(|intrinsic| {
+            intrinsic
+                .rings(index)
+                .map(|rings| {
+                    (
+                        rings,
+                        intrinsic.geographic,
+                        sub(intrinsic.earth_center, center),
+                    )
+                })
+                .ok_or_else(|| data("intrinsic polygon correspondence was lost"))
+        })
+        .transpose()?;
+    polygon_in_chart(rings, chart, repair)
+}
+
+fn polygon_in_chart(
+    rings: &[Vec<Point>],
+    chart: Option<(&[Vec<Point>], bool, Point)>,
+    repair: bool,
+) -> Result<Polygon, Error> {
     if rings.is_empty() || rings.iter().any(|r| opened(r).len() < 3) {
         return Err(data("polygon rings need three distinct vertices"));
     }
     let rings: Vec<Vec<_>> = rings.iter().map(|r| opened(r).to_vec()).collect();
     let plane = Plane::fit(&rings[0])?;
     let deviation = plane.deviation(&rings);
-    let projected: Vec<Vec<_>> = rings
-        .iter()
-        .map(|r| r.iter().map(|p| plane.project(*p)).collect())
-        .collect();
+    let source_rings =
+        chart.map(|(rings, _, _)| rings.iter().map(|r| opened(r).to_vec()).collect::<Vec<_>>());
+    if source_rings.as_ref().is_some_and(|source| {
+        source.len() != rings.len() || source.iter().zip(&rings).any(|(a, b)| a.len() != b.len())
+    }) {
+        return Err(data("intrinsic polygon vertex correspondence was lost"));
+    }
+    let projected: Vec<Vec<_>> = if let Some(source) = &source_rings {
+        // Uniform metre scale preserves source XY topology. In particular,
+        // retain the source longitude chart verbatim: shortest-edge unwrapping
+        // would change the declared Cartesian interpolation of its edges.
+        intrinsic_chart(source, chart.unwrap().1)
+    } else {
+        rings
+            .iter()
+            .map(|r| r.iter().map(|p| plane.project(*p)).collect())
+            .collect()
+    };
     let mut positions = Vec::new();
+    let mut source_positions = source_rings.as_ref().map(|_| Vec::new());
     let mut lookup = BTreeMap::new();
     let mut segments = Vec::new();
     let mut duplicates = 0;
-    for (ring, xy) in rings.iter().zip(&projected) {
+    for (ring_index, (ring, xy)) in rings.iter().zip(&projected).enumerate() {
         for i in 0..ring.len() {
             let q = xy[i];
             let k = key(q);
             if let std::collections::btree_map::Entry::Vacant(e) = lookup.entry(k) {
                 e.insert(positions.len() as u32);
                 positions.push(ring[i]);
+                if let Some(points) = &mut source_positions {
+                    points.push(source_rings.as_ref().unwrap()[ring_index][i]);
+                }
             } else {
                 duplicates += 1;
                 if !repair {
@@ -121,6 +192,12 @@ pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Err
                 xy[(i + 1) % xy.len()],
                 ring[i],
                 ring[(i + 1) % ring.len()],
+                source_rings.as_ref().map_or(ring[i], |r| r[ring_index][i]),
+                source_rings
+                    .as_ref()
+                    .map_or(ring[(i + 1) % ring.len()], |r| {
+                        r[ring_index][(i + 1) % ring.len()]
+                    }),
             ));
         }
     }
@@ -146,31 +223,35 @@ pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Err
         }
         let candidates: Vec<_> = segments
             .iter()
-            .map(|(a, b, p, r)| {
+            .map(|(a, b, p, r, source_a, source_b)| {
                 let ab = sub(*b, *a);
                 let t = (dot(sub(q, *a), ab) / dot(ab, ab).max(1e-30)).clamp(0., 1.);
                 (
                     norm(sub(add(*a, mul(ab, t)), q)),
                     add(*p, mul(sub(*r, *p), t)),
+                    add(*source_a, mul(sub(*source_b, *source_a), t)),
                 )
             })
             .collect();
         let closest = candidates
             .iter()
-            .map(|(d, _)| *d)
+            .map(|(d, _, _)| *d)
             .fold(f64::INFINITY, f64::min);
         if closest > 1e-6 {
             return Err(data("triangulator added a point away from source edges"));
         }
         let hits: Vec<_> = candidates
             .iter()
-            .filter(|(d, _)| *d < 1e-8f64.max(closest + 1e-9))
-            .map(|(_, p)| *p)
+            .filter(|(d, _, _)| *d < 1e-8f64.max(closest + 1e-9))
+            .map(|(_, p, source)| (*p, *source))
             .collect();
-        let point = hits
+        let point = hits.iter().fold([0.; 3], |sum, (p, _)| {
+            add(sum, mul(*p, 1. / hits.len() as f64))
+        });
+        let adjustment = hits
             .iter()
-            .fold([0.; 3], |sum, p| add(sum, mul(*p, 1. / hits.len() as f64)));
-        let adjustment = hits.iter().map(|p| norm(sub(*p, point))).fold(0., f64::max);
+            .map(|(p, _)| norm(sub(*p, point)))
+            .fold(0., f64::max);
         spread = spread.max(adjustment);
         if adjustment > 0.02 {
             return Err(outline(
@@ -180,6 +261,11 @@ pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Err
         let index = positions.len() as u32;
         lookup.insert(k, index);
         positions.push(point);
+        if let Some(points) = &mut source_positions {
+            points.push(hits.iter().fold([0.; 3], |sum, (_, p)| {
+                add(sum, mul(*p, 1. / hits.len() as f64))
+            }));
+        }
         added += 1;
         Ok(index)
     };
@@ -228,17 +314,72 @@ pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Err
             indices.extend(tri);
         }
     }
+    let mut collapsed_pole_triangles = 0;
+    if let Some((_, true, earth_center)) = chart {
+        let mut filled = Vec::new();
+        let mut offset = 0;
+        for (index, source_tri) in indices.as_chunks::<3>().0.iter().enumerate() {
+            while offset < triangle_offsets.len() && triangle_offsets[offset] == (index * 3) as u32
+            {
+                triangle_offsets[offset] = filled.len() as u32;
+                offset += 1;
+            }
+            let mut tri = *source_tri;
+            let [a, b, c] = [
+                positions[tri[0] as usize],
+                positions[tri[1] as usize],
+                positions[tri[2] as usize],
+            ];
+            let source = source_positions.as_ref().unwrap();
+            let pole_or_seam = (0..3).any(|i| {
+                let p = source[tri[i] as usize];
+                let q = source[tri[(i + 1) % 3] as usize];
+                let pole = (p[1].abs() - 90.).abs() < 1e-10 && (p[1] - q[1]).abs() < 1e-10;
+                let seam = (p[0] - q[0]).abs() > 359.9999999999
+                    && ((p[0] - q[0]).abs() - 360.).abs() < 1e-10
+                    && p[1] == q[1];
+                p[2] == q[2]
+                    && (pole || seam)
+                    && norm(sub(
+                        positions[tri[i] as usize],
+                        positions[tri[(i + 1) % 3] as usize],
+                    )) < 1e-6
+            });
+            if pole_or_seam {
+                // A chart face with equivalent pole/seam vertices has no
+                // physical filled area. Retain every source vertex in boundary
+                // loops, but do not turn this zero-area face into a fragment.
+                collapsed_pole_triangles += 1;
+                continue;
+            }
+            let ab = sub(b, a);
+            let ac = sub(c, a);
+            let normal = [
+                ab[1] * ac[2] - ab[2] * ac[1],
+                ab[2] * ac[0] - ab[0] * ac[2],
+                ab[0] * ac[1] - ab[1] * ac[0],
+            ];
+            if dot(normal, sub(mul(add(add(a, b), c), 1. / 3.), earth_center)) < 0. {
+                tri.reverse();
+            }
+            filled.extend(tri);
+        }
+        indices = filled;
+    }
+
     loops.pop();
     if indices.is_empty() {
         return Err(data("polygon produced no triangles"));
     }
     Ok(Polygon {
         positions,
+        source_positions,
         indices,
         loops,
         triangle_offsets,
         loop_offsets,
         report: json!({"planarityDeviationMetres":deviation,"topologyRepaired":!valid,
+        "triangulationSpace":if chart.is_some(){"intrinsic source XY"}else{"best-fit 3D"},"collapsedPoleTriangles":collapsed_pole_triangles,
         "duplicateVertices":duplicates,"addedIntersectionVertices":added,"maximumIntersectionAdjustmentMetres":spread,"polygonParts":parts.len()}),
     })
 }
@@ -254,8 +395,8 @@ pub(super) fn validate(
         _ => Vec::new(),
     };
     let mut reports = Vec::new();
-    for rings in &polygons {
-        if let Err(error) = polygon(rings, repair) {
+    for (index, rings) in polygons.iter().enumerate() {
+        if let Err(error) = polygon_for(feature, rings, index, [0.; 3], repair) {
             if !ambiguous || !is_outline(&error) {
                 return Err(error);
             }
@@ -266,6 +407,7 @@ pub(super) fn validate(
     if !reports.is_empty() {
         feature.geometry =
             Geometry::MultiLineString(polygons.iter().flat_map(|r| r.iter().cloned()).collect());
+        feature.intrinsic = None;
     }
     if feature.geometry.paths().iter().any(|p| {
         p.is_empty()
@@ -399,6 +541,45 @@ fn simplify_polygon(
     }
     Ok((candidates, error + 2. * deviation, None))
 }
+/// RDP retains original vertices in ring order. Carry the matching source
+/// positions with them so validation and later encoding use the same chart.
+fn retain_intrinsic(
+    original: &[Vec<Point>],
+    source: &[Vec<Point>],
+    candidate: &[Vec<Point>],
+) -> Result<Vec<Vec<Point>>, Error> {
+    if original.len() != source.len() || original.len() != candidate.len() {
+        return Err(data("intrinsic ring correspondence was lost"));
+    }
+    original
+        .iter()
+        .zip(source)
+        .zip(candidate)
+        .map(|((original, source), candidate)| {
+            let original = opened(original);
+            let source = opened(source);
+            if original.len() != source.len() {
+                return Err(data("intrinsic vertex correspondence was lost"));
+            }
+            let mut from = 0;
+            let mut result = Vec::new();
+            for point in opened(candidate) {
+                let index = original[from..]
+                    .iter()
+                    .position(|p| p == point)
+                    .map(|i| from + i)
+                    .ok_or_else(|| data("simplification introduced an unmatched source vertex"))?;
+                result.push(source[index]);
+                from = index + 1;
+            }
+            if candidate.first() == candidate.last() {
+                result.push(result[0]);
+            }
+            Ok(result)
+        })
+        .collect()
+}
+
 pub(super) fn simplify(
     feature: &Feature,
     tolerance: f64,
@@ -429,10 +610,36 @@ pub(super) fn simplify(
                 Geometry::MultiPolygon(p) => p.iter_mut().collect(),
                 _ => unreachable!(),
             };
-            for rings in polygons {
-                let (s, e, reason) = simplify_polygon(rings, tolerance, locked)?;
-                *rings = s;
-                error = error.max(e);
+            for (index, rings) in polygons.into_iter().enumerate() {
+                let (candidate, e, mut reason) = simplify_polygon(rings, tolerance, locked)?;
+                let mut source_candidate = None;
+                if candidate != *rings {
+                    if let Some(intrinsic) = &result.intrinsic {
+                        let source = intrinsic
+                            .rings(index)
+                            .ok_or_else(|| data("intrinsic polygon correspondence was lost"))?;
+                        let retained = retain_intrinsic(rings, source, &candidate)?;
+                        let chart = intrinsic_chart(&retained, intrinsic.geographic);
+                        let shape = GeometryHandle::polygon(&chart)?;
+                        if !shape.valid() || shape.area() <= 0. {
+                            reason = Some("simplification would change intrinsic source topology");
+                        } else {
+                            source_candidate = Some(retained);
+                        }
+                    }
+                }
+                if reason != Some("simplification would change intrinsic source topology") {
+                    *rings = candidate;
+                    error = error.max(e);
+                    if let Some(source_candidate) = source_candidate {
+                        let intrinsic = result.intrinsic.as_mut().unwrap();
+                        match &mut intrinsic.geometry {
+                            Geometry::Polygon(rings) => *rings = source_candidate,
+                            Geometry::MultiPolygon(polygons) => polygons[index] = source_candidate,
+                            _ => return Err(data("intrinsic polygon correspondence was lost")),
+                        }
+                    }
+                }
                 if let Some(reason) = reason {
                     fallback |= reason != "nonplanar polygon retained";
                     reports.push(json!({"sourceId":feature.source_id(),"reason":reason}));
@@ -483,6 +690,7 @@ pub(super) fn simplify(
             }
             result = feature.clone();
             result.geometry = Geometry::MultiLineString(outlines);
+            result.intrinsic = None;
             reports.push(json!({"sourceId":feature.source_id(),"sourceLayer":feature.layer(),"reason":"parent polygon replaced by bounded source outline",
                 "substitution":"parentOutline","sourceGeometry":if matches!(feature.geometry,Geometry::Polygon(_)){"Polygon"}else{"MultiPolygon"},
                 "geometryErrorMetres":bound,"toleranceMetres":tolerance,"retainedSharedVertices":locked.len()}));
@@ -763,3 +971,6 @@ mod tests {
         assert!(error <= 6.);
     }
 }
+
+#[cfg(test)]
+mod countries_tests;

@@ -168,6 +168,7 @@ impl Reader {
                     .map(Crs::wkt)
                     .transpose()?
                     .map_or(Value::Null, Value::String);
+                let polygon_units = source.as_ref().and_then(Crs::polygon_units);
                 let mut transform = source
                     .map(|source| {
                         EcefTransform::new(
@@ -315,6 +316,7 @@ impl Reader {
                                 properties.insert(key.clone(), value);
                             }
                         }
+                        let mut intrinsic = IntrinsicGeometry::capture(&geometry, polygon_units)?;
                         let points: Vec<_> = geometry.points().copied().collect();
                         if !points.iter().flatten().all(|p| p.is_finite()) {
                             return Err(data("coordinates must be finite XYZ"));
@@ -350,6 +352,9 @@ impl Reader {
                             });
                         }
                         let frame = self.frame.as_ref().unwrap();
+                        if let Some(intrinsic) = &mut intrinsic {
+                            intrinsic.earth_center = frame.project([0.; 3]);
+                        }
                         let mut iter = points.into_iter();
                         geometry.map(|_| frame.project(iter.next().unwrap()));
                         properties.insert("_source_id".into(), json!(id));
@@ -357,6 +362,7 @@ impl Reader {
                         accept(Feature {
                             properties,
                             geometry,
+                            intrinsic,
                             surface_fragment: false,
                             triangle_boundaries: Vec::new(),
                             fragment_path: String::new(),

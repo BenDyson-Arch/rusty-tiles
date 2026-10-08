@@ -63,6 +63,7 @@ pub(super) fn collect(
                     return Ok(Outcome::Rejected("pointAggregationBudget"));
                 }
                 let aggregate = Feature {
+                    intrinsic: None,
                     geometry: Geometry::Point(*point),
                     properties: BTreeMap::from([
                         ("aggregation".into(), json!("voxel")),

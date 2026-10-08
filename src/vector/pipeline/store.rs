@@ -98,38 +98,63 @@ fn split(
             }
             let mut f = feature.clone();
             f.geometry = Geometry::Polygon(p[0].clone());
+            if let Some(intrinsic) = &mut f.intrinsic {
+                let Geometry::MultiPolygon(source) = &intrinsic.geometry else {
+                    return Err(data("intrinsic polygon correspondence was lost"));
+                };
+                intrinsic.geometry = Geometry::Polygon(source[0].clone());
+            }
             return split(&f, repair, counters, reports);
         }
         Geometry::Polygon(rings) => {
-            let polygon = geometry::polygon(rings, repair)?;
+            let polygon = geometry::polygon_for(feature, rings, 0, [0.; 3], repair)?;
             let triangles = polygon.indices.as_chunks::<3>().0.to_vec();
             if triangles.len() <= 1 {
                 return Err(data("one triangle or its metadata exceeds tile budget"));
             }
-            let mut edges = BTreeMap::new();
-            for tri in &triangles {
-                for i in 0..3 {
-                    let mut pair = [tri[i], tri[(i + 1) % 3]];
+            // Boundary ownership comes from the source loops, not triangle
+            // incidence. Dropping a zero-area seam face must not expose its
+            // interior edges or lose its original (collapsed) boundary edge.
+            let mut edges = BTreeSet::new();
+            for ring in polygon.loops.split(|i| *i == u32::MAX) {
+                for i in 0..ring.len() {
+                    let mut pair = [ring[i], ring[(i + 1) % ring.len()]];
                     pair.sort();
-                    *edges.entry(pair).or_insert(0) += 1;
+                    edges.insert(pair);
                 }
             }
+            let mut represented = BTreeSet::new();
             let mut parts = Vec::new();
             let mut boundaries = Vec::new();
+            let mut source_parts = Vec::new();
             for tri in triangles {
                 let points: Vec<_> = tri.iter().map(|i| polygon.positions[*i as usize]).collect();
                 let mut ring = points.clone();
                 ring.push(points[0]);
                 parts.push(vec![ring]);
+                if let Some(source) = &polygon.source_positions {
+                    let mut source_ring: Vec<_> = tri.iter().map(|i| source[*i as usize]).collect();
+                    source_ring.push(source_ring[0]);
+                    source_parts.push(vec![source_ring]);
+                }
                 boundaries.push(
                     (0..3)
                         .filter_map(|i| {
                             let mut pair = [tri[i], tri[(i + 1) % 3]];
                             pair.sort();
-                            (edges[&pair] == 1).then(|| vec![points[i], points[(i + 1) % 3]])
+                            edges.contains(&pair).then(|| {
+                                represented.insert(pair);
+                                vec![points[i], points[(i + 1) % 3]]
+                            })
                         })
                         .collect::<Vec<_>>(),
                 );
+            }
+            for pair in edges.difference(&represented) {
+                boundaries[0].push(vec![
+                    polygon.positions[pair[0] as usize],
+                    polygon.positions[pair[1] as usize],
+                ]);
             }
             counters.fragmented_polygons += 1;
             let mut report = polygon.report;
@@ -143,6 +168,9 @@ fn split(
                 .map(|(a, b)| {
                     let mut f = feature.clone();
                     f.geometry = Geometry::MultiPolygon(parts[a..b].to_vec());
+                    if let Some(intrinsic) = &mut f.intrinsic {
+                        intrinsic.geometry = Geometry::MultiPolygon(source_parts[a..b].to_vec());
+                    }
                     f.surface_fragment = true;
                     f.triangle_boundaries = boundaries[a..b].to_vec();
                     f
@@ -155,9 +183,20 @@ fn split(
     }
     let mut parts: Vec<_> = geometries
         .into_iter()
-        .map(|geometry| {
+        .enumerate()
+        .map(|(index, geometry)| {
             let mut f = feature.clone();
             f.geometry = geometry;
+            if let Some(intrinsic) = &mut f.intrinsic {
+                if let Geometry::MultiPolygon(source) = &intrinsic.geometry {
+                    let middle = source.len() / 2;
+                    intrinsic.geometry = Geometry::MultiPolygon(if index == 0 {
+                        source[..middle].to_vec()
+                    } else {
+                        source[middle..].to_vec()
+                    });
+                }
+            }
             f
         })
         .collect();
@@ -206,7 +245,7 @@ impl Spool<'_> {
     }
 }
 fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Error> {
-    let (lo, hi) = bounds(feature.geometry.points())?;
+    let (lo, hi) = bounds(feature.rendered_points())?;
     let center = mul(add(lo, hi), 0.5);
     let bytes = canonical(feature)?;
     let data = String::from_utf8(bytes).unwrap();
@@ -214,7 +253,7 @@ fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Erro
         params![path,data,feature.geometry.size() as i64,feature.estimate() as i64,center[0],center[1],center[2],lo[0],lo[1],lo[2],hi[0],hi[1],hi[2],format!("{}\0{}\0{}",feature.layer(),feature.source_id().as_str().unwrap(),feature.fragment_path)]).map_err(sql)?;
     let owner = db.last_insert_rowid();
     let mut vertex=db.prepare_cached("INSERT INTO vertices(x,y,z,owner) VALUES(?1,?2,?3,?4) ON CONFLICT(x,y,z) DO UPDATE SET shared=shared OR owner!=excluded.owner").map_err(sql)?;
-    for point in feature.geometry.points() {
+    for point in feature.rendered_points() {
         vertex
             .execute(params![point[0], point[1], point[2], owner])
             .map_err(sql)?;
@@ -832,4 +871,101 @@ pub(super) fn convert(
         report["tiling"] = json!("implicit");
     }
     crate::output::write_report(output, report, true)
+}
+
+#[cfg(test)]
+mod countries_fragment_tests {
+    use super::*;
+
+    #[test]
+    fn source_boundaries_outside_a_fill_triangle_enter_spool_bounds() {
+        let mut feature: Feature = serde_json::from_value(json!({"properties":{"_source_id":"1","_source_layer":"polar"},"geometry":{"type":"Polygon","coordinates":[[[0.,0.,0.],[1.,0.,0.],[0.,1.,0.],[0.,0.,0.]]]}})).unwrap();
+        let before = feature.estimate();
+        feature.triangle_boundaries = vec![vec![vec![[10., 20., 30.], [11., 21., 31.]]]];
+        assert_eq!(feature.estimate(), before + 64);
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
+        insert_row(&db, &feature, "").unwrap();
+        let high: Point = db
+            .query_row("SELECT hx,hy,hz FROM features", [], |r| {
+                Ok([r.get(0)?, r.get(1)?, r.get(2)?])
+            })
+            .unwrap();
+        assert_eq!(high, [11., 21., 31.]);
+    }
+
+    #[test]
+    fn collapsed_polar_face_keeps_source_boundaries_and_expands_fragment_bounds() {
+        let source = Geometry::Polygon(vec![vec![
+            [-180., -90., 0.],
+            [-180., -80., 0.],
+            [0., -70., 0.],
+            [180., -80., 0.],
+            [180., -90., 0.],
+            [-180., -90., 0.],
+        ]]);
+        let intrinsic = IntrinsicGeometry::capture(&source, Some((true, 1.))).unwrap();
+        let mut geometry = source;
+        geometry.map(|p| {
+            crate::georef::geodetic_to_ecef(crate::georef::Cartographic::new(p[0], p[1], p[2]))
+        });
+        let feature = Feature {
+            properties: BTreeMap::from([
+                ("_source_id".into(), json!("polar")),
+                ("_source_layer".into(), json!("test")),
+            ]),
+            geometry,
+            intrinsic,
+            surface_fragment: false,
+            triangle_boundaries: vec![],
+            fragment_path: String::new(),
+        };
+        let Geometry::Polygon(rings) = &feature.geometry else {
+            unreachable!()
+        };
+        let mesh = geometry::polygon_for(&feature, rings, 0, [0.; 3], false).unwrap();
+        assert_eq!(mesh.report["collapsedPoleTriangles"], 1);
+        let edge = |a: Point, b: Point| {
+            let mut pair = [key(a), key(b)];
+            pair.sort();
+            pair
+        };
+        let expected: BTreeSet<_> = mesh
+            .loops
+            .split(|i| *i == u32::MAX)
+            .flat_map(|ring| {
+                (0..ring.len()).map(|i| {
+                    edge(
+                        mesh.positions[ring[i] as usize],
+                        mesh.positions[ring[(i + 1) % ring.len()] as usize],
+                    )
+                })
+            })
+            .collect();
+        let temp = tempfile::tempfile().unwrap();
+        let mut reports = Reports {
+            file: temp,
+            first: vec![],
+            count: 0,
+        };
+        let parts = split(&feature, false, &mut Counters::default(), &mut reports).unwrap();
+        let actual: BTreeSet<_> = parts
+            .iter()
+            .flat_map(|f| f.triangle_boundaries.iter().flatten())
+            .map(|line| edge(line[0], line[1]))
+            .collect();
+        assert_eq!(
+            actual, expected,
+            "fragmentation must not introduce internal meridian outlines"
+        );
+        for part in parts {
+            let (lo, hi) = bounds(part.rendered_points()).unwrap();
+            for point in part.triangle_boundaries.iter().flatten().flatten() {
+                for axis in 0..3 {
+                    assert!(point[axis] >= lo[axis] && point[axis] <= hi[axis]);
+                }
+            }
+            assert!(part.estimate() >= part.rendered_points().count() * 32);
+        }
+    }
 }

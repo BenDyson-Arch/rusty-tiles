@@ -41,12 +41,9 @@ const ENCODER_PREFIX: &str = "rusty-tiles-native-vector-v1:";
 #[cfg(not(feature = "native-geospatial"))]
 const ENCODER_PREFIX: &str = "rusty-tiles-portable-vector-v1:";
 
-fn encoder(explicit: bool) -> String {
-    if explicit && cfg!(feature = "native-geospatial") {
-        // The pre-implicit encoder's reviewed source/dependency fingerprint.
-        // Explicit geometry and manifests retain their established byte identity.
-        return "rusty-tiles-native-vector-v1:f5b4dd47a99e1274bb67b96476fb3e18afc0b40b0a551708a1e986ca7644881a".into();
-    }
+fn encoder() -> String {
+    // Intrinsic source-chart triangulation changes native explicit content too;
+    // every hierarchy uses the reviewed source/dependency fingerprint.
     let mut hasher = Sha256::new();
     for source in [
         include_str!("../pipeline.rs"),
@@ -250,7 +247,7 @@ impl Reuse {
                 layer
             })
             .collect();
-        self.config = json!({"encoder":encoder(options.explicit),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
+        self.config = json!({"encoder":encoder(),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
             "quantize":options.quantize,"meshopt":options.meshopt,"maxFeatures":max_features,"maxParentFeatures":options.max_parent_features,"maxVertices":options.max_vertices,"maxBytes":options.max_bytes,
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});

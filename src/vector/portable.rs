@@ -272,6 +272,12 @@ impl Reader {
                         }
                         properties
                     };
+                    let mut intrinsic = IntrinsicGeometry::capture(
+                        &geometry,
+                        transform
+                            .as_ref()
+                            .and_then(crate::crs::Transform::polygon_units),
+                    )?;
                     let points: Vec<_> = geometry.points().copied().collect();
                     let points = if let Some(transform) = &mut transform {
                         transform.transform(&points)?
@@ -286,6 +292,9 @@ impl Reader {
                         });
                     }
                     let frame = self.frame.as_ref().unwrap();
+                    if let Some(intrinsic) = &mut intrinsic {
+                        intrinsic.earth_center = frame.project([0.; 3]);
+                    }
                     let mut points = points.into_iter();
                     geometry.map(|_| frame.project(points.next().unwrap()));
                     properties.insert("_source_id".into(), json!(id));
@@ -293,6 +302,7 @@ impl Reader {
                     accept(Feature {
                         properties,
                         geometry,
+                        intrinsic,
                         surface_fragment: false,
                         triangle_boundaries: Vec::new(),
                         fragment_path: String::new(),
