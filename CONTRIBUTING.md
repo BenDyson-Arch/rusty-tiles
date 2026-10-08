@@ -81,6 +81,16 @@ Use current stable Rust with rustfmt and a C++ compiler. The default build uses 
 
 `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides `native-jpeg` for portable packaging. Python wheels never enable native features.
 
+Native builds require `LIBSQLITE3_SYS_USE_PKG_CONFIG=1` in the Cargo environment
+to share system SQLite with GDAL/PROJ. For example:
+`LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo build --locked --features native-geospatial`.
+Apply the same override to native tests, Clippy and examples below. Leave it unset
+for portable builds and wheels; they use bundled SQLite. Docker and the native
+acceptance scripts set it automatically.
+Static SQLite selectors (`SQLITE3_STATIC`, `PKG_CONFIG_ALL_STATIC`) and
+`SQLITE3_LIB_DIR` overrides are rejected for native builds; select the matching
+SDK through `PKG_CONFIG_PATH`. MSVC native builds also need `VCPKGRS_DYNAMIC=1`.
+
 ## Run the tests
 
 ### Rust
@@ -89,7 +99,7 @@ Use current stable Rust with rustfmt and a C++ compiler. The default build uses 
 cargo fmt --all --check
 cargo test --locked
 cargo test --locked --features native-jpeg
-cargo test --locked --features native-geospatial
+LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial
 RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 

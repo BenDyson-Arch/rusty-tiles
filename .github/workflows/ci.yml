@@ -150,12 +150,16 @@ jobs:
         with:
           key: gdal-${{ matrix.gdal }}
       - name: Test native geospatial build
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo test --locked --features native-geospatial
       - name: Check native geospatial lint
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -194,6 +198,8 @@ jobs:
         with:
           key: python-gdal-3.12
       - name: Build CLI for derivative acceptance
+        env:
+          LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -205,6 +211,12 @@ jobs:
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - name: Test portable vectors against independent fixtures and Python oracle
+        shell: bash -el {0}
+        run: |
+          cargo build --locked
+          RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_vector_*.py'
+          RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_native_vector.py'
 
   python-free-runtime:
     name: Python-free runtime

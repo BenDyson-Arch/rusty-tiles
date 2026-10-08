@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sqlite3
 import struct
 import sys
 import tempfile
@@ -46,6 +47,85 @@ class WheelAPI(unittest.TestCase):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
         self.root = Path(self.work.name)
+
+    def test_vector_geojson_options_progress_reuse_and_atomic_failure(self):
+        source = self.root / "features.geojson"
+        source.write_text(json.dumps({"type": "FeatureCollection", "features": [
+            {"type": "Feature", "id": i, "properties": {"keep": i, "name": str(i)},
+             "geometry": {"type": "Point", "coordinates": [i, i, 7]}}
+            for i in range(4)
+        ]}))
+        events = []
+        output = self.root / "vectors.3tz"
+        options = dict(source_crs="local", where_clause="keep >= 1", fields=["name"],
+                       max_features=1, lod_levels=1, reproducible=True, jobs=2,
+                       quantize=True, meshopt=True)
+        result = rusty_tiles.vector_to_3tz(source, output, callback=events.append, **options)
+        self.assertEqual(result.report["features"], 3)
+        self.assertTrue(rusty_tiles.validate(output)["ok"])
+        self.assertTrue(any(e["event"] == "progress" for e in events))
+        reused = rusty_tiles.vector_to_3tz(
+            source, self.root / "reused.3tz", reuse_tileset=output, **options,
+        )
+        self.assertEqual(reused.report["reuse"]["rebuiltContents"], 0)
+        self.assertGreater(reused.report["reuse"]["reusedContents"], 0)
+        self.assertTrue(rusty_tiles.validate(reused.output)["ok"])
+        before = output.read_bytes()
+        with self.assertRaises(rusty_tiles.OutputExistsError):
+            rusty_tiles.vector_to_3tz(source, output, **options)
+        source.write_text('{"type":"FeatureCollection","features":[')
+        with self.assertRaises(rusty_tiles.DataError):
+            rusty_tiles.vector_to_3tz(source, output, force=True, **options)
+        self.assertEqual(output.read_bytes(), before)
+
+    def test_vector_geopackage_readonly_height_and_layer_selection(self):
+        source = self.root / "survey.gpkg"
+        with sqlite3.connect(source) as db:
+            db.executescript("""
+                PRAGMA application_id=1196444487;
+                CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT,srs_id INTEGER PRIMARY KEY,
+                  organization TEXT,organization_coordsys_id INTEGER,definition TEXT,description TEXT);
+                INSERT INTO gpkg_spatial_ref_sys VALUES('WGS 84',4326,'EPSG',4326,
+                  'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]','');
+                CREATE TABLE gpkg_contents(table_name TEXT PRIMARY KEY,data_type TEXT,
+                  identifier TEXT,description TEXT,last_change TEXT,min_x REAL,min_y REAL,
+                  max_x REAL,max_y REAL,srs_id INTEGER);
+                INSERT INTO gpkg_contents(table_name,data_type,identifier,srs_id)
+                  VALUES('survey','features','survey',4326);
+                CREATE TABLE gpkg_geometry_columns(table_name TEXT,column_name TEXT,
+                  geometry_type_name TEXT,srs_id INTEGER,z INTEGER,m INTEGER);
+                INSERT INTO gpkg_geometry_columns VALUES('survey','geom','POINT',4326,1,0);
+                CREATE TABLE survey(fid INTEGER PRIMARY KEY,geom BLOB,name TEXT);
+            """)
+            geometry = b"GP\x00\x01" + struct.pack("<iBI3d", 4326, 1, 1001, 0, 0, 123)
+            db.execute("INSERT INTO survey VALUES(7,?,'height')", (geometry,))
+        before = source.read_bytes()
+        output = self.root / "survey.3tz"
+        result = rusty_tiles.vector_to_3tz(
+            source, output, layers=["survey"], height_offset=7, explicit=True,
+        )
+        self.assertEqual(result.report["features"], 1)
+        self.assertEqual(result.report["layers"][0]["heightMode"], "explicit offset")
+        self.assertTrue(rusty_tiles.validate(output)["ok"])
+        with zipfile.ZipFile(output) as archive:
+            tileset = json.loads(archive.read("tileset.json"))
+        self.assertAlmostEqual(tileset["root"]["transform"][12], 6378137 + 130, delta=0.001)
+        self.assertEqual(source.read_bytes(), before)
+        self.assertFalse(Path(str(source) + "-wal").exists())
+
+    def test_vector_unsupported_crs_and_height_refusals(self):
+        source = self.root / "points.geojson"
+        source.write_text(json.dumps({"type": "FeatureCollection", "features": [
+            {"type": "Feature", "properties": {},
+             "geometry": {"type": "Point", "coordinates": [0, 0, 0]}}
+        ]}))
+        output = self.root / "rejected.3tz"
+        with self.assertRaisesRegex(rusty_tiles.EnvironmentError, "native-geospatial"):
+            rusty_tiles.vector_to_3tz(source, output, source_crs="EPSG:26910", height_offset=0)
+        self.assertFalse(output.exists())
+        with self.assertRaises(rusty_tiles.DataError):
+            rusty_tiles.vector_to_3tz(source, output, source_crs="local", height_offset=7)
+        self.assertFalse(output.exists())
 
     def test_readme_example_in_clean_environment(self):
         self.assertEqual(os.environ["PATH"], "")

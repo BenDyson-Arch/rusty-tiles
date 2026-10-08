@@ -45,10 +45,72 @@ impl Geometry {
         }
     }
 }
+/// Constant-height geospatial surface chart, retained before ECEF placement.
+/// Geographic XY is in degrees and projected XY in metres. The chart's
+/// distinct seam/pole vertices may share a physical ECEF location.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(super) struct IntrinsicGeometry {
+    pub(super) geometry: Geometry,
+    pub(super) geographic: bool,
+    pub(super) earth_center: Point,
+}
+impl IntrinsicGeometry {
+    pub(super) fn capture(
+        geometry: &Geometry,
+        units: Option<(bool, f64)>,
+    ) -> Result<Option<Self>, crate::Error> {
+        if !matches!(geometry, Geometry::Polygon(_) | Geometry::MultiPolygon(_)) {
+            return Ok(None);
+        }
+        let Some((geographic, factor)) = units else {
+            return Ok(None);
+        };
+        if !factor.is_finite() || factor <= 0. {
+            return Err(crate::Error::Data(
+                "polygon chart unit factor must be finite and positive".into(),
+            ));
+        }
+        let Some(first) = geometry.points().next() else {
+            return Ok(None);
+        };
+        let height = first[2];
+        // Varying-height surfaces (walls, overhangs, roofs) keep their existing
+        // 3D best-fit policy rather than being flattened onto source XY.
+        if geometry.points().any(|p| p[2] != height) {
+            return Ok(None);
+        }
+        let mut geometry = geometry.clone();
+        geometry.map(|p| [p[0] * factor, p[1] * factor, p[2]]);
+        if geometry.points().flatten().any(|v| !v.is_finite()) {
+            return Err(crate::Error::Data(
+                "intrinsic polygon coordinates must be finite XYZ".into(),
+            ));
+        }
+        Ok(Some(Self {
+            geometry,
+            geographic,
+            earth_center: [0.; 3],
+        }))
+    }
+    pub(super) fn rings(&self, index: usize) -> Option<&[Vec<Point>]> {
+        match &self.geometry {
+            Geometry::Polygon(rings) if index == 0 => Some(rings),
+            Geometry::MultiPolygon(polygons) => polygons.get(index).map(Vec::as_slice),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Feature {
     pub(super) properties: BTreeMap<String, Value>,
     pub(super) geometry: Geometry,
+    #[serde(
+        default,
+        rename = "_intrinsic_geometry",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(super) intrinsic: Option<IntrinsicGeometry>,
     #[serde(
         default,
         rename = "_surface_fragment",
@@ -69,8 +131,18 @@ pub(super) struct Feature {
     pub(super) fragment_path: String,
 }
 impl Feature {
+    pub(super) fn rendered_points(&self) -> impl Iterator<Item = &Point> {
+        self.geometry
+            .points()
+            .chain(self.triangle_boundaries.iter().flatten().flatten())
+    }
     pub(super) fn estimate(&self) -> usize {
-        self.geometry.size() * 32
+        (self.rendered_points().count()
+            + self
+                .intrinsic
+                .as_ref()
+                .map_or(0, |source| source.geometry.size()))
+            * 32
             + serde_json::to_vec(&self.properties).map_or(0, |p| p.len())
             + 2048
     }
@@ -87,6 +159,22 @@ pub(super) struct Frame {
     pub(super) axes: [Point; 3],
 }
 impl Frame {
+    /// Orient the local frame at a WGS84 ECEF anchor. Keep the exact anchor;
+    /// the inverse operation establishes the surface axes only.
+    #[cfg(not(feature = "native-geospatial"))]
+    pub(super) fn georeferenced(anchor: Point) -> Result<Self, crate::Error> {
+        let geographic = crate::georef::ecef_to_cartographic(anchor)?;
+        let matrix = crate::georef::root_transform(geographic, None);
+        Ok(Self {
+            anchor,
+            axes: [
+                [matrix[0], matrix[1], matrix[2]],
+                [matrix[4], matrix[5], matrix[6]],
+                [matrix[8], matrix[9], matrix[10]],
+            ],
+        })
+    }
+
     pub(super) fn local(anchor: Point) -> Self {
         Self {
             anchor,

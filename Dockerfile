@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=geospatial-build /usr/local/ /usr/local/
 RUN ldconfig
 ENV RUSTY_TILES_DISABLE_NATIVE_JPEG=1
+ENV LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 WORKDIR /src
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

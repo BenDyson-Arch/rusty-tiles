@@ -77,7 +77,7 @@ Grid-free globe placement works in the default build. CRS selection automaticall
 
 ### vector
 
-Converts OGR layers into draft glTF vector content in a `.3tz`. Behaviour and limits are in the [vector guide](VECTOR.md).
+Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz` with the default build. Shapefile, other OGR drivers and CRS operations beyond the verified grid-free tier need `native-geospatial`. Behaviour and limits are in the [vector guide](VECTOR.md).
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ Converts OGR layers into draft glTF vector content in a `.3tz`. Behaviour and li
 | `--allLayers` | `--all-layers` | off | Include every spatial layer |
 | `--sourceCrs` | `--source-crs` | layer CRS | Override the input CRS, or `local` for metre XYZ |
 | `--heightOffset` | `--height-offset` | none | Metres added to source heights to give ellipsoidal height |
-| `--where` | | none | OGR attribute filter applied to every selected layer |
+| `--where` | | none | Attribute expression applied to every selected layer; SQLite in the default build, OGR in native builds |
 | `--fields` | | all | Comma-separated fields to include |
 | `--dropFields` | `--drop-fields` | none | Comma-separated fields to exclude |
 | `--listFields` | `--list-fields` | `error` | `error` rejects list fields. `json` stores them as JSON text. |
@@ -217,7 +217,7 @@ rusty-tiles doctor --command vector --command terrain
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
 | `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium` | Where to look for a Cesium runtime. This check is informational only. |
 
-`doctor` reports linked GDAL, PROJ and GEOS versions. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
+`doctor` reports linked GDAL, PROJ and GEOS versions when enabled. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Default-build vector readiness lists GeoJSON/GeoPackage readers, Rust geometry support and grid-free CRS limits independently of native dependencies. Native vector readiness retains GDAL/GEOS/PROJ checks. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
 
 ## Exit codes
 

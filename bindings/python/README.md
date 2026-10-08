@@ -1,6 +1,6 @@
 # rusty-tiles for Python
 
-Convert meshes, local or grid-free georeferenced LAS/LAZ point clouds and existing tilesets directly from
+Convert meshes, GeoJSON and GeoPackage vectors, local or grid-free georeferenced LAS/LAZ point clouds and existing tilesets directly from
 Python, including Blender's bundled Python. The wheels contain the portable
 default Rust build: no CLI subprocess, GDAL, Rust compiler or extra Python
 packages are needed at runtime.
@@ -40,6 +40,7 @@ staging and atomic archive replacement.
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
+| `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage |
 | `convert_to_3tz(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
 
@@ -74,6 +75,35 @@ or Helmert datum parameters. It refuses grid-dependent, compound/geoid,
 dynamic or unknown datum definitions with `EnvironmentError` naming the
 native build. See the [CRS limits](../../docs/FORMATS.md#point-clouds).
 Text `.xyz` files and in-memory buffers are not supported in this release.
+
+Vector conversion uses the same disk-backed tiling, metadata, LOD and encoding
+pipeline as the CLI. GeoJSON defaults to WGS84 longitude/latitude; GeoPackage
+uses its layer CRS. Use `source_crs="local"` for metre XYZ coordinates. A 3D
+GeoPackage with a horizontal CRS requires an explicit `height_offset`; GeoJSON
+Z is ellipsoidal metres. The same grid-free CRS restrictions apply to vectors.
+
+```python
+result = rusty_tiles.vector_to_3tz(
+    "buildings.gpkg", "buildings.3tz", layers=["buildings"],
+    height_offset=0, fields=["name", "height"], reproducible=True,
+)
+```
+
+Vector keyword defaults are `force=False`, `source_crs=None`, `height_offset=None`,
+`layers=None`, `all_layers=False`, `fields=None`, `drop_fields=None`,
+`list_fields="error"`, `where_clause=None`, `repair=False`,
+`ambiguous_outlines=False`, `skip_invalid=False`, `max_features=64`,
+`max_vertices=65536`, `max_bytes=4194304`, `max_tiles=100000`,
+`max_source_vertices=1000000`, `lod_tolerance=0.1`, `lod_levels=3`, `jobs=None`
+(available cores), `explicit=False`, `reproducible=False`, `quantize=False`,
+`meshopt=False`, `parent_repair=False`, `aggregate_points=False`,
+`max_parent_features=4096`, `reuse_tileset=None`, and `callback=None`.
+Layer and field selections are lists of strings. `where_clause` is a read-only
+SQLite expression, `list_fields="json"` preserves list/object fields as JSON
+strings, and `reuse_tileset` names an earlier compatible portable archive.
+See [vector conversion](../../docs/VECTOR.md) for geometry, filtering, repair
+and reuse limits. Close or checkpoint a GeoPackage with unmerged WAL edits
+before conversion.
 
 Callbacks receive dictionaries using the Rust reporter's event contract:
 `{"event": "progress", "phase": ..., "done": ..., "total": ...}`,
@@ -113,7 +143,7 @@ python scripts/test_blender_wheel.py target/wheels/*.whl --blender /path/to/blen
 
 The runner supplies an isolated pip installer, and Blender's Python checks the
 wheel compatibility and installs into a temporary directory. It then runs the
-same API suite, including georeferenced point clouds and callbacks, with an
+same API suite, including vectors, georeferenced point clouds and callbacks, with an
 empty `PATH`. `--blender` defaults to `blender` on your `PATH`. The JSON report
 records the actual Blender/Python versions, platform, wheel SHA-256 and test
 counts. The clean-venv runner also accepts `--report-json`.

@@ -106,16 +106,29 @@ fn raster_readiness(geospatial: &Value) -> Value {
 
 fn vector_readiness(geospatial: &Value) -> Value {
     #[cfg(feature = "native-geospatial")]
-    let geometry = match crate::vector::native_available() {
-        Ok(()) => json!({"ready":true}),
-        Err(error) => json!({"ready":false,"error":error.to_string()}),
-    };
+    {
+        let geometry = match crate::vector::native_available() {
+            Ok(()) => json!({"ready":true}),
+            Err(error) => json!({"ready":false,"error":error.to_string()}),
+        };
+        json!({"ready":geospatial["ready"] == true && geometry["ready"] == true,
+            "requires":["native GDAL >= 3.12", "GEOS >= 3.10", "SQLite", "PROJ >= 9.2"],
+            "backend":"native GDAL/GEOS", "geospatial":geospatial, "geometry":geometry,
+            "note":"Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required."})
+    }
     #[cfg(not(feature = "native-geospatial"))]
-    let geometry = json!({"ready":false});
-    json!({"ready":geospatial["ready"] == true && geometry["ready"] == true,
-        "requires":["native GDAL >= 3.12", "GEOS >= 3.10", "SQLite", "PROJ >= 9.2"],
-        "backend":"native GDAL/GEOS", "geospatial":geospatial, "geometry":geometry,
-        "note":"Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required."})
+    {
+        let crs = point_cloud_readiness(geospatial)["geospatial"]["crsClasses"].clone();
+        json!({"ready":true,"requires":[],"backend":"portable Rust/SQLite",
+            "inputs":["GeoJSON","GeoPackage"],
+            "reader":{"ready":true,"backend":"Rust GeoJSON and bundled SQLite/WKB"},
+            "geometry":{"ready":true,"backend":"Rust polygon validation, repair and triangulation"},
+            "geospatial":{"ready":true,"backend":"pure Rust (proj4rs)","crsClasses":crs,
+                "nativeFallback":geospatial,
+                "limitations":"Only verified grid-free horizontal CRS operations are available. Grids, geoid/compound heights, coordinate epochs and unverified datum operations require --features native-geospatial. GeoPackage 3D horizontal-CRS inputs require an explicit ellipsoidal metre height offset; GeoJSON heights use its ellipsoidal convention."},
+            "limitations":"GeoJSON and GeoPackage only; use --features native-geospatial for Shapefile and other OGR drivers. Measured geometries, geometry collections, curves and unsupported field types are refused. Conversion validates each selected source and operation.",
+            "note":"Local XYZ, grid-free globe placement, polygons with holes, LOD, meshopt and archive reuse need no Python or system GDAL/GEOS/SQLite."})
+    }
 }
 
 fn geospatial_readiness() -> Value {

@@ -8,11 +8,11 @@ Implicit tiling is the default. The existing spatial partition and LOD chains ar
 
 ## Requirements
 
-- A build with the `native-geospatial` feature.
-- GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite.
+- The default build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
+- Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build keeps its native ingestion, geometry and CRS backend for every vector conversion.
 - CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
 
-Conversion runs offline and needs no Python.
+Conversion runs offline and needs no Python or executable helpers. The default build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.
 
 ## Convert a layer
 
@@ -32,7 +32,7 @@ Every feature keeps two reserved properties.
 
 | Property | Contents |
 | --- | --- |
-| `_source_id` | The original GeoJSON ID or OGR FID, as JSON text |
+| `_source_id` | The original GeoJSON ID or feature-table integer primary key/OGR FID, as JSON text |
 | `_source_layer` | The original layer name |
 
 Together they identify a source feature. This holds even when a feature is split into several fragments.
@@ -57,7 +57,9 @@ List fields fail by default. `--list-fields json` stores each list as JSON text.
 
 ### Filter features
 
-`--where "category = 'public'"` applies an OGR attribute filter to every selected layer. It runs before features are read. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset.
+`--where "category = 'public'"` applies an attribute filter to every selected layer before geometry is processed. The default build evaluates expressions using SQLite; the native build uses OGR. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset. Use a single read-only expression; multiple statements, comments and SQL parameters are refused by the portable reader.
+
+Portable GeoJSON filtering refuses source integers beyond signed 64-bit range instead of converting them to SQLite floating-point values. Encoded integer metadata also requires signed 64-bit values. GeoPackage is opened read-only in immutable mode; checkpoint and close a writer with an active nonempty WAL before conversion so every committed row is available from the main file. Conversion refuses that WAL state rather than silently reading older rows. Recover a hot rollback journal with SQLite and close the writer before conversion; the immutable reader cannot safely perform database recovery.
 
 ## Coordinates and height
 
@@ -67,10 +69,12 @@ Each layer uses its declared CRS with traditional X and Y axis order. `--source-
 | --- | --- |
 | 2D geospatial features | Placed at ellipsoidal height zero |
 | 3D features with only a horizontal CRS | Need `--height-offset` in metres |
-| Compound or 3D CRS | Use the declared height reference |
+| Compound or 3D CRS | Need the native build to use the declared height reference |
 | GeoJSON | Uses its conventional ellipsoidal metre heights |
 
-Three-axis geographic CRSs such as EPSG:7843 use their declared height. Declared coordinate epochs are kept. A missing epoch stays unspecified.
+The default build accepts verified grid-free WGS84 geographic (`EPSG:4326`), UTM north/south and Mercator operations, plus supported WKT/PROJ projections with explicit WGS84 or three-/seven-parameter Helmert datum parameters. It uses the same [strict CRS classes and projection domains as point clouds](FORMATS.md#point-clouds). Unsupported datums, required grids, compound/geoid heights and coordinate epochs fail with an environment error naming `native-geospatial`; no archive is published. Undefined GeoPackage CRS declarations need an explicit `--source-crs` override, including `local` when those coordinates are known to be local metres.
+
+With the native build, three-axis geographic CRSs such as EPSG:7843 use their declared height. Declared coordinate epochs are kept. A missing epoch stays unspecified.
 
 PROJ networking and ballpark operations are disabled. A missing operation or grid fails the job. An additive height offset is not a geoid transformation.
 
@@ -94,11 +98,17 @@ Features with NULL or empty geometry are omitted automatically, because they hav
 
 With `--repair --ambiguous-outlines`, a repair that collapses to lines or points keeps the original closed rings as outlines. The report records `outputGeometry: outline` and the reason. No fill is invented. Without the flags, a collapse is a reported failure.
 
+The portable backend validates polygons in Rust, repairs self-intersections using an even-odd fill rule and uses constrained Delaunay triangulation. Repairs that would discard collapsed boundary material or move source boundary vertices beyond the preservation checks are refused or handled by the explicit outline policy. Native builds retain GDAL/GEOS repair and triangulation. Triangle ordering and diagonals can differ between these backends.
+
+Polygons with a horizontal CRS and a constant source height retain their original XY coordinates for validation and triangulation. The resulting triangles use the corresponding vertices on the globe. This prevents globe curvature from introducing false crossings, such as the missing Sudan polygon in earlier country conversions. Longitude coordinates are used as supplied; pole and longitude-seam aliases retain their source boundaries. Local polygons, surfaces with varying heights and native compound or three-axis CRS inputs keep the existing best-fit 3D policy. Simplification carries the matching source vertices through each LOD, and triangle fragmentation retains the original boundary without adding internal edges.
+
+Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including explicit tilesets.
+
 `--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. No feature is dropped.
 
 Oversized polygons that need triangle fragmentation still need unambiguous filled geometry. Outline fallback does not resolve their fragmentation.
 
-Raw GDAL and GEOS warnings are quiet by default. Set `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` to see them.
+Raw GDAL and GEOS warnings in native builds are quiet by default. Set `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` to see them.
 
 ## Tile budgets
 
@@ -127,7 +137,7 @@ Buffered grid clipping and coverage-wide edge reconciliation are not implemented
 
 ### Memory and scratch disk
 
-Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. Memory depends on one source feature, one candidate tile per worker, the hierarchy and the OGR driver. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
+Features and a shared-coordinate index are spooled to a SQLite store beside the output. Its cache is 32 MiB. The portable GeoJSON reader also spools collection members to disk. Memory depends on one source feature, one candidate tile per worker, the hierarchy and, in native builds, the OGR driver. Leave scratch disk for transformed coordinates and indexes. Staging files are removed on success and on failure.
 
 ## Level of detail
 
@@ -220,7 +230,7 @@ rusty-tiles vector -i updated.gpkg -o output/updated.3tz --layer roads \
 
 ### What must match
 
-Reuse needs the same tiling mode (`--explicit` or the implicit default), layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and the same GDAL, GEOS and PROJ versions. Archives made by the earlier Python converter need a fresh native build first.
+Reuse needs the same tiling mode (`--explicit` or the implicit default), layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and backend. Native builds additionally need the same GDAL, GEOS and PROJ versions. Switching between portable and native builds needs a fresh conversion. Archives made by the earlier Python converter also need a fresh build first.
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 

@@ -457,6 +457,30 @@ impl Crs {
         }
     }
 
+    /// Source-coordinate normalization for constant-height polygon charts.
+    pub(crate) fn polygon_units(&self) -> Option<(bool, f64)> {
+        if !self.is_horizontal() {
+            return None;
+        }
+        // SAFETY: These queries borrow the live SRS and do not mutate it.
+        unsafe {
+            if gdal_sys::OSRIsGeographic(self.0.as_ptr()) != 0 {
+                Some((
+                    true,
+                    gdal_sys::OSRGetAngularUnits(self.0.as_ptr(), std::ptr::null_mut())
+                        .to_degrees(),
+                ))
+            } else if gdal_sys::OSRIsProjected(self.0.as_ptr()) != 0 {
+                Some((
+                    false,
+                    gdal_sys::OSRGetLinearUnits(self.0.as_ptr(), std::ptr::null_mut()),
+                ))
+            } else {
+                None
+            }
+        }
+    }
+
     pub fn is_horizontal(&self) -> bool {
         // SAFETY: Queries use this live SRS without modifying it.
         unsafe {
@@ -712,6 +736,28 @@ impl EcefTransform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn polygon_charts_are_only_for_horizontal_source_crs() {
+        let geographic = Crs::from_definition("EPSG:4326")
+            .unwrap()
+            .polygon_units()
+            .unwrap();
+        assert!(geographic.0 && (geographic.1 - 1.).abs() < 1e-12);
+        assert_eq!(
+            Crs::from_definition("EPSG:27700").unwrap().polygon_units(),
+            Some((false, 1.))
+        );
+        for definition in ["EPSG:4978", "EPSG:4979", "EPSG:7405", "EPSG:9518"] {
+            assert!(
+                Crs::from_definition(definition)
+                    .unwrap()
+                    .polygon_units()
+                    .is_none(),
+                "{definition}"
+            );
+        }
+    }
 
     #[test]
     fn epoch_is_unspecified_or_passed_to_time_dependent_pipeline() {

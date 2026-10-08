@@ -72,6 +72,18 @@ impl Transform {
         Ok(Self::Native(Box::new(NativeTransform { ecef, albers })))
     }
 
+    /// Source-coordinate normalization for intrinsic polygon charts.
+    /// Geographic coordinates become degrees; projected coordinates metres.
+    #[cfg(not(feature = "native-geospatial"))]
+    pub(crate) fn polygon_units(&self) -> Option<(bool, f64)> {
+        match self {
+            Self::Pure(operation) if operation.source.is_latlong() => {
+                Some((true, operation.angular_units.to_degrees()))
+            }
+            Self::Pure(operation) => Some((false, operation.source.to_meter())),
+        }
+    }
+
     /// Convert a complete batch to ECEF metres, retaining its input on failure.
     /// A point-dependent native fallback retries every point and is retained
     /// for subsequent batches. No partial result is returned to the caller.

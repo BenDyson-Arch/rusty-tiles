@@ -79,7 +79,7 @@ if [[ -n ${RUSTY_TILES_BIN:-} ]]; then
   BIN=$RUSTY_TILES_BIN
   skip build "using RUSTY_TILES_BIN=$BIN"
 else
-  cargo build --manifest-path "$REPO/Cargo.toml" --release --locked \
+  LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo build --manifest-path "$REPO/Cargo.toml" --release --locked \
     --features native-geospatial >"$WORK/build.log" 2>&1 || fail build "$WORK/build.log"
   BIN=$REPO/target/release/rusty-tiles
   pass build

@@ -1,7 +1,6 @@
-//! Native vector acceptance on the GDAL minimum, without Python or executables.
+//! Shared vector acceptance for portable and native builds, without executables.
 mod support;
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn vector_is_reproducible_and_reuses_native_content_without_executables() {
     use serde_json::{json, Value};
@@ -71,7 +70,6 @@ fn vector_is_reproducible_and_reuses_native_content_without_executables() {
     assert!(report.get("python").is_none());
 }
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn compressed_point_aggregates_refine_and_reuse_without_executables() {
     use serde_json::{json, Value};
@@ -146,7 +144,6 @@ fn compressed_point_aggregates_refine_and_reuse_without_executables() {
     assert_eq!(report["reuse"]["rebuiltContents"], 0);
 }
 
-#[cfg(feature = "native-geospatial")]
 #[test]
 fn force_replaces_only_successful_output() {
     support::force_replaces_only_successful_output(

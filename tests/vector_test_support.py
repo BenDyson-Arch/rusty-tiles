@@ -1,9 +1,11 @@
-"""Native vector CLI helpers for the Python acceptance tests.
+"""Vector CLI helpers for the Python acceptance tests.
 
-Acceptance always invokes the selected native CLI. Tests that compare with
+Acceptance always invokes the selected CLI. Tests that compare with
 the frozen Python oracle import it from tests/fixtures/vector_oracle directly.
 """
 import os
+import functools
+import json
 import pathlib
 import subprocess
 import sys
@@ -13,6 +15,15 @@ import unittest
 import zipfile
 
 from cli_bin import BIN
+
+@functools.cache
+def portable_vectors():
+    """Read the actual selected build's capabilities instead of trusting an env flag."""
+    if not BIN:
+        raise unittest.SkipTest('RUSTY_TILES_BIN is not set')
+    result = subprocess.run([BIN, 'doctor', '--command', 'vector', '--json'],
+                            capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)['commands']['vector'].get('backend') == 'portable Rust/SQLite'
 
 def native_run(args):
     if not BIN:

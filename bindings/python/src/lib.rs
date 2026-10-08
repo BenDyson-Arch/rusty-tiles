@@ -16,6 +16,7 @@ use tiles_core::{
     point_cloud::PointCloudOptions,
     report::ndjson,
     tile::TextureFormat,
+    vector::{VectorLodOptions, VectorOptions},
     Cartographic, CreateTilesetOptions, Error, Event, EventSink, MeshTo3tzOptions, Reporter,
     SourceCrs,
 };
@@ -296,6 +297,94 @@ fn point_cloud_to_3tz(
     })
 }
 
+/// Tile GeoJSON or GeoPackage vector features using the portable pipeline.
+#[pyfunction]
+#[pyo3(signature = (input, output, *, force=false, source_crs=None, height_offset=None,
+    layers=None, all_layers=false, fields=None, drop_fields=None, list_fields="error",
+    where_clause=None, repair=false, ambiguous_outlines=false, skip_invalid=false,
+    max_features=64, max_vertices=65_536, max_bytes=4_194_304, max_tiles=100_000,
+    max_source_vertices=1_000_000, lod_tolerance=0.1, lod_levels=3, jobs=None,
+    explicit=false, reproducible=false, quantize=false, meshopt=false, parent_repair=false,
+    aggregate_points=false, max_parent_features=4096, reuse_tileset=None, callback=None))]
+#[allow(clippy::too_many_arguments)]
+fn vector_to_3tz(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    force: bool,
+    source_crs: Option<String>,
+    height_offset: Option<f64>,
+    layers: Option<Vec<String>>,
+    all_layers: bool,
+    fields: Option<Vec<String>>,
+    drop_fields: Option<Vec<String>>,
+    list_fields: &str,
+    where_clause: Option<String>,
+    repair: bool,
+    ambiguous_outlines: bool,
+    skip_invalid: bool,
+    max_features: usize,
+    max_vertices: usize,
+    max_bytes: usize,
+    max_tiles: usize,
+    max_source_vertices: usize,
+    lod_tolerance: f64,
+    lod_levels: u8,
+    jobs: Option<usize>,
+    explicit: bool,
+    reproducible: bool,
+    quantize: bool,
+    meshopt: bool,
+    parent_repair: bool,
+    aggregate_points: bool,
+    max_parent_features: usize,
+    reuse_tileset: Option<PathBuf>,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<ConversionResult> {
+    let defaults = VectorOptions::default();
+    let options = VectorOptions {
+        force,
+        source_crs,
+        height_offset,
+        layers: layers.unwrap_or_default(),
+        all_layers,
+        fields: fields.unwrap_or_default(),
+        drop_fields: drop_fields.unwrap_or_default(),
+        list_fields: list_fields.into(),
+        where_clause,
+        skip_invalid,
+        max_vertices,
+        max_bytes,
+        max_tiles,
+        max_source_vertices,
+        lod: VectorLodOptions {
+            tolerance_metres: lod_tolerance,
+            levels: lod_levels,
+        },
+        jobs: jobs.unwrap_or(defaults.jobs),
+        explicit,
+        reproducible,
+        quantize,
+        meshopt,
+        parent_repair,
+        aggregate_points,
+        max_parent_features,
+        reuse_tileset,
+        ..defaults
+    };
+    run_conversion(py, callback, |reporter| {
+        tiles_core::vector::vector_to_3tz_reported(
+            &input,
+            &output,
+            max_features,
+            repair,
+            ambiguous_outlines,
+            &options,
+            reporter,
+        )
+    })
+}
+
 /// Pack a tileset directory or tileset.json path as a 3TZ archive.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, force=false))]
@@ -342,6 +431,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(point_cloud_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(convert_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(validate, module)?)?;
     Ok(())

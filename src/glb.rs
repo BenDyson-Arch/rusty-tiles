@@ -38,7 +38,6 @@ pub(crate) fn glb_len(json_len: usize, bin_len: usize) -> Result<usize, Error> {
 }
 
 /// Serialised JSON length of `document`, without materialising it.
-#[cfg(any(test, feature = "native-geospatial"))]
 pub(crate) fn json_len<T: Serialize + ?Sized>(document: &T) -> Result<usize, Error> {
     struct Count(usize);
     impl std::io::Write for Count {
@@ -324,14 +323,12 @@ impl MetadataGlb {
     }
 
     /// Replace a generated view while retaining accessor/metadata identities.
-    #[cfg(feature = "native-geospatial")]
     pub fn replace_view(&mut self, index: usize, bytes: &[u8]) {
         let offset = append_aligned(&mut self.binary, Self::ALIGN, bytes);
         self.document["bufferViews"][index]["byteOffset"] = offset.into();
         self.document["bufferViews"][index]["byteLength"] = bytes.len().into();
     }
 
-    #[cfg(feature = "native-geospatial")]
     pub fn compact_views(&mut self) {
         let mut binary = Vec::with_capacity(self.binary.len());
         for view in self.document["bufferViews"].as_array_mut().unwrap() {
@@ -350,7 +347,6 @@ impl MetadataGlb {
 
     /// Length of the GLB [`Self::finish`] would produce now, without
     /// serialising or copying the binary.
-    #[cfg(feature = "native-geospatial")]
     pub fn encoded_len(&mut self) -> Result<usize, Error> {
         self.record_buffer_length();
         glb_len(json_len(&self.document)?, self.binary.len())

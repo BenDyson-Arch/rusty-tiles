@@ -14,7 +14,8 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 | --- | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | No |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
-| GeoPackage, GeoJSON or Shapefile | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
+| GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
 | GeoTIFF or other GDAL imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
 | Elevation rasters | `terrain` | Prototype quantized-mesh terrain with height sidecars | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
@@ -25,7 +26,7 @@ Every option for every command is in the [command reference](docs/CLI.md).
 
 ## Install
 
-The default build supports mesh tiling, local and grid-free georeferenced point clouds, packaging, validation and preview. For other CRS operations, vector, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo). See the [point-cloud CRS limits](docs/FORMATS.md#point-clouds).
+The default build supports mesh tiling, local and grid-free georeferenced point clouds, GeoJSON and GeoPackage vector conversion, packaging, validation and preview. Vector conversion includes polygons with holes, repair, level of detail, metadata, compression and archive reuse, using bundled SQLite and Rust geometry libraries. For other vector formats, CRS operations outside the grid-free tier, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo). See the [vector input limits](docs/VECTOR.md#requirements) and [point-cloud CRS limits](docs/FORMATS.md#point-clouds).
 
 ### macOS / Linux
 
@@ -81,6 +82,11 @@ cargo install --path . --locked
 ```
 
 Add `--features native-geospatial` to enable every converter. This build needs GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite, development headers, `pkg-config` and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. PROJ's database and any datum grids must be installed locally; conversion never downloads them.
+
+For native builds, set `LIBSQLITE3_SYS_USE_PKG_CONFIG=1` in the Cargo environment
+so Rust, GDAL and PROJ use the same system SQLite. The build rejects a missing
+override to prevent incompatible SQLite copies from sharing symbols. Leave it
+unset when building portable binaries or wheels, which bundle SQLite.
 
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
@@ -143,7 +149,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the pyramid; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
 
-With the full toolset, try the [invented vector fixture](tests/fixtures/vector.geojson) too:
+Try the [invented vector fixture](tests/fixtures/vector.geojson) with the default build too:
 
 ```sh
 rusty-tiles vector -i tests/fixtures/vector.geojson -o output/vector.3tz --max-features 2
@@ -221,7 +227,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Point clouds automatically use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. Other operations use strict native PROJ when built with `native-geospatial`; the default build refuses them with a message naming that feature. Datum shifts are never silently discarded. Native operations use local PROJ resources only; a missing grid fails the job and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Point clouds and default-build vectors use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. Point clouds use strict native PROJ fallback when built with `native-geospatial`; vectors use the native GDAL/GEOS/PROJ backend throughout that build. The default build refuses other CRS operations with a message naming that feature. Datum shifts are never silently discarded. Native operations use local PROJ resources only; a missing grid fails the job and ballpark operations are refused.
 
 ## Library use
 
