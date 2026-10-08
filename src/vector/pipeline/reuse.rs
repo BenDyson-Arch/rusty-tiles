@@ -36,19 +36,23 @@ pub(super) struct Reuse {
     reused_references: usize,
     reused_uris: BTreeSet<String>,
 }
+#[cfg(feature = "native-geospatial")]
+const ENCODER_PREFIX: &str = "rusty-tiles-native-vector-v1:";
+#[cfg(not(feature = "native-geospatial"))]
+const ENCODER_PREFIX: &str = "rusty-tiles-portable-vector-v1:";
+
 fn encoder(explicit: bool) -> String {
-    if explicit {
+    if explicit && cfg!(feature = "native-geospatial") {
         // The pre-implicit encoder's reviewed source/dependency fingerprint.
         // Explicit geometry and manifests retain their established byte identity.
         return "rusty-tiles-native-vector-v1:f5b4dd47a99e1274bb67b96476fb3e18afc0b40b0a551708a1e986ca7644881a".into();
     }
     let mut hasher = Sha256::new();
     for source in [
-        include_str!("../native.rs"),
+        include_str!("../pipeline.rs"),
         include_str!("../model.rs"),
         include_str!("../source_fields.rs"),
         include_str!("geometry.rs"),
-        include_str!("source.rs"),
         include_str!("encoding.rs"),
         include_str!("aggregation.rs"),
         include_str!("../../point_sampling.rs"),
@@ -60,15 +64,27 @@ fn encoder(explicit: bool) -> String {
         include_str!("../../glb.rs"),
         include_str!("../../bbox.rs"),
         include_str!("../../georef.rs"),
-        include_str!("../../geospatial.rs"),
-        include_str!("../../../Cargo.lock"),
         include_str!("../../implicit.rs"),
         include_str!("../../implicit/tileset.rs"),
     ] {
         hasher.update(source.as_bytes());
         hasher.update([0]);
     }
-    format!("rusty-tiles-native-vector-v1:{:x}", hasher.finalize())
+    #[cfg(feature = "native-geospatial")]
+    for source in [
+        include_str!("source_native.rs"),
+        include_str!("../../geospatial.rs"),
+        include_str!("../../../Cargo.lock"),
+    ] {
+        hasher.update(source.as_bytes());
+        hasher.update([0]);
+    }
+    #[cfg(not(feature = "native-geospatial"))]
+    for source in [include_str!("../portable.rs"), include_str!("../../crs.rs")] {
+        hasher.update(source.as_bytes());
+        hasher.update([0]);
+    }
+    format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
 }
 pub(super) fn contents(node: &Value) -> Vec<&Value> {
     if let Some(contents) = node["contents"].as_array() {
@@ -118,10 +134,10 @@ impl Reuse {
             // Reject it explicitly before interpreting native integrity hashes.
             if !state["config"]["encoder"]
                 .as_str()
-                .is_some_and(|s| s.starts_with("rusty-tiles-native-vector-v1:"))
+                .is_some_and(|s| s.starts_with(ENCODER_PREFIX))
             {
                 return Err(data(
-                    "previous encoder differs; run a fresh native conversion without reuseTileset",
+                    "previous encoder differs; run a fresh conversion with this build without reuseTileset",
                 ));
             }
             if state["version"] != 1
@@ -209,7 +225,11 @@ impl Reuse {
         options: &VectorOptions,
         reader: &source::Reader,
     ) -> Result<(), Error> {
+        #[cfg(feature = "native-geospatial")]
         let versions = crate::geospatial::versions()?;
+        #[cfg(not(feature = "native-geospatial"))]
+        let versions = json!({"backend":"portable", "rustyTiles":env!("CARGO_PKG_VERSION"),
+            "proj4rs":"0.2.0", "proj4wkt":"0.1.1", "geo":"0.33.1", "geozero":"0.15.1", "i_overlay":"4.5.2"});
         let layers: Vec<_> = reader
             .layer_reports
             .iter()

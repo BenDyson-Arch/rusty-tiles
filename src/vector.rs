@@ -1,23 +1,17 @@
-//! OGR vector layers → draft glTF vector content (`3DTILES_content_gltf_vector`).
+//! Vector layers → draft glTF vector content (`3DTILES_content_gltf_vector`).
 //!
 //! The prototype pins a tested draft; the encoding spec is still drafting ([3d-tiles#825](https://github.com/CesiumGS/3d-tiles/issues/825),
 //! [PR #838](https://github.com/CesiumGS/3d-tiles/pull/838)). Do not invent a private format.
 
 use std::path::Path;
 
-// Native ingestion currently consumes these shared reader foundations. They are
-// also compiled and tested without GDAL before portable readers are wired in.
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
 mod model;
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+mod pipeline;
 mod source_fields;
 
 #[cfg(feature = "native-geospatial")]
-mod native;
-
-#[cfg(feature = "native-geospatial")]
 pub(crate) fn native_available() -> Result<(), Error> {
-    native::available()
+    pipeline::available()
 }
 
 use crate::{
@@ -259,19 +253,11 @@ pub fn vector_to_3tz_reported(
     }
     crate::output::require_file(input)?;
     crate::output::check_output(output, options.force)?;
-    #[cfg(not(feature = "native-geospatial"))]
-    {
-        let _ = (repair, ambiguous_outlines, reporter);
-        Err(Error::Environment(
-            "vector conversion requires a build with native-geospatial".into(),
-        ))
-    }
-    #[cfg(feature = "native-geospatial")]
     {
         let job = crate::output::Job::begin(output, options.force)?;
         // The tileset tree is staged apart from the job's scratch space.
         let staging = job.staging("tiles")?;
-        let report = native::convert(
+        let report = pipeline::convert(
             input,
             &staging,
             max_features,

@@ -1,9 +1,14 @@
-//! Native OGR ingestion and disk-backed vector hierarchy. Native handles never
-//! cross worker boundaries; only owned features, reports and bytes do.
+//! Shared disk-backed vector hierarchy, LOD, encoding and reuse. Source readers
+//! and polygon operations are selected by build; workers receive owned data.
 mod aggregation;
 mod encoding;
 mod geometry;
 mod reuse;
+#[cfg(feature = "native-geospatial")]
+#[path = "pipeline/source_native.rs"]
+mod source;
+#[cfg(not(feature = "native-geospatial"))]
+#[path = "portable.rs"]
 mod source;
 mod store;
 
@@ -77,26 +82,33 @@ pub(super) fn convert(
 }
 
 pub(crate) fn available() -> Result<(), Error> {
-    let versions = crate::geospatial::versions()?;
-    if versions.geos.is_none_or(|v| v < [3, 10, 0]) {
-        return Err(Error::Environment(
-            "native vector requires GDAL with GEOS >= 3.10".into(),
-        ));
-    }
-    crate::geospatial::native::init()?;
-    // SAFETY: Drivers are registered; these lookups return borrowed
-    // process-lifetime drivers and do not open or alter any datasets.
-    unsafe {
-        for driver in [c"GeoJSON", c"GPKG", c"ESRI Shapefile"] {
-            if gdal_sys::GDALGetDriverByName(driver.as_ptr()).is_null() {
-                return Err(Error::Environment(format!(
-                    "native vector requires the GDAL {} driver",
-                    driver.to_string_lossy()
-                )));
+    #[cfg(feature = "native-geospatial")]
+    {
+        let versions = crate::geospatial::versions()?;
+        if versions.geos.is_none_or(|v| v < [3, 10, 0]) {
+            return Err(Error::Environment(
+                "native vector requires GDAL with GEOS >= 3.10".into(),
+            ));
+        }
+        crate::geospatial::native::init()?;
+        // SAFETY: Drivers are registered; these lookups return borrowed
+        // process-lifetime drivers and do not open or alter any datasets.
+        unsafe {
+            for driver in [c"GeoJSON", c"GPKG", c"ESRI Shapefile"] {
+                if gdal_sys::GDALGetDriverByName(driver.as_ptr()).is_null() {
+                    return Err(Error::Environment(format!(
+                        "native vector requires the GDAL {} driver",
+                        driver.to_string_lossy()
+                    )));
+                }
             }
         }
+        geometry::GeometryHandle::polygon(&[vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]])?
+            .triangulate()
+            .map(drop)
     }
-    geometry::GeometryHandle::polygon(&[vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]])?
-        .triangulate()
-        .map(drop)
+    #[cfg(not(feature = "native-geospatial"))]
+    {
+        Ok(())
+    }
 }
