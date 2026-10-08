@@ -361,9 +361,37 @@ impl Crs {
         Ok(crs)
     }
 
-    fn promote_with_metre_height(&mut self) -> Result<(), Error> {
+    fn promote_with_metre_height(&mut self) -> Result<f64, Error> {
         let _errors = QuietErrors::new();
         let epoch = self.coordinate_epoch();
+        // PROJ 9.9 requires a projected Cartesian CRS's axes to share units.
+        // Normalize XY and its linear projection parameters before adding a
+        // metre height axis; the caller scales only horizontal coordinates.
+        // SAFETY: The queries and mutation use this uniquely owned, live SRS.
+        let horizontal_to_metre = unsafe {
+            if gdal_sys::OSRIsProjected(self.0.as_ptr()) != 0 {
+                let factor = gdal_sys::OSRGetLinearUnits(self.0.as_ptr(), null_mut());
+                if !factor.is_finite() || factor <= 0. {
+                    return Err(Error::Data(
+                        "CRS linear unit factor must be finite and positive".into(),
+                    ));
+                }
+                if factor != 1.
+                    && gdal_sys::OSRSetLinearUnitsAndUpdateParameters(
+                        self.0.as_ptr(),
+                        c"metre".as_ptr(),
+                        1.,
+                    ) != 0
+                {
+                    return Err(Error::Environment(diagnostic(
+                        "cannot normalize horizontal CRS units",
+                    )));
+                }
+                factor
+            } else {
+                1.
+            }
+        };
         let mut raw = null_mut();
         // SAFETY: Promotion mutates the uniquely owned SRS. The exported JSON
         // is a GDAL allocation copied into Rust before its matching free.
@@ -386,9 +414,8 @@ impl Crs {
         } else {
             &mut document
         };
-        // PROJ 9.9 promotes projected Z using the horizontal linear units.
-        // Our caller's new height axis is explicitly metres, independently of
-        // source XY units. Retain every horizontal/datum/operation definition.
+        // Explicitly retain metre heights in the promoted source and its base
+        // geographic CRS without changing datum/operation definitions.
         let axis = crs
             .pointer_mut("/coordinate_system/axis/2")
             .ok_or_else(|| Error::Environment("promoted CRS has no third axis".into()))?;
@@ -401,7 +428,7 @@ impl Crs {
             promoted.set_coordinate_epoch(epoch)?;
         }
         *self = promoted;
-        Ok(())
+        Ok(horizontal_to_metre)
     }
 
     pub fn coordinate_epoch(&self) -> Option<f64> {
@@ -635,6 +662,7 @@ impl Drop for StrictTransform {
 pub struct EcefTransform {
     operation: StrictTransform,
     height_offset: f64,
+    horizontal_to_metre: f64,
 }
 
 impl EcefTransform {
@@ -643,6 +671,7 @@ impl EcefTransform {
             return Err(Error::Data("height offset must be finite".into()));
         }
         let native_height = source.has_native_height();
+        let mut horizontal_to_metre = 1.;
         if native_height && height_offset.is_some() {
             return Err(Error::Data("declared 3D/vertical CRS already defines heights; use a horizontal CRS override to apply height offset".into()));
         }
@@ -655,19 +684,26 @@ impl EcefTransform {
             if !horizontal || height_offset.is_none() {
                 return Err(Error::Data("horizontal CRS input requires an explicit height offset to ellipsoidal metres (0 when established)".into()));
             }
-            source.promote_with_metre_height()?;
+            horizontal_to_metre = source.promote_with_metre_height()?;
         }
         let target = Crs::from_definition("EPSG:4978")?;
         Ok(Self {
             operation: StrictTransform::new(&source, &target)?,
             height_offset: height_offset.unwrap_or(0.),
+            horizontal_to_metre,
         })
     }
 
     pub fn transform(&mut self, points: &[[f64; 3]]) -> Result<Vec<[f64; 3]>, Error> {
         let points: Vec<_> = points
             .iter()
-            .map(|p| [p[0], p[1], p[2] + self.height_offset])
+            .map(|p| {
+                [
+                    p[0] * self.horizontal_to_metre,
+                    p[1] * self.horizontal_to_metre,
+                    p[2] + self.height_offset,
+                ]
+            })
             .collect();
         self.operation.transform(&points)
     }
