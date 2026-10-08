@@ -1,4 +1,7 @@
 //! Original country rings must produce fills in both vector backends.
+//! The Sudan and Antarctica fixture rings are unchanged extracts from Natural
+//! Earth's public-domain 1:110m Admin 0 Countries dataset, pinned in
+//! `bench/demodata_manifest.json` (ne_110m_admin_0_countries.zip).
 use serde_json::Value;
 use std::{collections::BTreeSet, fs, io::Read, path::Path, process::Command};
 

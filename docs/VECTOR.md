@@ -100,6 +100,10 @@ With `--repair --ambiguous-outlines`, a repair that collapses to lines or points
 
 The portable backend validates polygons in Rust, repairs self-intersections using an even-odd fill rule and uses constrained Delaunay triangulation. Repairs that would discard collapsed boundary material or move source boundary vertices beyond the preservation checks are refused or handled by the explicit outline policy. Native builds retain GDAL/GEOS repair and triangulation. Triangle ordering and diagonals can differ between these backends.
 
+Polygons with a horizontal CRS and a constant source height retain their original XY coordinates for validation and triangulation. The resulting triangles use the corresponding vertices on the globe. This prevents globe curvature from introducing false crossings, such as the missing Sudan polygon in earlier country conversions. Longitude coordinates are used as supplied; pole and longitude-seam aliases retain their source boundaries. Local polygons, surfaces with varying heights and native compound or three-axis CRS inputs keep the existing best-fit 3D policy. Simplification carries the matching source vertices through each LOD, and triangle fragmentation retains the original boundary without adding internal edges.
+
+Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including explicit tilesets.
+
 `--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. No feature is dropped.
 
 Oversized polygons that need triangle fragmentation still need unambiguous filled geometry. Outline fallback does not resolve their fragmentation.
