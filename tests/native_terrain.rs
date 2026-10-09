@@ -1,7 +1,9 @@
 //! Public terrain consumer admission and directory publication; no Python runtime.
+#[cfg(feature = "native-geospatial")]
+use rusty_tiles::OutputPolicy;
 use rusty_tiles::{
     terrain::{terrain_to_directory, TerrainHeights, TerrainOptions, TerrainRequest},
-    OutputPolicy, RunControl,
+    RunControl,
 };
 use serde_json::Value;
 use std::{path::Path, process::Command};
