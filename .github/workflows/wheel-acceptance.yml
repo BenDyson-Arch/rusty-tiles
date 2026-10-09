@@ -3,6 +3,21 @@ name: Wheel acceptance
 # Run against a candidate commit before creating a release tag. This workflow
 # builds and tests artifacts only; it has no package or release publishing steps.
 on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/wheel-acceptance.yml'
+      - '.github/workflows/release.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.cargo/**'
+      - 'src/**'
+      - 'bindings/python/**'
+      - 'scripts/*wheel*'
+      - 'scripts/*blender*'
+      - 'tests/test_wheel_runners.py'
+      - 'tests/fixtures/**'
   workflow_dispatch:
     inputs:
       test-blender:
@@ -21,7 +36,7 @@ permissions:
 
 concurrency:
   group: wheel-acceptance-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   wheels:
@@ -83,8 +98,66 @@ jobs:
           path: evidence/*.json
           if-no-files-found: error
 
-  blender:
-    name: Installed wheel in Blender (Linux x86_64)
+  blender-official:
+    name: Official Blender (${{ matrix.platform }})
+    needs: wheels
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            platform: windows-x64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: macos-x64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+    defaults:
+      run:
+        shell: bash
+    env:
+      BLENDER_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: candidate
+      - name: Install official Blender's Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libx11-6 libxi6 libxfixes3 libxrender1 libxxf86vm1 libxkbcommon0
+      - name: Verify and unpack official Blender
+        run: >-
+          python scripts/download_blender.py --platform "$BLENDER_PLATFORM"
+          --directory "$RUNNER_TEMP/official-blender"
+          --report-json evidence/blender-distribution.json
+      - name: Install and test using official Blender's embedded Python
+        run: |
+          blender=$(python -c "import json; print(json.load(open('evidence/blender-distribution.json'))['executable'])")
+          python scripts/test_blender_wheel.py candidate/*.whl --blender "$blender" --distribution-json evidence/blender-distribution.json --report-json evidence/blender-acceptance.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: evidence-official-blender-${{ matrix.platform }}
+          path: evidence/*.json
+          if-no-files-found: error
+
+  blender-distribution:
+    name: Distribution Blender (Linux x86_64)
     needs: wheels
     if: inputs.test-blender
     runs-on: ubuntu-24.04
