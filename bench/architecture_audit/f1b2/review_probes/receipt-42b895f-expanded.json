@@ -1,0 +1,1618 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-f1b2-portable-42b895f",
+  "sha256": "0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b",
+  "source_commit": "42b895f0513f8a3aaa3f58879bcef2118adcfd77",
+  "fixtures": "manual stdlib glTF/buffers/PNG; Pillow generated JPEG; no oracle imports",
+  "stable_source_precondition": true,
+  "cases": [
+    {
+      "case": "multibuffer_external_png",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/multibuffer_external_png/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/multibuffer_external_png/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 707,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "glb_without_bin_external_buffers",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/glb_without_bin_external_buffers/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":652,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/glb_without_bin_external_buffers/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":652},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 652,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "external_view_image_same_offset_other_buffer",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/external_view_image_same_offset_other_buffer/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":802,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/external_view_image_same_offset_other_buffer/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":802},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 802,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "embedded_uv_external_positions",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/embedded_uv_external_positions/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":108,\"external_files\":2,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":668,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/embedded_uv_external_positions/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":108,\"external_files\":2,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":668},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 668,
+          "external_files": 2,
+          "external_bytes": 108,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "buffer_trailing_bytes",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/buffer_trailing_bytes/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":154,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/buffer_trailing_bytes/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":154,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 707,
+          "external_files": 3,
+          "external_bytes": 154,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "hardlink_unused_dedup",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/hardlink_unused_dedup/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":747,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/hardlink_unused_dedup/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":747},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 747,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "literal_percent_once",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/literal_percent_once/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":710,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/literal_percent_once/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":710},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 710,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "encoded_hash",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/encoded_hash/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":709,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/encoded_hash/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":709},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 709,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "unicode_raw",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/unicode_raw/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":710,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/unicode_raw/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":710},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 710,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "contained_parent",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/contained_parent/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":717,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/contained_parent/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":717},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 717,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "unused_bad_image",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"image signature is invalid\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "bad.png",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "unused_missing_buffer",
+      "expected": "io",
+      "exit": 1,
+      "stdout": "{\"error\":{\"code\":\"io\",\"kind\":\"io\",\"message\":\"inspect mesh source entry: No such file or directory (os error 2) (/tmp/fresh-f1b2-review-wc1br61p/unused_missing_buffer/missing.bin)\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":1,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"io\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "io",
+      "expectation_met": true
+    },
+    {
+      "case": "forbidden_uri_before_missing",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"resource URI must be a relative path without scheme, query or fragment\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "extension_before_missing",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"F1a does not support JSON field extensions\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "mime_mismatch",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"image MIME type does not match encoded bytes\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "encoded_separator",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"resource URI contains an encoded separator\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "raw_space",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid unescaped resource URI character\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "raw_backslash",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid unescaped resource URI character\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "invalid_escape",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid resource URI percent escape\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "decoded_bad_utf8",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"resource URI decoded path must be UTF-8\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "raw_portable_forbidden_angle",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid unescaped resource URI character\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "encoded_portable_forbidden_angle",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"resource URI filename outside portable path profile\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "raw_reserved_plus",
+      "expected": "invalid_input",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/raw_reserved_plus/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":703,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/raw_reserved_plus/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":703},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 703,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": false
+    },
+    {
+      "case": "encoded_reserved_plus",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/encoded_reserved_plus/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":705,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/encoded_reserved_plus/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":705},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 705,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "terminal_literal_dot",
+      "expected": "invalid_input",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_literal_dot/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":709,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_literal_dot/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":709},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 709,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": false
+    },
+    {
+      "case": "terminal_encoded_dot",
+      "expected": "invalid_input",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_encoded_dot/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":711,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_encoded_dot/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":711},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 711,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": false
+    },
+    {
+      "case": "terminal_decoded_parent",
+      "expected": "invalid_input",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_decoded_parent/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":719,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/terminal_decoded_parent/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":719},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 719,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": false
+    },
+    {
+      "case": "parent_escape",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"resource URI escapes the document directory\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "symlink_leaf",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh resource symlink is outside profile: /tmp/fresh-f1b2-review-wc1br61p/symlink_leaf/alias.bin\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "alias.bin",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "symlink_directory",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh resource symlink is outside profile: /tmp/fresh-f1b2-review-wc1br61p/symlink_directory/alias\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "alias",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "fifo_leaf",
+      "expected": "invalid_input",
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"mesh resource must be a regular file\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_input\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "fifo.bin",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_input",
+      "expectation_met": true
+    },
+    {
+      "case": "root_resource_alias",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh resource aliases its source document\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "output_dependency_hardlink",
+      "expected": "invalid_request",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"invalid_request\",\"kind\":\"invalid_request\",\"message\":\"mesh output overlaps or aliases a source file\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_request\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "alias.3tz",
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_request",
+      "expectation_met": true
+    },
+    {
+      "case": "output_root_hardlink",
+      "expected": "invalid_request",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"invalid_request\",\"kind\":\"invalid_request\",\"message\":\"mesh output overlaps or aliases a source file\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"invalid_request\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "alias.3tz",
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "invalid_request",
+      "expectation_met": true
+    },
+    {
+      "case": "output_descendant_of_root",
+      "expected": "invalid_request",
+      "exit": 1,
+      "stdout": "{\"error\":{\"code\":\"io\",\"kind\":\"io\",\"message\":\"inspect mesh output: Not a directory (os error 20) (/tmp/fresh-f1b2-review-wc1br61p/output_descendant_of_root/source.gltf/out.3tz)\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":1,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"io\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "io",
+      "expectation_met": false
+    },
+    {
+      "case": "output_descendant_of_dependency",
+      "expected": "invalid_request",
+      "exit": 1,
+      "stdout": "{\"error\":{\"code\":\"io\",\"kind\":\"io\",\"message\":\"inspect mesh output: Not a directory (os error 20) (/tmp/fresh-f1b2-review-wc1br61p/output_descendant_of_dependency/positions.bin/out.3tz)\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":1,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"io\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "io",
+      "expectation_met": false
+    },
+    {
+      "case": "min_exceeds_max_before_missing",
+      "expected": "invalid_input",
+      "exit": 1,
+      "stdout": "{\"error\":{\"code\":\"io\",\"kind\":\"io\",\"message\":\"inspect mesh source entry: No such file or directory (os error 2) (/tmp/fresh-f1b2-review-wc1br61p/min_exceeds_max_before_missing/missing.bin)\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":1,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"io\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "io",
+      "expectation_met": false
+    },
+    {
+      "case": "unused_min_exceeds_max_before_missing",
+      "expected": "invalid_input",
+      "exit": 1,
+      "stdout": "{\"error\":{\"code\":\"io\",\"kind\":\"io\",\"message\":\"inspect mesh source entry: No such file or directory (os error 2) (/tmp/fresh-f1b2-review-wc1br61p/unused_min_exceeds_max_before_missing/missing.bin)\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":1,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"io\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "io",
+      "expectation_met": false
+    },
+    {
+      "case": "inexact_accessor_extrema",
+      "expected": "invalid_input",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/inexact_accessor_extrema/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/inexact_accessor_extrema/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 707,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": false
+    },
+    {
+      "case": "json_ceiling_exact",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/json_ceiling_exact/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1048576,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/json_ceiling_exact/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1048576},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":688,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":688,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":688,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1496,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1496,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1496,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1568}\n{\"done\":1568,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1568}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1048576,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "json_ceiling_plus_one",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh source exceeds file or aggregate byte ceiling\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "dependency_ceiling_exact",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/dependency_ceiling_exact/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":33554528,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/dependency_ceiling_exact/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":33554528,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":689,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":689,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":689,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1497,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1497,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1497,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1569}\n{\"done\":1569,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1569}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 707,
+          "external_files": 3,
+          "external_bytes": 33554528,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "dependency_ceiling_plus_one",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh resource exceeds 32 MiB file ceiling\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "aggregate_unique_ceiling_exceeded",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"mesh captured inputs exceed 64 MiB\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "unused.bin",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "declared_buffer_ceiling_before_missing",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"declared buffers exceed 32 MiB\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "image_count_32_aliases",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/image_count_32_aliases/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1420,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/image_count_32_aliases/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1420},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1565}\n{\"done\":1565,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1565}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1420,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "image_count_33_before_missing",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"image/texture/sampler count exceeds 32\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "copied_image_bytes_exact",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/copied_image_bytes_exact/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":1048636,\"external_files\":3,\"image_bytes\":1048576,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1420,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/copied_image_bytes_exact/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":1048636,\"external_files\":3,\"image_bytes\":1048576,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":1420},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":694,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":694,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":694,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1502,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1502,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1502,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":67038,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":132574,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":198110,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":263646,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":329182,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":394718,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":460254,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":525790,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":591326,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":656862,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":722398,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":787934,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":853470,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":919006,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":984542,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1050078}\n{\"done\":1050078,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1050078}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1420,
+          "external_files": 3,
+          "external_bytes": 1048636,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 1048576,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "28b85f09c5f8d6038217f0ca6df39e54eaebb8d73f83b466161c05aabc841564"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "copied_image_bytes_exceeded",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"owned image bytes exceed 32 MiB\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "uri_components_exact_128",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/uri_components_exact_128/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":961,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/uri_components_exact_128/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":132,\"external_files\":3,\"image_bytes\":72,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":961},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":684,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1492,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":1564}\n{\"done\":1564,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":1564}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 961,
+          "external_files": 3,
+          "external_bytes": 132,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    },
+    {
+      "case": "uri_components_129",
+      "expected": "unsupported",
+      "exit": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"resource URI exceeds length/component ceiling\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"code\":\"unsupported\",\"event\":\"failed\",\"phase\":\"conversion\"}\n",
+      "source_preserved": true,
+      "entries_after": [
+        "source.gltf",
+        "pixels.png",
+        "positions.bin",
+        "uv.bin"
+      ],
+      "actual_kind": "unsupported",
+      "expectation_met": true
+    },
+    {
+      "case": "jpeg_exact_forward",
+      "expected": "ok",
+      "exit": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/tmp/fresh-f1b2-review-wc1br61p/jpeg_exact_forward/out.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"external_bytes\":693,\"external_files\":3,\"image_bytes\":633,\"image_pixels\":2,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":1,\"profile\":\"f1b-local-gltf-v1\",\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707,\"triangles\":1},\"ok\":true,\"output\":\"/tmp/fresh-f1b2-review-wc1br61p/jpeg_exact_forward/out.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":693,\"external_files\":3,\"image_bytes\":633,\"image_pixels\":2,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":3.60555127546399,\"schema_version\":3,\"source_bytes\":707},\"skippedFeatures\":null}\n",
+      "stderr": "{\"done\":0,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"mesh_leaves\",\"total\":1}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":0,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":405,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":685,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":1493,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"mesh_archive\",\"total\":2126}\n{\"done\":2126,\"event\":\"progress\",\"phase\":\"ready_to_publish\",\"total\":2126}\n{\"done\":1,\"event\":\"progress\",\"phase\":\"conversion\",\"total\":1}\n",
+      "archive": {
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 707,
+          "external_files": 3,
+          "external_bytes": 693,
+          "triangles": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 633,
+          "image_pixels": 2,
+          "routing_geometric_error_metres": 3.60555127546399
+        },
+        "members": [
+          "tileset.json",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.jpg",
+          "@3dtilesIndex1@"
+        ],
+        "positions": [
+          [
+            11.0,
+            21.0,
+            31.0
+          ],
+          [
+            13.0,
+            21.0,
+            31.0
+          ],
+          [
+            11.0,
+            24.0,
+            31.0
+          ]
+        ],
+        "image_sha256": "594935de7cc8fd70cbc1f6e02a3c55e17737bb6befb0b4fac8a19e0314cb28ae"
+      },
+      "actual_kind": "ok",
+      "expectation_met": true
+    }
+  ]
+}

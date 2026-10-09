@@ -1,0 +1,267 @@
+{
+  "production_source_commit": "ce8a89c58e2781d72c2ac5dff686de2f8d340850",
+  "binary_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc",
+  "manifest_sha256": "be9cdaa029dac38947e68ee2a5eb0be577e1a7919e0c2010671f15ce2069e807",
+  "static_cases": [
+    {
+      "variant": "multibuffer",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5952,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+    },
+    {
+      "variant": "glb-mixed",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 6444,
+        "external_files": 3,
+        "external_bytes": 531,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed"
+    },
+    {
+      "variant": "glb-json-only",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5972,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76"
+    },
+    {
+      "variant": "external-view-image",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 6029,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe"
+    },
+    {
+      "variant": "space-percent",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5956,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d"
+    },
+    {
+      "variant": "encoded-unicode",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5958,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d"
+    },
+    {
+      "variant": "encoded-hash",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5960,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52"
+    },
+    {
+      "variant": "once-percent",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5957,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5"
+    },
+    {
+      "variant": "distinct-basename",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5925,
+        "external_files": 4,
+        "external_bytes": 973,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 2,
+        "image_bytes": 174,
+        "image_pixels": 12,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d"
+    },
+    {
+      "variant": "mime-inferred",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5929,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd"
+    },
+    {
+      "variant": "plus",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 5952,
+        "external_files": 4,
+        "external_bytes": 1011,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd"
+    },
+    {
+      "variant": "uv-u8-bounds",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 6439,
+        "external_files": 4,
+        "external_bytes": 915,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e"
+    },
+    {
+      "variant": "uv-u16-bounds",
+      "status": "passed",
+      "report": {
+        "schema_version": 3,
+        "profile": "f1b-local-gltf-v1",
+        "coordinates": "local-gltf",
+        "source_bytes": 6351,
+        "external_files": 4,
+        "external_bytes": 915,
+        "triangles": 8,
+        "leaf_tiles": 4,
+        "leaf_triangles": 3,
+        "images": 1,
+        "image_bytes": 87,
+        "image_pixels": 6,
+        "routing_geometric_error_metres": 58.07968663827312
+      },
+      "source_sha256": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52"
+    }
+  ]
+}
