@@ -1,9 +1,8 @@
-"""Compare release builds of old/new CLI terrain paths on deterministic invented DEMs.
+"""Historical quantized-mesh benchmark; the producer was removed by T1.
 
-Run after building both binaries in release mode. Timing includes process startup,
-source inspection, sampling, encoding, sidecars and safe directory publication.
-Linux wait4 reports CPU seconds and largest-process peak RSS (not a sum over the
-process tree). Fixtures and correctness checks run outside measured intervals.
+This script is retained only to reproduce recorded pre-T1 experiments using
+historical binaries. Use architecture_audit/terrain_acceptance/resource_probe.py
+for the current bounded mesh profile. It is not current producer acceptance.
 """
 import argparse
 import datetime

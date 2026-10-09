@@ -4,6 +4,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ## 0.4.0 - Unreleased
 
+- Breaking terrain foundation: bounded EPSG:4326 Float32/Float64 DEMs produce 3D Tiles 1.1 GLB meshes through one typed request and directory publication attempt. Source-footprint cells replace zoom/simplification options and quantized-mesh output. The pinned Cesium preview includes mesh surface queries, clamping and imagery draping.
+
 ### Added
 
 - Self-contained per-converter demo recipes, including an invented LAS generator. Strict release acceptance renders and picks the README example and exercises all five preview layers before and after a cache-disabled reload.

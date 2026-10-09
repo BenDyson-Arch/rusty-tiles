@@ -191,18 +191,21 @@ else
   RUSTY_TILES_BIN=$BIN "$PYTHON" "$REPO/tests/fixtures/preview_layers.py" "$CASE" \
     >"$WORK/layers.log" 2>&1 || fail "preview_layers.py" "$WORK/layers.log"
   pass "preview layers"
+  "$PYTHON" "$REPO/tests/t1_terrain_oracle.py" "$CASE/terrain" --browser-oracle "$CASE/terrain-oracle.json" --browser-imagery \
+    >"$WORK/terrain-oracle.log" 2>&1 || fail "terrain GLB oracle" "$WORK/terrain-oracle.log"
   for probe in preview_layers point_cloud terrain "vector_compat --require-native --require-aggregates"; do
     read -r script flags <<<"$probe"
     case $script in
       preview_layers) layers=(--mesh "$CASE/mesh" --point-cloud "$CASE/cloud"
         --annotations "$CASE/annotations" --imagery "$CASE/imagery" --terrain "$CASE/terrain") ;;
       point_cloud) layers=(--point-cloud "$CASE/cloud") ;;
-      terrain) layers=(--terrain "$CASE/terrain") ;;
+      terrain) layers=(--terrain "$CASE/terrain" --imagery "$CASE/imagery") ;;
       vector_compat) layers=(--annotations "$CASE/annotations") ;;
     esac
     start_preview "$WORK/preview-$script.json" --cesium "$CESIUM_DIR" "${layers[@]}"
-    # shellcheck disable=SC2086 # flags are intentionally split
-    node "$REPO/tests/fixtures/$script.cjs" "$URL" $flags >"$WORK/$script.log" 2>&1 \
+    read -r -a browser_flags <<<"$flags"
+    if [[ $script == terrain ]]; then browser_flags=("$CASE/terrain-oracle.json"); fi
+    node "$REPO/tests/fixtures/$script.cjs" "$URL" "${browser_flags[@]}" >"$WORK/$script.log" 2>&1 \
       || fail "browser probe $script.cjs" "$WORK/$script.log"
     pass "browser probe $script.cjs"
     stop_server

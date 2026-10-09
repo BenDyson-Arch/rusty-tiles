@@ -232,6 +232,22 @@ jobs:
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install pinned terrain consumer
+        run: |
+          npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
+          target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prove terrain rendering, queries, clamping and imagery draping
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/t1_terrain_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/terrain-browser.json"
       - name: Test portable vectors against independent fixtures and Python oracle
         shell: bash -el {0}
         run: |

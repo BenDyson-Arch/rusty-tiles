@@ -101,7 +101,7 @@ fn preview_readiness(cesium: &Path) -> Value {
 
 fn terrain_readiness(geospatial: &Value) -> Value {
     json!({"ready":geospatial["ready"],"backend":"native GDAL/Rust","requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
-        "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
+        "geospatial":geospatial,"note":"Bounded EPSG:4326 GeoTIFF elevation decoding to 3D Tiles 1.1; source admission is checked during conversion."})
 }
 
 fn raster_readiness(geospatial: &Value) -> Value {

@@ -136,20 +136,20 @@ fn derivative_missing_inputs_do_not_publish_output() {
     )
     .unwrap_err();
     assert_eq!(err.error.kind(), rusty_tiles::JobErrorKind::Io);
-    let err = terrain::dem_to_terrain(
-        &input,
-        &output,
-        &terrain::TerrainOptions {
-            force: false,
-            max_zoom: 1,
-            grid: 17,
-            height_offset: 0.0,
-            fill_height: 0.0,
-            max_error: 0.,
-        },
+    let err = terrain::terrain_to_directory(
+        terrain::TerrainRequest::new(
+            &input,
+            &output,
+            terrain::TerrainHeights::RawMetres {
+                height_offset_metres: 0.,
+                fill_height_metres: 0.,
+            },
+            terrain::TerrainOptions::new(16),
+        ),
+        &rusty_tiles::RunControl::default(),
     )
     .unwrap_err();
-    assert!(matches!(err, rusty_tiles::Error::InputNotFound(_)));
+    assert_eq!(err.error.kind(), rusty_tiles::JobErrorKind::Io);
     assert!(!output.exists());
 }
 

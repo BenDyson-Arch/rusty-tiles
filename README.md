@@ -36,7 +36,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
 | GeoTIFF or other GDAL imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
-| Elevation rasters | `terrain` | Prototype quantized-mesh terrain with height sidecars | Yes |
+| Elevation rasters | `terrain` | Bounded 3D Tiles terrain meshes | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 
 Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
@@ -190,7 +190,7 @@ Every converter takes `-i` for input and `-o` for output. The file names below a
 | Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
 | Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
 | Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | **Native-geospatial only**; [imagery guide](docs/FORMATS.md#imagery) |
-| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --max-zoom 14 --height-offset 0 --fill-height 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
+| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --cells-per-leaf 64 --height-offset 0 --fill-height 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
 
 A height offset of 0 is correct only when source heights are already ellipsoidal metres. Read [Coordinates and height](#coordinates-and-height) before you choose one.
 
@@ -220,7 +220,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 The server never lists directories and never downloads a runtime or data. It serves only the directories you select, so point it at generated output.
 
-To use another viewer, serve the extracted `tileset.json` and its files. Raster output uses `tilejson.json`, and terrain output uses `layer.json`.
+To use another viewer, serve the extracted `tileset.json` and its files. Raster output uses `tilejson.json`, and terrain output uses `tileset.json`.
 
 ## Validate and publish
 
@@ -295,7 +295,7 @@ The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_me
 - [Command reference](docs/CLI.md): every option, exit codes, JSON output and progress events.
 - [Mesh, point cloud and imagery guide](docs/FORMATS.md): fidelity, limits and advanced options.
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.
-- [Terrain guide](docs/TERRAIN.md): height decisions, sidecars and viewer setup.
+- [Terrain guide](docs/TERRAIN.md): height decisions, mesh queries and viewer setup.
 - [Contributing](CONTRIBUTING.md): build, test and release.
 - [Demo-data suite](CONTRIBUTING.md#demo-data-acceptance-and-benchmarks): opt-in native acceptance and benchmarks against the pinned public corpus.
 

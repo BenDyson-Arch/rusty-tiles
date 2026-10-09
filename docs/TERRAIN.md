@@ -1,115 +1,103 @@
 # Terrain guide
 
-This page explains what the `terrain` command produces and how to read it. It is for users who build terrain from elevation rasters and for developers who load that terrain in a viewer. Option defaults are in the [command reference](CLI.md#terrain).
-
-**Terrain conversion is available only in the native-geospatial CLI/Rust build.** Use the [native container or build against system libraries](INSTALL.md#native-geospatial-cli). The standard CLI downloads and Python wheels cannot convert DEMs; installing GDAL alongside them does not enable this feature. Both CLI builds can preview existing terrain output.
-
-`terrain` is a prototype. Native conversion runs offline and needs no Python.
-
-## Convert an elevation raster
+`terrain` converts a bounded elevation GeoTIFF to a **3D Tiles 1.1 directory**
+containing glTF 2.0 GLB meshes. This replaces the prototype quantized-mesh format;
+there is no compatibility mode. Conversion requires the `native-geospatial`
+CLI or Rust build. Standard binaries can preview existing output.
 
 ```sh
 rusty-tiles terrain -i elevation.tif -o output/terrain \
-  --max-zoom 14 --height-offset 0 --fill-height 0 --max-error 1
+  --cells-per-leaf 64 --height-offset 0 --fill-height -1000
+rusty-tiles preview --cesium <Build/Cesium> --terrain output/terrain \
+  --imagery output/imagery
 ```
 
-This example assumes the source heights are already ellipsoidal metres. It fills missing coverage at zero metres. Choose values that suit your own height reference.
+## Source and height meaning
 
-For a small test DEM, the command prints a short summary and suggests a preview:
+The first profile accepts a standalone, one-band Float32 or Float64 GeoTIFF with
+internal EPSG:4326/WGS84 north-up PixelIsArea georeferencing. Samples are raw
+metres; the caller explicitly supplies an offset to obtain ellipsoidal heights.
+Empty or metre band units are allowed. Other units, nonidentity scale/offset,
+explicit masks, overviews, sidecar dependencies and alternate georeferencing
+are refused. Scalar NoData is supported, including NaN NoData. Valid samples
+must be finite and at least one sample must be valid.
 
-```text
-terrain: wrote output/terrain (19 tiles)
-next: rusty-tiles preview --cesium <Build/Cesium> --terrain output/terrain
-```
+The sampling lattice spans the closed source footprint, with one cell per source
+pixel. Bilinear interpolation uses pixel centres and clamps within outer pixel
+edges. Only contributors with nonzero weight must be valid. Missing lattice
+samples use the supplied **ellipsoidal** fill height directly; the offset is
+not added to fill. Geometry is never generated outside the footprint.
 
-## Input requirements
+Sampled and filled vertex heights must be −10,000…8,000 metres. The finite
+profile supports public Cesium surface queries whose downward rays start at
+9,000 metres. These bounds are checked before staging output. They do not
+imply that triangle interiors equal the original raster surface: triangles
+are Cartesian chords between samples.
 
-| Requirement | Why |
+## Output and limits
+
+| Member | Meaning |
 | --- | --- |
-| One band with a declared CRS | Placement is never guessed |
-| Heights in metres | The band unit must be empty or a metre spelling |
-| No band scale or offset | Convert scaled values to real metres first |
-| A finite height range | Empty or all-NoData rasters fail |
-| A longitude span under 180 degrees, inside -180 to 180 | Split antimeridian or global DEMs first |
-| At most 100,000 tiles in the pyramid | Reduce `--max-zoom` if the job is larger |
+| `tileset.json` | 3D Tiles 1.1 entrypoint, shared local frame and Cartesian bounds |
+| `tiles/{row}/{column}.glb` | Full-detail, opaque triangle mesh patches |
+| `conversion.json` | Typed source, sampling, height, placement and output receipt report |
 
-The command counts every tile before writing any. A job over the limit fails without output.
+`--cells-per-leaf` accepts 16, 32, 64 or 128, with smaller boundary patches.
+Adjacent patches store identical boundary positions. A shared local ENU frame
+places the mesh in WGS84 ECEF. Actual Float32 position storage error must be at
+most **0.05 metre**; larger extents that cannot meet this are refused. Collapsed
+or reversed decoded triangles are refused. There is no simplification, zoom
+pyramid, parent proxy, encoded normal or compression.
 
-## Height decisions
+Source file size is limited to 128 MiB, each source dimension to 32,768, decoded
+Float64 values to 64 MiB and native raster blocks to 64 MiB. Validity storage
+and the native cache are additional allocations. Output is limited to 10,000
+patches and a conservative 1 GiB plan; encoding uses one bounded patch at a time.
+These limits are not a whole-process RSS guarantee.
 
-You supply both height values. The command never infers a vertical datum.
+Leaf geometric error is zero relative to the discrete sampled mesh. The empty
+routing root uses its decoded bound diameter as a positive selection metric;
+this is not a certified source approximation error. Bounds contain decoded
+positions and their triangle chords.
 
-- `--height-offset` is added to every source height to give ellipsoidal metres.
-- `--fill-height` is the ellipsoidal height used for NoData and for areas outside the source.
+Conversion finishes native decoding and validates the full plan before staging.
+Members are flushed and synced; an exact inventory and report finish before
+exclusive publication. `--force` uses the foundation replacement protocol.
+Source identity and containing-directory overlaps are rejected; replacing a
+final output symlink replaces that entry and preserves its referent.
 
-A constant offset is not a geoid transformation. If your heights use a geoid or local datum, transform the DEM first. Automatic GDAL vertical shifts are disabled. Horizontal reprojection uses only the best local PROJ operation. Ballpark operations are refused, and missing grids fail the job.
+## Queries, clamping and imagery
 
-## What the output contains
+The tested consumer is **CesiumJS 1.146.0**. Load the output as a
+`Cesium3DTileset`, with `enableCollision: true`. `CesiumTerrainProvider` and
+`sampleTerrain` do not load this representation.
 
-| Path | Contents |
-| --- | --- |
-| `layer.json` | Quantized-mesh 1.0 manifest in the TMS scheme and EPSG:4326 tiling |
-| `{z}/{x}/{y}.terrain` | Quantized-mesh tiles |
-| `{z}/{x}/{y}.heights.json` | Coverage sidecar for each tile |
-| `conversion.json` | Settings, height range, simplification results and limitations |
-
-All tiles share one height range. Adjacent tile edges therefore decode to identical heights. The range includes the fill height. `conversion.json` records the range and the height quantization step.
-
-### Coverage sidecars
-
-Each sidecar is a JSON object with `width`, `height` and `heights`. Rows run south to north. A sample is the source height plus the offset. Missing coverage is `null`, recorded before the fill height is applied. Use the sidecar when you need to tell real coverage from filled terrain.
-
-`layer.json` points to the sidecars through a custom `heightOverlay` entry:
-
-```json
-"heightOverlay": {"version": 1, "grid": 65, "rowOrder": "south-to-north", "tiles": ["{z}/{x}/{y}.heights.json"]}
+```js
+const terrain = await Cesium.Cesium3DTileset.fromUrl("terrain/tileset.json", {
+  enableCollision: true,
+});
+viewer.scene.primitives.add(terrain);
+terrain.imageryLayers.addImageryProvider(imageryProvider);
+const heights = await viewer.scene.sampleHeightMostDetailed(cartographicPositions);
+const clamped = await viewer.scene.clampToHeightMostDetailed(cartesianPositions);
 ```
 
-This entry is a rusty-tiles extension. It is not part of the quantized-mesh standard, and other viewers ignore it.
+Queries intersect the decoded triangle mesh, including fill geometry. They
+require 3D mode and depth texture support. Public scene methods can query other
+scene geometry too: isolate the terrain by excluding unrelated primitives and
+hiding the globe. Normalize query positions to ellipsoid height zero before
+calling them so supplied input heights do not alter the pinned implementation's
+ray origin. Outside the terrain footprint, isolated queries/clamps return
+undefined. `HeightReference.CLAMP_TO_3D_TILE` is available for entity placement.
 
-## Sampling grid
+The included preview does this isolation and normalization, exposes
+`window.terrainSurface.sampleHeights` and `clampPositions`, and clamps a marker
+when the user clicks the terrain. It hides the global ellipsoid so negative
+heights remain visible. Imagery selected with `--imagery` is draped onto the
+terrain tileset using its georeferenced provider.
 
-`--grid` sets samples per tile edge. It accepts 17, 33, 65 or 129, and the default is 65. Samples are taken with bilinear resampling in EPSG:4326. A larger grid keeps more detail and writes larger tiles.
-
-## Simplification and `--max-error`
-
-The encoder simplifies each sampled grid and keeps every original tile-edge vertex. `--max-error` is the largest added error allowed, in metres. The default is 1. A value of 0 keeps the full grid.
-
-The limit covers two measurements. One is added elevation error. The other is 3D surface displacement, including the Earth's curvature. Both are measured against the decoded, quantized regular-grid mesh. A candidate that fails validation keeps its full grid instead.
-
-`conversion.json.simplification` records the outcome:
-
-| Field | Meaning |
-| --- | --- |
-| `maxErrorMetres` | The requested limit |
-| `maxAddedHeightErrorMetres` | Measured added elevation error |
-| `maxAddedSurfaceErrorMetres` | Measured added 3D surface error |
-| `maxMeshoptEstimateMetres` | The simplifier's own estimate, not a measurement |
-| `inputTriangles`, `outputTriangles` | Triangle counts before and after |
-| `inputVertices`, `outputVertices` | Vertex counts before and after |
-
-These limits exclude DEM sampling error and height quantization error. They are not a certified accuracy bound against the source surface. Use `--max-error 0` when the original grid matters more than smaller tiles.
-
-## Memory and threads
-
-GDAL sampling runs on one thread with a 64 MiB warp budget and a 64 MiB block cache. Encoding runs in batches of up to four grids. `RAYON_NUM_THREADS=1` makes encoding serial. `--max-error 0` is always serial.
-
-## View the terrain
-
-The output is a directory, not an archive. Load it in the included preview:
-
-```sh
-rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Cesium \
-  --terrain output/terrain
-```
-
-In your own CesiumJS application, serve the directory and load it with `CesiumTerrainProvider.fromUrl`. Request no vertex normals, because the tiles contain none. Set `requestVertexNormals: false`.
-
-`validate` does not check terrain directories yet.
-
-## Limits
-
-- Regular-grid sampling with border-preserving simplification only.
-- No encoded normals and no water mask.
-- No antimeridian or polar coverage without preprocessing.
-- The coverage sidecar format is a rusty-tiles extension.
+Cesium's `tileset.imageryLayers` API is **experimental** in the pinned version.
+Draping acceptance applies to this consumer; other 3D Tiles viewers do not
+necessarily implement that API. The mesh files remain ordinary standard GLBs.
+Archive packaging is a separate `convert` operation. `validate` currently
+checks `.3tz` archives rather than terrain directories.

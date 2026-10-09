@@ -16,10 +16,10 @@ const assert=require('node:assert/strict');
     await page.goto(process.argv[2]);
     const inspect=async()=>{
       await page.waitForFunction(()=>window.tiles && window.annotations && window.pointCloud && window.orthophoto && window.terrain,null,{timeout:30000});
-      const toggles=page.locator('#layers input');assert.equal(await toggles.count(),4);
-      for(let i=0;i<4;i++){
+      const toggles=page.locator('#layers input');assert.equal(await toggles.count(),5);
+      for(let i=0;i<5;i++){
         await toggles.nth(i).uncheck();
-        assert.equal(await page.evaluate(i=>[window.orthophoto,window.tiles,window.annotations,window.pointCloud][i].show,i),false);
+        assert.equal(await page.evaluate(i=>[window.terrain,window.orthophoto,window.tiles,window.annotations,window.pointCloud][i].show,i),false);
         await toggles.nth(i).check();
       }
       await page.getByRole('button',{name:'3D mesh extent',exact:true}).click();

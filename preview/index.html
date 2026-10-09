@@ -37,7 +37,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   viewer.scene.renderError.addEventListener((scene, error) => fail(error));
   const tilesets = [];
   const spheres = [];
-  let imageryBounds, terrainBounds;
+  let imageryBounds, imageryProvider;
   function frame(sphere) {
     viewer.camera.viewBoundingSphere(sphere, new C.HeadingPitchRange(-.8, -.65, Math.max(sphere.radius * 3, 5)));
     viewer.camera.lookAtTransform(C.Matrix4.IDENTITY);
@@ -61,22 +61,60 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     const metadata = await json(config.imagery);
     imageryBounds = C.Rectangle.fromDegrees(...metadata.bounds);
     const url = new URL(config.imagery, location.href);
-    const provider = new C.UrlTemplateImageryProvider({
+    const provider = imageryProvider = new C.UrlTemplateImageryProvider({
       url: new URL('./tiles/', url).href + '{z}/{x}/{y}.png',
       minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom, rectangle: imageryBounds,
     });
     provider.errorEvent.addEventListener(fail);
-    window.orthophoto = viewer.imageryLayers.addImageryProvider(provider);
-    toggle('Imagery', window.orthophoto);
+    if (!config.terrain) {
+      window.orthophoto = viewer.imageryLayers.addImageryProvider(provider);
+      toggle('Imagery', window.orthophoto);
+    }
     button('Imagery extent', () => viewer.camera.setView({destination: imageryBounds}));
   }
   if (config.terrain) {
-    const manifest = await json(config.terrain);
-    terrainBounds = C.Rectangle.fromDegrees(...manifest.bounds);
-    const provider = window.terrain = await C.CesiumTerrainProvider.fromUrl(new URL('./', new URL(config.terrain, location.href)).href, {requestVertexNormals: false});
-    provider.errorEvent.addEventListener(fail);
-    viewer.terrainProvider = provider;
-    button('Terrain extent', () => viewer.camera.setView({destination: terrainBounds}));
+    const terrain = window.terrain = await C.Cesium3DTileset.fromUrl(config.terrain, {
+      maximumScreenSpaceError: 8, enableCollision: true,
+    });
+    viewer.scene.primitives.add(terrain);
+    terrain.tileFailed.addEventListener(fail);
+    // This is a bounded mesh, including below-ellipsoid elevations. The global
+    // ellipsoid is not part of its surface and would otherwise cover those meshes.
+    viewer.scene.globe.show = false;
+    tilesets.push(terrain);
+    spheres.push(terrain.boundingSphere);
+    toggle('Terrain', terrain);
+    button('Terrain extent', () => frame(terrain.boundingSphere));
+    if (imageryProvider) {
+      window.orthophoto = terrain.imageryLayers.addImageryProvider(imageryProvider);
+      toggle('Imagery on terrain', window.orthophoto);
+    }
+    function excludedSurfaces() {
+      const excluded = [];
+      for (const collection of [viewer.scene.primitives, viewer.scene.groundPrimitives]) {
+        for (let i = 0; i < collection.length; i++) {
+          const primitive = collection.get(i);
+          if (primitive !== terrain) excluded.push(primitive);
+        }
+      }
+      for (const entity of viewer.entities.values) excluded.push(entity);
+      for (let i = 0; i < viewer.dataSources.length; i++) {
+        for (const entity of viewer.dataSources.get(i).entities.values) excluded.push(entity);
+      }
+      return excluded;
+    }
+    // Delegate to Cesium's mesh intersections, including most-detailed loading.
+    // These query rendered triangles, not an interpolated DEM or ellipsoid fill.
+    window.terrainSurface = {
+      async sampleHeights(positions) {
+        if (!viewer.scene.sampleHeightSupported) throw new Error('Terrain queries require depth texture support');
+        return viewer.scene.sampleHeightMostDetailed(positions.map(p => {const position = C.Cartographic.clone(p); position.height = 0; return position;}), excludedSurfaces());
+      },
+      async clampPositions(positions) {
+        if (!viewer.scene.clampToHeightSupported) throw new Error('Terrain clamping requires depth texture support');
+        return viewer.scene.clampToHeightMostDetailed(positions.map(p => {const position = C.Cartographic.fromCartesian(p); return C.Cartesian3.fromRadians(position.longitude, position.latitude, 0);}), excludedSurfaces());
+      },
+    };
   }
   for (const [name, label] of [['mesh', '3D mesh'], ['annotations', 'Annotations'], ['point-cloud', 'Point cloud']]) {
     if (!config[name]) continue;
@@ -97,22 +135,35 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   }
   function overview() {
     if (spheres.length) frame(C.BoundingSphere.fromBoundingSpheres(spheres));
-    else viewer.camera.setView({destination: imageryBounds || terrainBounds});
+    else viewer.camera.setView({destination: imageryBounds});
   }
   button('Full scene', overview);
   overview();
-  viewer.screenSpaceEventHandler.setInputAction(event => {
+  viewer.screenSpaceEventHandler.setInputAction(async event => {
     const feature = viewer.scene.pick(event.position);
     if (feature?.getPropertyIds) {
       status.textContent = JSON.stringify(Object.fromEntries(feature.getPropertyIds().map(key => [key, feature.getProperty(key)])),
         (_, value) => typeof value === 'bigint' ? String(value) : value, 2);
+    } else if (window.terrainSurface && viewer.scene.pickPositionSupported) {
+      try {
+        const picked = viewer.scene.pickPosition(event.position);
+        if (!picked) return;
+        const [position] = await window.terrainSurface.sampleHeights([C.Cartographic.fromCartesian(picked)]);
+        if (!Number.isFinite(position?.height)) return;
+        const [clamped] = await window.terrainSurface.clampPositions([C.Cartesian3.fromRadians(position.longitude, position.latitude, position.height)]);
+        if (!clamped) return;
+        viewer.entities.removeById('terrain-query');
+        viewer.entities.add({id: 'terrain-query', position: clamped,
+          point: {pixelSize: 9, color: C.Color.YELLOW, disableDepthTestDistance: Number.POSITIVE_INFINITY}});
+        status.textContent = `Terrain height: ${position.height.toFixed(3)} m (ellipsoidal)`;
+      } catch (error) { fail(error); }
     }
   }, C.ScreenSpaceEventType.LEFT_CLICK);
   const removeReady = viewer.scene.postRender.addEventListener(() => {
     if (!window.failures.length && tilesets.every(tiles => tiles.tilesLoaded) && viewer.scene.globe.tilesLoaded) {
       window.loaded = true;
       status.textContent = 'Scene ready. Click a point or annotation for properties. Hide covering layers to inspect them.'
-        + (config.terrain ? '\nTerrain uses your supplied height datum and NoData fill settings.' : '');
+        + (config.terrain ? '\nTerrain uses your supplied height datum and NoData fill. Click its surface to query and clamp a marker.' : '');
       removeReady();
     }
   });

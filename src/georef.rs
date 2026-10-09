@@ -43,10 +43,6 @@ pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 
 }
 
 /// WGS84 geodetic → ECEF metres; also the origin of [`east_north_up`].
-///
-/// The quantized-mesh terrain encoder keeps its own formula (e² from the
-/// semi-minor axis, a different evaluation order): its published `.terrain`
-/// bytes differ from this one in the last ulp.
 pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
     let lon = pos.lon_deg.to_radians();
     let lat = pos.lat_deg.to_radians();

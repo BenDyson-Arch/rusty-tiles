@@ -3,8 +3,8 @@
 Tracking: [#135](https://github.com/BenDyson-Arch/rusty-tiles/issues/135), under
 [#124](https://github.com/BenDyson-Arch/rusty-tiles/issues/124) and release gate #113.
 Audit baseline develop `5df15e7`; point P1 subsequently merged as `c4912f8`.
-Status: standard replacement investigation complete; replacement producer not
-accepted or implemented by this document. The user selected investigation of a
+Status: replacement implementation and independent acceptance are in progress;
+this decision document alone earns no producer acceptance. The user selected investigation of a
 standard replacement rather than a custom quantized-mesh viewer contract.
 
 ## Decision and consequences
@@ -17,8 +17,11 @@ to invent filled hemispherical roots for a small DEM.
 
 This is a breaking output change: `tileset.json` and GLB leaves replace
 `layer.json` and quantized `.terrain` files. Consumers load a `Cesium3DTileset`.
-It is not a drop-in `CesiumTerrainProvider`: `sampleTerrain`, terrain-based
-clamping and imagery-layer draping are outside the initial profile. An adapter,
+It is not a drop-in `CesiumTerrainProvider`. The first slice includes mesh surface
+queries, terrain-based clamping and georeferenced imagery draping through the
+pinned Cesium 1.146.0 consumer. Queries/clamps use public scene mesh-intersection
+APIs; imagery attaches to `tileset.imageryLayers`, an explicitly experimental
+Cesium API. It does not promise terrain-provider `sampleTerrain` compatibility. An adapter,
 nonfinite header sentinel, huge finite proxy or legacy fallback is not part of
 this decision.
 
@@ -69,12 +72,13 @@ partition size; there is no zoom pyramid or inferred resampling resolution.
 Before acceptance, freeze exact lattice counts/coordinates, triangle diagonal,
 resource caps and precision domain. Boundary patches share coordinates and heights.
 Missing source samples inside the footprint use the caller's fill; independent
-sample records retain null coverage before fill. There is no geometry outside the
+fixtures prove null coverage before fill. There is no geometry outside the
 source footprint. Holes instead of fill would be a separate explicit policy.
 
 Partition the complete sampled triangle mesh without simplification or parent
-proxies. Initially omit textures, encoded normals, imagery draping, compression
-and optional culling extensions. Define the untextured material/rendering profile
+proxies. Initially omit embedded textures, encoded normals, compression
+and optional culling extensions. Include live imagery draping from an explicit
+georeferenced imagery provider on the terrain tileset. Define the opaque material/rendering profile
 explicitly. Use one shared Cartesian local frame and identical encoded boundary
 coordinates so adjacent patches remain identical after decoding. Apply glTF Y-up
 to 3D Tiles Z-up conversion exactly once, then the declared Earth-fixed transform.
@@ -114,7 +118,11 @@ required cleanup before publication. Measure source/patch/member growth and
 state limits without treating sample counts as whole-process memory bounds.
 
 Run actual Cesium loading/traversal/rendering for a forced multipatch case,
-negative heights and root bounds, then final candidate/platform/package checks.
+negative heights and root bounds. Compare public scene queries and clamping
+against independent intersections of decoded GLB triangles; prove absent results
+outside the footprint and isolation from unrelated geometry. Prove imagery
+changes the terrain surface pixels and uses local georeferenced tile requests,
+including an uncached reload, then final candidate/platform/package checks.
 Existing F1a GLB encoding is a candidate building block; do not make terrain
 import mesh source/partition models just to reach it. Extract only a small private,
 runtime-free codec if both actual consumers justify it.
@@ -128,3 +136,23 @@ runtime-free codec if both actual consumers justify it.
 - [Cesium recomputation fallback](https://github.com/CesiumGS/cesium/blob/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Core/QuantizedMeshTerrainData.js#L338).
 - [Cesium empty-root traversal](https://github.com/CesiumGS/cesium/blob/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Cesium3DTilesetBaseTraversal.js#L50).
 - [Heightmap 1.0 primary documentation](https://github.com/CesiumGS/cesium/wiki/heightmap-1.0-terrain-format), live wiki; parser behavior checked against the same Cesium pin.
+
+## First-slice consumer domain
+
+Sampled and filled ellipsoidal vertex heights are within −10,000…8,000 metres.
+The pinned public query implementation starts a downward ray at 9,000 metres;
+this profile makes that limitation explicit rather than using private viewer APIs.
+Actual Euclidean Float32 position storage error must be at most 0.05 metre.
+This is distinct from interpolation or between-sample triangle approximation.
+
+Preview hides the global ellipsoid when the bounded terrain mesh is selected,
+so below-ellipsoid geometry remains visible. Mesh-only query/clamp helpers exclude
+other scene primitives and require 3D mode/depth texture support. Missing source
+samples produce caller-declared fill geometry; queries intersect that geometry.
+Outside the footprint there is no terrain geometry and the result is undefined.
+
+Cesium 1.146.0 pin `b8d3a36fe98a3e432eb89253c95d5f20e605e0f1`:
+
+- [Public scene sampling/clamping](https://github.com/CesiumGS/cesium/blob/b8d3a36fe98a3e432eb89253c95d5f20e605e0f1/packages/engine/Source/Scene/Scene.js#L5293).
+- [Tileset imagery layers](https://github.com/CesiumGS/cesium/blob/b8d3a36fe98a3e432eb89253c95d5f20e605e0f1/packages/engine/Source/Scene/Cesium3DTileset.js#L1220), experimental.
+- [Height references](https://github.com/CesiumGS/cesium/blob/b8d3a36fe98a3e432eb89253c95d5f20e605e0f1/packages/engine/Source/Scene/HeightReference.js).
