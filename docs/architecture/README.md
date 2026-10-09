@@ -1,6 +1,6 @@
 # Architecture foundations for 0.4.0
 
-Status: ongoing architecture gate; F0 is implemented in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
+Status: ongoing architecture gate; F0 is accepted and merged in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Baseline: `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on `develop`.
 
 0.4.0 promotion, tagging and publication are blocked by #113. Existing release

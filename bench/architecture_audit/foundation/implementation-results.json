@@ -1,5 +1,5 @@
 {
-  "implementation_commit": "36db8b2941db8d93a66c81c49efdd917711e6e41",
+  "implementation_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
   "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
   "gdal": "3.13.3",
   "portable": {
@@ -21,17 +21,19 @@
     "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
     "machine": "x86_64",
     "package_version": "0.4.0",
-    "package_file": "/tmp/rusty-tiles-wheel-xh1m5drk/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+    "package_file": "/tmp/rusty-tiles-wheel-_e1lpnp2/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
     "wheel_sha256": "0dca2bd67aee81c60abdf315b6eea550e628be23f2ede37fc373e30baca5b17b",
     "empty_path": true,
     "tests_run": 22,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "ok": true
+    "ok": true,
+    "build_source_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
+    "test_source_commit": "dd0e0afc9b927f43944cc185aa8b806c6032fbde"
   },
   "build_profile": "dev, debug=0, incremental=false, jobs=2",
-  "platform_limit": "Local Linux only. macOS/Windows and other Python versions require CI; no crash or power-loss durability proof.",
+  "platform_limit": "Local Linux results below are supplemented by ci-acceptance.json and installed-platform-results.json. No crash/power-loss durability or final #113 release qualification.",
   "verification_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
   "destination_binding_fix_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
   "cli_fixture_followup": {
@@ -41,5 +43,6 @@
     "changes": "Canonical output fixture root with lexical input recipes for Windows; production unchanged from c777180.",
     "portable_log_sha256": "56f45c336de275b9c0f847ecd19c9d4d52da9c3f261cb44ae968742fa3d95e3e",
     "native_log_sha256": "84b28c194aa876ac9f9b9903120b176811344fc71342126b608793b561e30fa4"
-  }
+  },
+  "initial_implementation_commit": "36db8b2941db8d93a66c81c49efdd917711e6e41"
 }

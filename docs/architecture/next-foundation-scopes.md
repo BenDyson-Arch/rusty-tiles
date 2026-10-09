@@ -27,8 +27,9 @@ parallel tests. This is a required F0 fix, not a new mesh feature.
 See [F0 contract](f0-implementation.md), [acceptance evidence](f0-evidence.md)
 and [final review](../../bench/architecture_audit/post_f0/f0-acceptance-review.md).
 The earlier agents' statements that their narrower audits found no F0 blocker
-precede this targeted review; they are not contrary evidence. Merge acceptance
-requires the fix and applicable verification, not only the formerly green head.
+precede this targeted review; they are not contrary evidence. The fixed head `dd0e0af` passed all active PR and wheel/Blender checks and merged
+in #116 at `519e8c1`. The merged tree exactly matches the accepted tree. This
+acceptance is bounded by the F0 contract; all later scopes below remain open.
 
 ## Ordered work and dependencies
 
@@ -181,7 +182,7 @@ component. No whole subsystem receives unconditional retention.
 
 ## Release gate and next action
 
-Finish accepted F0, then finalize #117's small contract with its local #120/#125
+F0 is accepted and merged. Next finalize #117's small contract with its local #120/#125
 oracles and implement that slice. Directory/vector contracts and remaining proof
 work can proceed in parallel with named owners. Update the disposition ledger as
 actual evidence lands, including counterexamples and withdrawn suspicions.

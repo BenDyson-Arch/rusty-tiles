@@ -1,8 +1,10 @@
 # F0 implementation evidence (#115)
 
-Implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
+Initial implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
 Destination-binding fix and full verification: `c777180f178df5cc2f524f7b20f4251ba9d522e0`.
 CLI fixture follow-up: `4b51b32bc63e789296f9eaaaaaa2fc0b2dee8e1d` (3 portable / 4 native CLI contract tests pass; production unchanged).
+Merged into `develop` in PR #116 at `519e8c105dfb9afcdcf6447b82adc91ff0dba630`;
+the merged tree exactly matches accepted head `dd0e0af`.
 The [implementation contract](f0-implementation.md) defines the supported scope
 and deliberate migrations. This evidence does not close #113 or release 0.4.0.
 
@@ -25,9 +27,11 @@ record source/toolchain identity, test totals, log hashes and wheel identity.
 | Foundation lifecycle model | 14 contract cases pass; 8 designated negative controls detected |
 | Independent monitor traces | 3 tests pass; pre-permission fatal causes, late producer work, post-permission publisher failure |
 
-The installed wheel is a local Linux dev artifact, not a manylinux/release
-qualification. Ignored tests are not counted as passing. Windows/macOS and other
-Python versions require CI evidence; no local claim is made for them.
+The locally installed wheel is a Linux dev artifact, not a manylinux/release
+qualification. Its production source is `c777180`; the final Python output-path
+assertion at `dd0e0af` compares filesystem identity, including Windows verbatim
+path spellings. Ignored tests are not counted as passing. The hosted results below are separate from the local runs; no platform result
+is inferred from the local environment.
 
 The final review found and fixed publication through an unresolved relative
 destination: a callback changing CWD could redirect Replace into a selected
@@ -35,6 +39,28 @@ source. The operation now retains its checked absolute destination for staging,
 publication and result identity. An isolated subprocess regression proves source
 preservation and intended installation; the rebuilt wheel verifies the resolved
 output contract. See the [final review](../../bench/architecture_audit/post_f0/f0-acceptance-review.md).
+
+## Hosted acceptance
+
+At head `dd0e0afc9b927f43944cc185aa8b806c6032fbde`, all active jobs in
+[PR CI](https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620)
+and [wheel/Blender acceptance](https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617)
+pass. [Recorded CI metadata](../../bench/architecture_audit/foundation/ci-acceptance.json)
+identifies the exact jobs, source, merge and equal tree hashes.
+
+- Five portable CLI targets: Linux x86-64/ARM64, macOS x86-64/ARM64, Windows x86-64.
+- Rust/Python checks, native GDAL 3.12/3.13, and the Python-free installed container
+  suite plus network-disabled runtime capability check.
+- Five candidate wheel platforms, each tested on CPython 3.10 and 3.14, plus four
+  official Blender 4.5.14 LTS bundles (Linux/Windows x86-64 and both macOS targets):
+  **14 sessions, 308 tests, zero failures/errors/skipped tests**. The
+  [installed-platform evidence](../../bench/architecture_audit/foundation/installed-platform-results.json)
+  retains report/wheel/distribution hashes and environment identity.
+
+The optional distribution-Blender job and workflow-dispatch-only release route
+were skipped, not passed. No PyPI installation/publication, current strict browser
+run or completed #113 architecture gate is claimed. Fresh merged-head CI starts
+separately; the accepted PR and merged source trees are identical.
 
 ## Proof boundaries
 
