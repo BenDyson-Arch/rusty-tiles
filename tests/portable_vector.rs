@@ -55,11 +55,10 @@ fn convert(input: &Path, output: &Path, arguments: &[&str]) -> Value {
         String::from_utf8_lossy(&result.stderr)
     );
     assert_eq!(report["ok"], true);
-    assert_eq!(
+    assert!(
         rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(output))
             .unwrap()
-            .ok,
-        true
+            .ok
     );
     archive_json(output, "conversion.json")
 }
@@ -360,11 +359,10 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
         .unwrap();
         assert_eq!(result.output, std::fs::canonicalize(&output).unwrap());
         assert_eq!(result.report["features"], 6);
-        assert_eq!(
+        assert!(
             rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
                 .unwrap()
-                .ok,
-            true
+                .ok
         );
         let manifest = archive_json(&output, "tileset.json");
         assert_eq!(manifest["root"].get("implicitTiling").is_some(), !explicit);

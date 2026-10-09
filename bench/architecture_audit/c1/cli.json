@@ -1,0 +1,1752 @@
+{
+  "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
+  "cases": [
+    {
+      "name": "triangle",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/triangle.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "min_version_2_0",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/min_version_2_0.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "min_version_2_1",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "minimum glTF version 2.1"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "min_version_3_0",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "minimum glTF version 3.0"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "min_version_bad_type",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "asset.minVersion must be a version string"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "points",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/points.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "lines",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/lines.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "primitive_restart_lines",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/primitive_restart_lines.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "primitive_restart_not_required",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "primitive restart extension must be required"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "primitive_restart_ordinary_index_oob",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "primitive index outside POSITION count"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "primitive_restart_empty_segment",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "restart LINE_STRIP profile requires at least two vertices in every segment"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "primitive_restart_singleton_segment",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "restart LINE_STRIP profile requires at least two vertices in every segment"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "terrain",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/terrain.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "unknown_chunk",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/unknown_chunk.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "external_bin",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/external_bin.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "interleaved_normalized",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/interleaved_normalized.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 3,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "color_set_noninteger",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid indexed attribute suffix"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "color_set_01",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid indexed attribute suffix"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "color_set_1",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "indexed attribute sets must start at zero and be consecutive"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "texcoord_set_noninteger",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid indexed attribute suffix"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "mixed_index_vertex_view",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "bufferView mixes indices and vertex attributes"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "custom_attribute_u32",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid _CUSTOM accessor type"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "matrix_padding",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/matrix_padding.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 3,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "matrix_final_padding_omitted",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/matrix_final_padding_omitted.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 3,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "quantized_positions",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/quantized_positions.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "b3dm",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/b3dm.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "b3dm feature and batch table semantics",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.b3dm",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "b3dm_short_header",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "truncated or invalid b3dm header"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_total_length",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "b3dm length/alignment invalid"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_table_overclaim",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_table_alignment",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "b3dm table boundary must be eight-byte aligned"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_future_version",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "b3dm version other than 1"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_missing_batch_length",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "b3dm requires uint32 BATCH_LENGTH"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_duplicate_feature_key",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid JSON: duplicate JSON key: BATCH_LENGTH at line 1 column 32"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_batch_binary_without_json",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "b3dm table framing invalid"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_embedded_glb_overclaim",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "b3dm_nonzero_tile_padding",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid b3dm trailing padding"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "meshopt_none_golden",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/meshopt_none_golden.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "empty_bin",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "buffer byteLength does not match actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "stride_one",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid bufferView byteStride"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "offset_overflow",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor alignment/stride invalid"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "index_range",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "primitive restart index is not allowed for this core mode"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_short",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "buffer byteLength does not match actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "nan_position",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "nonfinite accessor float"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "infinite_position",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "nonfinite accessor float"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "sparse",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "sparse accessor"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "data_uri",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "data buffer media type or encoding"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "required_unknown",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "required extension UNKNOWN_required"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "count_limit",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "count_sum_overflow",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_base64_octet-stream",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/buffer_base64_octet-stream.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "buffer_base64_gltf-buffer",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/buffer_base64_gltf-buffer.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "buffer_base64_bad_base64",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid base64 buffer: Invalid symbol 33, offset 0."
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_base64_missing_bytes",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "buffer byteLength does not match actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_base64_length_mismatch",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "buffer byteLength does not match actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_remote",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "URI outside archive-local profile: https://example.invalid/positions.bin"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_absolute",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "URI outside archive-local profile: /positions.bin"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_percent",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "URI outside archive-local profile: positions%2ebin"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_query",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "URI outside archive-local profile: positions.bin?x=1"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_fragment",
+      "exitCode": 2,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "message": "URI outside archive-local profile: positions.bin#part"
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_empty",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid resource URI: "
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_backslash",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid resource URI: a\\positions.bin"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "buffer_uri_escape",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "URI escapes archive"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "tileset_duplicate_key",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid JSON: duplicate JSON key: geometricError at line 1 column 65"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "truncated_header",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "bin_overclaim",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "duplicate_bin",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "BIN must be the second chunk, at most once"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "bin_nonzero_padding",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "buffer byteLength does not match actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "matrix_missing_padding",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "meshopt_count_limit",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "meshopt decoded size overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "implicit_no_content",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/implicit_no_content.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 0,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "implicitAddressingAndAvailability",
+          "materialAndImageSemantics",
+          "metadataSemantics"
+        ],
+        "ok": true,
+        "payloads": [],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "implicit_duplicate_subtree_key",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "invalid JSON: duplicate JSON key: constant at line 1 column 44"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "polygon_optional_tables",
+      "exitCode": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-final-corpus-64122fd/polygon_optional_tables.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "EXT_mesh_polygon",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 5,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "polygon_accessor_reference_oob",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "reference out of range"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "polygon_accessor_wrong_scalar",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "polygon reference must be unsigned SCALAR accessor"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "index_offset_max",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "3TZ index differs from ZIP directory"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "zip_local_offset_sentinel",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "missing ZIP64 central sizes/offset"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "name": "zip64_count_max",
+      "exitCode": 3,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "archive exceeds 65,536 entries"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    }
+  ],
+  "readOnly": true
+}

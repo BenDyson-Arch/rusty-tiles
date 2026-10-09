@@ -13,7 +13,11 @@ explicitly not inspected. Truncated framing is invalid; unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
 
 The glTF contract uses the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html),
-identified by revision `8e798b02d254cea97659a333cfcb20875b62bdd4`. It admits core
+identified by revision `8e798b02d254cea97659a333cfcb20875b62bdd4`.
+`asset.version` must be `2.0`. Optional `asset.minVersion` must have numeric
+major.minor syntax: requirements through 2.0 are admitted, later requirements
+are Unsupported, and malformed or non-string values are InvalidInput. This gate
+does not infer support for future specifications. It admits core
 numeric buffers, accessor layouts and primitive indices. Finite stored values and declared accessor bounds do not
 prove unit-length normals, rendered material meaning or source/LOD fidelity.
 KHR_mesh_quantization permits

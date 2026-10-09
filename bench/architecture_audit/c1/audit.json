@@ -7,10 +7,10 @@
     "baseline-hand-fixtures.json": "ab79b8e16f6cb622ae38982bcfbd3548f563efc38e66f36a5493735425eab3ac",
     "baseline-historical.json": "d0a848a009aa797e8c7053129d58fd6e751a5e4fd8ebb8cfa1ba6b563773e16a"
   },
-  "fixtureManifestSha256": "71428a5d003068110154defa37c1841dbf42758c17442ccc7f58be68e6b986d5",
+  "fixtureManifestSha256": "2b7e498d306a44d2aa6841ad73ba593a1ff0a41fdafc12fec34e7091361d4cbc",
   "generatorReproduction": "Fresh corpus hashes and manifest bytes exactly match checked fixtures.",
   "coverage": "Public Rust and CLI tests consume checked corpus without invoking Python. Standalone wheel parity opt-in. Hand geometry, stride, normalized color, quantization, MAT3 padding, external BIN, unknown chunks, missing bytes, float/index/range/count corruption and unsupported profiles.",
-  "remaining": "Await final frozen C1 binary and installed wheel; Rust now compares complete success reports, wheel runner optional CLI evidence compares complete success reports with archive path normalized.",
+  "remaining": "None for recorded C1 independent native/installed-wheel acceptance; documented finite profile exclusions remain.",
   "primarySpec": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
   "meshoptOracle": {
     "primarySource": "https://github.com/zeux/meshoptimizer/blob/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
@@ -23,17 +23,17 @@
     "filter": "NONE"
   },
   "publishedSpecification": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
-  "candidateExecuted": "27 original cases and five additional framing/container cases pass. Independent mixed-role and indexed-semantic negatives are incorrectly accepted; valid 11-byte MAT3 view incorrectly rejected. Legal shared indices trigger three-second killed work-amplification probe.",
-  "candidateResourceObserved": "Fresh twelve-process measurements: basic/count-limit ~76MiB, oversized JSON ~83MiB, 80000 repeated primitive DOM ~192MiB; document-item rejection occurs after JSON DOM parsing. No universal RSS bound claimed.",
+  "candidateExecuted": "INTERMEDIATE candidate only: 27 original cases and five additional framing/container cases pass. Independent mixed-role and indexed-semantic negatives are incorrectly accepted; valid 11-byte MAT3 view incorrectly rejected. Legal shared indices trigger three-second killed work-amplification probe.",
+  "candidateResourceObserved": "INTERMEDIATE candidate only: Fresh twelve-process measurements: basic/count-limit ~76MiB, oversized JSON ~83MiB, 80000 repeated primitive DOM ~192MiB; document-item rejection occurs after JSON DOM parsing. No universal RSS bound claimed.",
   "b3dmSource": "https://github.com/CesiumGS/3d-tiles/blob/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/Batched3DModel/README.adoc",
   "b3dmControls": "Independent modern BATCH_LENGTH-zero header/table/GLB positive; short header and corrupt length/table/alignment/key/padding boundaries and future version controls.",
   "publishedSpecificationVersion": "glTF 2.0.1; published registry snapshot selected by parent at commit prefix 8e798b02 (unpublished main is not normative for this corpus).",
   "matrixPaddingAuthority": "Published registry Data Alignment explicitly permits omitted final matrix padding; the independently authored 11-byte MAT3 U8 control passes the official validator.",
   "officialPositiveControl": {
     "evidence": "official-positive.json",
-    "sha256": "5b72e6de9325d9ca286f4f34ba4c4ef1c5017e6a63ffb256be986cf4678ffb0d",
+    "sha256": "3b4db33bc8e8a84f81a09f34f1b150e464ce5a340b374c1649f61e161c6c22f6",
     "validatorVersion": "2.0.0-dev.3.10",
-    "controls": 12,
+    "controls": 13,
     "errors": 0,
     "limitations": [
       "Official validator independently checks these core/quantization positive controls.",
@@ -44,7 +44,31 @@
   },
   "primitiveRestartSource": "https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md",
   "primitiveRestartControls": "Draft-profile LINE_STRIP positive with two independent segments, missing-required declaration and ordinary out-of-range index negatives; no unsupported segment cardinality assumption. Empty/singleton segment controls are Unsupported under the bounded profile, not asserted invalid under draft semantics.",
-  "implicitControls": "Independent one-node constant-availability no-content binary subtree and duplicated subtree key; runtime oversized JSON, >65536 JSON nodes and subtreeLevels16 pre-read capacity probes pending final binary.",
+  "implicitControls": "Independent one-node constant-availability no-content binary subtree and duplicated subtree key; final runtime oversized JSON, >65536 JSON nodes and subtreeLevels16 pre-read capacity probes passed (resources.json).",
   "polygonControls": "Optional three unsigned scalar table accessor references; out-of-range and FLOAT VEC3 reference corruption; full polygon topology uninspected.",
-  "bufferDataUriControls": "Two analytic 42-byte base64 buffer positives and malformed/empty/declared-length negatives; other encoding Unsupported."
+  "bufferDataUriControls": "Two analytic 42-byte base64 buffer positives and malformed/empty/declared-length negatives; other encoding Unsupported.",
+  "finalNativeExecuted": {
+    "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
+    "sourceHead": "64122fd3085347ea95c2d2458bc5c109bfd06a59",
+    "cliCases": 77,
+    "resourceRuns": 20,
+    "actualProducerB3dmControls": 147,
+    "checkedCorpusExactlyReproduced": true,
+    "evidenceSha256": {
+      "cli.json": "fe38d666e01b3405915572acf5ce692a744d4f7875d2b4fc96d5e9865defb2aa",
+      "resources.json": "de008bf18cf43f7b4c4c911b4866595fcc2c767b3fb9253df3b0cd7d5bf8422a",
+      "producer-alignment.json": "30b71986b57c90f62526c5e27231a0440afcd523082eaefae298398663070e4f",
+      "historical-final.json": "5c16bd3a3bd441e4e164875f2d6f06a74c15b58849ba54ccc35ddd548229ae92"
+    }
+  },
+  "finalWheelExecuted": {
+    "cases": 77,
+    "fullSuccessReportParity": true,
+    "failureClassParity": true,
+    "readOnly": true,
+    "wheelSha256": "babce1ca2e533b50287137806a6e39902cea87f2e6401ba0b4e7b1607513a17a",
+    "extensionSha256": "2f5af46358fc6b9854fe015576ffa7fa7b7ef94e476fa0af70e433b40f725b37",
+    "extensionMatchesWheelZipEntry": true,
+    "evidenceSha256": "8770456d62dcb0b2276147f8bb3704e33daea15b0d9327257918e8439bc1066c"
+  }
 }
