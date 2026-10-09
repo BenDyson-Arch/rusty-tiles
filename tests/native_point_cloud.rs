@@ -1101,14 +1101,11 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
                     expected[0]
                 }
                 Err(error) => {
-                    assert_eq!(
-                        result.status.code(),
-                        Some(i32::from(error.category().1)),
-                        "{definition}"
-                    );
-                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-                    assert_eq!(report["error"]["code"], error.category().0);
                     assert!(matches!(error, rusty_tiles::Error::Data(_)), "{error}");
+                    assert_eq!(result.status.code(), Some(3), "{definition}");
+                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                    assert_eq!(report["error"]["code"], "invalid_input");
+                    assert_eq!(report["error"]["kind"], "invalid_input");
                     assert!(!output.exists());
                     continue;
                 }
