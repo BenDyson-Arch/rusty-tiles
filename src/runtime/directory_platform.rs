@@ -178,7 +178,7 @@ mod implementation {
         let result = unsafe {
             libc::getattrlist(
                 stat.f_mntonname.as_ptr(),
-                &mut attrs,
+                (&mut attrs as *mut libc::attrlist).cast(),
                 (&mut caps as *mut Capabilities).cast(),
                 std::mem::size_of::<Capabilities>(),
                 0,
