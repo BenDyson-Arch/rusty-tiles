@@ -89,7 +89,7 @@ class WheelAPI(unittest.TestCase):
                                                callback=observe)
         self.assertIsInstance(result, rusty_tiles.MeshResult)
         self.assertTrue(result.output.is_absolute())
-        self.assertEqual(result.output.resolve(), output.resolve())
+        self.assertTrue(result.output.samefile(output))
         self.assertEqual(result.report["triangles"], 3)
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
@@ -147,7 +147,8 @@ class WheelAPI(unittest.TestCase):
                         self.assertEqual(output.read_bytes(), b"previous destination")
                     else:
                         self.assertFalse(output.exists())
-        self.assertFalse(any(path.name.startswith(".tiles-") for path in self.root.iterdir()))
+        self.assertFalse(any(path.name.startswith((".tiles-", ".mesh-work-"))
+                             for path in self.root.iterdir()))
 
     def test_local_mesh_callback_cwd_change_cannot_redirect_relative_output(self):
         source = self.root / "cwd.glb"
@@ -166,7 +167,7 @@ def observe(event):
     os.chdir(redirected)
 result = rusty_tiles.mesh_local_to_3tz(source, "bound.3tz", leaf_triangles=1, callback=observe)
 assert result.output.is_absolute()
-assert result.output.resolve() == (initial / "bound.3tz").resolve()
+assert result.output.samefile(initial / "bound.3tz")
 assert (initial / "bound.3tz").exists()
 assert not (redirected / "bound.3tz").exists()
 """
