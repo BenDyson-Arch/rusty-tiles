@@ -1,0 +1,603 @@
+{
+  "self_test": {
+    "fixture_variants": {
+      "coincident": "passed",
+      "degenerate": "passed",
+      "nested": "passed",
+      "instanced": "passed",
+      "scenes": "passed",
+      "interleaved": "passed",
+      "normal-absent": "passed",
+      "default-material": "passed",
+      "empty-material": "passed",
+      "nonindexed": "passed"
+    },
+    "analytic_transform_normal_winding": "passed",
+    "corruption_controls": {
+      "missing_triangle": "rejected",
+      "wrong_winding": "rejected",
+      "wrong_position": "rejected",
+      "missing_normal": "rejected",
+      "wrong_normal": "rejected",
+      "wrong_material": "rejected",
+      "invalid_buffer_range": "rejected",
+      "wrong_bounds": "rejected",
+      "default_valued_material_omission": "rejected"
+    },
+    "archive_corruption_controls": {
+      "orphan": "rejected",
+      "wrong_root_metric": "rejected",
+      "wrong_report": "rejected",
+      "wrong_leaf_bounds": "rejected",
+      "missing_leaf": "rejected",
+      "invalid_payload": "rejected"
+    }
+  },
+  "candidate": {
+    "binary": "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
+    "binary_sha256": "1c8246a3eabfe501222df3e9ee516b09690b5e73231caefb16983089c2f9e992",
+    "cases": [
+      {
+        "variant": "standard",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "standard",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "standard",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 3.64005494464026
+        }
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 3.64005494464026
+        }
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 3.64005494464026
+        }
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.00000000000001
+        }
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.00000000000001
+        }
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1436,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.000000000000014
+        }
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 16,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 16,
+          "leaf_tiles": 16,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 155.79794607118546
+        }
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 16,
+          "leaf_tiles": 8,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 155.79794607118546
+        }
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1476,
+          "triangles": 16,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 155.79794607118546
+        }
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1488,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 29.034462281915953
+        }
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1488,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 29.034462281915953
+        }
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1488,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 29.034462281915953
+        }
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1420,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1420,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1420,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1028,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1028,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1028,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "default-material",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1424,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "default-material",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1424,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "default-material",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1424,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "empty-material",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1316,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "empty-material",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1316,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "empty-material",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1316,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1264,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1264,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "routing_geometric_error_metres": 58.07968663827312
+        }
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "report": {
+          "schema_version": 1,
+          "profile": "f1a-local-static-glb-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 1264,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 58.079686638273124
+        }
+      }
+    ]
+  }
+}

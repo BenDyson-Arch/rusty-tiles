@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Linux F1a boundary evidence. RSS uses wait4; FD/thread/scratch peaks are sampled."""
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -88,7 +89,7 @@ def main():
         subprocess.run(['cc', '-O2', '-Wall', '-Wextra', '-Werror', str(Path(__file__).with_name('measure_child.c')), '-o', str(launcher)], check=True)
         results = [measure(args.binary.resolve(), case, Path(work), launcher) for case in
                    ['small', 'geometry', 'leaves', 'source-bytes', 'json-bytes', 'combined', 'rejected-leaves', 'rejected-geometry']]
-    report = dict(platform=platform.platform(), python=sys.version, cpu_count=os.cpu_count(),
+    report = dict(binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(), platform=platform.platform(), python=sys.version, cpu_count=os.cpu_count(),
                   caveat='Linux wait4 process peak RSS; descriptors, threads and scratch sampled at >=2ms, not proven maxima. Serial materialization, no constant-memory claim.', results=results)
     args.output.write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=2))
