@@ -44,6 +44,7 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `output.rs` | The conversion `Job`: preflight, private work directory, no-clobber publication |
 | `error.rs` | `Error` and its stable exit-code categories |
 | `pack.rs` | Stored ZIP/ZIP64 with the 3TZ index, and `convert` |
+| `convert_implicit.rs` | Eligibility, unchanged payload aliases and owned implicit roots for `convert-to-implicit` |
 | `validate.rs` | Read-only `.3tz` validation |
 | `tileset.rs` | `createTilesetJson` and `glb-to-3tz` |
 | `tileset_node.rs` | Shared 3D Tiles node pieces for tilers |
@@ -133,7 +134,7 @@ Doctor, machine results, native diagnostics, preview, force replacement and arch
 ### Python acceptance
 
 The Python extension has its own dependency-free suite. It installs an actual
-wheel into a fresh virtual environment and runs the README example, all five
+wheel into a fresh virtual environment and runs the README example, the public
 entry points, callbacks, concurrent calls, errors and force replacement with an
 empty executable `PATH`:
 
@@ -275,6 +276,24 @@ node tests/fixtures/terrain.cjs http://127.0.0.1:9279
 node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --require-aggregates
 ```
 
+For `convert-to-implicit`, export the native Rust fixtures and prepare separate preview copies. The helper requires a new destination directory; it preserves the exported manifests. Install CesiumJS 1.146.0 and Playwright 1.63.0 for the recorded gate:
+
+```sh
+npm install --prefix target/convert-implicit-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
+RUSTY_TILES_CONVERT_IMPLICIT_FIXTURES=target/convert-implicit-fixtures \
+  LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial --test convert_implicit
+python3 tests/fixtures/prepare_convert_implicit_preview.py \
+  target/convert-implicit-fixtures target/convert-implicit-preview
+rusty-tiles preview --point-cloud target/convert-implicit-preview/point \
+  --annotations target/convert-implicit-preview/vector \
+  --cesium target/convert-implicit-browser/node_modules/cesium/Build/Cesium --port 9386
+# In another terminal:
+NODE_PATH="$PWD/target/convert-implicit-browser/node_modules" \
+  node tests/fixtures/convert_implicit.cjs http://127.0.0.1:9386
+```
+
+[The recorded migration gate](bench/convert_implicit_browser_results.json) passes initial load and a cache-disabled reload. All three cloud variants refine from 2 proxy points to 16 leaf points; vectors reach all 8 points. Both source clusters remain pickable with their original properties, cyan styling and hidden visibility. Georeferenced world positions agree within 0.00001 m, with no page, tile or render errors. The report also records the rejected wrapper design, which left 18 cloud points visible by retaining the parent proxy alongside its descendants. The accepted alias layout preserves payload bytes but duplicates their storage; archive migration eligibility remains the regular point/vector subset documented in the command reference.
+
 | Probe | Checks |
 | --- | --- |
 | `preview_layers.cjs` | Mounts, toggles, mesh picking, imagery decoding and zero external requests |
@@ -283,6 +302,7 @@ node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --r
 | `vector_compat.cjs` | Native vector rendering, LOD, holes, fragment boundaries, picking and aggregates |
 | `vector_metadata.cjs` | Property styling, visibility, source identity, exact INT64 and missing values |
 | `implicit_levels.cjs` | Deep implicit mesh/cloud traversal across every level and boundary, full leaf counts and picking |
+| `convert_implicit.cjs` | Explicit, converted and fresh implicit cloud/vector refinement, world placement, both-cluster picking, original properties, style and visibility |
 
 Generate standalone vector cases with `tests/fixtures/vector_compat.py OUTPUT`. Add `--batch`, `--quantize`, `--meshopt-helper PATH` or `--aggregate-points` to match the option under test. `tests/fixtures/vector_metadata.py OUTPUT` builds the metadata cases. Omit `--require-native` to inspect fallback behaviour in older Cesium releases.
 

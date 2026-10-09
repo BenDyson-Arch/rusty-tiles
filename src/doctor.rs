@@ -16,6 +16,7 @@ pub const COMMANDS: &[(&str, &[&str])] = &[
     ("glb-to-3tz", &["glbTo3tz"]),
     ("createTilesetJson", &["create-tileset-json"]),
     ("convert", &[]),
+    ("convert-to-implicit", &[]),
     ("validate", &[]),
     ("preview", &[]),
 ];
@@ -43,6 +44,7 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
         "glb-to-3tz",
         "createTilesetJson",
         "convert",
+        "convert-to-implicit",
         "validate",
     ] {
         report["commands"][name] = json!({"ready":true,"requires":[],"backend":"native Rust"});

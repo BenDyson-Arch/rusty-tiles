@@ -173,6 +173,21 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(rusty_tiles.validate(repacked.output)["ok"])
         self.assertIsNone(repacked.report)
 
+    def test_convert_to_implicit_preserves_payload_and_force_semantics(self):
+        source = self.root / "source.las"
+        write_las(source)
+        explicit = rusty_tiles.point_cloud_to_3tz(source, self.root / "explicit.3tz", explicit=True)
+        converted = rusty_tiles.convert_to_implicit(explicit.output, self.root / "implicit.3tz")
+        self.assertTrue(rusty_tiles.validate(converted.output)["ok"])
+        self.assertTrue(converted.report["contentBytesPreserved"])
+        with zipfile.ZipFile(explicit.output) as before, zipfile.ZipFile(converted.output) as after:
+            for name in before.namelist():
+                if name.endswith(".glb"):
+                    self.assertEqual(before.read(name), after.read(name))
+        with self.assertRaises(rusty_tiles.OutputExistsError):
+            rusty_tiles.convert_to_implicit(explicit.output, converted.output)
+        rusty_tiles.convert_to_implicit(explicit.output, converted.output, force=True)
+
     def test_local_points_progress_and_force(self):
         source = self.root / "points.las"
         write_las(source)

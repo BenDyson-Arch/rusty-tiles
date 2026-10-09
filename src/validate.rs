@@ -659,6 +659,20 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
         if let Some(name) = check.reports["geometryReports"].as_str() {
             check.reference(uri("conversion.json", name)?)?;
         }
+        if check.reports["operation"] == "convert-to-implicit" {
+            if let Some(sources) = check.reports["retainedContentUris"].as_array().cloned() {
+                for source in sources {
+                    let source = uri(
+                        "conversion.json",
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid retained content URI"))?,
+                    )?;
+                    check.reference(source.clone())?;
+                    gltf(check.zip, &source)?;
+                }
+            }
+        }
     }
     let manifest = read_json(check.zip, "tileset.json")?;
     if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
