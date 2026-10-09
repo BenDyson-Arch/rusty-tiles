@@ -1,0 +1,195 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-135-native-final",
+  "source_bounds": [
+    10,
+    20,
+    11,
+    21
+  ],
+  "outside_hits": [
+    {
+      "longitude": 10.0625,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 100.31535573013228
+    },
+    {
+      "longitude": 10.0625,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 100.31535785066343
+    },
+    {
+      "longitude": 10.0625,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 100.31537905579977
+    },
+    {
+      "longitude": 10.0625,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 100.31559111584542
+    },
+    {
+      "longitude": 10.0625,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 100.3177118001139
+    },
+    {
+      "longitude": 10.125,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 97.25381960767872
+    },
+    {
+      "longitude": 10.125,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 97.25382172778839
+    },
+    {
+      "longitude": 10.125,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 97.2538429356126
+    },
+    {
+      "longitude": 10.125,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 97.25405501325156
+    },
+    {
+      "longitude": 10.125,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 97.25617587856748
+    },
+    {
+      "longitude": 10.1875,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 100.8153684161024
+    },
+    {
+      "longitude": 10.1875,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 100.8153705366539
+    },
+    {
+      "longitude": 10.1875,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 100.81539174281158
+    },
+    {
+      "longitude": 10.1875,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 100.81560379871246
+    },
+    {
+      "longitude": 10.1875,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 100.81772445342479
+    },
+    {
+      "longitude": 10.375,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 98.75381958997377
+    },
+    {
+      "longitude": 10.375,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 98.75382171074516
+    },
+    {
+      "longitude": 10.375,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 98.75384291804764
+    },
+    {
+      "longitude": 10.375,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 98.75405499905209
+    },
+    {
+      "longitude": 10.375,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 98.75617589475566
+    },
+    {
+      "longitude": 10.625,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 100.75380387432332
+    },
+    {
+      "longitude": 10.625,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 100.75380599499626
+    },
+    {
+      "longitude": 10.625,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 100.75382720300638
+    },
+    {
+      "longitude": 10.625,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 100.75403928360434
+    },
+    {
+      "longitude": 10.625,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 100.75616017955151
+    },
+    {
+      "longitude": 10.875,
+      "latitude": 21.000000001,
+      "outside_by_degrees": 1e-09,
+      "decoded_mesh_height": 102.25379812642531
+    },
+    {
+      "longitude": 10.875,
+      "latitude": 21.00000001,
+      "outside_by_degrees": 1e-08,
+      "decoded_mesh_height": 102.25380024713282
+    },
+    {
+      "longitude": 10.875,
+      "latitude": 21.0000001,
+      "outside_by_degrees": 1e-07,
+      "decoded_mesh_height": 102.25382145452542
+    },
+    {
+      "longitude": 10.875,
+      "latitude": 21.000001,
+      "outside_by_degrees": 1e-06,
+      "decoded_mesh_height": 102.25403353218954
+    },
+    {
+      "longitude": 10.875,
+      "latitude": 21.00001,
+      "outside_by_degrees": 1e-05,
+      "decoded_mesh_height": 102.2561543990556
+    }
+  ],
+  "binary_sha256": "89f84214e2592837bba197053b123c64a31db491f179983df0ff6409ee43de8d",
+  "source_head": "acabe9972623da2d7a227f46b0855220515cc220",
+  "fixture": "tests/fixtures/t1-plane.tif",
+  "interpretation": "Cartesian boundary triangles can project outside the geographic source lattice domain; source-ROI clipping belongs to the query wrapper, not an assertion about raw mesh intersections."
+}

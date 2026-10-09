@@ -302,7 +302,27 @@ def browser_oracle(directory, destination):
     for u,v in [(0.173,0.237),(0.503,0.507),(0.431,0.823)]:
         lon,lat=west+(east-west)*u,south+(north-south)*v
         samples.append(dict(longitude=lon,latitude=lat,height=ray_height(triangles,lon,lat),tolerance=.05))
-    oracle=dict(samples=samples,outside=[dict(longitude=west-(east-west)*.25,latitude=(south+north)/2)],
+    outside=[dict(longitude=west-(east-west)*.25,latitude=(south+north)/2)]
+    # Constant-latitude Cartesian boundary chords bow poleward. A source ROI
+    # guard must reject this point even though a raw decoded-mesh ray hits it.
+    # The spherical expression chooses an interior fraction of the bow; the
+    # independent WGS84/actual stored-mesh intersection proves the control.
+    step=report['sourcePixelDegrees'][0]
+    half_step=math.radians(step/2)
+    for edge in [north,south]:
+        bow=math.degrees(math.atan(math.tan(math.radians(edge))/math.cos(half_step)))-edge
+        latitude=edge+bow/4
+        if south<=latitude<=north or latitude==edge:
+            continue
+        longitude=west+step/2
+        try:
+            underlying_height=ray_height(triangles,longitude,latitude)
+        except AssertionError:
+            continue
+        outside.append(dict(longitude=longitude,latitude=latitude,
+                            underlyingMeshHeight=underlying_height,tolerance=.05))
+        break
+    oracle=dict(samples=samples,outside=outside,
                 minimumLeaves=len(json.loads((directory/'tileset.json').read_text())['root']['children']))
     pathlib.Path(destination).write_text(json.dumps(oracle,indent=2)+'\n')
     return oracle

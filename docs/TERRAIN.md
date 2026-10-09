@@ -26,7 +26,9 @@ The sampling lattice spans the closed source footprint, with one cell per source
 pixel. Bilinear interpolation uses pixel centres and clamps within outer pixel
 edges. Only contributors with nonzero weight must be valid. Missing lattice
 samples use the supplied **ellipsoidal** fill height directly; the offset is
-not added to fill. Geometry is never generated outside the footprint.
+not added to fill. Only footprint lattice nodes and their triangles are generated; there are no
+additional geographic tiles or global fill roots. Cartesian boundary chords can
+project slightly beyond the geographic rectangle.
 
 Sampled and filled vertex heights must be −10,000…8,000 metres. The finite
 profile supports public Cesium surface queries whose downward rays start at
@@ -87,8 +89,9 @@ require 3D mode and depth texture support. Public scene methods can query other
 scene geometry too: isolate the terrain by excluding unrelated primitives and
 hiding the globe. Normalize query positions to ellipsoid height zero before
 calling them so supplied input heights do not alter the pinned implementation's
-ray origin. Outside the terrain footprint, isolated queries/clamps return
-undefined. `HeightReference.CLAMP_TO_3D_TILE` is available for entity placement.
+ray origin. Raw Cesium methods intersect the Cartesian mesh, including any boundary-chord
+projection beyond the rectangle. Preview helpers separately fence queries to the
+closed source footprint; outside that domain queries/clamps return undefined. `HeightReference.CLAMP_TO_3D_TILE` is available for entity placement.
 
 The included preview does this isolation and normalization, exposes
 `window.terrainSurface.sampleHeights` and `clampPositions`, and clamps a marker

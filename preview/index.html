@@ -73,6 +73,13 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     button('Imagery extent', () => viewer.camera.setView({destination: imageryBounds}));
   }
   if (config.terrain) {
+    const report = await json(new URL('./conversion.json', new URL(config.terrain, location.href)));
+    if (report.profile !== 't1-terrain-mesh-3dtiles-1.1' || !Array.isArray(report.bounds)
+        || report.bounds.length !== 4 || !report.bounds.every(Number.isFinite)
+        || report.bounds[0] >= report.bounds[2] || report.bounds[1] >= report.bounds[3]) {
+      throw new Error('Terrain requires a valid T1 source footprint report');
+    }
+    const bounds = report.bounds.map(C.Math.toRadians);
     const terrain = window.terrain = await C.Cesium3DTileset.fromUrl(config.terrain, {
       maximumScreenSpaceError: 8, enableCollision: true,
     });
@@ -103,16 +110,36 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
       }
       return excluded;
     }
-    // Delegate to Cesium's mesh intersections, including most-detailed loading.
-    // These query rendered triangles, not an interpolated DEM or ellipsoid fill.
+    async function queryWithinSource(positions, cartographic, query) {
+      const result = Array(positions.length).fill(undefined);
+      const included = [], indices = [];
+      positions.forEach((position, index) => {
+        const coordinate = cartographic(position);
+        if (coordinate.longitude >= bounds[0] && coordinate.longitude <= bounds[2]
+            && coordinate.latitude >= bounds[1] && coordinate.latitude <= bounds[3]) {
+          coordinate.height = 0;
+          included.push(coordinate); indices.push(index);
+        }
+      });
+      if (included.length) {
+        const queried = await query(included);
+        queried.forEach((value, index) => { result[indices[index]] = value; });
+      }
+      return result;
+    }
+    // Scene intersections use decoded triangles; the source footprint separately
+    // fences the query domain because Cartesian boundary chords can bow outside it.
     window.terrainSurface = {
       async sampleHeights(positions) {
         if (!viewer.scene.sampleHeightSupported) throw new Error('Terrain queries require depth texture support');
-        return viewer.scene.sampleHeightMostDetailed(positions.map(p => {const position = C.Cartographic.clone(p); position.height = 0; return position;}), excludedSurfaces());
+        return queryWithinSource(positions, p => C.Cartographic.clone(p),
+          points => viewer.scene.sampleHeightMostDetailed(points, excludedSurfaces()));
       },
       async clampPositions(positions) {
         if (!viewer.scene.clampToHeightSupported) throw new Error('Terrain clamping requires depth texture support');
-        return viewer.scene.clampToHeightMostDetailed(positions.map(p => {const position = C.Cartographic.fromCartesian(p); return C.Cartesian3.fromRadians(position.longitude, position.latitude, 0);}), excludedSurfaces());
+        return queryWithinSource(positions, p => C.Cartographic.fromCartesian(p),
+          points => viewer.scene.clampToHeightMostDetailed(points.map(p =>
+            C.Cartesian3.fromRadians(p.longitude, p.latitude, 0)), excludedSurfaces()));
       },
     };
   }

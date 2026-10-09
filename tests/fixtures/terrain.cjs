@@ -8,6 +8,7 @@ const oracle = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 assert(oracle.samples.some(p => p.height < 0), 'negative-height oracle required');
 assert(oracle.samples.some(p => p.height > 0), 'positive-height oracle required');
 assert(oracle.outside.length, 'outside-domain oracle required');
+assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decoded mesh boundary hit required');
 (async () => {
   const browser = await chromium.launch({executablePath: process.env.CHROMIUM || '/usr/bin/chromium',
     headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader']});
@@ -33,6 +34,9 @@ assert(oracle.outside.length, 'outside-domain oracle required');
         const outside = oracle.outside.map(p => C.Cartographic.fromDegrees(p.longitude, p.latitude));
         const heights = await surface.sampleHeights(samples);
         const absent = await surface.sampleHeights(outside);
+        const borderControls = oracle.outside.filter(p => Number.isFinite(p.underlyingMeshHeight));
+        const rawBorder = await scene.sampleHeightMostDetailed(borderControls.map(p =>
+          C.Cartographic.fromDegrees(p.longitude, p.latitude)));
         const positions = oracle.samples.map(p => C.Cartesian3.fromDegrees(p.longitude, p.latitude, -25000));
         const clamped = await surface.clampPositions(positions);
         const missingClamp = await surface.clampPositions(oracle.outside.map(p =>
@@ -48,6 +52,7 @@ assert(oracle.outside.length, 'outside-domain oracle required');
         return {version: C.VERSION, supported: scene.sampleHeightSupported && scene.clampToHeightSupported,
           collision: terrain.enableCollision, globeHidden: !scene.globe.show,
           heights: heights.map(height), absent: absent.map(height), isolated: isolated.map(height),
+          rawBorderHeights: rawBorder.map(height),
           clamped: clamped.map(p => p && C.Cartographic.fromCartesian(p).height),
           missingClamp: missingClamp.map(p => !!p), failures: window.failures};
       }, oracle);
@@ -110,6 +115,10 @@ assert(oracle.outside.length, 'outside-domain oracle required');
         }
       });
       assert(Math.abs(result.isolated[0] - oracle.samples[0].height) <= oracle.samples[0].tolerance);
+      oracle.outside.filter(p => Number.isFinite(p.underlyingMeshHeight)).forEach((p, i) => {
+        assert(Number.isFinite(result.rawBorderHeights[i]), 'underlying mesh boundary must remain queryable');
+        assert(Math.abs(result.rawBorderHeights[i] - p.underlyingMeshHeight) <= p.tolerance);
+      });
       assert(result.absent.every(h => h == null));
       assert(result.missingClamp.every(p => !p));
     }

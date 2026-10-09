@@ -72,8 +72,8 @@ partition size; there is no zoom pyramid or inferred resampling resolution.
 Before acceptance, freeze exact lattice counts/coordinates, triangle diagonal,
 resource caps and precision domain. Boundary patches share coordinates and heights.
 Missing source samples inside the footprint use the caller's fill; independent
-fixtures prove null coverage before fill. There is no geometry outside the
-source footprint. Holes instead of fill would be a separate explicit policy.
+fixtures prove null coverage before fill. Only source-footprint lattice nodes and their triangles are emitted;
+Cartesian boundary chords can project slightly beyond its geographic rectangle. Holes instead of fill would be a separate explicit policy.
 
 Partition the complete sampled triangle mesh without simplification or parent
 proxies. Initially omit embedded textures, encoded normals, compression
@@ -149,7 +149,10 @@ Preview hides the global ellipsoid when the bounded terrain mesh is selected,
 so below-ellipsoid geometry remains visible. Mesh-only query/clamp helpers exclude
 other scene primitives and require 3D mode/depth texture support. Missing source
 samples produce caller-declared fill geometry; queries intersect that geometry.
-Outside the footprint there is no terrain geometry and the result is undefined.
+Preview helpers fence the closed geographic source footprint separately from
+Cartesian triangle intersections. Boundary chords can project beyond the
+rectangle, so raw scene intersections alone cannot guarantee outside-domain
+absence. The helpers return undefined outside this explicit query domain.
 
 Cesium 1.146.0 pin `b8d3a36fe98a3e432eb89253c95d5f20e605e0f1`:
 
