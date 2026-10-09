@@ -4,6 +4,12 @@ This page lists every `rusty-tiles` subcommand and option. It is for users who s
 
 Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Run that command to check your installed build.
 
+## Build availability
+
+The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh placement can need native CRS support too. See [installation](INSTALL.md#choose-a-build).
+
+Both builds expose the command help, including commands whose native capability is unavailable. Check `rusty-tiles doctor --command COMMAND` before using a converter. Adding GDAL to a standard installation does not enable the feature. The Python wheel exposes only the [standard Python API](../bindings/python/README.md), not this CLI.
+
 ## Conventions
 
 Options have a camelCase spelling, such as `--sourceCrs`. Each multi-word option also accepts a kebab-case alias, such as `--source-crs`. Both spellings behave the same. The examples in these docs use the kebab-case alias.

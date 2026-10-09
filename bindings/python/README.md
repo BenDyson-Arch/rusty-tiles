@@ -2,8 +2,26 @@
 
 Convert meshes, GeoJSON and GeoPackage vectors, local or grid-free georeferenced LAS/LAZ point clouds and existing tilesets directly from
 Python, including Blender's bundled Python. The wheels contain the portable
-default Rust build: no CLI subprocess, GDAL, Rust compiler or extra Python
+standard (default) Rust build: no CLI subprocess, GDAL, Rust compiler or extra Python
 packages are needed at runtime.
+
+## Package scope
+
+The wheel supports mesh conversion, local/grid-free georeferenced LAS/LAZ,
+GeoJSON/GeoPackage vectors, tileset packaging and archive validation. The
+function table below is the complete Python API.
+
+**Native-geospatial is a separate CLI/Rust build, not a pip extra or wheel.**
+The Python package does not provide imagery or terrain conversion, Shapefile,
+PostGIS or other OGR-only inputs, or native GDAL/PROJ fallback. Installing GDAL
+or its Python bindings does not add those capabilities to this wheel. Use the
+[native CLI/container or Rust library](../../docs/INSTALL.md#native-geospatial-cli)
+for those operations. The wheel also does not install the `rusty-tiles` CLI or
+expose `doctor`, `preview` or `createTilesetJson`.
+
+## Install and convert
+
+After the first PyPI publication, install a released standard wheel with:
 
 ```sh
 python -m pip install rusty-tiles

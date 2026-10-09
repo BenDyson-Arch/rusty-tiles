@@ -72,6 +72,8 @@ Native GDAL handles are created inside each worker. Spatial references and trans
 
 ## Build
 
+The user docs call the default Cargo build the **standard package**. Release CLI downloads and Python wheels use that build; the native container enables **`native-geospatial`**. This is a compile-time distinction: a standard artifact cannot discover an installed GDAL and gain native converters at runtime. `native-jpeg` is an independent codec option, not a geospatial build selector. See the [installation comparison](docs/INSTALL.md#choose-a-build).
+
 Use current stable Rust with rustfmt and a C++ compiler. The default build uses portable JPEG. Native features need `pkg-config` and their system libraries.
 
 | Build | Command | Extra system packages |
