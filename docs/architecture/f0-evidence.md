@@ -1,7 +1,8 @@
 # F0 implementation evidence (#115)
 
 Implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
-Namespace tests and portable fixture verification: `44040c015908c6c55849c1704e8c8a11350c8afb`.
+Destination-binding fix and full verification: `c777180f178df5cc2f524f7b20f4251ba9d522e0`.
+CLI fixture follow-up: `62aca29a2f5c3361263fa7945fef86b4d76c65ad` (3 portable / 4 native CLI contract tests pass; production unchanged).
 The [implementation contract](f0-implementation.md) defines the supported scope
 and deliberate migrations. This evidence does not close #113 or release 0.4.0.
 
@@ -14,8 +15,8 @@ record source/toolchain identity, test totals, log hashes and wheel identity.
 
 | Check | Result |
 | --- | --- |
-| `cargo test --locked --no-fail-fast` | 308 passed; 8 existing ignored tests |
-| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 333 passed; 9 existing ignored tests |
+| `cargo test --locked --no-fail-fast` | 309 passed; 8 existing ignored tests |
+| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 334 passed; 9 existing ignored tests |
 | `cargo clippy --locked --workspace --all-targets -- -D warnings` | Passed |
 | Native-feature all-target clippy with warnings denied | Passed |
 | `cargo fmt --all --check`, `git diff --check` | Passed |
@@ -28,6 +29,13 @@ The installed wheel is a local Linux dev artifact, not a manylinux/release
 qualification. Ignored tests are not counted as passing. Windows/macOS and other
 Python versions require CI evidence; no local claim is made for them.
 
+The final review found and fixed publication through an unresolved relative
+destination: a callback changing CWD could redirect Replace into a selected
+source. The operation now retains its checked absolute destination for staging,
+publication and result identity. An isolated subprocess regression proves source
+preservation and intended installation; the rebuilt wheel verifies the resolved
+output contract. See the [final review](../../bench/architecture_audit/post_f0/f0-acceptance-review.md).
+
 ## Proof boundaries
 
 The 20 runtime tests exercise actual temporary files and installation primitives,
@@ -39,7 +47,7 @@ postcommit reoccupied temporary names and Unix permissions. Faults and schedules
 are deterministic test injection, not observed disk-full or natural race events.
 Artifact ownership ties each candidate to its creating attempt by lifetime.
 
-Eleven Linux package integration tests and four CLI tests cover pure validation, read-only
+Twelve Linux package integration tests and four CLI tests cover pure validation, read-only
 resolution, exact byte/receipt inventory, safe names, root/member/directory
 symlinks, nonregular sources, non-UTF8 member rejection, long/oversized members,
 source/output aliases, changed/deleted sources, observer failure, competing

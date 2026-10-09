@@ -1,11 +1,11 @@
 # Architecture foundations for 0.4.0
 
-Status: proposed design and ongoing audit. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
+Status: ongoing architecture gate; F0 is implemented in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Baseline: `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on `develop`.
 
 0.4.0 promotion, tagging and publication are blocked by #113. Existing release
-acceptance describes the previous candidate, not the redesigned library. This
-proposal does not change production behavior or complete that release gate.
+acceptance describes the previous candidate, not the redesigned library. F0 changes only packaging and completed-file publication; it does not complete
+that release gate.
 
 The audit is replacement-first. Treat the current implementation as untrusted
 and potentially incorrect throughout; it is a source of observations and
@@ -29,7 +29,7 @@ compatibility obligations.
 
 ## Foundation-first scope
 
-The next implementation scope is **F0: the shared job/publication plumbing used
+The first implementation scope is **F0: the shared job/publication plumbing used
 by a real package-conversion path through Rust, CLI and Python**, tracked in
 [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115). The full mesh
 rewrite is downstream work. This narrows the earlier mesh-first plan: F0 must
@@ -45,8 +45,16 @@ and failure outcomes carry their meaning. It does not mean banning every `if`
 or replacing branch statements with opaque policy tables. Real platform and
 geometry alternatives remain explicit in their owning module.
 
+The [post-F0 audit and ordered scopes](next-foundation-scopes.md) govern the next
+work. They separate a bounded first mesh milestone, directory publication, vector
+transactions and remaining subsystem proof obligations. Earlier API sketches
+remain proposals wherever the concrete scope has not adopted them.
+
 ## Audit documents
 
+- [Post-F0 audit and ordered scopes](next-foundation-scopes.md)
+- [F0 implementation and migrations](f0-implementation.md)
+- [F0 acceptance evidence](f0-evidence.md)
 - [Foundation contracts and first implementation slice](foundation-contracts.md)
 - [Boundary/conditional-complexity audit](boundary-audit.md)
 - [Publication primitive evidence](platform-evidence.md)
