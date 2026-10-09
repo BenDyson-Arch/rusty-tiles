@@ -2,7 +2,7 @@
 
 Status: functional source review at latest functional commit
 `64122fd3085347ea95c2d2458bc5c109bfd06a59`; frozen native binary identified,
-final corpus/resource evidence recorded; installed-wheel evidence recorded; source-package and CI checks pending.
+final corpus/resource evidence recorded; installed-wheel evidence recorded; source-package verification recorded; CI pending.
 Review baseline branch is `feat/c1-payload-validation`, based on merged develop
 `00a9d1c34c3017a9475e6099c2805d6d2366d70a`. This source commit is the functional freeze recorded in [build-manifest.json](build-manifest.json),
 not a resource acceptance claim. Later evidence-only edits require their own recorded provenance.
@@ -179,7 +179,7 @@ extension SHA256 is `2f5af46358fc6b9854fe015576ffa7fa7b7ef94e476fa0af70e433b40f7
 of 33 API tests, zero failures/errors/skips, against the same wheel. These are
 owner-executed records, not reviewer reruns. All 83 functional source hashes
 were rechecked after recording wheel evidence and still match the manifest.
-Source-package verification and CI remain pending; native and installed-wheel
+Source-package verification is recorded in verification.json; CI remains pending. Native and installed-wheel
 controls are complete.
 
 Final acceptance requires frozen source/binary/fixture provenance, malformed
@@ -189,3 +189,10 @@ parity, immutable input preservation and required full checks. Unavailable
 checks remain unverified. C1's finite payload profile does not certify every
 glTF extension, metadata/implicit semantics, decoded world-space containment,
 source fidelity or the complete #133/#125/#113 release gate.
+
+Coordinator packaging evidence: `cargo package --locked` verified the clean
+`97313d6` archive (479 files), including compilation after unpacking. The
+archive hash and log hash are in [verification.json](verification.json). This
+packaging run is attributed to the coordinator, not executed by this reviewer.
+Two equivalent portable-test bool assertions were adjusted for Clippy after the
+functional freeze; all 83 compiled-source manifest hashes remain unchanged.

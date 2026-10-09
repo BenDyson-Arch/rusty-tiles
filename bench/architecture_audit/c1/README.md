@@ -48,3 +48,10 @@ hashes. Resource measurements are observations, not universal RSS or time bounds
 
 `wheel-parity.json` records installed-wheel/extension hashes and input preservation.
 The portable wheel excludes GDAL/native JPEG; these checks do not imply those features.
+
+[Verification record](verification.json) records the full default/native Rust suites, lint,
+Python checks, installed-wheel API tests and verified source packaging at
+`97313d6c078e947e66b993d7fed53c87b7e1377b`. That commit adds evidence/docs and
+two equivalent test assertion lint fixes; all 83 functional source hashes still
+match the freeze. Later packaging-record edits are metadata only. Remote CI
+remains the merge gate.
