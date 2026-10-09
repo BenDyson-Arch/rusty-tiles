@@ -1,0 +1,570 @@
+{
+  "binary_sha256": "e8ac65740cf396bd8d1d79327a54a7ed98817466a202b067d37c23dc024f1960",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "probe_sha256": "8a3df979f8d9d95398f48763d25e08f1e6dcdcf8a8e7557957224cd17a8d79b9",
+  "provenance": "Consumer-authored finite file/byte workload, literal triangle and PNG. Shares only prior measurement helpers, not independent acceptance truth.",
+  "measurement_contract": "Linux child wait4 maximum RSS excludes Python fixture author. FD/thread/scratch observations sampled at >=2ms plus inspection time, not hard maxima. Scratch excludes archive staging. Stable files; no filesystem hostile-race guarantee.",
+  "results": [
+    {
+      "case": "64-distinct-resources",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1957,
+        "external_files": 64,
+        "external_bytes": 3392,
+        "uri_requests": 64
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.0077245069842319936,
+      "peak_rss_kib_wait4": 28884,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 4,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 3,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b2-resource-hylqxu2l/64-distinct-resources/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 3392,
+          "external_files": 64,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b2-resource-hylqxu2l/64-distinct-resources/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 3392,
+          "external_files": 64,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "case": "64-aliased-resources",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1957,
+        "external_files": 2,
+        "external_bytes": 106,
+        "uri_requests": 64
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.007038599986117333,
+      "peak_rss_kib_wait4": 28648,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 3,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 3,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b2-resource-hylqxu2l/64-aliased-resources/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 106,
+          "external_files": 2,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b2-resource-hylqxu2l/64-aliased-resources/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 106,
+          "external_files": 2,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "case": "64MiB-exact",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1957,
+        "external_files": 64,
+        "external_bytes": 67106907,
+        "uri_requests": 64
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.013656777009600773,
+      "peak_rss_kib_wait4": 92132,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 5,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 7,
+          "samples": 5,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 5,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 6,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b2-resource-hylqxu2l/64MiB-exact/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 67106907,
+          "external_files": 64,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b2-resource-hylqxu2l/64MiB-exact/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 67106907,
+          "external_files": 64,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1957
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "case": "64MiB-plus-one",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1957,
+        "external_files": 64,
+        "external_bytes": 67106908,
+        "uri_requests": 64
+      },
+      "exit_code": 2,
+      "elapsed_seconds": 0.013792226993246004,
+      "peak_rss_kib_wait4": 92048,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 4,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 7,
+          "samples": 4,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 4,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 6,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh captured inputs exceed 64 MiB",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "case": "dependency32MiB-exact",
+      "passed": true,
+      "expected": {
+        "source_bytes": 335,
+        "external_files": 1,
+        "external_bytes": 33554432,
+        "uri_requests": 1
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.00915927701862529,
+      "peak_rss_kib_wait4": 60412,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 6,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 4,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b2-resource-hylqxu2l/dependency32MiB-exact/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 33554432,
+          "external_files": 1,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 335,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b2-resource-hylqxu2l/dependency32MiB-exact/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 33554432,
+          "external_files": 1,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 335
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "case": "dependency32MiB-plus-one",
+      "passed": true,
+      "expected": {
+        "source_bytes": 335,
+        "external_files": 1,
+        "external_bytes": 33554433,
+        "uri_requests": 1
+      },
+      "exit_code": 2,
+      "elapsed_seconds": 0.004638548998627812,
+      "peak_rss_kib_wait4": 27560,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 3,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 2,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh resource exceeds 32 MiB file ceiling",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "case": "json1MiB-exact",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1048576,
+        "external_files": 1,
+        "external_bytes": 36,
+        "uri_requests": 1
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.0067395160149317235,
+      "peak_rss_kib_wait4": 28620,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 4,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 2,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 3,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b2-resource-hylqxu2l/json1MiB-exact/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 36,
+          "external_files": 1,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1048576,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b2-resource-hylqxu2l/json1MiB-exact/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 36,
+          "external_files": 1,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 1048576
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "case": "json1MiB-plus-one",
+      "passed": true,
+      "expected": {
+        "source_bytes": 1048577,
+        "external_files": 1,
+        "external_bytes": 36,
+        "uri_requests": 1
+      },
+      "exit_code": 2,
+      "elapsed_seconds": 0.004520745016634464,
+      "peak_rss_kib_wait4": 24788,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 3,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 2,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh source exceeds file or aggregate byte ceiling",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    }
+  ]
+}

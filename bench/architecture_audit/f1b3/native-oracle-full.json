@@ -1,0 +1,5597 @@
+{
+  "self_test": {
+    "literal_UV1_RGBA_normalized_RGB_reflected_tangent": "passed",
+    "variants": {
+      "mr-only": [
+        2
+      ],
+      "occlusion-defaults": [
+        4
+      ],
+      "occlusion-strength": [
+        4
+      ],
+      "emissive-only": [
+        5
+      ],
+      "all-slots": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "shared-orm": [
+        2
+      ],
+      "shared-colorspace": [
+        1
+      ],
+      "uv1-slots": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "uv1-outside": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "uv1-u8": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "uv1-u16": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "color-f32-rgb": [],
+      "color-f32-rgba-mask": [],
+      "color-u8-rgb": [],
+      "color-u8-rgba": [],
+      "color-u16": [],
+      "unused-attributes": [],
+      "normal-signs": [
+        3
+      ],
+      "normal-scales": [
+        3
+      ],
+      "uniform-rotation": [
+        3
+      ],
+      "reflected": [
+        3
+      ],
+      "interleaved": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "nonuniform-nonnormal": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "selected-equal-images": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "nested-conformal": [
+        3
+      ],
+      "nonorthogonal-tangent": [
+        3
+      ]
+    },
+    "sensitive_semantic_controls": {
+      "omit-TANGENT": "rejected",
+      "omit-COLOR_0": "rejected",
+      "omit-TEXCOORD_1": "rejected",
+      "omit-baseColorTexture": "rejected",
+      "omit-metallicRoughnessTexture": "rejected",
+      "omit-normalTexture": "rejected",
+      "omit-occlusionTexture": "rejected",
+      "omit-emissiveTexture": "rejected",
+      "wrong-uv1": "rejected",
+      "wrong-color-alpha": "rejected",
+      "wrong-tangent-w": "rejected",
+      "wrong-tangent-xyz": "rejected",
+      "wrong-winding": "rejected",
+      "wrong-slot": "rejected",
+      "wrong-normal-scale": "rejected",
+      "wrong-occlusion-strength": "rejected",
+      "missing-texcoord-field": "rejected",
+      "wrong-logical-image-id": "rejected",
+      "equal-byte-logical-image-swap": "rejected",
+      "missing-nonbase-image": "rejected",
+      "orphan-nonbase-image": "rejected",
+      "changed-nonbase-image-bytes": "rejected",
+      "leaf-wrong-slot": "rejected",
+      "leaf-wrong-uv-selection": "rejected",
+      "leaf-omitted-normal-slot": "rejected"
+    },
+    "scope": "bounded conformal authored tangents; exact core-PBR closure and corner semantics; no universal renderer claim"
+  },
+  "candidate": {
+    "binary": "/home/bend/.cache/rusty-tiles-f1b3-native-92c7e02",
+    "binary_sha256": "e8b184c61171e8fc92a81ce245afea96b19f7043983dcc2ba8ffc6308dd942fe",
+    "positive_cases": [
+      {
+        "variant": "mr-only",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11448,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "a5a636728cad79ce34e541b1a61b45432fccc30ea4a228294e629cb81c8d77d6",
+        "archive_sha256": "84029dce9fe48bdc3f14c01b9e32564ec2452d31beac043b2527ec5c36f52eaf",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "mr-only",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11448,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "a5a636728cad79ce34e541b1a61b45432fccc30ea4a228294e629cb81c8d77d6",
+        "archive_sha256": "c3de627a072bab5d7ebdbce8ea6d6a44637e2ce387729e9742941ab248f0ee75",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "mr-only",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11448,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "a5a636728cad79ce34e541b1a61b45432fccc30ea4a228294e629cb81c8d77d6",
+        "archive_sha256": "18141c4c1b75ecd8842d6f9c2660250841b610a7b33c41c944413bf01fce34c1",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-defaults",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11444,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "0450d99433c404b88dd86dddc32e4049847c5e5680de610c9bca6a0724da7084",
+        "archive_sha256": "61b21a36fda62bb8030ab2c80bb9da5e3948cf746094414ea5f3dc3eeb6649ab",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-defaults",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11444,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "0450d99433c404b88dd86dddc32e4049847c5e5680de610c9bca6a0724da7084",
+        "archive_sha256": "ccfb6f2e1c30c789d1ed0a67567975e29f73a9f766eb8851e6267716b151f1af",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-defaults",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11444,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "0450d99433c404b88dd86dddc32e4049847c5e5680de610c9bca6a0724da7084",
+        "archive_sha256": "3c856118d14a6f03a788848e3e2cdb96bcd09b4aca4b28dd0087dab7603ac6df",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-strength",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11500,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6de3b676cd6de2a362b1e5027455a342e5b33cf5dcd3c3be04a064f2aa5df456",
+        "archive_sha256": "63b1caaf43e26b979dbc3a055dca817f61ce2e467ca851624d394e969cf34f4c",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-strength",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11500,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6de3b676cd6de2a362b1e5027455a342e5b33cf5dcd3c3be04a064f2aa5df456",
+        "archive_sha256": "cb4f05cab404d0bad9256e4eecb2fc9653321880306d7226221b0291ac003cc1",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "occlusion-strength",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/4.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/4.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11500,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "6de3b676cd6de2a362b1e5027455a342e5b33cf5dcd3c3be04a064f2aa5df456",
+        "archive_sha256": "a53d6a410cc3770d35d566daa192f171199e66325b22e54fd564f68077e96fe2",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "emissive-only",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11520,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 90,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f72f81d2f49dfe421ed0d2fe75e62553e759ff88cdc4da39c24ca8d043a4abc1",
+        "archive_sha256": "49274e51b431c3a38c047d19ffb5aa8cfeeec4e61d5a929b7642ec14202e12d2",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "emissive-only",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11520,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 90,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f72f81d2f49dfe421ed0d2fe75e62553e759ff88cdc4da39c24ca8d043a4abc1",
+        "archive_sha256": "598caf2ea3cc79057b75e4845db5625c380cfe89b964e9a2e25f2b25988505df",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "emissive-only",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11520,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 90,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "f72f81d2f49dfe421ed0d2fe75e62553e759ff88cdc4da39c24ca8d043a4abc1",
+        "archive_sha256": "b91daa499f906ca820ea4e0f6ee1e15171f2776559446569c3d713fc68c38932",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "all-slots",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "46ff4ca59eabeb53ad347c935797b6627ca8fd5b425f74f4d650fb4761f9b906",
+        "archive_sha256": "f40bbd53b9b2aa84a649055e01b63c5cb75ada438d3629e84dbb20a767541c6a",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "all-slots",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "46ff4ca59eabeb53ad347c935797b6627ca8fd5b425f74f4d650fb4761f9b906",
+        "archive_sha256": "fdd5cffe87d82baa4df0e15c550a4a6803129ac58bd44930525d8692b57bd468",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "all-slots",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "46ff4ca59eabeb53ad347c935797b6627ca8fd5b425f74f4d650fb4761f9b906",
+        "archive_sha256": "4e84567b45e94c74dc386d09aa85b34b0d22e586ec7fa00b9c2e88b29b4f7ce2",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-orm",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11808,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6fa47c96130cdf8f5e664d857dd6d0eadcdf6de536ddd38436a53d7415fa2062",
+        "archive_sha256": "afb3378bda7eff39e37776c5e68acb59aea465999b9d1375944b0dab36e30359",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-orm",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11808,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6fa47c96130cdf8f5e664d857dd6d0eadcdf6de536ddd38436a53d7415fa2062",
+        "archive_sha256": "6f1ba6b3cfcc1a73ababd5dadf9d7a963c3e375c175abcf53858c98e83efa167",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-orm",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/2.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/2.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11808,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "6fa47c96130cdf8f5e664d857dd6d0eadcdf6de536ddd38436a53d7415fa2062",
+        "archive_sha256": "684856219ebf63729bc3bf08a148ab497308098111dba4542cca6a1703aedff3",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-colorspace",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6c593f9de5e870b9277bb738458b2c918fdac58fbcaf2e0f5559f86464561807",
+        "archive_sha256": "09f00b240f27064ce7630f139a995a8de695ca04c877aa221cf2df9ad281d80c",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-colorspace",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6c593f9de5e870b9277bb738458b2c918fdac58fbcaf2e0f5559f86464561807",
+        "archive_sha256": "82379b539f8728c632d5890d4e46e5922dd147c1a36352cb2595a39cea15f819",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "shared-colorspace",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14552,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 92,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "6c593f9de5e870b9277bb738458b2c918fdac58fbcaf2e0f5559f86464561807",
+        "archive_sha256": "ffaeb40a1e3bfc27397af37c99bbfbd840f255f1b5685664db525c4ed5b8705a",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-slots",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14812,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f0734258cce33ef76e17035a258a6b939831bd6819e86060c0fcd45b0cf5dd28",
+        "archive_sha256": "a7278a4bcbbfc8c04fade050d67cbe97dd4cf81d59ef2ae0ef8874ca9ce20031",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-slots",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14812,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f0734258cce33ef76e17035a258a6b939831bd6819e86060c0fcd45b0cf5dd28",
+        "archive_sha256": "98e844ce8daa892ff3bf447bf75ebca0ce21c022e884a3deee0b4c777991011e",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-slots",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14812,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "f0734258cce33ef76e17035a258a6b939831bd6819e86060c0fcd45b0cf5dd28",
+        "archive_sha256": "260577b6f70335fd603aaa717c75519808a8047e74c20af17e7d9dae01f99c10",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-outside",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14120,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "81b77c5561b4d55de32d00d9e23d8fec8704854224f845ad8aee38cd0c5541d6",
+        "archive_sha256": "558db7ee7931676403c22d669e48d4aefdd4db027919ccab47df35dced6f5937",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-outside",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14120,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "81b77c5561b4d55de32d00d9e23d8fec8704854224f845ad8aee38cd0c5541d6",
+        "archive_sha256": "39501b89ac1fd4bb18542901d6470c93cd0973ef076d51dfb41be49de451a747",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-outside",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14120,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "81b77c5561b4d55de32d00d9e23d8fec8704854224f845ad8aee38cd0c5541d6",
+        "archive_sha256": "1ac575c7ba001f0cd766b79c0860ee726c6b362a7986b7cef8afd3208f985862",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u8",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14216,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "0c59211f3f38ce7d849c1c12791b3128cf30d4b9307901929fb5da4fd142857c",
+        "archive_sha256": "8016785cf8451f535726bfac9fe12dba1760a5937f49b7d23d2794fb7ea08564",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u8",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14216,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "0c59211f3f38ce7d849c1c12791b3128cf30d4b9307901929fb5da4fd142857c",
+        "archive_sha256": "5fc569ef1ae55f9e4cb52aa50856b35a81efcf427243f41e974526ab183042a6",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u8",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14216,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "0c59211f3f38ce7d849c1c12791b3128cf30d4b9307901929fb5da4fd142857c",
+        "archive_sha256": "a7b79d73e960f7be55282b13c23abb7424ef6232d7cec2b29cf66df476f30aaa",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u16",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14128,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "bffa89b8aee610757f99f27c6649bdd5978306a5f8fa10d688ce2ff9ccf451d1",
+        "archive_sha256": "589ac3450b8285d7fb088d682c262d3a111e1570c790cd4da2e4d956a18aff3c",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u16",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14128,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "bffa89b8aee610757f99f27c6649bdd5978306a5f8fa10d688ce2ff9ccf451d1",
+        "archive_sha256": "16148c32780dec11d48f2d70663dec5ae0cfe80a1d608050c0ce51309f556105",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uv1-u16",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 14128,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "bffa89b8aee610757f99f27c6649bdd5978306a5f8fa10d688ce2ff9ccf451d1",
+        "archive_sha256": "01ac6329eb3c93c07829d0fb662ba550da2f32bf86067bd99ed22b4359a607d2",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgb",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10916,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f0fdfe6f11bb6f49c9e30bb699939638a9ee8b35649d443ad96f8a6b28592f30",
+        "archive_sha256": "544e73ae1806882810efd6d1154051d8b1ad9fe3e528cb9025657036f6b221c0",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgb",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10916,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f0fdfe6f11bb6f49c9e30bb699939638a9ee8b35649d443ad96f8a6b28592f30",
+        "archive_sha256": "49a887dab34ccb023225424c424a3aeb1005c5e5296b9049d5564df42076f1e6",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgb",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10916,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "f0fdfe6f11bb6f49c9e30bb699939638a9ee8b35649d443ad96f8a6b28592f30",
+        "archive_sha256": "a81e372b3223b3f8d14c5b467883630c0047e1977fb1a46cd1262ed7d54eb716",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgba-mask",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11380,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "1268940fd63986cf809b670a6bece8819cb79d1bf4420071be228ab04d12c8f2",
+        "archive_sha256": "dc40a8cba12691764c6559bb7eecf00983170ffd8678378868cbf9413b1de60c",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgba-mask",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11380,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "1268940fd63986cf809b670a6bece8819cb79d1bf4420071be228ab04d12c8f2",
+        "archive_sha256": "294b50fe7a96f86cab52adae3a619ecc015e0d15d2df36edc9021941729a48c6",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-f32-rgba-mask",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11380,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "1268940fd63986cf809b670a6bece8819cb79d1bf4420071be228ab04d12c8f2",
+        "archive_sha256": "ac4d0a0c82eedf294b08beaa5d4d698031a48bf20ce85eb09ef18fa822b46e9a",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgb",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10884,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "5133fee663b0ae6cbc7db5acea2351dab5875e0f103b24f587bbadf76bb6e759",
+        "archive_sha256": "c62d5d2a0fe151f0c62564481c77b18e032e4d9e03ac67aa94629dcae1589712",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgb",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10884,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "5133fee663b0ae6cbc7db5acea2351dab5875e0f103b24f587bbadf76bb6e759",
+        "archive_sha256": "ee90c385e7628b86806007f69f1545d9afeca2ef7ca4bdfe8f7edae28e29ed80",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgb",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10884,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "5133fee663b0ae6cbc7db5acea2351dab5875e0f103b24f587bbadf76bb6e759",
+        "archive_sha256": "bf5c05007609f032c53f611e7fafa90e2f57688d89dc0930de86749513584db9",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgba",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10828,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f3bdb31e3692ebb1db7060f2e74c78c10992a9072a978c71fcd22da6c43532f7",
+        "archive_sha256": "8a0c4676a72ddcebbdf6a59e06346c0be87ab6af475c6d709af72c78ed352339",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgba",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10828,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "f3bdb31e3692ebb1db7060f2e74c78c10992a9072a978c71fcd22da6c43532f7",
+        "archive_sha256": "3b2dfad76f206b627be2dae29e31a9c6bf648634f599839d66905b4f8856477a",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u8-rgba",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10828,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "f3bdb31e3692ebb1db7060f2e74c78c10992a9072a978c71fcd22da6c43532f7",
+        "archive_sha256": "b24fa43e0553c100e3ee35c02df7f1d19e77d3c2ede1a0b1098ec07e3677972f",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u16",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "c0a4741e0ce4a6e886591243a7cdb3d13cdcdc62c2cfef34b3b06635effa4d49",
+        "archive_sha256": "3f083255b4b6d86a3a1099269dc0c3c11c667a6a3007652578d22d6c7257e4cd",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u16",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "c0a4741e0ce4a6e886591243a7cdb3d13cdcdc62c2cfef34b3b06635effa4d49",
+        "archive_sha256": "85fb171e33a2fcff456f5cf4ee10d8da7a337f393b84e748471c6653d483131c",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "color-u16",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 11052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "c0a4741e0ce4a6e886591243a7cdb3d13cdcdc62c2cfef34b3b06635effa4d49",
+        "archive_sha256": "c021ce2328bd2e6504a2519ff7a910a7894cfcc438e76ac9ca91c06f79cbc053",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "unused-attributes",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12816,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "34322b680f5cff3a4ffd4f42d7f19101981ca2d13531f5dbc2f72dc4e33284c2",
+        "archive_sha256": "aa80de545103dc9d9f55c9236c02e69ab21cb21488c109f3c957e2c883dd2452",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "unused-attributes",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12816,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "34322b680f5cff3a4ffd4f42d7f19101981ca2d13531f5dbc2f72dc4e33284c2",
+        "archive_sha256": "ab39bade4f47530e22f083cd26ef16e768cf018628a982e6cf9361cea2924a66",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "unused-attributes",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12816,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "34322b680f5cff3a4ffd4f42d7f19101981ca2d13531f5dbc2f72dc4e33284c2",
+        "archive_sha256": "85c6ce7ff7279e9acb83ac89f18d70a26828bfd514507728e26586886311fb2b",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-signs",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6479da9a041f5b4713c41e2ab41b227dfde8b08413a142061fd7ed9431898162",
+        "archive_sha256": "b9eaf1193e0a0acb44ed714ca1db4deee3e822ff3ac4dd41afbe6ec5ab8bcaaa",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-signs",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6479da9a041f5b4713c41e2ab41b227dfde8b08413a142061fd7ed9431898162",
+        "archive_sha256": "0b264f0b741c4c19a1b9da240f0dd824b8b91d204531cb5588250d8b06a85c4a",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-signs",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "6479da9a041f5b4713c41e2ab41b227dfde8b08413a142061fd7ed9431898162",
+        "archive_sha256": "4fa208dca40a24c6f69358f9a119e18069635cde08634baf89d4bb43cfd8f56b",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-scales",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13176,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "ff0d619b984938f0de61ce86e41b2309ce0b32fd604784ec1e5343336872279a",
+        "archive_sha256": "4a53a26b356a32637e6bb64cfe908a3ca679a47dc6c09760cea186ff52f05790",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-scales",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13176,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "ff0d619b984938f0de61ce86e41b2309ce0b32fd604784ec1e5343336872279a",
+        "archive_sha256": "334dee5ad8c8a55ee175c0ad4956b076101ece121cb95e05e3d94d35d7648b88",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "normal-scales",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13176,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "ff0d619b984938f0de61ce86e41b2309ce0b32fd604784ec1e5343336872279a",
+        "archive_sha256": "b213441a6161427a0837f8371a6c718d9bb45e52c141581f97a313d83013ef50",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uniform-rotation",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13136,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418764
+        },
+        "source_sha256": "7765111c4187ea504aa108561f9af173617bd44a5337f54c2a5dd4231cfa8a7c",
+        "archive_sha256": "5a9db350195d148efbf891e9b3fe46825ccf9b44c2790300e6c5778d0f771137",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uniform-rotation",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13136,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418764
+        },
+        "source_sha256": "7765111c4187ea504aa108561f9af173617bd44a5337f54c2a5dd4231cfa8a7c",
+        "archive_sha256": "e9ca7f72219167a51a2f76596d954ea2315a50aa08b8aba24e708990b3deaf04",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "uniform-rotation",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13136,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418765
+        },
+        "source_sha256": "7765111c4187ea504aa108561f9af173617bd44a5337f54c2a5dd4231cfa8a7c",
+        "archive_sha256": "3a9a10419e66ae02358fdb71a78999f90b47d892078efa0965ead7a02f7b7b22",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "reflected",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13108,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418764
+        },
+        "source_sha256": "b1f66cbcc56fb1eb20c04278b0cdab90473fb3f1292118783416689f99a2724e",
+        "archive_sha256": "5aeb3ad293c15b4a158b9466757f6fe46440d35edfdb0e0672ca4cbd4edf01c6",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "reflected",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13108,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418764
+        },
+        "source_sha256": "b1f66cbcc56fb1eb20c04278b0cdab90473fb3f1292118783416689f99a2724e",
+        "archive_sha256": "192f03a0f7c3de9560ba36ea9651dcb4e88fd25ba646a6ede281ff59305687d4",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "reflected",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13108,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.03447251418765
+        },
+        "source_sha256": "b1f66cbcc56fb1eb20c04278b0cdab90473fb3f1292118783416689f99a2724e",
+        "archive_sha256": "d30c40c06a18a941b753b1c62644859f00b601f7196da7ca57a9eb056024dcb1",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "interleaved",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 17564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6ef400f05f265f13a2f54361a10186052224684b768288cad9d9d06839cee348",
+        "archive_sha256": "864ede86381b4f1f4e277e5fb06f34e6019e9be2dc1a20e089f4cecea82f9959",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "interleaved",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 17564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "6ef400f05f265f13a2f54361a10186052224684b768288cad9d9d06839cee348",
+        "archive_sha256": "c00384fe249efd96dbe5b8fd31bdf633cf2363749220e278b18e54199a4d7e96",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "interleaved",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 17564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "6ef400f05f265f13a2f54361a10186052224684b768288cad9d9d06839cee348",
+        "archive_sha256": "aed936310ae6de8c28e7235d8318f602682630c180982ad58e6e405051ac641f",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonuniform-nonnormal",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 58.07753438292642
+        },
+        "source_sha256": "f5777b8ae27a4defc7ea6730371766721b8edff0178f41f25c0b039421389b88",
+        "archive_sha256": "924211ebd7b19dd85679f603323db55a385f9cdc497537fb7edc87fdc7aaf90e",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonuniform-nonnormal",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 58.07753438292642
+        },
+        "source_sha256": "f5777b8ae27a4defc7ea6730371766721b8edff0178f41f25c0b039421389b88",
+        "archive_sha256": "2798f89da4a37aec63458c2eb3f436a0e3bdc813c0018f46bf89fed396e90867",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonuniform-nonnormal",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12564,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 4,
+          "image_bytes": 366,
+          "image_pixels": 24,
+          "routing_geometric_error_metres": 58.07753438292643
+        },
+        "source_sha256": "f5777b8ae27a4defc7ea6730371766721b8edff0178f41f25c0b039421389b88",
+        "archive_sha256": "a55e6ecf3c7d9902ba357abb1a657cfc624d9bea195b5f8075e9f17536553d6f",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "selected-equal-images",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 15568,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 462,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "b09c66d9da104ab97d983448cb10a32ae44e04d482990c552f61919603ea2ad6",
+        "archive_sha256": "dfb7734a41efe2e325419e7ac2c8c834b8388ae863e91cf7202bcfeea527b5e9",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "selected-equal-images",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 15568,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 5,
+          "image_bytes": 462,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "b09c66d9da104ab97d983448cb10a32ae44e04d482990c552f61919603ea2ad6",
+        "archive_sha256": "01d41afd08ad6a07c4ff495f572df19639f3fe4dae00b3e3aeeca2aaff36cb00",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "selected-equal-images",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 15568,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 462,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "b09c66d9da104ab97d983448cb10a32ae44e04d482990c552f61919603ea2ad6",
+        "archive_sha256": "75f9dbc7a7d105fe62b5ec36fd87aee36f4efc889e045dadf698df9cce1e57a0",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nested-conformal",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13164,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "05ff1456b9709a553660f1e2547f732424feacc3941c9bab58c239e21e83b852",
+        "archive_sha256": "39dc6a93471608883312f4d7632624a7ec39dfeead8694fcfefb9d3133b1cd2f",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nested-conformal",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13164,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "05ff1456b9709a553660f1e2547f732424feacc3941c9bab58c239e21e83b852",
+        "archive_sha256": "6d04bf8fd4b3b2dbadf868c07f23d80dc68f28689c08705f37d46dfe40ff24b4",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nested-conformal",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13164,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "05ff1456b9709a553660f1e2547f732424feacc3941c9bab58c239e21e83b852",
+        "archive_sha256": "dc8acb6461dadda9de6ccc5eec58e3a189af95e0bb85d4eb465bb7df39d037e5",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonorthogonal-tangent",
+        "external": false,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "880019db2a1b094ba2a503fadf7c219767b33fe29857a313c475abe0f1b391fb",
+        "archive_sha256": "99bda2241b236a07af7192d570be7ecb3b111b4b332fdcb7f5ff1a2ce4c978ae",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonorthogonal-tangent",
+        "external": false,
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "880019db2a1b094ba2a503fadf7c219767b33fe29857a313c475abe0f1b391fb",
+        "archive_sha256": "dcd5687c5423efa62e5f89f28a235ee21223f29ca490707a114ee237af828941",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "nonorthogonal-tangent",
+        "external": false,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "880019db2a1b094ba2a503fadf7c219767b33fe29857a313c475abe0f1b391fb",
+        "archive_sha256": "51acaf72a6d5fbc79226a7fbd9ebf9e3520e9fb9a0090fd8461e16c4f6e0c69b",
+        "external_files": 0,
+        "external_bytes": 0,
+        "source_dependencies": []
+      },
+      {
+        "variant": "emissive-only",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9647,
+          "external_files": 7,
+          "external_bytes": 2432,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 90,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "bf65b4bfeb582180898f63e866ce41f6abf81f93d00787e552907177ef37e029",
+        "archive_sha256": "bd9282c3718e03fae9e11da4460e5ad24d64ddf628384f91f611409330c2a870",
+        "external_files": 7,
+        "external_bytes": 2432,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1898,
+            "dda494b07efc9e47a2bdf090ecdece99aa355e9beb512d0e33e3f112ecf9e487"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "emissive-only",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9647,
+          "external_files": 7,
+          "external_bytes": 2432,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 90,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "bf65b4bfeb582180898f63e866ce41f6abf81f93d00787e552907177ef37e029",
+        "archive_sha256": "dbfdcf710ccda6c8d84961b49b79f6ed0134feb974684a2fd033ebbad9700522",
+        "external_files": 7,
+        "external_bytes": 2432,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1898,
+            "dda494b07efc9e47a2bdf090ecdece99aa355e9beb512d0e33e3f112ecf9e487"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "all-slots",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12293,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "3374b90589cc69e6cd475d77d23b5fc358c26be6ba06eb646154c1416e930024",
+        "archive_sha256": "d29bd870143d06c1796fbd51e317f8de8c95bef7028530293bb9fd873fc1e830",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "all-slots",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12293,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "3374b90589cc69e6cd475d77d23b5fc358c26be6ba06eb646154c1416e930024",
+        "archive_sha256": "bf673d6dee417ef294a6edf01895ab44c1310dc8ee8b9480af0c3572db4d3b78",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "uv1-slots",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12553,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "9fbb2bc3a2c88cec4fa75110302f581dc698fcd774cd882eb4a83c617a37061e",
+        "archive_sha256": "a399c1ad297a6e87fdd48b3e6c4513860d21634913747c195c07dd3264ce800e",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "uv1-slots",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 12553,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "9fbb2bc3a2c88cec4fa75110302f581dc698fcd774cd882eb4a83c617a37061e",
+        "archive_sha256": "afdaebbcd35f2dc4693bcbaa0ffc0ccb697a40461807c469b75b87e0d35b0ad6",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "color-f32-rgb",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9138,
+          "external_files": 7,
+          "external_bytes": 2336,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "4b3f2c77273d96be8194ad2a0ae83f1180eb6e1fc7a2f6132c2cad2447f124bb",
+        "archive_sha256": "d436812f8c7ee8ed593134e3a98b35f908bd48aea298bb1f72b10bdc3e96b446",
+        "external_files": 7,
+        "external_bytes": 2336,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1802,
+            "663c8aba51b00eb9ac8d83781a55c7b42cb90a9e886a935f7293e22234d90b4a"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "color-f32-rgb",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9138,
+          "external_files": 7,
+          "external_bytes": 2336,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "4b3f2c77273d96be8194ad2a0ae83f1180eb6e1fc7a2f6132c2cad2447f124bb",
+        "archive_sha256": "adf1564702790e0f0738f55c5648603384a2708739a4241dd0973c5c9ae52c3a",
+        "external_files": 7,
+        "external_bytes": 2336,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1802,
+            "663c8aba51b00eb9ac8d83781a55c7b42cb90a9e886a935f7293e22234d90b4a"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "color-u8-rgb",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9300,
+          "external_files": 7,
+          "external_bytes": 2144,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "3d9d8c644e181919c4d8de889d86dacc81ba6d76d4c1d6214f10cf4f99e45a81",
+        "archive_sha256": "f9c2e045f6b42101c061f6a679f64aca279ff09c9a6c88bf8403a77ccbc2b282",
+        "external_files": 7,
+        "external_bytes": 2144,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1610,
+            "829af0c204226666bb47ebcfda1ef4d4954e11002d3bc64a978112f03a77b526"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "color-u8-rgb",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 9300,
+          "external_files": 7,
+          "external_bytes": 2144,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "3d9d8c644e181919c4d8de889d86dacc81ba6d76d4c1d6214f10cf4f99e45a81",
+        "archive_sha256": "e34f79252abb41f9fda60b58fc8577b21754514facec8d110114da137f158377",
+        "external_files": 7,
+        "external_bytes": 2144,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            1610,
+            "829af0c204226666bb47ebcfda1ef4d4954e11002d3bc64a978112f03a77b526"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "normal-signs",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10834,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "24af28e49b6c00b5ae59c7bebd7b03de8d66757d32ba61d57c36d149459241a0",
+        "archive_sha256": "cc640d601806d663b7f844c16570ceb8c7bc72acc4f8fc88693a6bbd7db6c7cf",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "normal-signs",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/3.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/3.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 10834,
+          "external_files": 7,
+          "external_bytes": 2816,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 94,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "24af28e49b6c00b5ae59c7bebd7b03de8d66757d32ba61d57c36d149459241a0",
+        "archive_sha256": "287070af7988b25882f80ef24696476bc9aa280132acda7707f86388586b4ecb",
+        "external_files": 7,
+        "external_bytes": 2816,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2282,
+            "65eaab366f8d7a3e6076be3ce041de91085d79e7b7fdecb2b2847ba475b95f0b"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "interleaved",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13579,
+          "external_files": 7,
+          "external_bytes": 4544,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "1a768520110ca1d576ffdd0940f8a2a84fb2484fdc7c69a8ae9027d2908e3f99",
+        "archive_sha256": "75b864e9864b76d2b811f6cd75f508925e9779d866a26be21378d03c5a3642d4",
+        "external_files": 7,
+        "external_bytes": 4544,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            4010,
+            "6961b6311fe26f58d43979bd784148205e9132ce621b26fab68fe081e7640064"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "interleaved",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13579,
+          "external_files": 7,
+          "external_bytes": 4544,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 460,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "1a768520110ca1d576ffdd0940f8a2a84fb2484fdc7c69a8ae9027d2908e3f99",
+        "archive_sha256": "42db4ace9c51c99fc0840304bfbe67eaefae98cb2de8e6e482e9bf11f756162a",
+        "external_files": 7,
+        "external_bytes": 4544,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            4010,
+            "6961b6311fe26f58d43979bd784148205e9132ce621b26fab68fe081e7640064"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ],
+          [
+            "images/5.png",
+            90,
+            "95159109cbd4a43f26279403e77e5250c11cfe4e46bbbe3b19ab0b057d655cfc"
+          ]
+        ]
+      },
+      {
+        "variant": "selected-equal-images",
+        "external": true,
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13311,
+          "external_files": 6,
+          "external_bytes": 2728,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 5,
+          "image_bytes": 462,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.01723625709382
+        },
+        "source_sha256": "1add7a980d7b01ca2a9c8dd08a0b6165bad0b2b2f4780e5f4efaaaf8d585eee6",
+        "archive_sha256": "790fa42deba3828bf0222bf22e1d8c513e76efc402b0af63bc888f6a7c1b7c97",
+        "external_files": 6,
+        "external_bytes": 2728,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2284,
+            "4564732b33f1d936e539b3661ba6898109cb56fc090888f64d5b8eb18d720410"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ]
+        ]
+      },
+      {
+        "variant": "selected-equal-images",
+        "external": true,
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "textures/2.png",
+          "textures/3.png",
+          "textures/4.png",
+          "textures/5.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 13311,
+          "external_files": 6,
+          "external_bytes": 2728,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 5,
+          "image_bytes": 462,
+          "image_pixels": 30,
+          "routing_geometric_error_metres": 29.017236257093824
+        },
+        "source_sha256": "1add7a980d7b01ca2a9c8dd08a0b6165bad0b2b2f4780e5f4efaaaf8d585eee6",
+        "archive_sha256": "f9e867e6ffe77fe3add401aea62c066b3bfb2e1f9fa28c564cc8f7924bb96edb",
+        "external_files": 6,
+        "external_bytes": 2728,
+        "source_dependencies": [
+          [
+            "geometry/data.bin",
+            2284,
+            "4564732b33f1d936e539b3661ba6898109cb56fc090888f64d5b8eb18d720410"
+          ],
+          [
+            "images/0.png",
+            74,
+            "0b85ec0b72847dd62c8e001a3c199c0417408712356df8de1d2a87826b66855f"
+          ],
+          [
+            "images/1.png",
+            92,
+            "4e5b5df2530c577bf9714cb6219921295d013971ceda69f350ed3741163cf5e7"
+          ],
+          [
+            "images/2.png",
+            92,
+            "2493c6438dfc6df79fed34ad51cc49693bcce44de4991fe705a17200c8bf4727"
+          ],
+          [
+            "images/3.png",
+            94,
+            "77315f346b28b58dc032b0ea2cc0891d2c0747fec122444418f1b1c7e9ecf6cb"
+          ],
+          [
+            "images/4.png",
+            92,
+            "b4e9bd96cb9b1c8454317c0658394378a72cc2833961b5e4323e0e6fe1867170"
+          ]
+        ]
+      }
+    ],
+    "refusal_cases": [
+      {
+        "case": "bad-index-baseColorTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-baseColorTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-baseColorTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-baseColorTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-baseColorTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-baseColorTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-baseColorTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-baseColorTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-metallicRoughnessTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-metallicRoughnessTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-metallicRoughnessTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-metallicRoughnessTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-metallicRoughnessTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-metallicRoughnessTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-metallicRoughnessTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-metallicRoughnessTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-normalTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-normalTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-normalTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-normalTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-normalTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-normalTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-normalTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-normalTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-occlusionTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-occlusionTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-occlusionTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-occlusionTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-occlusionTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-occlusionTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-occlusionTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-occlusionTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-emissiveTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-emissiveTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-emissiveTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "missing-uv1-emissiveTexture",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-emissiveTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv2-emissiveTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-emissiveTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-emissiveTexture",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-TANGENT",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-TEXCOORD_1",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "count-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "nan-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "range-COLOR_0",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-no-normal",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-no-normal",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "normal-no-tangent",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "normal-no-tangent",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonconformal",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonconformal",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonconformal-unused-material",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonconformal-unused-material",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-mixed-w",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-mixed-w",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-sign-zero",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-sign-zero",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-zero",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-zero",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonunit",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-nonunit",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-above-one",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-above-one",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-negative",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-negative",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-integer-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-integer-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-short-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-short-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-float-normalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-float-normalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-integer-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-integer-unnormalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-float-normalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-float-normalized",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-not-consecutive",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-not-consecutive",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-one",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-one",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-domain",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-domain",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "occlusion-strength-range",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "occlusion-strength-range",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "emissive-factor-range",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "emissive-factor-range",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5120-VEC3",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5120-VEC3",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5122-VEC3",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5122-VEC3",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-SCALAR",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-SCALAR",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-MAT4",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-MAT4",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5125-VEC4",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5125-VEC4",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-occlusionTexture-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "slot-extension-occlusionTexture-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-emissiveTexture-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "bad-index-emissiveTexture-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-COLOR_0-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "shape-COLOR_0-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-integer-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-integer-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-short-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-short-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-float-normalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "color-float-normalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-integer-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "uv1-integer-unnormalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-float-normalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "tangent-float-normalized-before-missing-file",
+        "kind": "invalid_input",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5120-VEC3-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5120-VEC3-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5122-VEC3-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5122-VEC3-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-SCALAR-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-SCALAR-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-MAT4-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5126-MAT4-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5125-VEC4-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1,
+        "output_parent_exists": false
+      },
+      {
+        "case": "unused-storage-5125-VEC4-before-missing-file",
+        "kind": "unsupported",
+        "leaf_limit": 1000,
+        "output_parent_exists": false
+      }
+    ]
+  }
+}

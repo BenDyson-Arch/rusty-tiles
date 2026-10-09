@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installed F1b2 extension parity with independent dependency/geometry truth."""
+"""Installed local-resource/core-PBR parity with independent source truth."""
 import argparse
 import hashlib
 import json
@@ -11,7 +11,6 @@ import zipfile
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import f1b2_oracle as oracle
 
 
 def main():
@@ -19,7 +18,12 @@ def main():
     parser.add_argument('--installed', required=True, type=Path)
     parser.add_argument('--binary', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--core-pbr', action='store_true')
     args = parser.parse_args()
+    if args.core_pbr:
+        import f1b3_oracle as oracle
+    else:
+        import f1b2_oracle as oracle
     installed, binary = args.installed.resolve(), args.binary.resolve()
     sys.path.insert(0, str(installed))
     import rusty_tiles
@@ -31,11 +35,18 @@ def main():
     errors = (rusty_tiles.DataError, rusty_tiles.UnsupportedError, rusty_tiles.TilesIOError, rusty_tiles.InvalidRequestError)
     with tempfile.TemporaryDirectory(prefix='f1b2-wheel-') as temporary:
         root = Path(temporary)
-        for variant in oracle.VARIANTS:
-            source = oracle.write_fixture(root / 'sources' / variant, variant)
+        scenarios = [(variant, False, (1, 3, 1000)) for variant in oracle.VARIANTS]
+        if args.core_pbr:
+            scenarios += [(variant, True, (1, 1000)) for variant in oracle.EXTERNAL_VARIANTS]
+        for variant, external, limits in scenarios:
+            name = ('external-' if external else '') + variant
+            if args.core_pbr:
+                source = oracle.write_fixture(root / 'sources' / name, variant, external=external)
+            else:
+                source = oracle.write_fixture(root / 'sources' / name, variant)
             before = {str(p.relative_to(source.parent)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.parent.rglob('*') if p.is_file()}
-            for limit in (1, 3, 1000):
-                cli, python = (root / (variant + '-' + str(limit) + suffix + '.3tz') for suffix in ('-cli', '-python'))
+            for limit in limits:
+                cli, python = (root / (name + '-' + str(limit) + suffix + '.3tz') for suffix in ('-cli', '-python'))
                 completed = subprocess.run([str(binary), '--json', 'mesh-local-to-3tz', '-i', str(source), '-o', str(cli), '--leaf-triangles', str(limit)], capture_output=True, text=True, timeout=60)
                 oracle.require(completed.returncode == 0, completed.stdout + completed.stderr)
                 cli_report = json.loads(completed.stdout)['meshReport']
@@ -48,9 +59,11 @@ def main():
                 oracle.require(events and not value.cleanup_diagnostics, 'events and clean successful result')
                 after = {str(p.relative_to(source.parent)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.parent.rglob('*') if p.is_file()}
                 oracle.require(after == before, 'all admitted sources unchanged')
-                receipt['positive_cases'].append({'variant': variant, 'leaf_limit': limit, 'status': 'passed', 'report': value.report})
+                receipt['positive_cases'].append({'variant': variant, 'external': external, 'leaf_limit': limit, 'status': 'passed', 'report': value.report})
         for name, bundle, kind in oracle.refusal_bundles():
-            source = oracle.write_bundle(root / 'refusals' / name, bundle)
+            writer = oracle.binding.write_bundle if args.core_pbr else oracle.write_bundle
+            source = writer(root / 'refusals' / name, bundle)
+            before = {str(p.relative_to(source.parent)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.parent.rglob('*') if p.is_file()}
             for limit in (1, 1000):
                 output = root / 'absent' / name / (str(limit) + '.3tz')
                 try:
@@ -60,6 +73,8 @@ def main():
                 else:
                     raise oracle.OracleError('invalid source admitted: ' + name)
                 oracle.require(not output.parent.exists(), 'refusal created output work')
+                after = {str(p.relative_to(source.parent)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.parent.rglob('*') if p.is_file()}
+                oracle.require(before == after, 'refused source changed')
                 receipt['refusal_cases'].append({'case': name, 'leaf_limit': limit, 'kind': kind})
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(receipt, indent=2) + '\n')

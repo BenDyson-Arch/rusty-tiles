@@ -1,0 +1,5344 @@
+{
+  "self_test": {
+    "URI_analytic_reference": "passed",
+    "fixture_variants": {
+      "multibuffer": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "glb-mixed": {
+        "external_files": 3,
+        "external_bytes": 531
+      },
+      "glb-json-only": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "external-view-image": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "mime-inferred": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "jpeg": {
+        "external_files": 4,
+        "external_bytes": 1821
+      },
+      "trailing-buffer": {
+        "external_files": 4,
+        "external_bytes": 1055
+      },
+      "unicode": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "encoded-unicode": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "space-percent": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "encoded-hash": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "once-percent": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "plus": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "contained-dots": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "percent-alias": {
+        "external_files": 3,
+        "external_bytes": 886
+      },
+      "repeated-uri": {
+        "external_files": 3,
+        "external_bytes": 886
+      },
+      "hardlink-alias": {
+        "external_files": 3,
+        "external_bytes": 886
+      },
+      "buffer-alias": {
+        "external_files": 3,
+        "external_bytes": 1225
+      },
+      "distinct-basename": {
+        "external_files": 4,
+        "external_bytes": 973
+      },
+      "unused-buffer": {
+        "external_files": 5,
+        "external_bytes": 1015
+      },
+      "json-whitespace": {
+        "external_files": 4,
+        "external_bytes": 1011
+      },
+      "uv-u8-bounds": {
+        "external_files": 4,
+        "external_bytes": 915
+      },
+      "uv-u16-bounds": {
+        "external_files": 4,
+        "external_bytes": 915
+      }
+    },
+    "sensitive_binding_controls": {
+      "uri-empty": "rejected",
+      "uri-percent-short": "rejected",
+      "uri-percent-nonhex": "rejected",
+      "uri-raw-space": "rejected",
+      "uri-raw-backslash": "rejected",
+      "uri-raw-control": "rejected",
+      "uri-raw-C1-control": "rejected",
+      "uri-encoded-C1-control": "rejected",
+      "uri-raw-plus": "rejected",
+      "uri-raw-ampersand": "rejected",
+      "uri-raw-semicolon": "rejected",
+      "uri-raw-at": "rejected",
+      "uri-terminal-decoded-dot": "rejected",
+      "uri-terminal-decoded-dotdot": "rejected",
+      "uri-decoded-nul": "rejected",
+      "uri-decoded-invalid-utf8": "rejected",
+      "uri-trailing-slash": "rejected",
+      "uri-query": "rejected",
+      "uri-fragment": "rejected",
+      "uri-absolute": "rejected",
+      "uri-authority": "rejected",
+      "uri-network": "rejected",
+      "uri-file-scheme": "rejected",
+      "uri-data": "rejected",
+      "uri-escape": "rejected",
+      "uri-encoded-escape": "rejected",
+      "uri-encoded-slash": "rejected",
+      "uri-encoded-backslash": "rejected",
+      "uri-encoded-query-character": "rejected",
+      "uri-encoded-colon": "rejected",
+      "uri-trailing-dot": "rejected",
+      "uri-trailing-space": "rejected",
+      "uri-uri-byte-limit": "rejected",
+      "uri-uri-component-limit": "rejected",
+      "wrong-uri-base-pixels": "rejected",
+      "wrong-logical-buffer-binding": "rejected",
+      "same-sized-buffer-payload-change": "rejected"
+    },
+    "f1b_texture_self_test": {
+      "png_analytic_filters": {
+        "0": "passed",
+        "1": "passed",
+        "2": "passed",
+        "3": "passed",
+        "4": "passed"
+      },
+      "jpeg_manifest_sha256": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+      "analytic_transform_normal_UV_winding": "passed",
+      "fixture_variants": {
+        "standard": "passed",
+        "nested": "passed",
+        "instanced": "passed",
+        "scenes": "passed",
+        "coincident": "passed",
+        "degenerate": "passed",
+        "normal-absent": "passed",
+        "nonindexed": "passed",
+        "uv-u8": "passed",
+        "uv-u16": "passed",
+        "empty-sampler": "passed",
+        "wrap": "passed",
+        "mixed": "passed",
+        "jpeg": "passed",
+        "spike": "passed",
+        "reordered-spike": "passed",
+        "thin": "passed",
+        "disconnected": "passed",
+        "interleaved": "passed",
+        "uv-on-untextured": "passed",
+        "two-images": "passed",
+        "selected-image-one": "passed",
+        "sampler-9728": "passed",
+        "sampler-9729": "passed",
+        "sampler-9984": "passed",
+        "sampler-9985": "passed",
+        "sampler-9986": "passed",
+        "sampler-9987": "passed"
+      },
+      "sensitive_corruption_controls": {
+        "missing-triangle": "rejected",
+        "wrong-winding": "rejected",
+        "wrong-uv": "rejected",
+        "uv-corner-order": "rejected",
+        "missing-normal": "rejected",
+        "wrong-factor": "rejected",
+        "alpha-cutoff": "rejected",
+        "double-sided": "rejected",
+        "sampler-omission": "rejected",
+        "alpha-only": "rejected",
+        "explicit-default-alpha-omission": "rejected",
+        "explicit-default-sampler-omission": "rejected",
+        "orphan-image": "rejected",
+        "missing-image": "rejected",
+        "wrong-image-rows": "rejected",
+        "encoded-byte-change-same-pixels": "rejected",
+        "image-alpha": "rejected",
+        "leaf-wrong-texture-index": "rejected",
+        "leaf-unused-image": "rejected",
+        "leaf-wrong-image-uri": "rejected",
+        "leaf-uv-association": "rejected"
+      },
+      "scope": "full-detail textured leaf fidelity; no coarse approximation/error-bound acceptance"
+    },
+    "scope": "independent URI/base/physical-file/buffer interpretation and full-detail resource fidelity; no atomic snapshot claim"
+  },
+  "candidate": {
+    "binary": "/home/bend/.cache/rusty-tiles-f1b3-native-92c7e02",
+    "binary_sha256": "e8b184c61171e8fc92a81ce245afea96b19f7043983dcc2ba8ffc6308dd942fe",
+    "positive_cases": [
+      {
+        "variant": "multibuffer",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "3dad877e7adf607656fc99c7b8928da1cce0c838f6c42efb1c235501c3c32dcd",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "multibuffer",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "9f7e967399d49d131f1a55c0c32aa87832b09115123fae3a4d7fe50824a7e746",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "multibuffer",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "40f761db92a8cdc8c1f2c5d87a9c8c98307a752001e149b422f1264819e77935",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-mixed",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6444,
+          "external_files": 3,
+          "external_bytes": 531,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed",
+        "archive_sha256": "918a5884ebfb83ae57b4c03d028d4219856f5bdac528e4e8a8b8fd40f5e68492",
+        "external_files": 3,
+        "external_bytes": 531,
+        "source_dependencies": [
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-mixed",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6444,
+          "external_files": 3,
+          "external_bytes": 531,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed",
+        "archive_sha256": "5cc10a9279debf73cc992a9d11d8d21a54f0fbe7f03bc4dba9aeec78aef960bb",
+        "external_files": 3,
+        "external_bytes": 531,
+        "source_dependencies": [
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-mixed",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6444,
+          "external_files": 3,
+          "external_bytes": 531,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed",
+        "archive_sha256": "1313a7ff7f2a59c779b8f9db9e23ca0dd3b518ed361863694ef1c98b0cabbf7d",
+        "external_files": 3,
+        "external_bytes": 531,
+        "source_dependencies": [
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-json-only",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76",
+        "archive_sha256": "0fafcec5c9c826ec5192e9bc55f88903287eec7d7b17cf3ff3724474df1cec40",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-json-only",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76",
+        "archive_sha256": "b534f70a36e35d4b76f38c9eaf7129d7cbd165f2400006731893dbb0021e56f3",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "glb-json-only",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76",
+        "archive_sha256": "39887e8c19d56a6dd08537e4ebe833d9e96f9bd5199976837cd01fccffbb638e",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "external-view-image",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6029,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe",
+        "archive_sha256": "dd5816ae5baa9637b34cedadc0d8f34e77c5c6eab610193bd5b39ef2b736600c",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "images/view.bin",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "external-view-image",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6029,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe",
+        "archive_sha256": "0a644a7e5cdc3b62dce38f504e30b3257170a84ff12d51b1446aabc6bb0abb74",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "images/view.bin",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "external-view-image",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6029,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe",
+        "archive_sha256": "26f7168caa7c04db5ca113a2c0650483fc67434aed3efffd8fde6cfa0bb539c9",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "images/view.bin",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "mime-inferred",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5929,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd",
+        "archive_sha256": "1b3a3734db991cccb74a39bdec368b11e1503f28888ba8d65632fb8ec5a2e678",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "mime-inferred",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5929,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd",
+        "archive_sha256": "fe452e4f53db1126fd689e5871d73e8f89f83c60720b6253a6f6ef53e61e508c",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "mime-inferred",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5929,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd",
+        "archive_sha256": "55a45a8afbd076d2d86b8ceef4c813f6258f9c8efea7b70f83727b16bfcd3413",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 4,
+          "external_bytes": 1821,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "46e268e7b922808eec0dbe0aa389d9e476c8fdee4bad76a3c794a59bd53262fc",
+        "archive_sha256": "14704dc3cb805b25a395b8f58a108aeb0b20664b0cc8bc87eef63f86c6f7d2da",
+        "external_files": 4,
+        "external_bytes": 1821,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            897,
+            "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 4,
+          "external_bytes": 1821,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "46e268e7b922808eec0dbe0aa389d9e476c8fdee4bad76a3c794a59bd53262fc",
+        "archive_sha256": "9cd525640cc96af34f2b5f63712b07a6ee0b98f34517c6102fdde28724cddc92",
+        "external_files": 4,
+        "external_bytes": 1821,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            897,
+            "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 4,
+          "external_bytes": 1821,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "46e268e7b922808eec0dbe0aa389d9e476c8fdee4bad76a3c794a59bd53262fc",
+        "archive_sha256": "a18cabb257d175a8009441b457d09c06df1f4ad603a14387f2d85664493ca6d4",
+        "external_files": 4,
+        "external_bytes": 1821,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            897,
+            "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "trailing-buffer",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1055,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "2bdc1402f9b48932a9302efaf1c1910cd7380d1d0086d6d6e6e61a743a1e914c",
+        "external_files": 4,
+        "external_bytes": 1055,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            524,
+            "5ca1fd3cb16fd18186a3ba79c44758d1c0d0370c81ef2a44b3b58d5d17ac7451"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "trailing-buffer",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1055,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "0f6274cd89bbf8e6d38117dfae6b1c02e6e3aef179196db5dbdf95d85e96236e",
+        "external_files": 4,
+        "external_bytes": 1055,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            524,
+            "5ca1fd3cb16fd18186a3ba79c44758d1c0d0370c81ef2a44b3b58d5d17ac7451"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "trailing-buffer",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1055,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+        "archive_sha256": "e160fa7ed0160e7dc651629709394f3cd69e34bb3c64c1f191938c48c4802898",
+        "external_files": 4,
+        "external_bytes": 1055,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            524,
+            "5ca1fd3cb16fd18186a3ba79c44758d1c0d0370c81ef2a44b3b58d5d17ac7451"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "unicode",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5954,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "3df5db1278ff967287dd67a4206da31a3388fef0fc648ffa8af6af008e187c5f",
+        "archive_sha256": "d26398e59d53ea567c74ff2f1f2ee7181b04050549d29a1108bbcd503a08e6ee",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "unicode",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5954,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "3df5db1278ff967287dd67a4206da31a3388fef0fc648ffa8af6af008e187c5f",
+        "archive_sha256": "a97770b6ae4d6b0cb55df9af1008c3b017641f675df89ab8a0d40ae50fc15a82",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "unicode",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5954,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "3df5db1278ff967287dd67a4206da31a3388fef0fc648ffa8af6af008e187c5f",
+        "archive_sha256": "2ad2ab477f267983a6bf8454555e0bf94cc2936e97d972822ae9cfd1fc04c47c",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-unicode",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5958,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d",
+        "archive_sha256": "fb84f7c918b9aa52f032b4bbb671efe1f20b78a18a53ec1de6f494ff5209ff61",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-unicode",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5958,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d",
+        "archive_sha256": "12620113140959f4e22d1adf7cb8dc83acb15384412ab0236caaad81a919ccc1",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-unicode",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5958,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d",
+        "archive_sha256": "337c7f283e40a858851b44fde50b841d4c3427fad13f6d42257ee8bc2bf7eba2",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/sph\u00e8re.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "space-percent",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5956,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d",
+        "archive_sha256": "293d54e5f76198497ae159b6030daee4edd1e0dc01d5e2af882d9de8794e32b2",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a 25%.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "space-percent",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5956,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d",
+        "archive_sha256": "40ace2646b176cefd9fe7ae73992974b205cc799534dddc93b7da00ae6b16ab7",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a 25%.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "space-percent",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5956,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d",
+        "archive_sha256": "c0d6f4a73bf69d9f6383250fa40ef1844f4dac9da6944d237391ec063ea31eb9",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a 25%.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-hash",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5960,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52",
+        "archive_sha256": "f3725813414ede54aec6aef7f65e579010a4072b55f07d6a6e293739ac5c687c",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color#alpha.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-hash",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5960,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52",
+        "archive_sha256": "f8b08579f06f00913ca962b2b86b0b64089aee94e2d855636cfa298921aeae7b",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color#alpha.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "encoded-hash",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5960,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52",
+        "archive_sha256": "a4e54896f97808b4b18653c519ad1e2e89177e196abcade0b7c624111fc35260",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color#alpha.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "once-percent",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5957,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5",
+        "archive_sha256": "a0aa794be40d58e0881d0fca9fdb689e7491f927ce67dc7eb67d6ed9bd2dfdbf",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/%2e%2e.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "once-percent",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5957,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5",
+        "archive_sha256": "3c02338e134c6f6d5f4bb884c637e28553de72ac96aec33c6562a5de80ab9714",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/%2e%2e.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "once-percent",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5957,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5",
+        "archive_sha256": "9d060b2730731efc6b1ecae262320a7db6c7af7dac2b199d2c55b27df91203e7",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/%2e%2e.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "plus",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd",
+        "archive_sha256": "3dad877e7adf607656fc99c7b8928da1cce0c838f6c42efb1c235501c3c32dcd",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a+b.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "plus",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd",
+        "archive_sha256": "9f7e967399d49d131f1a55c0c32aa87832b09115123fae3a4d7fe50824a7e746",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a+b.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "plus",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5952,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd",
+        "archive_sha256": "40f761db92a8cdc8c1f2c5d87a9c8c98307a752001e149b422f1264819e77935",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/a+b.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "contained-dots",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5976,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "30c431837c0a58455543b51813f70978c8ae04eec25087524219e6669b015970",
+        "archive_sha256": "01cdd1a0cb11b1aeabfca9793a7dd190d7fee838343ce4c57f19b1d5401080e7",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "contained-dots",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5976,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "30c431837c0a58455543b51813f70978c8ae04eec25087524219e6669b015970",
+        "archive_sha256": "4e3895f1dd1e507626efb7c5d7adc77d64eb8e7964fdad0b0a70453b498c3601",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "contained-dots",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5976,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "30c431837c0a58455543b51813f70978c8ae04eec25087524219e6669b015970",
+        "archive_sha256": "b98cc41b404508cadfd35d244a2d27e4ec396a272202f524f92d38ee14880fb4",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "percent-alias",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "4a712b8681af51693d689433f889d96eb157e0ff2874ef8fb44c6739cad4fdd3",
+        "archive_sha256": "5c3d1bf8d122e157d90ac5bb8ea62e9eed241b04172a320b24785f3b84a5fc22",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "percent-alias",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "4a712b8681af51693d689433f889d96eb157e0ff2874ef8fb44c6739cad4fdd3",
+        "archive_sha256": "53d0fd225e0060b2c06ae9a37a57dd3252cb5cbe1e61243ec28aa7b665854b15",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "percent-alias",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5953,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "4a712b8681af51693d689433f889d96eb157e0ff2874ef8fb44c6739cad4fdd3",
+        "archive_sha256": "d506515abf6a19022d51fbafc59543e4943b13ceeb70e0cded6f62b80379614f",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "repeated-uri",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "d0694879745192026afba24013763545622c7c0b5222bc6538f1d6947552702e",
+        "archive_sha256": "4b1757758b1959e66cb26779d12501ec21373d31fa8c6ed676c0d68532a1bfc1",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "repeated-uri",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "d0694879745192026afba24013763545622c7c0b5222bc6538f1d6947552702e",
+        "archive_sha256": "e4dd64066b2166058d93d2e99e38cbb0cb15f4db945f6bfbd75d31996d7f1fa2",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "repeated-uri",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "d0694879745192026afba24013763545622c7c0b5222bc6538f1d6947552702e",
+        "archive_sha256": "f17723dea707c63be9164dffefb6acad0e243597441968a07dceff08bb095d38",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "hardlink-alias",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "a86f82eb22aaa6595ad49eb72651458ef8325501237e3e59a68b15fe712aec02",
+        "archive_sha256": "4b1757758b1959e66cb26779d12501ec21373d31fa8c6ed676c0d68532a1bfc1",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "hardlink-alias",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "a86f82eb22aaa6595ad49eb72651458ef8325501237e3e59a68b15fe712aec02",
+        "archive_sha256": "e4dd64066b2166058d93d2e99e38cbb0cb15f4db945f6bfbd75d31996d7f1fa2",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "hardlink-alias",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5951,
+          "external_files": 3,
+          "external_bytes": 886,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "a86f82eb22aaa6595ad49eb72651458ef8325501237e3e59a68b15fe712aec02",
+        "archive_sha256": "f17723dea707c63be9164dffefb6acad0e243597441968a07dceff08bb095d38",
+        "external_files": 3,
+        "external_bytes": 886,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ]
+        ]
+      },
+      {
+        "variant": "buffer-alias",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 3,
+          "external_bytes": 1225,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7a9fd2885fbb7ba11c55e90f4bf189b7055194ef9da698e9d2b68d54a2a8c9ee",
+        "archive_sha256": "53cf11744826347cd15b44c6a2dc4817da48e251195f0a3f88667e53530a7036",
+        "external_files": 3,
+        "external_bytes": 1225,
+        "source_dependencies": [
+          [
+            "geom/shared.bin",
+            1013,
+            "173453b1e01e3bb30de6959bfa7e9c764860c57a3c7d9773c8caf873eff088bf"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "buffer-alias",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 3,
+          "external_bytes": 1225,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7a9fd2885fbb7ba11c55e90f4bf189b7055194ef9da698e9d2b68d54a2a8c9ee",
+        "archive_sha256": "cee494264fae11ef94652af8bcb5d474498a8e6766bf7aa1b22aa8bf04aff1de",
+        "external_files": 3,
+        "external_bytes": 1225,
+        "source_dependencies": [
+          [
+            "geom/shared.bin",
+            1013,
+            "173453b1e01e3bb30de6959bfa7e9c764860c57a3c7d9773c8caf873eff088bf"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "buffer-alias",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5972,
+          "external_files": 3,
+          "external_bytes": 1225,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "7a9fd2885fbb7ba11c55e90f4bf189b7055194ef9da698e9d2b68d54a2a8c9ee",
+        "archive_sha256": "ee93a33031e97cdf63077340347fb0f5390b5f233ddf48e60de963298c09acc9",
+        "external_files": 3,
+        "external_bytes": 1225,
+        "source_dependencies": [
+          [
+            "geom/shared.bin",
+            1013,
+            "173453b1e01e3bb30de6959bfa7e9c764860c57a3c7d9773c8caf873eff088bf"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "distinct-basename",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5925,
+          "external_files": 4,
+          "external_bytes": 973,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d",
+        "archive_sha256": "dda1bd214e3e8db920fec67b8f68f499d9eb0e70400a9d585ba20a82ac968d5f",
+        "external_files": 4,
+        "external_bytes": 973,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "left/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "right/color.png",
+            87,
+            "02a505a377f2ce0fb8245a7c5cfb154016a71fd656568c08470abd41bf9f2509"
+          ]
+        ]
+      },
+      {
+        "variant": "distinct-basename",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5925,
+          "external_files": 4,
+          "external_bytes": 973,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d",
+        "archive_sha256": "00ae0c509b4cda9f4ac5017340019dbd4c76db757a62931c9c5bdd9a015f31aa",
+        "external_files": 4,
+        "external_bytes": 973,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "left/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "right/color.png",
+            87,
+            "02a505a377f2ce0fb8245a7c5cfb154016a71fd656568c08470abd41bf9f2509"
+          ]
+        ]
+      },
+      {
+        "variant": "distinct-basename",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5925,
+          "external_files": 4,
+          "external_bytes": 973,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 2,
+          "image_bytes": 174,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d",
+        "archive_sha256": "e4d5fc3506b4761753dbbfc44f1f5bab4630a09340ec6f1137eddadb20ae7ee9",
+        "external_files": 4,
+        "external_bytes": 973,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "left/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "right/color.png",
+            87,
+            "02a505a377f2ce0fb8245a7c5cfb154016a71fd656568c08470abd41bf9f2509"
+          ]
+        ]
+      },
+      {
+        "variant": "unused-buffer",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6001,
+          "external_files": 5,
+          "external_bytes": 1015,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "04d8a71186a5e700afc523d23242fc091c68d54e52b508540635be1fd7ce279a",
+        "archive_sha256": "f03576b182683e9637af32fcc1c203ad645d38cab13e0ef4e83e76fcb17fe46d",
+        "external_files": 5,
+        "external_bytes": 1015,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "unused/not-rendered.bin",
+            4,
+            "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"
+          ]
+        ]
+      },
+      {
+        "variant": "unused-buffer",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6001,
+          "external_files": 5,
+          "external_bytes": 1015,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "04d8a71186a5e700afc523d23242fc091c68d54e52b508540635be1fd7ce279a",
+        "archive_sha256": "0288957fca8498d753596df1c2819a766c9c79007be3ebf7778c8858815c1b6d",
+        "external_files": 5,
+        "external_bytes": 1015,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "unused/not-rendered.bin",
+            4,
+            "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"
+          ]
+        ]
+      },
+      {
+        "variant": "unused-buffer",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6001,
+          "external_files": 5,
+          "external_bytes": 1015,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "04d8a71186a5e700afc523d23242fc091c68d54e52b508540635be1fd7ce279a",
+        "archive_sha256": "1e60bea904f6fde2e6a6719c043517de15be1e15af2aa4ea31b8b735078c1c5d",
+        "external_files": 5,
+        "external_bytes": 1015,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ],
+          [
+            "unused/not-rendered.bin",
+            4,
+            "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"
+          ]
+        ]
+      },
+      {
+        "variant": "json-whitespace",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5955,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "485019d82e40d380f360b4c310a899d435acc6141525b24dd559e67e47184d51",
+        "archive_sha256": "78cd83cfa1de82d0145d6c12b760f1c530187b9cd2814deee77d3f39c6dc68d9",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "json-whitespace",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5955,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "485019d82e40d380f360b4c310a899d435acc6141525b24dd559e67e47184d51",
+        "archive_sha256": "b6377e5f08305a5245b9d65a8d1150a38882e5b8507214b8fbc8d4689988ca43",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "json-whitespace",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5955,
+          "external_files": 4,
+          "external_bytes": 1011,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "485019d82e40d380f360b4c310a899d435acc6141525b24dd559e67e47184d51",
+        "archive_sha256": "af6c310f3bc16ff1f1ca48e789fb18a8a13483a5ecc2fbcf1f22da6817103b4c",
+        "external_files": 4,
+        "external_bytes": 1011,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            480,
+            "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u8-bounds",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6439,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e",
+        "archive_sha256": "c23f202a58cea9000c2c1aab3cffe79d1a6c266101df01a57442b580f019699b",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "db016a9d332bb5f625fb7d8aa0fee0ca51c29921e9902b64035ad3ba0d142997"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u8-bounds",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6439,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e",
+        "archive_sha256": "6cbb1dd64e47c3eb247eb36fffd2b9e5e8865d382d6940dfb143887ab80dfb2e",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "db016a9d332bb5f625fb7d8aa0fee0ca51c29921e9902b64035ad3ba0d142997"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u8-bounds",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6439,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e",
+        "archive_sha256": "a36b933adbab7d1e53320efe2db09b90e9952b5d8cdc6e5807d2fc099b4f34f4",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "db016a9d332bb5f625fb7d8aa0fee0ca51c29921e9902b64035ad3ba0d142997"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u16-bounds",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6351,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52",
+        "archive_sha256": "9b7493d90c9ca5733e9e6f03f0e7623915386ddc784c2796eb3b5c6baa2758b0",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "b77380c0fee1074be45f46cb77bda54e2848954611d11e8deede936989be017a"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u16-bounds",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6351,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52",
+        "archive_sha256": "6a0f76f0f7d41b47796bfb81314d07b288ea65dfa9ab5b44951fa3e7cafe406b",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "b77380c0fee1074be45f46cb77bda54e2848954611d11e8deede936989be017a"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      },
+      {
+        "variant": "uv-u16-bounds",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6351,
+          "external_files": 4,
+          "external_bytes": 915,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52",
+        "archive_sha256": "753c6ccd47f2188cb7e36a6195516aabff74b609154f7245b7164f3dcd1e0e55",
+        "external_files": 4,
+        "external_bytes": 915,
+        "source_dependencies": [
+          [
+            "geom/a.bin",
+            384,
+            "b77380c0fee1074be45f46cb77bda54e2848954611d11e8deede936989be017a"
+          ],
+          [
+            "geom/b.bin",
+            319,
+            "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550"
+          ],
+          [
+            "images/color.png",
+            87,
+            "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+          ],
+          [
+            "images/unused.png",
+            125,
+            "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+          ]
+        ]
+      }
+    ],
+    "refusal_cases": [
+      {
+        "case": "uri-empty",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "411d556b125f67aabd84cc39c8f10bb0c06772e8f03d8c1074a930cfa4a41d48"
+      },
+      {
+        "case": "uri-empty",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "411d556b125f67aabd84cc39c8f10bb0c06772e8f03d8c1074a930cfa4a41d48"
+      },
+      {
+        "case": "uri-percent-short",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "7d284ad74a645a0d84aed9428c9702a9dd2dbb220ea61fae8572332f2de97861"
+      },
+      {
+        "case": "uri-percent-short",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "7d284ad74a645a0d84aed9428c9702a9dd2dbb220ea61fae8572332f2de97861"
+      },
+      {
+        "case": "uri-percent-nonhex",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "ce023ee2d0ba3275d66bcfb4314daba23156cd80bc032ed34d5588e562ed4a10"
+      },
+      {
+        "case": "uri-percent-nonhex",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "ce023ee2d0ba3275d66bcfb4314daba23156cd80bc032ed34d5588e562ed4a10"
+      },
+      {
+        "case": "uri-raw-space",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "bad7dbd8b4f23fab8dd01184be7508643972539a873e93dfbf7d339b7467e424"
+      },
+      {
+        "case": "uri-raw-space",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "bad7dbd8b4f23fab8dd01184be7508643972539a873e93dfbf7d339b7467e424"
+      },
+      {
+        "case": "uri-raw-backslash",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "080645239d664a5aa730661a0b155b172673fe59e538caa96b6b9cb14cc73b83"
+      },
+      {
+        "case": "uri-raw-backslash",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "080645239d664a5aa730661a0b155b172673fe59e538caa96b6b9cb14cc73b83"
+      },
+      {
+        "case": "uri-raw-control",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "4a04681fbb9b218e7baf6c77f85133da553f0e7f581e3d27cc06376dcd27582a"
+      },
+      {
+        "case": "uri-raw-control",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "4a04681fbb9b218e7baf6c77f85133da553f0e7f581e3d27cc06376dcd27582a"
+      },
+      {
+        "case": "uri-raw-C1-control",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "466ec53eae2c18bdcdb59916910c955c513e5967d22a29ea98b3eaedeecb85b4"
+      },
+      {
+        "case": "uri-raw-C1-control",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "466ec53eae2c18bdcdb59916910c955c513e5967d22a29ea98b3eaedeecb85b4"
+      },
+      {
+        "case": "uri-encoded-C1-control",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "afdb74cbdb6882b9b99b47dca350571f1fa84b9a6dbd78360d7c7f8c101cb6b9"
+      },
+      {
+        "case": "uri-encoded-C1-control",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "afdb74cbdb6882b9b99b47dca350571f1fa84b9a6dbd78360d7c7f8c101cb6b9"
+      },
+      {
+        "case": "uri-raw-plus",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "64726981166773b300147a84e4d427255ab771b8275bc5f82474a90e4c86bba0"
+      },
+      {
+        "case": "uri-raw-plus",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "64726981166773b300147a84e4d427255ab771b8275bc5f82474a90e4c86bba0"
+      },
+      {
+        "case": "uri-raw-ampersand",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "29bf3ae912800e1d7343a03eb9118d161b7a8e907fbdf479af0c834553b31d08"
+      },
+      {
+        "case": "uri-raw-ampersand",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "29bf3ae912800e1d7343a03eb9118d161b7a8e907fbdf479af0c834553b31d08"
+      },
+      {
+        "case": "uri-raw-semicolon",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a70cbe3cbb2123a4f48ae79fc13b3c619861a07988e393e010a307948b148f64"
+      },
+      {
+        "case": "uri-raw-semicolon",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a70cbe3cbb2123a4f48ae79fc13b3c619861a07988e393e010a307948b148f64"
+      },
+      {
+        "case": "uri-raw-at",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "5b720311e1b3f652fe2fe42e34602452b9e2cd4e69437f2c735dd5bb83a46117"
+      },
+      {
+        "case": "uri-raw-at",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "5b720311e1b3f652fe2fe42e34602452b9e2cd4e69437f2c735dd5bb83a46117"
+      },
+      {
+        "case": "uri-terminal-decoded-dot",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "fabf5307202495f21b2ad0ad11898e5b885ce4a9c1583f771fc7b8781ab78acc"
+      },
+      {
+        "case": "uri-terminal-decoded-dot",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "fabf5307202495f21b2ad0ad11898e5b885ce4a9c1583f771fc7b8781ab78acc"
+      },
+      {
+        "case": "uri-terminal-decoded-dotdot",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "61a265e28460e8b70f514d8ae4e0fa46eda68ee2a9633441ff061eb01b2e4bc9"
+      },
+      {
+        "case": "uri-terminal-decoded-dotdot",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "61a265e28460e8b70f514d8ae4e0fa46eda68ee2a9633441ff061eb01b2e4bc9"
+      },
+      {
+        "case": "uri-decoded-nul",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "157553008851ef603c8e4d71c25ab5979b0910aca862b027a2afb03afe123845"
+      },
+      {
+        "case": "uri-decoded-nul",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "157553008851ef603c8e4d71c25ab5979b0910aca862b027a2afb03afe123845"
+      },
+      {
+        "case": "uri-decoded-invalid-utf8",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "fb694ff2d4248e08dfa69a8792135b35a756f64121df665d955dfa6111a2dc4c"
+      },
+      {
+        "case": "uri-decoded-invalid-utf8",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "fb694ff2d4248e08dfa69a8792135b35a756f64121df665d955dfa6111a2dc4c"
+      },
+      {
+        "case": "uri-trailing-slash",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "ca2a46c63c048ebc17daf6e5b9491b754bc4b27b69b17284e348800efaf7eaef"
+      },
+      {
+        "case": "uri-trailing-slash",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "ca2a46c63c048ebc17daf6e5b9491b754bc4b27b69b17284e348800efaf7eaef"
+      },
+      {
+        "case": "uri-query",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "026560d0bff0f92b300efb3599da8f57c79ea64964dad212b69b36b222d83a18"
+      },
+      {
+        "case": "uri-query",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "026560d0bff0f92b300efb3599da8f57c79ea64964dad212b69b36b222d83a18"
+      },
+      {
+        "case": "uri-fragment",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "c6849378e6c95537c9be4d4c869db601089ff44b117eb845cc1dde712acc1608"
+      },
+      {
+        "case": "uri-fragment",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "c6849378e6c95537c9be4d4c869db601089ff44b117eb845cc1dde712acc1608"
+      },
+      {
+        "case": "uri-absolute",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "3a7dc2d09caaaccf43e87d5ae8ce95e40803ecc7308d22ca245fc0665726b954"
+      },
+      {
+        "case": "uri-absolute",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "3a7dc2d09caaaccf43e87d5ae8ce95e40803ecc7308d22ca245fc0665726b954"
+      },
+      {
+        "case": "uri-authority",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "21e56c2a522d3285c2b138860d9ea4a1e2be8767e7d7b8b518103ddcd93fb943"
+      },
+      {
+        "case": "uri-authority",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "21e56c2a522d3285c2b138860d9ea4a1e2be8767e7d7b8b518103ddcd93fb943"
+      },
+      {
+        "case": "uri-network",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "58d21cfa14a0ad694f0a800849e4545cac944230bc8c9914302bee7b82b28392"
+      },
+      {
+        "case": "uri-network",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "58d21cfa14a0ad694f0a800849e4545cac944230bc8c9914302bee7b82b28392"
+      },
+      {
+        "case": "uri-file-scheme",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ff4341144560682badd11e043f1e5afa390c444aa10a9626339b0b57853ca59d"
+      },
+      {
+        "case": "uri-file-scheme",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ff4341144560682badd11e043f1e5afa390c444aa10a9626339b0b57853ca59d"
+      },
+      {
+        "case": "uri-data",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "283f0d5c14311235b9d47e100a796c1ca3d282b52223a0332ee3eac413ba3b82"
+      },
+      {
+        "case": "uri-data",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "283f0d5c14311235b9d47e100a796c1ca3d282b52223a0332ee3eac413ba3b82"
+      },
+      {
+        "case": "uri-escape",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "1bc08d12baaa8af3732dc4b3fbc910fd59e00cf3311c013377597e48fc96d213"
+      },
+      {
+        "case": "uri-escape",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "1bc08d12baaa8af3732dc4b3fbc910fd59e00cf3311c013377597e48fc96d213"
+      },
+      {
+        "case": "uri-encoded-escape",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "677bc5947d551bda8bac2683716800dc9bf7e62038ce58fbd3c97fd02f7ff837"
+      },
+      {
+        "case": "uri-encoded-escape",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "677bc5947d551bda8bac2683716800dc9bf7e62038ce58fbd3c97fd02f7ff837"
+      },
+      {
+        "case": "uri-encoded-slash",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "e1715b1a4ceda6a2f0e0a6fbab5f9f5db7ea75b29b581f39cc66cbff18f6ec08"
+      },
+      {
+        "case": "uri-encoded-slash",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "e1715b1a4ceda6a2f0e0a6fbab5f9f5db7ea75b29b581f39cc66cbff18f6ec08"
+      },
+      {
+        "case": "uri-encoded-backslash",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "7bee807a81b6929a5aa8c2e629594fcb669487b98d06c1a493e8ac8ac636ce06"
+      },
+      {
+        "case": "uri-encoded-backslash",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "7bee807a81b6929a5aa8c2e629594fcb669487b98d06c1a493e8ac8ac636ce06"
+      },
+      {
+        "case": "uri-encoded-query-character",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ef163fd72004a2d3b588c52e298d70bf573482cb3c4482e0538d1fa48f50b41a"
+      },
+      {
+        "case": "uri-encoded-query-character",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ef163fd72004a2d3b588c52e298d70bf573482cb3c4482e0538d1fa48f50b41a"
+      },
+      {
+        "case": "uri-encoded-colon",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "b83c20b68a06fcb1445c3feca7ecd5da28225a3f243d6d7e974eb8423424b38d"
+      },
+      {
+        "case": "uri-encoded-colon",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "b83c20b68a06fcb1445c3feca7ecd5da28225a3f243d6d7e974eb8423424b38d"
+      },
+      {
+        "case": "uri-trailing-dot",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "e28330d0f77d93a6e8a4d2c619e6c4200059aa75fcd36bd6688fd6ae2d4242d6"
+      },
+      {
+        "case": "uri-trailing-dot",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "e28330d0f77d93a6e8a4d2c619e6c4200059aa75fcd36bd6688fd6ae2d4242d6"
+      },
+      {
+        "case": "uri-trailing-space",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "1d653c77c93652d123192ce209c368cf84f5ebd43845a3ef18b1b32091a8965c"
+      },
+      {
+        "case": "uri-trailing-space",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "1d653c77c93652d123192ce209c368cf84f5ebd43845a3ef18b1b32091a8965c"
+      },
+      {
+        "case": "uri-uri-byte-limit",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "fff6c281ab16cc900c5b6fc86160dbddde317bb2c5b451e6bd3accf665173353"
+      },
+      {
+        "case": "uri-uri-byte-limit",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "fff6c281ab16cc900c5b6fc86160dbddde317bb2c5b451e6bd3accf665173353"
+      },
+      {
+        "case": "uri-uri-component-limit",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "21f2a2bacdc6b4efefacda937da926d4ef385ed112a745069af1bf63bfb832f6"
+      },
+      {
+        "case": "uri-uri-component-limit",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "21f2a2bacdc6b4efefacda937da926d4ef385ed112a745069af1bf63bfb832f6"
+      },
+      {
+        "case": "missing-image",
+        "leaf_limit": 1,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "missing-image",
+        "leaf_limit": 1000,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "missing-buffer",
+        "leaf_limit": 1,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "missing-buffer",
+        "leaf_limit": 1000,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "missing-unused-image",
+        "leaf_limit": 1,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "missing-unused-image",
+        "leaf_limit": 1000,
+        "kind": "io",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "short-buffer",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "short-buffer",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "view-beyond-declared-prefix",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "12e510e6c5742893390c7cd3576082dbfc9d924401c61943b75ba1a578044bb7"
+      },
+      {
+        "case": "view-beyond-declared-prefix",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "12e510e6c5742893390c7cd3576082dbfc9d924401c61943b75ba1a578044bb7"
+      },
+      {
+        "case": "image-two-sources",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a185a362ef396ec0e4dbfd58b21163298ecf38b59856d85a4c99aefff7f5bc80"
+      },
+      {
+        "case": "image-two-sources",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a185a362ef396ec0e4dbfd58b21163298ecf38b59856d85a4c99aefff7f5bc80"
+      },
+      {
+        "case": "buffer-one-without-URI",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ba5774739f4a67f81bfbc715026fc3ba023ce5bf0ba2b9e50c3a7451ef81028e"
+      },
+      {
+        "case": "buffer-one-without-URI",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ba5774739f4a67f81bfbc715026fc3ba023ce5bf0ba2b9e50c3a7451ef81028e"
+      },
+      {
+        "case": "json-uri-less-buffer-zero",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "0bfb2ea5396bae81816642deb572d3095d9555972a3593c088432ecd3685e534"
+      },
+      {
+        "case": "json-uri-less-buffer-zero",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "0bfb2ea5396bae81816642deb572d3095d9555972a3593c088432ecd3685e534"
+      },
+      {
+        "case": "image-no-source",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a4b104bb9053d27abcac6e13c1315e5c3ac9ffc18dc067f509ffa9dfeb01775d"
+      },
+      {
+        "case": "image-no-source",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "a4b104bb9053d27abcac6e13c1315e5c3ac9ffc18dc067f509ffa9dfeb01775d"
+      },
+      {
+        "case": "external-mime-mismatch",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "46e268e7b922808eec0dbe0aa389d9e476c8fdee4bad76a3c794a59bd53262fc"
+      },
+      {
+        "case": "external-mime-mismatch",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "46e268e7b922808eec0dbe0aa389d9e476c8fdee4bad76a3c794a59bd53262fc"
+      },
+      {
+        "case": "invalid-unused-png",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "invalid-unused-png",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "buffer-count",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ab7f444b8f8d80eb13e47702fd1e89ddd2b88bc4f6e1670875b7f74fb33428a8"
+      },
+      {
+        "case": "buffer-count",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "ab7f444b8f8d80eb13e47702fd1e89ddd2b88bc4f6e1670875b7f74fb33428a8"
+      },
+      {
+        "case": "declared-buffer-sum",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "81ad470a126ad694d13ab3113437dda302b335a6440ba46753ac25f641eb4643"
+      },
+      {
+        "case": "declared-buffer-sum",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "81ad470a126ad694d13ab3113437dda302b335a6440ba46753ac25f641eb4643"
+      },
+      {
+        "case": "buffer-file-ceiling",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "buffer-file-ceiling",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "unique-external-byte-ceiling",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "unique-external-byte-ceiling",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "root-json-ceiling",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "3c2a24ea0294de6f27f250f2ba953c7afe9e4d61f5c9f6753b3ff4a22192fa62"
+      },
+      {
+        "case": "root-json-ceiling",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "3c2a24ea0294de6f27f250f2ba953c7afe9e4d61f5c9f6753b3ff4a22192fa62"
+      },
+      {
+        "case": "BIN-contradictory-buffer-zero-URI",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "9fb3422e727f09c251a0398b0228e8dc444d36ae8a69bddb8599f2e6a9a07fe9"
+      },
+      {
+        "case": "BIN-contradictory-buffer-zero-URI",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "9fb3422e727f09c251a0398b0228e8dc444d36ae8a69bddb8599f2e6a9a07fe9"
+      },
+      {
+        "case": "root-GLB-byte-ceiling",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "899aa481bf7175b2077e481577c14a63d8ece4f4755c8bcc03b3caa4dd504ecf"
+      },
+      {
+        "case": "root-GLB-byte-ceiling",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "899aa481bf7175b2077e481577c14a63d8ece4f4755c8bcc03b3caa4dd504ecf"
+      },
+      {
+        "case": "used-position-broad-bounds",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "66809315a2ac0099d0e8e0f381ce8b7629f92356ea57272547351b95408ee145"
+      },
+      {
+        "case": "used-position-broad-bounds",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "66809315a2ac0099d0e8e0f381ce8b7629f92356ea57272547351b95408ee145"
+      },
+      {
+        "case": "unused-UV-broad-bounds",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "90a67eae84db7194577d3bbf3322f7e070d7ee304a02715bdda7143469c9dcb9"
+      },
+      {
+        "case": "unused-UV-broad-bounds",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "90a67eae84db7194577d3bbf3322f7e070d7ee304a02715bdda7143469c9dcb9"
+      },
+      {
+        "case": "used-inverted-bounds-before-open",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "14139a10e6cd359c849b4082cbeefc2a394a88a285891ed66fa1201d4e452af9"
+      },
+      {
+        "case": "used-inverted-bounds-before-open",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "14139a10e6cd359c849b4082cbeefc2a394a88a285891ed66fa1201d4e452af9"
+      },
+      {
+        "case": "unused-inverted-bounds-before-open",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "61a27c36d26237fd950590ecf864fc62d28ed935d78ca6267263add7f9817906"
+      },
+      {
+        "case": "unused-inverted-bounds-before-open",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false,
+        "source_sha256": "61a27c36d26237fd950590ecf864fc62d28ed935d78ca6267263add7f9817906"
+      },
+      {
+        "case": "all-uris-before-open",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "58d21cfa14a0ad694f0a800849e4545cac944230bc8c9914302bee7b82b28392"
+      },
+      {
+        "case": "all-uris-before-open",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "58d21cfa14a0ad694f0a800849e4545cac944230bc8c9914302bee7b82b28392"
+      },
+      {
+        "case": "unsupported-extensions-before-open",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "2f2d85fb485893b32e10087ad98e425439b8122a19b68b2fe66eec7f120e5f64"
+      },
+      {
+        "case": "unsupported-extensions-before-open",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "2f2d85fb485893b32e10087ad98e425439b8122a19b68b2fe66eec7f120e5f64"
+      },
+      {
+        "case": "unsupported-unused-extras-before-open",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "123c755db1a4a5e16e5d5113a427e8d273eddc0d33d3e1b774d1717f4b71b15f"
+      },
+      {
+        "case": "unsupported-unused-extras-before-open",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "123c755db1a4a5e16e5d5113a427e8d273eddc0d33d3e1b774d1717f4b71b15f"
+      },
+      {
+        "case": "unsupported-attribute-before-open",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "c0eae271ca13e70fc2f6c1944d3f52f3c2e6690dbc33323993a70fe569e16a12"
+      },
+      {
+        "case": "unsupported-attribute-before-open",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false,
+        "source_sha256": "c0eae271ca13e70fc2f6c1944d3f52f3c2e6690dbc33323993a70fe569e16a12"
+      },
+      {
+        "case": "image-leaf-symlink",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "image-leaf-symlink",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "image-directory-symlink",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "image-directory-symlink",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "directory-image",
+        "leaf_limit": 1,
+        "kind": "invalid_input",
+        "output_parent_exists": false
+      },
+      {
+        "case": "directory-image",
+        "leaf_limit": 1000,
+        "kind": "invalid_input",
+        "output_parent_exists": false
+      },
+      {
+        "case": "document-alias",
+        "leaf_limit": 1,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "document-alias",
+        "leaf_limit": 1000,
+        "kind": "unsupported",
+        "output_parent_exists": false
+      },
+      {
+        "case": "output-alias-document",
+        "leaf_limit": 1,
+        "kind": "invalid_request",
+        "preserved_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "output-alias-document",
+        "leaf_limit": 1000,
+        "kind": "invalid_request",
+        "preserved_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      {
+        "case": "output-alias-buffer",
+        "leaf_limit": 1,
+        "kind": "invalid_request",
+        "preserved_sha256": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+      },
+      {
+        "case": "output-alias-buffer",
+        "leaf_limit": 1000,
+        "kind": "invalid_request",
+        "preserved_sha256": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe"
+      },
+      {
+        "case": "output-alias-image",
+        "leaf_limit": 1,
+        "kind": "invalid_request",
+        "preserved_sha256": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+      },
+      {
+        "case": "output-alias-image",
+        "leaf_limit": 1000,
+        "kind": "invalid_request",
+        "preserved_sha256": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+      },
+      {
+        "case": "output-alias-unused-image",
+        "leaf_limit": 1,
+        "kind": "invalid_request",
+        "preserved_sha256": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+      },
+      {
+        "case": "output-alias-unused-image",
+        "leaf_limit": 1000,
+        "kind": "invalid_request",
+        "preserved_sha256": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6"
+      }
+    ]
+  }
+}

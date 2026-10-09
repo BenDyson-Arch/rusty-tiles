@@ -350,7 +350,7 @@ def inspect(source,archive,leaf_limit,position_tolerance=None,normal_tolerance=2
             actual.extend(triangles)
         require(set(names)=={'tileset.json','conversion.json','@3dtilesIndex1@',*uris},'exact accepted resource closure')
         report=json.loads(z.read('conversion.json'))
-        expected_report={'schema_version':3,'profile':'f1b-local-gltf-v1','coordinates':'local-gltf','source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        expected_report={'schema_version':3,'profile':'f1b-core-pbr-gltf-v1','coordinates':'local-gltf','source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         require(close_value(expected_report,report,1e-10*max(1,ge)),'typed report facts/fields')
         check_index(z,Path(archive).read_bytes())
         match_triangles(expected,actual,position_tolerance,normal_tolerance)
@@ -375,7 +375,7 @@ def archive_controls():
         root=Path(temporary);source=root/'source.glb';source.write_bytes(fixture(2,transformed=False))
         box=[2.5,-0.5,0.5,2.5,0,0,0,0.5,0,0,0,0.5];ge=math.sqrt(27)
         manifest={'asset':{'version':'1.1'},'geometricError':ge,'root':{'boundingVolume':{'box':box},'geometricError':ge,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
-        report={'schema_version':3,'profile':'f1b-local-gltf-v1','coordinates':'local-gltf','source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        report={'schema_version':3,'profile':'f1b-core-pbr-gltf-v1','coordinates':'local-gltf','source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         members={'tileset.json':json.dumps(manifest).encode(),'conversion.json':json.dumps(report).encode(),'t/0.glb':source.read_bytes()}
         archive=root/'control.3tz';write_control_archive(archive,members);inspect(source,archive,2)
         controls={}

@@ -277,9 +277,11 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
             d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
             d["nodes"][0]["scale"] = json!([1, 1, 1]);
         }),
-        ("missing-texture-reference", JobErrorKind::InvalidInput, |d, _| {
-            d["materials"] = json!([{"normalTexture":{"index":0}}])
-        }),
+        (
+            "missing-texture-reference",
+            JobErrorKind::InvalidInput,
+            |d, _| d["materials"] = json!([{"normalTexture":{"index":0}}]),
+        ),
         ("extras", JobErrorKind::Unsupported, |d, _| {
             d["nodes"][0]["extras"] = json!({"identity":42})
         }),

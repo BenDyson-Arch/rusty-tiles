@@ -1,0 +1,45 @@
+{
+  "review_role": "Independent nonauthor source and handcrafted frozen-binary runtime review; no production/main-oracle changes and no Cargo",
+  "source_commit": "92c7e02433efc2031df835290cd05d72a392ebdc",
+  "binary_sha256": "e8ac65740cf396bd8d1d79327a54a7ed98817466a202b067d37c23dc024f1960",
+  "verdict": "No blocking semantic, ownership, or encoder-design issue found within this review scope.",
+  "source_observations": [
+    "Material fields and the finite private binding table own core slot paths; scalar and UV presence are preserved by cloning validated JSON and replacing only texture indices.",
+    "Selected and leaf image/texture/sampler closures retain logical identities, including shared images with different samplers. One channel writer follows a common prepared triangle corner order.",
+    "Raw extrema use all four components before semantic normalization; normalized integer UV/color conversion and VEC3 implicit color alpha agree with admitted component rules.",
+    "Whole-document primitive admission checks bound UV sets and counts. Payload caches distinguish accessor semantic roles and index accessor/POSITION-count contexts.",
+    "Conformal admission checks the accumulated world Gram matrix in metadata before dependency capture and staging. Reflections map tangent XYZ with the linear matrix, NORMAL with inverse transpose, and flip tangent W alongside the shared corner permutation.",
+    "The finite color range, authored normal/tangent requirement, mixed-W exclusion, and conformal bake restriction are bounded producer policies. No extra orthogonality condition is introduced.",
+    "Runtime, local resource binding, and image admission modules are unchanged from the baseline; material and vertex decisions remain in the pure source decoder.",
+    "Corrective metadata classification separates generic bounded accessor layout from semantic role validity. Admitted roles reject contradictory shape/component/normalization as InvalidInput; impossible FLOAT/u32 normalization is also InvalidInput. Post-role profile admission refuses unused signed, scalar-FLOAT, and matrix storage before dependency I/O, so none enters the scalar decoder or four-component extrema arrays."
+  ],
+  "runtime_evidence": {
+    "cases": 27,
+    "cases_passed": 27,
+    "checker_controls": 8,
+    "controls_detected": 8,
+    "record": "runtime-results.json",
+    "probe": "probe.py"
+  },
+  "source_verification": {
+    "manifest_inputs": 89,
+    "git_pin_and_current_tree_match": true,
+    "record": "source-verification.json"
+  },
+  "primary_sources": [
+    "https://github.com/KhronosGroup/glTF/blob/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc",
+    "https://github.com/KhronosGroup/glTF/blob/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/schema/material.normalTextureInfo.schema.json",
+    "https://github.com/KhronosGroup/glTF/blob/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/schema/material.occlusionTextureInfo.schema.json"
+  ],
+  "proof_limits": [
+    "Fresh runtime cases use the portable frozen CLI and one-leaf handcrafted fixtures. They do not independently claim multi-leaf browser lighting, native frontend, installed-wheel, lifecycle fault injection, or process resource measurements.",
+    "Eight checker controls corrupt decoded channel or material values in memory; they show sensitivity to plausible UV, handedness, color-alpha, lost-color, slot, and scalar mistakes, without mutating the producer.",
+    "Official Khronos validator and source-versus-output lit browser evidence are separate mandatory acceptance evidence. Their runners must supply receipts; this source/runtime review does not substitute for them.",
+    "The supplied build-input manifest was independently hash-checked against Git and the tree. This review did not rebuild the candidate or independently reconstruct the compiler dependency graph."
+  ],
+  "corrective_runtime_cases": {
+    "new_cases": 10,
+    "passed": 10,
+    "details": "Unnormalized unsigned COLOR and UV; unused signed byte/short, scalar-FLOAT, MAT4-FLOAT, padded MAT2-u8 and MAT3-u16; impossible normalized FLOAT/u32. Missing external buffer deliberately proves metadata-first classification; source bytes preserved and output/staging absent."
+  }
+}
