@@ -409,6 +409,9 @@ fn read_bounded(
             "mesh source exceeds file or aggregate byte ceiling",
         ));
     }
+    if prefix_len as u64 > before.len() {
+        return Err(changed(path));
+    }
     let mut bytes = Vec::new();
     bytes
         .try_reserve_exact(before.len() as usize)
@@ -417,17 +420,15 @@ fn read_bounded(
     let mut portion = [0; 64 * 1024];
     loop {
         check()?;
-        let allowed = (ceiling + 1 - bytes.len() as u64).min(portion.len() as u64) as usize;
+        let allowed = (before.len() + 1 - bytes.len() as u64).min(portion.len() as u64) as usize;
         let read = file
             .read(&mut portion[..allowed])
             .map_err(|error| JobError::io("read mesh source bytes", path, error))?;
         if read == 0 {
             break;
         }
-        if bytes.len() as u64 + read as u64 > ceiling {
-            return Err(unsupported(
-                "mesh source exceeds file or aggregate byte ceiling",
-            ));
+        if bytes.len() as u64 + read as u64 > before.len() {
+            return Err(changed(path));
         }
         bytes
             .try_reserve_exact(read)
@@ -814,6 +815,90 @@ mod tests {
             .filter_map(std::result::Result::ok)
             .filter_map(|entry| fs::read_link(entry.path()).ok())
             .any(|target| target == path)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn root_growth_after_admission_is_invalid_input() {
+        let (directory, input, output) = setup(&["data.bin"]);
+        fs::write(directory.path().join("data.bin"), [0; 36]).unwrap();
+        fs::write(&output, b"prior").unwrap();
+        let mut grew = false;
+        let error = load(&input, &output, || {
+            if !grew && is_open(&input) {
+                OpenOptions::new()
+                    .write(true)
+                    .open(&input)
+                    .unwrap()
+                    .set_len(MAX_JSON_BYTES + 1)
+                    .unwrap();
+                grew = true;
+            }
+            Ok(())
+        })
+        .err()
+        .unwrap();
+        assert!(grew, "growth must occur after the root handle is admitted");
+        assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        assert_eq!(fs::read(&output).unwrap(), b"prior");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dependency_growth_after_admission_is_invalid_input() {
+        let (directory, input, output) = setup(&["data.bin"]);
+        let dependency = directory.path().join("data.bin");
+        fs::write(&dependency, [0; 36]).unwrap();
+        fs::write(&output, b"prior").unwrap();
+        let mut grew = false;
+        let error = load(&input, &output, || {
+            if !grew && is_open(&dependency) {
+                OpenOptions::new()
+                    .write(true)
+                    .open(&dependency)
+                    .unwrap()
+                    .set_len(MAX_FILE_BYTES + 1)
+                    .unwrap();
+                grew = true;
+            }
+            Ok(())
+        })
+        .err()
+        .unwrap();
+        assert!(
+            grew,
+            "growth must occur after the dependency handle is admitted"
+        );
+        assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        assert_eq!(fs::read(&output).unwrap(), b"prior");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn zero_and_short_root_prefix_growth_is_detected_before_reader_arithmetic() {
+        for initial_length in 0..4 {
+            let (directory, input, output) = setup(&["data.bin"]);
+            fs::write(directory.path().join("data.bin"), [0; 36]).unwrap();
+            let complete = fs::read(&input).unwrap();
+            fs::write(&input, &complete[..initial_length]).unwrap();
+            let mut grew = false;
+            let error = load(&input, &output, || {
+                if !grew && is_open(&input) {
+                    fs::write(&input, &complete).unwrap();
+                    grew = true;
+                }
+                Ok(())
+            })
+            .err()
+            .unwrap();
+            assert!(
+                grew,
+                "prefix growth must execute for length {initial_length}"
+            );
+            assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+            assert!(error.message().contains("source changed during capture"));
+            assert!(!output.exists());
+        }
     }
 
     #[cfg(target_os = "linux")]

@@ -4,7 +4,7 @@ This is the next implementation slice of [#121](https://github.com/BenDyson-Arch
 
 ## Ownership
 
-The consumer reads the root document once, asks the pure decoder for a validated resource plan, binds every declared dependency, and captures owned bytes before the first observer callback or workspace creation. The decoder receives only a parsed document and borrowed byte slices. It never sees paths or opens files. Leaf encoding and F0 publication retain their existing ownership. Production does not flatten resources into a synthetic GLB or pass paths to a later decoder.
+The consumer reads the root document once, asks the pure decoder for a validated resource plan, binds every declared dependency, and captures owned bytes before the first domain observer callback or workspace creation. The decoder receives only a parsed document and borrowed byte slices. It never sees paths or opens files. Leaf encoding and F0 publication retain their existing ownership. Production does not flatten resources into a synthetic GLB or pass paths to a later decoder.
 
 All declared resources, including unused buffers and images, participate in admission and output-overlap validation. Only the selected scene's used image closure is published. Logical buffer and image identities remain separate from physical file identities; aliasing files does not merge glTF indices or material associations.
 
