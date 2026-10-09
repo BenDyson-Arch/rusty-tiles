@@ -1,0 +1,1682 @@
+{
+  "source_commit": "12ce4c6b93625f309877a249a5406aae5a1d4e7c",
+  "source_manifest": {
+    "compiler_paths": [
+      "src",
+      "bindings/python/src",
+      "Cargo.toml",
+      "Cargo.lock",
+      "build.rs",
+      ".cargo",
+      "tests"
+    ],
+    "comparison": "working tree versus frozen source at recording time; binary provenance is the parent-reported immutable frozen build",
+    "changed_compiler_files": []
+  },
+  "build": {
+    "command": "env CARGO_TARGET_DIR=/home/bend/.cache/rusty-tiles-115-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --workspace --no-fail-fast; copy target/debug/rusty-tiles to immutable /home/bend/.cache/rusty-tiles-119-12ce-portable",
+    "log": "/home/bend/.cache/rusty-tiles-119-12ce-default.log",
+    "log_sha256": "33cfbe465bf6377821000d4d612ce2f9544025c1df6d1c7488c4efd396cf3db3",
+    "source_status": [
+      " M bench/architecture_audit/vector_acceptance/README.md",
+      " M bench/architecture_audit/vector_acceptance/record.py",
+      "?? bench/architecture_audit/vector_acceptance/native-final.json",
+      "?? bench/architecture_audit/vector_acceptance/portable-final.json"
+    ]
+  },
+  "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+  "environment": {
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)"
+  },
+  "provenance": "Parent built this binary after freezing the stated commit; this recorder verifies oracle/resource binary hashes agree. Earlier candidate runs are not attributed to frozen source.",
+  "raw_evidence": {
+    "oracle": "/tmp/rt119-independent/12ce-portable/results.json",
+    "oracle_sha256": "99456a5e490235dd98d32502175dd2a762f439cb1f88f1526f5fff67f658c016",
+    "resources": "/tmp/rt119-independent/resources-12ce-portable.json",
+    "resources_sha256": "45bfc40f4191e7c78d709a99578d0723bd4c20f6476afb2de4efbc9b5d2b0e5f"
+  },
+  "replay_commands": [
+    "python tests/vector_acceptance_oracle.py --binary BINARY --evidence DIRECTORY",
+    "python bench/architecture_audit/vector_acceptance/measure.py --binary BINARY --output RESOURCE_JSON"
+  ],
+  "observations": {
+    "accepted-only": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/accepted-only/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/accepted-only/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 0,
+      "source_sha256": "68d0e234072c59f90efb161d77efb730690a30764385bf4f61ce0cf8922f0e39",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "rejected-first": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/rejected-first/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/rejected-first/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "29e5393621de6468b489d1bb5801ea963bd479430268cdba25de81790172859c",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "indivisible polygon fill/boundary or metadata exceeds tile budget",
+          "sourceId": "\"oversize\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "malformed-strict-0": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-0/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-0/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "68268dc2cc4dd6e4b539163f9158375c01f7cf64bf2217847eb20dbcd1dfb780",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: unsupported geometry: Unsupported. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "malformed-skip-0": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-0/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-0/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "68268dc2cc4dd6e4b539163f9158375c01f7cf64bf2217847eb20dbcd1dfb780",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "unsupported geometry: Unsupported",
+          "sourceId": "\"malformed\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "malformed-strict-1": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-1/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-1/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "19ce777c49f1681740a72659df4f7f837ddda2f781ee60f3cb6b6343af4bd000",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: coordinates must have exactly two or three ordinates; measured geometry is unsupported. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "malformed-skip-1": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-1/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-1/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "19ce777c49f1681740a72659df4f7f837ddda2f781ee60f3cb6b6343af4bd000",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "coordinates must have exactly two or three ordinates; measured geometry is unsupported",
+          "sourceId": "\"malformed\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "malformed-strict-2": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-2/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-2/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "e4ef3216ac6c674ee313c74af16fdf04ad8582ba80e22b97a892a9e8918f30d1",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: coordinates must have exactly two or three ordinates; measured geometry is unsupported. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "malformed-skip-2": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-2/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-2/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "e4ef3216ac6c674ee313c74af16fdf04ad8582ba80e22b97a892a9e8918f30d1",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "coordinates must have exactly two or three ordinates; measured geometry is unsupported",
+          "sourceId": "\"malformed\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "malformed-strict-3": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-3/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-3/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "ef6ee7bfc81bfbd3980729e0ec1fd354083a591bd133c9fe672311decd554354",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: coordinates must be finite XYZ. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "malformed-skip-3": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-3/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-3/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "ef6ee7bfc81bfbd3980729e0ec1fd354083a591bd133c9fe672311decd554354",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "coordinates must be finite XYZ",
+          "sourceId": "\"malformed\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "malformed-strict-4": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-4/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-strict-4/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "fb992902d598905ef1a1667bb3dff9458d6f483e417906812cecd471fad44cbe",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: geometry coordinates must be arrays. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "malformed-skip-4": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-4/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/malformed-skip-4/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "fb992902d598905ef1a1667bb3dff9458d6f483e417906812cecd471fad44cbe",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "geometry coordinates must be arrays",
+          "sourceId": "\"malformed\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "partial-fragment": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/partial-fragment/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/partial-fragment/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxVertices",
+        "4",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "source_sha256": "c37bf0daa3fee28761d3b7f100cf6f3edc218bd8f8023e285584d5258b224d3f",
+      "identities": [
+        [
+          "source",
+          "\"valid\""
+        ]
+      ],
+      "content_sha256": {
+        "t/f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38.glb": "f7bc5b5b144d0250063a914b1ce81a8455e29aea501bab42f54d6876963b9c38"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        20.0,
+        20.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "skipped",
+          "reason": "positions exceed float32 range",
+          "sourceId": "\"partial\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 1,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1504,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "strict": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/strict/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/strict/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--force"
+      ],
+      "exit_code": 3,
+      "source_sha256": "29e5393621de6468b489d1bb5801ea963bd479430268cdba25de81790172859c",
+      "preserved_output_sha256": "74241030e48b43b9ad89f2fe385c95d67b3c8897674edd487344bbe8337f1b5b",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "1 unconvertible feature(s); first failure: indivisible polygon fill/boundary or metadata exceeds tile budget. No tileset published. Fix the reported features or explicitly use --skipInvalid.",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "encoded-budget": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 0,
+      "source_sha256": "0a6173c11bc00a66ed1e424c24769e72c83f137a1e159b3922be4302322844c7",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/a678332632cf6fa26c5f983be644ed440945e38c7e073b36e00bbe167f64bade.glb": "a678332632cf6fa26c5f983be644ed440945e38c7e073b36e00bbe167f64bade",
+        "t/e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0.glb": "e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        50.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3216,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 2,
+        "rebuiltContents": 2,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "reuse": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/reuse/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/reuse/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--reuseTileset",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz"
+      ],
+      "exit_code": 0,
+      "source_sha256": "0a6173c11bc00a66ed1e424c24769e72c83f137a1e159b3922be4302322844c7",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/a678332632cf6fa26c5f983be644ed440945e38c7e073b36e00bbe167f64bade.glb": "a678332632cf6fa26c5f983be644ed440945e38c7e073b36e00bbe167f64bade",
+        "t/e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0.glb": "e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        50.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3216,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": true,
+        "publishedContents": 2,
+        "rebuiltContents": 0,
+        "requestedPreviousTileset": true,
+        "reusedContentReferences": 2,
+        "reusedContents": 2,
+        "reusedSubtrees": 1,
+        "reusedTiles": 3
+      }
+    },
+    "edited-fresh": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/edited-fresh/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/edited-fresh/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6c70f8972190ce2fbd54600d2ab7898a4a5a3c8dc53293a5e5e21ed8b193ef92",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/41991137f2794bc290a9409ab9ad4cff0e42737a7b312bca03f27225d49d7ad1.glb": "41991137f2794bc290a9409ab9ad4cff0e42737a7b312bca03f27225d49d7ad1",
+        "t/e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0.glb": "e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        125.0,
+        5.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3220,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 2,
+        "rebuiltContents": 2,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "edited-reuse": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/edited-reuse/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/edited-reuse/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--reuseTileset",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6c70f8972190ce2fbd54600d2ab7898a4a5a3c8dc53293a5e5e21ed8b193ef92",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/41991137f2794bc290a9409ab9ad4cff0e42737a7b312bca03f27225d49d7ad1.glb": "41991137f2794bc290a9409ab9ad4cff0e42737a7b312bca03f27225d49d7ad1",
+        "t/e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0.glb": "e3ef44415ec10042d50d5f826d4005f26b4274d95f85dd4ae9053dae5b7e4bf0"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        125.0,
+        5.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3220,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": true,
+        "publishedContents": 2,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": true,
+        "reusedContentReferences": 1,
+        "reusedContents": 1,
+        "reusedSubtrees": 1,
+        "reusedTiles": 1
+      }
+    },
+    "delete-all-reuse": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/delete-all-reuse/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/delete-all-reuse/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--reuseTileset",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz"
+      ],
+      "exit_code": 0,
+      "source_sha256": "7d09e532fc380630caac6b4b1b5174a7a9f7a308f6544bcb79eefb97b1e12306",
+      "identities": [],
+      "content_sha256": {},
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        0.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 0,
+        "fragments": 0,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 0,
+        "maximumTileVertices": 0
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": true,
+        "publishedContents": 0,
+        "rebuiltContents": 0,
+        "requestedPreviousTileset": true,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "all-null-reuse": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/all-null-reuse/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/all-null-reuse/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--reuseTileset",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3e0842448039271b09c0d1dbc269705d434f13626cb33dccc139e3e52d27bf27",
+      "identities": [],
+      "content_sha256": {},
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        0.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [
+        {
+          "outcome": "no-geometry",
+          "reason": "source geometry is null or empty",
+          "sourceId": "\"null\"",
+          "sourceLayer": "source"
+        }
+      ],
+      "counts": {
+        "features": 0,
+        "fragments": 0,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 0,
+        "maximumTileVertices": 0
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": true,
+        "publishedContents": 0,
+        "rebuiltContents": 0,
+        "requestedPreviousTileset": true,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "schema-fresh": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/schema-fresh/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/schema-fresh/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 0,
+      "source_sha256": "121f1cb6da1bb8542399d28a7b4e89da2fff9e400bb9b866b20bd335f14c086c",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/ab0acc79ba0f3414049a9fed94fee9caa7304f429aa878e63face76b4a262a03.glb": "ab0acc79ba0f3414049a9fed94fee9caa7304f429aa878e63face76b4a262a03",
+        "t/f70f27edded112d5cda2da66240e3633c23e3c26b04a52c92f5fba54377664a7.glb": "f70f27edded112d5cda2da66240e3633c23e3c26b04a52c92f5fba54377664a7"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        50.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3352,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 2,
+        "rebuiltContents": 2,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "schema-reuse": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/schema-reuse/source.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/schema-reuse/out.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxBytes",
+        "4096",
+        "--reuseTileset",
+        "/tmp/vector-acceptance-m_7lzbsl/encoded-budget/out.3tz"
+      ],
+      "exit_code": 0,
+      "source_sha256": "121f1cb6da1bb8542399d28a7b4e89da2fff9e400bb9b866b20bd335f14c086c",
+      "identities": [
+        [
+          "source",
+          "0"
+        ],
+        [
+          "source",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/ab0acc79ba0f3414049a9fed94fee9caa7304f429aa878e63face76b4a262a03.glb": "ab0acc79ba0f3414049a9fed94fee9caa7304f429aa878e63face76b4a262a03",
+        "t/f70f27edded112d5cda2da66240e3633c23e3c26b04a52c92f5fba54377664a7.glb": "f70f27edded112d5cda2da66240e3633c23e3c26b04a52c92f5fba54377664a7"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        50.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 2,
+        "fragments": 2,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 3352,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": true,
+        "publishedContents": 2,
+        "rebuiltContents": 2,
+        "requestedPreviousTileset": true,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "overlap-exact": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-exact.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-exact.geojson",
+        "--sourceCrs",
+        "local",
+        "--force",
+        "--skipInvalid"
+      ],
+      "exit_code": 2,
+      "preserved_source_sha256": "68d0e234072c59f90efb161d77efb730690a30764385bf4f61ce0cf8922f0e39",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "vector output must use .3tz or .3dtiles.zip",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "overlap-hardlink": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-hardlink.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-hardlink.3tz",
+        "--sourceCrs",
+        "local",
+        "--force",
+        "--skipInvalid"
+      ],
+      "exit_code": 2,
+      "preserved_source_sha256": "68d0e234072c59f90efb161d77efb730690a30764385bf4f61ce0cf8922f0e39",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "vector output aliases source or reused archive",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "overlap-symlink": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-symlink.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/overlap-symlink.3tz",
+        "--sourceCrs",
+        "local",
+        "--force",
+        "--skipInvalid"
+      ],
+      "exit_code": 2,
+      "preserved_source_sha256": "68d0e234072c59f90efb161d77efb730690a30764385bf4f61ce0cf8922f0e39",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "vector output aliases source or reused archive",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    "concurrent-0": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/concurrent-0.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/concurrent-0.3tz",
+        "--sourceCrs",
+        "local",
+        "--explicit",
+        "--reproducible"
+      ],
+      "exit_code": 0,
+      "identities": [
+        [
+          "concurrent-0",
+          "0"
+        ]
+      ],
+      "content_sha256": {
+        "t/d8b52daf5aabf0a9cf8617a79cf650cf677c1a0eee844d2e2fec4b3f443072c2.glb": "d8b52daf5aabf0a9cf8617a79cf650cf677c1a0eee844d2e2fec4b3f443072c2"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        0.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1512,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    },
+    "concurrent-1": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+        "--json",
+        "vector",
+        "-i",
+        "/tmp/vector-acceptance-m_7lzbsl/concurrent-1.geojson",
+        "-o",
+        "/tmp/vector-acceptance-m_7lzbsl/concurrent-1.3tz",
+        "--sourceCrs",
+        "local",
+        "--explicit",
+        "--reproducible"
+      ],
+      "exit_code": 0,
+      "identities": [
+        [
+          "concurrent-1",
+          "1"
+        ]
+      ],
+      "content_sha256": {
+        "t/017bbfff80f2ca2b8d157c0822f1b3d74117a1b3f2203553ae6c1ff7910d1789.glb": "017bbfff80f2ca2b8d157c0822f1b3d74117a1b3f2203553ae6c1ff7910d1789"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0,
+        10000.0,
+        0.0,
+        0.0,
+        1
+      ],
+      "diagnostics": [],
+      "counts": {
+        "features": 1,
+        "fragments": 1,
+        "skippedFeatures": 0,
+        "fragmentedPolygons": 0,
+        "maximumTileBytes": 1512,
+        "maximumTileVertices": 1
+      },
+      "reuse": {
+        "incompatibleReason": null,
+        "previousTileset": false,
+        "publishedContents": 1,
+        "rebuiltContents": 1,
+        "requestedPreviousTileset": false,
+        "reusedContentReferences": 0,
+        "reusedContents": 0,
+        "reusedSubtrees": 0,
+        "reusedTiles": 0
+      }
+    }
+  },
+  "resources": [
+    {
+      "feature_count": 100,
+      "maximum_source_vertices": 2,
+      "input_bytes": 13901,
+      "peak_rss_kib": 31712,
+      "sampled_scratch_files": 6,
+      "sampled_scratch_bytes": 69287,
+      "output_bytes": 25694
+    },
+    {
+      "feature_count": 1000,
+      "maximum_source_vertices": 2,
+      "input_bytes": 142601,
+      "peak_rss_kib": 33768,
+      "sampled_scratch_files": 36,
+      "sampled_scratch_bytes": 824735,
+      "output_bytes": 431639
+    },
+    {
+      "feature_count": 10000,
+      "maximum_source_vertices": 2,
+      "input_bytes": 1465601,
+      "peak_rss_kib": 48292,
+      "sampled_scratch_files": 513,
+      "sampled_scratch_bytes": 10965817,
+      "output_bytes": 6260808
+    },
+    {
+      "feature_count": 1,
+      "maximum_source_vertices": 1000,
+      "input_bytes": 13044,
+      "peak_rss_kib": 32132,
+      "sampled_scratch_files": 3,
+      "sampled_scratch_bytes": 83072,
+      "output_bytes": 26713
+    },
+    {
+      "feature_count": 1,
+      "maximum_source_vertices": 10000,
+      "input_bytes": 139044,
+      "peak_rss_kib": 37084,
+      "sampled_scratch_files": 4,
+      "sampled_scratch_bytes": 701352,
+      "output_bytes": 206730
+    }
+  ],
+  "measurement_caveat": "wait4 RSS per process; scratch sampled every >=2ms and can miss peaks. Inventory includes producer and publication staging; measurements do not establish an asymptotic bound."
+}

@@ -13,6 +13,9 @@ parser.add_argument('--source-commit', required=True)
 parser.add_argument('--oracle', type=pathlib.Path, required=True)
 parser.add_argument('--resources', type=pathlib.Path, required=True)
 parser.add_argument('--output', type=pathlib.Path, required=True)
+parser.add_argument('--build-log', type=pathlib.Path, required=True)
+parser.add_argument('--build-command', required=True)
+parser.add_argument('--require-clean-compiler-source', action='store_true')
 args = parser.parse_args()
 raw = json.loads(args.oracle.read_text())
 resources = json.loads(args.resources.read_text())
@@ -39,7 +42,15 @@ for name, case in combined_cases.items():
     observations[name] = item
 for case in resources['cases']:
     case.pop('report', None)
-record = dict(source_commit=args.source_commit, binary_sha256=raw['binary_sha256'],
+code_paths = ['src', 'bindings/python/src', 'Cargo.toml', 'Cargo.lock', 'build.rs', '.cargo', 'tests']
+changed = subprocess.check_output(['git','diff','--name-only',args.source_commit,'--',*code_paths],text=True).splitlines()
+changed_code = [p for p in changed if p.endswith('.rs') or pathlib.Path(p).name in ('Cargo.toml','Cargo.lock','build.rs')]
+if args.require_clean_compiler_source:
+    assert not changed_code, changed_code
+record = dict(source_commit=args.source_commit,
+              source_manifest=dict(compiler_paths=code_paths, comparison='working tree versus frozen source at recording time; binary provenance is the parent-reported immutable frozen build', changed_compiler_files=changed_code),
+              build=dict(command=args.build_command, log=str(args.build_log), log_sha256=hashlib.sha256(args.build_log.read_bytes()).hexdigest(),
+                         source_status=subprocess.check_output(['git','status','--short'],text=True).splitlines()), binary_sha256=raw['binary_sha256'],
               environment=dict(platform=platform.platform(), python=sys.version,
                                rustc=subprocess.check_output(['rustc','--version'], text=True).strip()),
               provenance='Parent built this binary after freezing the stated commit; this recorder verifies oracle/resource binary hashes agree. Earlier candidate runs are not attributed to frozen source.',
