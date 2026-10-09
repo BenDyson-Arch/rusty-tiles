@@ -52,13 +52,17 @@ Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. S
 | `--maxTexelDensity` | `--max-texel-density` | `0` | Must be 0, so leaf texels keep source resolution |
 | `--nodeFeatures` | `--node-features` | off | Pick and style individual source nodes by `name` and `node_index`; also authors small inputs as tiles |
 | `--noMeshopt` | `--no-meshopt` | off | Disable lossless meshopt compression |
-| `--sourceCrs` | `--source-crs` | `auto` | Position convention: `auto`, `geographic` or `epsg:3857` |
-| `--sourceOffset E N [A]` | `--source-offset` | none | EPSG:3857 source shift in metres, added in double precision |
-| `--sourceOffsetFile` | `--source-offset-file` | none | Source offset text file with `E:`, `N:` and optional `A:` metre values; existing `offset.txt` files remain supported |
+| `--sourceCrs` | `--source-crs` | `auto` | Legacy `auto`, `geographic`, `epsg:3857`, or a general 2D horizontal EPSG/WKT/PROJ definition |
+| `--sourceAxes` | `--source-axes` | none | Required for general CRS: `xyz` is E/N/height; `y-up` is E/height/−N, after glTF node transforms |
+| `--heightOffset` | `--height-offset` | none | General CRS only: metres added to source height plus A to obtain ellipsoidal height; required, including explicit zero |
+| `--sourceOffset E N [A]` | `--source-offset` | none | E/N in declared horizontal CRS units, A metres; added in double precision. Legacy adapters use EPSG:3857 metre shifts. |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Read E/N and optional A from labelled lines; existing `offset.txt` files remain supported |
 | `--cartographicPositionDegrees lon lat [height]` | `--cartographic-position-degrees` | none | Place a local model on the globe |
 | `--rotationDegrees heading pitch roll` | `--rotation-degrees` | none | Orient a placed model |
 
 Mesh placement rules are in [Coordinates and height](../README.md#coordinates-and-height).
+
+General CRS placement uses the shared [conservative CRS resolver](FORMATS.md#point-clouds). Supply both axes and a height decision, for example `--source-crs EPSG:32632 --source-axes xyz --source-offset 500000 0 100 --height-offset 0` for a model whose transformed POSITION values are local easting/northing/height offsets. Horizontal feet never rescale source height or A. The CRS bake rewrites positions into a local metre ENU frame and transforms authored normals by the projection's inverse transpose, preserving triangle membership/winding, UVs and feature identity before the usual atlas/LOD pipeline. Source files remain unchanged; output positions/normals are float32. Manual cartographic placement or rotation cannot be combined with the general path. Existing commands without axes/height retain their original placement semantics and representative textured output digests. Retiling materials without an authored PBR object now preserves its omission instead of inserting invalid JSON null.
 
 ### point-cloud
 

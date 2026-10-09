@@ -51,6 +51,9 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
     }
     report["commands"]["preview"] = preview_readiness(cesium.unwrap_or(Path::new(DEFAULT_CESIUM)));
     report["commands"]["point-cloud"] = point_cloud_readiness(&geospatial);
+    report["commands"]["mesh-to-3tz"]["generalCrs"] =
+        point_cloud_readiness(&geospatial)["geospatial"].clone();
+    report["commands"]["mesh-to-3tz"]["note"] = json!("Local/manual placement and legacy geographic/Web Mercator adapters remain available. General mesh CRS uses the shared horizontal resolver and requires explicit xyz/y-up axes after node transforms and an ellipsoidal metre height offset; E/N shifts use horizontal units, A metres. No compound/geocentric input or manual placement/rotation on the general path.");
     report["commands"]["terrain"] = terrain_readiness(&geospatial);
     report["commands"]["raster"] = raster_readiness(&geospatial);
     report["commands"]["vector"] = vector_readiness(&geospatial);
