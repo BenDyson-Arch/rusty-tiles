@@ -85,6 +85,29 @@
         "passed": 16,
         "skipped": 0
       }
+    },
+    {
+      "name": "python-all",
+      "command": "RUSTY_TILES_BIN=/home/bend/.cache/rusty-tiles-132-12d98ab-native RUSTY_TILES_REQUIRE_BIN=1 /tmp/rusty-tiles-119-python-acceptance/bin/python -m unittest discover -s tests -p test_*.py",
+      "exit_code": 0,
+      "summary": {
+        "tests_run": 125,
+        "passed": 123,
+        "skipped": 2,
+        "failed": 0,
+        "note": "existing release/browser environment gates skipped; not claimed as executed"
+      },
+      "log_sha256": "be6f6ae03b2c58f9b19c4ef4cf90af9721816754a0f17dbf016a7faa76f47561"
+    },
+    {
+      "name": "package",
+      "command": "cargo package --locked --no-verify",
+      "exit_code": 0,
+      "summary": {
+        "files": 352,
+        "note": "source archive only; no rebuild/verification claim"
+      },
+      "log_sha256": "865388dbb9272a9be78d34ee86e33f38c39ae0e9e92da119857d8d209c1fc162"
     }
   ],
   "wheel": {
