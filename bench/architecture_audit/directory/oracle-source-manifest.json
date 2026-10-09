@@ -109,5 +109,12 @@
     "src/vector/portable.rs": "efe5e1e857ba71d4a95caece3d22a703ad56f4e61ef1cb170e3d59919ecfb32a",
     "src/vector/source_fields.rs": "1c00efc2e5ebf92cc23bcc55a74490cd2e5b97e4d1430f2e907830d0612f515d",
     "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+  },
+  "subsequent_linux_build": {
+    "source_commit": "88c0c0a97528c9b5bc50c8aad05f20aa66e8d1a4",
+    "change": "macOS-only getattrlist pointer cast and merged roadmap documentation",
+    "binary_sha256": "09690fb73f9b7a1643c6494e3363c0a4731500e6aa4cc66eed7373a4c5cf3e37",
+    "proof": "Rebuilt native Linux CLI is byte-for-byte identical to the independently tested binary.",
+    "directory_platform_sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64"
   }
 }

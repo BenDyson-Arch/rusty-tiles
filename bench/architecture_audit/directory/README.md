@@ -57,3 +57,8 @@ The oracle uses an existing `cc` and the checked-in small RSS launcher where
 real directory collisions, commit/cancel ordering, retained cleanup paths,
 postcommit staging-name reuse, source close/member write/finalizer failures,
 concurrent facade attempts, CWD redirection and installed-interface behavior.
+
+The first macOS CI compile found a libc `getattrlist` pointer-type mismatch.
+The platform-only cast correction is included after `a299e6c`; a rebuilt native
+Linux CLI remains byte-for-byte identical to the tested binary. The source
+manifest records this equivalence. Actual macOS execution still requires CI.
