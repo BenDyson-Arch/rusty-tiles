@@ -185,9 +185,27 @@
       "log": "/home/bend/.cache/rusty-tiles-c1-review-package.log",
       "logSha256": "9f9870f2e87225664caa692b3be60c485e12b9694e63a6157ecfb7620c3db709",
       "verification": "Cargo unpacked and compiled the clean archive using default features; no --no-verify or --allow-dirty and no publication."
+    },
+    "ciRustOracleProfile": {
+      "status": "passed",
+      "features": [
+        "native-jpeg"
+      ],
+      "nativeGeospatial": false,
+      "binary": "/home/bend/.cache/rusty-tiles-c1-ci-native-jpeg",
+      "binarySha256": "4c4e24dd97b95e8ec1ae0456764c9547c60ada80e079f9c67f4a3bde79f6dde0",
+      "sourceHead": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+      "sequence": "All six Rust-job oracle commands completed successfully under set -e: C1 independent corpus, resource probes, producer framing, F1a mesh, vector acceptance, point oracle.",
+      "evidenceSha256": {
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-validation.json": "4e16c614784989464619bf6818613328c160b6cdd086213ae92b9568a019d2c4",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-resources.json": "fb455a13a018bb3024a5dc67665e9f0f9d4f44ee315e5963cf285d07757b40ea",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-producer.json": "9aa746d8ca189f3b5fb41b5ff92d5bee641ba63a45ff4e5399cc9da26394c344",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-point.json": "8670c4eca406e6540efafe1f0288163b3d8a05dbd474bbb67ad45f852afd465b"
+      }
     }
   },
   "pending": [
+    "updated source archive verification",
     "remote CI"
   ]
 }

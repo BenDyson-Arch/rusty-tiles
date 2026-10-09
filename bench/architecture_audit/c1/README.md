@@ -37,3 +37,12 @@ Remote CI remains the merge gate; no release/publication is authorized.
 Clean source archive at `ca2356a97a2cb8d230b5b6d621341fde0e9baf2c` was unpacked and compiled by
 `cargo package --locked` (531 files). Its archive/log hashes are recorded in
 `verification.json`; later packaging-record edits change evidence only.
+
+The Rust CI profile uses `native-jpeg` without `native-geospatial`. Its producer
+framing control now uses an independently defined local-metre staircase instead
+of the GDAL-admitted countries source. [Independent CI framing review](CI-framing-review.md)
+records 8 portable and 6 native b3dm positives, and historical rejection of
+4 misaligned members. `producer-framing-portable.json` and
+`producer-framing-native.json` retain these runs. The older 147-member countries
+run is supplemental native evidence, not portable admission evidence. All six
+Rust-job oracle commands passed locally with the exact feature profile.

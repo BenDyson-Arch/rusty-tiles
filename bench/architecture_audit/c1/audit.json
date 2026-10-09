@@ -99,5 +99,25 @@
       "4.4.7-9",
       "4.5.3"
     ]
+  },
+  "ciProducerFraming": {
+    "failure": "Rust CI uses native-jpeg without native-geospatial; original countries fixture is not admitted by that portable triangulation profile. Native147-member acceptance remains valid supplemental evidence only.",
+    "fixture": "tests/fixtures/c1-framing-staircase.geojson",
+    "fixtureSha256": "e3a0cc6821d5a80a3fc29e7e6533e03579a63f34f80e04220e551e377a19f7b5",
+    "facts": {
+      "sourceCrs": "local",
+      "ringVertices": 50,
+      "planarAreaSquareMetres": 300
+    },
+    "portableMembers": 8,
+    "nativeMembers": 6,
+    "historicalMembers": 6,
+    "historicalMisalignedMembers": 4,
+    "compiledSourcesUnchanged": true,
+    "evidenceSha256": {
+      "producer-framing-portable.json": "c9e9e4d99877cfd53c61bb5e6759cd339d3ddb1061ae24b606c5172caa447c1a",
+      "producer-framing-native.json": "0b4a2712f6ca80069539d09848d2cd239979b6345c66384b6f0ba0bdeaeb000a",
+      "CI-framing-review.md": "b6aca3301b3f16d9e23c18242e56afb0d163ca17cafc0df0afc25608b533410b"
+    }
   }
 }

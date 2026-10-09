@@ -1,0 +1,100 @@
+{
+  "binarySha256": "4c4e24dd97b95e8ec1ae0456764c9547c60ada80e079f9c67f4a3bde79f6dde0",
+  "sourceSha256": "e3a0cc6821d5a80a3fc29e7e6533e03579a63f34f80e04220e551e377a19f7b5",
+  "sourceFacts": {
+    "ringVertices": 50,
+    "planarAreaSquareMetres": 300.0,
+    "sourceCrs": "local"
+  },
+  "archiveSha256": "bfae88f38f0ad18fe50d45a418b011f0e516a560661cfa1447a3da6882ef997c",
+  "command": [
+    "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
+    "vector",
+    "-i",
+    "/home/bend/.cache/rusty-tiles-c1-foundation/tests/fixtures/c1-framing-staircase.geojson",
+    "-o",
+    "/home/bend/.cache/rusty-tiles-c1-framing-portable-check/staircase.3tz",
+    "--sourceCrs",
+    "local",
+    "--explicit",
+    "--reproducible",
+    "--maxVertices",
+    "32",
+    "--maxBytes",
+    "16384",
+    "--json"
+  ],
+  "counts": {
+    "features": 1,
+    "featuresWithoutGeometry": 0,
+    "fragmentedPolygons": 1,
+    "fragments": 8,
+    "geometryReportCount": 49,
+    "leafTiles": 8,
+    "lockedSharedVertices": 8,
+    "maximumTileBytes": 4412,
+    "maximumTileVertices": 32,
+    "routingTiles": 7,
+    "skippedFeatures": 0,
+    "tiles": 15
+  },
+  "controls": [
+    {
+      "member": "t/178cf643ce424e637ea074f342028dfef1ee4cfc0fd7adc1217bfaf63292d25d.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/24fafeb2c48ca4bdd181a129e57102943629085dbff3f5d7834d63ef86d36535.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/4e58bb8b669b1675582fe6c1d5850d154694a42f12333d5aa384c0abf214d2d6.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/94cfc53bbad4101e3781a42d4db6fe5717357c2e86628f515da7bbac24ff5b56.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/bcfb845af227e13e7c17d99b6cd7b87b0447792f29a6a2364b5923cd3e3f8284.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/c600309c694c0869ef68708d8c0f6d6ed4d37f4d0da45b57ac1aac10a3810a47.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/e7e1bd0f91c5d2898138fb903cc559e49908d093c2658d349757a357c8815dbb.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    },
+    {
+      "member": "t/f792c3d61cd2552f03c6d836dabe5b60e5d5ef246dc1231f45cf89718233333f.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 432,
+      "declaredBufferBytes": 432
+    }
+  ],
+  "sourceReadOnly": true
+}

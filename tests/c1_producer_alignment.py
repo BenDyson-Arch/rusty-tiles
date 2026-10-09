@@ -3,9 +3,13 @@ import argparse,hashlib,json,pathlib,struct,subprocess,zipfile
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=pathlib.Path,required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
- source=pathlib.Path(__file__).parent/'fixtures/countries-source.geojson';before=hashlib.sha256(source.read_bytes()).hexdigest();a.work.mkdir(parents=True,exist_ok=False)
- target=a.work/'countries.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--explicit','--reproducible','--maxVertices','32','--maxBytes','16384','--json']
+ source=pathlib.Path(__file__).parent/'fixtures/c1-framing-staircase.geojson';before=hashlib.sha256(source.read_bytes()).hexdigest();a.work.mkdir(parents=True,exist_ok=False)
+ ring=json.loads(source.read_text())['features'][0]['geometry']['coordinates'][0]
+ assert len(ring)-1==50 and ring[0]==ring[-1]
+ area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(ring,ring[1:])))/2;assert area==300
+ target=a.work/'staircase.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--sourceCrs','local','--explicit','--reproducible','--maxVertices','32','--maxBytes','16384','--json']
  run=subprocess.run(command,capture_output=True,text=True,timeout=120);assert run.returncode==0,(run.stdout,run.stderr)
+ report=json.loads(run.stdout);assert report['counts']['features']==1 and report['counts']['fragmentedPolygons']==1 and report['counts']['skippedFeatures']==0,report
  controls=[]
  with zipfile.ZipFile(target) as z:
   for name in z.namelist():
@@ -26,6 +30,6 @@ def main():
    controls.append(dict(member=name,b3dmBytes=total,glbBytes=gl,binBytes=bin_length,declaredBufferBytes=declared))
  assert controls,'Actual producer emitted no b3dm controls'
  assert hashlib.sha256(source.read_bytes()).hexdigest()==before
- evidence=dict(binarySha256=hashlib.sha256(a.binary.read_bytes()).hexdigest(),sourceSha256=before,archiveSha256=hashlib.sha256(target.read_bytes()).hexdigest(),command=command,controls=controls,sourceReadOnly=True)
+ evidence=dict(binarySha256=hashlib.sha256(a.binary.read_bytes()).hexdigest(),sourceSha256=before,sourceFacts=dict(ringVertices=50,planarAreaSquareMetres=area,sourceCrs='local'),archiveSha256=hashlib.sha256(target.read_bytes()).hexdigest(),command=command,counts=report['counts'],controls=controls,sourceReadOnly=True)
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(evidence,indent=2)+'\n');print(json.dumps({'ok':True,'b3dmControls':len(controls)}))
 if __name__=='__main__':main()
