@@ -11,6 +11,38 @@
       "sha256": "7096fa910ae8516c47d42523c8603884f79d89a2fab5efd815ece0f491f8ecc7"
     },
     {
+      "name": "min_version_2_0",
+      "path": "min_version_2_0.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "fc78e44c644631fd5d32154213aa92435f354a614298e0b6d2e80dc8d2763c2d"
+    },
+    {
+      "name": "min_version_2_1",
+      "path": "min_version_2_1.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "f2ccdd8be77c6499f8bb9fc689f2d6bf6d8aeaa14f48d1b3a61a6f3a5452700d"
+    },
+    {
+      "name": "min_version_3_0",
+      "path": "min_version_3_0.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "5e12c855905262a5d22b7d35b69facba3125c83e30e6167492816a2a430389b7"
+    },
+    {
+      "name": "min_version_bad_type",
+      "path": "min_version_bad_type.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "9d32e883d8f07c3de5cfce19486c18e9e5b2fe97d4a6cf58d287dfd9b6769513"
+    },
+    {
       "name": "points",
       "path": "points.3tz",
       "expectedKind": null,

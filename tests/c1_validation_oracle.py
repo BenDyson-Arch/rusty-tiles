@@ -63,6 +63,10 @@ def generate(directory):
                           analyticFact=fact, sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
 
     emit('triangle', glb(document, payload), None, 'Three finite positions, indices 0,1,2; position bytes 36 and index bytes 6.')
+    for name,value,kind in [('min_version_2_0','2.0',None),('min_version_2_1','2.1','unsupported'),
+                            ('min_version_3_0','3.0','unsupported'),('min_version_bad_type',2,'invalid_input')]:
+        minimum=copy.deepcopy(document);minimum['asset']['minVersion']=value
+        emit(name,glb(minimum,payload),kind,'Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.')
     for name, mode, count in [('points', 0, 3), ('lines', 1, 2)]:
         doc = copy.deepcopy(document); doc['meshes'][0]['primitives'][0]['mode'] = mode; doc['accessors'][1]['count'] = count
         emit(name, glb(doc, payload), None, 'Core POINTS or LINES topology with valid finite positions and indices.')

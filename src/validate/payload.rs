@@ -159,6 +159,29 @@ fn normalized(v: f64, c: usize) -> f64 {
         _ => v,
     }
 }
+fn minimum_version(asset: &Value) -> Result<()> {
+    let Some(version) = asset.get("minVersion") else {
+        return Ok(());
+    };
+    let version = version
+        .as_str()
+        .ok_or_else(|| invalid("asset.minVersion must be a version string"))?;
+    let (major, minor) = version
+        .split_once('.')
+        .filter(|(major, minor)| {
+            !major.is_empty()
+                && !minor.is_empty()
+                && major.bytes().all(|b| b.is_ascii_digit())
+                && minor.bytes().all(|b| b.is_ascii_digit())
+        })
+        .ok_or_else(|| invalid("asset.minVersion must have digit major.minor syntax"))?;
+    let major = major.trim_start_matches('0');
+    let minor = minor.trim_start_matches('0');
+    if !(major.is_empty() || major == "1" || (major == "2" && minor.is_empty())) {
+        return Err(unsupported(format!("minimum glTF version {version}")));
+    }
+    Ok(())
+}
 fn decode_buffer_uri(uri: &str) -> Result<Vec<u8>> {
     use base64::Engine;
     let encoded = uri
@@ -328,6 +351,7 @@ pub(super) fn inspect(
     if !doc.is_object() || doc["asset"]["version"] != "2.0" {
         return Err(invalid("glTF asset.version must be 2.0"));
     }
+    minimum_version(&doc["asset"])?;
     let used: BTreeSet<_> = list(&doc, "extensionsUsed")?
         .iter()
         .map(|v| {
@@ -1235,6 +1259,35 @@ mod tests {
             decode_buffer_uri("data:text/plain;base64,AAAA"),
             Err(ValidationFailure::Unsupported(_))
         ));
+    }
+    #[test]
+    fn minimum_version_gate_is_bounded_and_typed() {
+        for version in ["2.0", "1.999999999999999999999999", "0002.000"] {
+            assert!(minimum_version(&json!({"minVersion":version})).is_ok());
+        }
+        for version in [
+            "2.1",
+            "3.0",
+            "2.999999999999999999999999",
+            "99999999999999999999.0",
+        ] {
+            assert!(matches!(
+                minimum_version(&json!({"minVersion":version})),
+                Err(ValidationFailure::Unsupported(_))
+            ));
+        }
+        for version in [
+            json!(2),
+            json!("2"),
+            json!("2."),
+            json!("2.0.0"),
+            json!("-2.0"),
+        ] {
+            assert!(matches!(
+                minimum_version(&json!({"minVersion":version})),
+                Err(ValidationFailure::InvalidInput(_))
+            ));
+        }
     }
     #[test]
     fn missing_position_is_a_failure_instead_of_a_panic() {

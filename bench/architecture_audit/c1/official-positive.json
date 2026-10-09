@@ -7,7 +7,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.300Z",
+        "validatedAt": "2026-10-09T12:29:26.481Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -55,12 +55,66 @@
       }
     },
     {
+      "name": "min_version_2_0",
+      "report": {
+        "uri": "tile.glb",
+        "mimeType": "model/gltf-binary",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "validatedAt": "2026-10-09T12:29:26.484Z",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 2,
+          "messages": [
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/attributes/POSITION"
+            },
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/indices"
+            }
+          ],
+          "truncated": false
+        },
+        "info": {
+          "version": "2.0",
+          "minVersion": "2.0",
+          "resources": [
+            {
+              "pointer": "/buffers/0",
+              "mimeType": "application/gltf-buffer",
+              "storage": "glb",
+              "byteLength": 44
+            }
+          ],
+          "animationCount": 0,
+          "materialCount": 0,
+          "hasMorphTargets": false,
+          "hasSkins": false,
+          "hasTextures": false,
+          "hasDefaultScene": true,
+          "drawCallCount": 1,
+          "totalVertexCount": 3,
+          "totalTriangleCount": 1,
+          "maxUVs": 0,
+          "maxInfluences": 0,
+          "maxAttributes": 1
+        }
+      }
+    },
+    {
       "name": "points",
       "report": {
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.302Z",
+        "validatedAt": "2026-10-09T12:29:26.485Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -113,7 +167,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.303Z",
+        "validatedAt": "2026-10-09T12:29:26.486Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -166,7 +220,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.304Z",
+        "validatedAt": "2026-10-09T12:29:26.487Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -219,7 +273,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.305Z",
+        "validatedAt": "2026-10-09T12:29:26.488Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -273,7 +327,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.306Z",
+        "validatedAt": "2026-10-09T12:29:26.489Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -326,7 +380,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.307Z",
+        "validatedAt": "2026-10-09T12:29:26.490Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -385,7 +439,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.307Z",
+        "validatedAt": "2026-10-09T12:29:26.490Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -444,7 +498,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.308Z",
+        "validatedAt": "2026-10-09T12:29:26.491Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 1,
@@ -503,7 +557,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.309Z",
+        "validatedAt": "2026-10-09T12:29:26.492Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -562,7 +616,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.310Z",
+        "validatedAt": "2026-10-09T12:29:26.493Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -615,7 +669,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:20:08.311Z",
+        "validatedAt": "2026-10-09T12:29:26.494Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -666,6 +720,7 @@
   "schemaVersion": 1,
   "fixtureSha256": {
     "triangle": "7096fa910ae8516c47d42523c8603884f79d89a2fab5efd815ece0f491f8ecc7",
+    "min_version_2_0": "fc78e44c644631fd5d32154213aa92435f354a614298e0b6d2e80dc8d2763c2d",
     "points": "0ce587236348d9c66fe8367dedb13adef5787318fe56ed4013679fff2201da8c",
     "lines": "7fcc35e18f22799d7d9cdf4f07c7fa27745596417bd494e9bb3ed02f2f45adcd",
     "terrain": "4c2a099ded7a8239c7ee6cc45d401ec87d561a518c5a35b8294da689a6226ff4",
