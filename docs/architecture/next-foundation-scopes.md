@@ -182,9 +182,11 @@ component. No whole subsystem receives unconditional retention.
 
 ## Release gate and next action
 
-F0 is accepted and merged. Next finalize #117's small contract with its local #120/#125
-oracles and implement that slice. Directory/vector contracts and remaining proof
-work can proceed in parallel with named owners. Update the disposition ledger as
+F0 and the bounded F1a profile are accepted and merged through #116 and #128.
+Next implement #118 D1 together with one minimal raster pilot from #124.
+A bounded #82 feasibility review informs the source boundary without adding
+a GDAL replacement to D1. Vector contracts and remaining proof work can proceed
+in parallel with named owners. Update the disposition ledger as
 actual evidence lands, including counterexamples and withdrawn suspicions.
 
 Issue #126 owns the otherwise uncovered operation/API inventory: wrapping and
