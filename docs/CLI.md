@@ -2,7 +2,7 @@
 
 This page lists every `rusty-tiles` subcommand and option. It is for users who script conversions and for programs that call the CLI. For a guided first run, start with the [README quick start](../README.md#quick-start).
 
-Every value here comes from `rusty-tiles <command> --help` for version 0.3.0. Run that command to check your installed build.
+Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Run that command to check your installed build.
 
 ## Conventions
 
