@@ -2,7 +2,7 @@
 
 Implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
 Destination-binding fix and full verification: `c777180f178df5cc2f524f7b20f4251ba9d522e0`.
-CLI fixture follow-up: `62aca29a2f5c3361263fa7945fef86b4d76c65ad` (3 portable / 4 native CLI contract tests pass; production unchanged).
+CLI fixture follow-up: `4b51b32bc63e789296f9eaaaaaa2fc0b2dee8e1d` (3 portable / 4 native CLI contract tests pass; production unchanged).
 The [implementation contract](f0-implementation.md) defines the supported scope
 and deliberate migrations. This evidence does not close #113 or release 0.4.0.
 

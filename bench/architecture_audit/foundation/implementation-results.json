@@ -35,9 +35,11 @@
   "verification_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
   "destination_binding_fix_commit": "c777180f178df5cc2f524f7b20f4251ba9d522e0",
   "cli_fixture_followup": {
-    "commit": "62aca29a2f5c3361263fa7945fef86b4d76c65ad",
+    "commit": "4b51b32bc63e789296f9eaaaaaa2fc0b2dee8e1d",
     "portable_passed": 3,
     "native_passed": 4,
-    "changes": "Canonical fixture root in shared human CLI contract test; production unchanged from c777180."
+    "changes": "Canonical output fixture root with lexical input recipes for Windows; production unchanged from c777180.",
+    "portable_log_sha256": "56f45c336de275b9c0f847ecd19c9d4d52da9c3f261cb44ae968742fa3d95e3e",
+    "native_log_sha256": "84b28c194aa876ac9f9b9903120b176811344fc71342126b608793b561e30fa4"
   }
 }
