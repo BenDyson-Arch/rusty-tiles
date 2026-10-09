@@ -221,6 +221,46 @@ def fixture(triangles=8, transformed=True, normals=True, indexed=True, variant='
     return encode_glb(doc,binary)
 
 
+def mixed_vertex_index_view_fixture():
+    """Invalid glTF control: disjoint valid bytes, shared vertex/index view.
+
+    No target or stride is declared, so the only changed semantic is the
+    bufferView's simultaneous use for vertex attributes and indices.
+    """
+    doc,binary=decode_glb(fixture(8,normals=False))
+    views=doc['bufferViews']
+    for a in doc['accessors']:
+        a['byteOffset']=a.get('byteOffset',0)+views[a['bufferView']].get('byteOffset',0)
+        a['bufferView']=0
+    doc['bufferViews']=[{'buffer':0,'byteOffset':0,'byteLength':len(binary)}]
+    return encode_glb(doc,binary)
+
+
+def vertex_accessors_without_stride_fixture():
+    """Invalid glTF control: two distinct vertex accessors, one unstrided view.
+
+    Index data has its own view. POSITION/NORMAL bytes remain disjoint and
+    readable, isolating the missing required stride for shared vertex storage.
+    """
+    doc,binary=decode_glb(fixture(8))
+    views=doc['bufferViews']
+    for a in doc['accessors'][:2]:
+        a['byteOffset']=a.get('byteOffset',0)+views[a['bufferView']].get('byteOffset',0)
+        a['bufferView']=0
+    doc['accessors'][2]['bufferView']=1
+    doc['bufferViews']=[{'buffer':0,'byteOffset':0,'byteLength':views[1]['byteOffset']+views[1]['byteLength']},views[2]]
+    return encode_glb(doc,binary)
+
+
+def unused_u32_accessor_fixture():
+    """Invalid glTF control: UNSIGNED_INT accessor not used as mesh indices."""
+    doc,binary=decode_glb(fixture(8))
+    view=len(doc['bufferViews'])
+    doc['bufferViews'].append({'buffer':0,'byteOffset':len(binary),'byteLength':4})
+    doc['accessors'].append({'bufferView':view,'componentType':5125,'count':1,'type':'SCALAR'})
+    return encode_glb(doc,binary+struct.pack('<I',0))
+
+
 def distance(a,b):
     return math.sqrt(sum((x-y)**2 for x,y in zip(a,b)))
 
@@ -403,7 +443,7 @@ def self_test():
 
 
 def run_binary(binary):
-    binary=Path(binary).resolve();cases=[]
+    binary=Path(binary).resolve();cases=[];source_controls=[]
     with tempfile.TemporaryDirectory(prefix='f1a-candidate-') as temporary:
         root=Path(temporary)
         for variant in ('standard','coincident','degenerate','nested','instanced','scenes','interleaved','normal-absent','default-material','empty-material','nonindexed'):
@@ -418,7 +458,25 @@ def run_binary(binary):
                 require(summary['meshReport']==evidence['report'],'CLI/archive typed report parity')
                 require((limit>=evidence['source_triangles']) or evidence['leaves']>1,'forced multileaf not demonstrated')
                 cases.append({'variant':variant,'leaf_limit':limit,'status':'passed','source_triangles':evidence['source_triangles'],'leaves':evidence['leaves'],'report':evidence['report']})
-    return {'binary':str(binary),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cases':cases}
+        for name,data,original in (
+            ('mixed_vertex_index_buffer_view',mixed_vertex_index_view_fixture(),fixture(8,normals=False)),
+            ('distinct_vertex_accessors_without_stride',vertex_accessors_without_stride_fixture(),fixture(8)),
+            ('unused_u32_accessor',unused_u32_accessor_fixture(),fixture(8)),
+        ):
+            source=root/(name+'.glb');source.write_bytes(data)
+            # Independent byte reading recovers every triangle: these controls
+            # test source conformance, not accidental out-of-range bytes.
+            match_triangles(scene_triangles(original),scene_triangles(data))
+            for limit in (1,1000):
+                output=root/(name+'-'+str(limit)+'.3tz')
+                command=[str(binary),'--json','mesh-local-to-3tz','-i',str(source),'-o',str(output),'--leaf-triangles',str(limit)]
+                completed=subprocess.run(command,text=True,capture_output=True,timeout=60)
+                summary=json.loads(completed.stdout)
+                require(completed.returncode==3 and summary.get('ok') is False,'invalid shared-view source accepted: '+name)
+                require(summary['error'].get('kind')=='invalid_input','shared-view source error classification: '+name)
+                require(not output.exists(),'invalid shared-view source published output: '+name)
+                source_controls.append({'case':name,'leaf_limit':limit,'status':'rejected','error_kind':'invalid_input','output_exists':False,'source_sha256':hashlib.sha256(data).hexdigest()})
+    return {'binary':str(binary),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cases':cases,'invalid_source_controls':source_controls}
 
 
 def main():

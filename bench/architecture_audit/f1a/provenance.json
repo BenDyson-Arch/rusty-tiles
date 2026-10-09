@@ -1,9 +1,9 @@
 {
-  "status": "final portable binary acceptance; production manifest verified against committed source",
-  "recorded_utc": "2026-10-09T04:52:45.254614+00:00",
-  "source_git_head_at_run": "519e8c105dfb9afcdcf6447b82adc91ff0dba630",
-  "source_git_head_limit": "source_git_head_at_run records the pre-commit base observed during the run; source_git_commit is the later verified commit containing identical tested production files.",
-  "production_manifest_sha256": "7a9914af6e3d3441624991852d7be8632721ded667bfd7f4efc03a2d61a98f5a",
+  "status": "final immutable portable role-validation binary acceptance; production manifest verified against committed source",
+  "recorded_utc": "2026-10-09T05:28:40.725593+00:00",
+  "source_git_head_at_run": "0b3af01e2e486b0d2336c8d1be7dd277147c73d8",
+  "source_git_head_limit": "Final source is committed. Each production manifest path matches both the working tree and git show source_git_commit:path; production diff is empty.",
+  "production_manifest_sha256": "f63ed224f53bdb30866d375d3cf38b76d2e6137474d945128e6cbc5873daf85c",
   "production_files_sha256": {
     "Cargo.lock": "1c1490f2db7cc1141a638262d74485346d4820bbc1cabe16e245e1a35c1142b4",
     "Cargo.toml": "2bc0c26f8a9acd0750f0b2a3d15773da7190290410eb7a97bb0de6fb27995c71",
@@ -34,7 +34,7 @@
     "src/mesh_archive/encode.rs": "69be539812be01b6de9564116bdcfb0a0994ad5bb4d1113d239667c67ba49b89",
     "src/mesh_archive/partition.rs": "5098d48ea0643189d2b8b4b99cd77cd3ead8450fa8a60220bf16d0aebf7109f5",
     "src/mesh_archive/source/json.rs": "fa18021ce2400cea97f0fc99d24cc6fb6672307c317bb5eed5f4bf9da92c85b8",
-    "src/mesh_archive/source.rs": "fa3e11cf19f482208af175d9045336ee3972d457b5445b8fc2dbd5f520fc5c5a",
+    "src/mesh_archive/source.rs": "db524348c31c0fe47867e9f6f74e3425028245da389ccef1f6109a23527f04c1",
     "src/mesh_archive.rs": "7095d4f3e78ddb7ec964b3bd4ce169f9b2bc1d50627aeee34113a584245fb121",
     "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
     "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
@@ -79,15 +79,15 @@
     "src/vector.rs": "16fe82cb31645aa81f77d8dba4e5caa46cc0fda9f6e55e95b34553deda6c1d94",
     "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
   },
-  "binary_path": "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
-  "binary_sha256": "1c8246a3eabfe501222df3e9ee516b09690b5e73231caefb16983089c2f9e992",
-  "build_provenance": "Integration owner supplied portable build, cargo test --locked; exact compiler/features recorded in integration build evidence rather than inferred from file name.",
+  "binary_path": "/home/bend/.cache/rusty-tiles-117-role-cli",
+  "binary_sha256": "08306016ff3f67028f3e6f9dcb436d4c6fb3308f405c0473a84abc94685c8ad0",
+  "build_provenance": "Integration owner supplied immutable rusty-tiles-117-role-cli after full portable cargo test --locked suite passed, built from frozen 0b3af01 production source; precise compiler/features retained in integration build evidence.",
   "oracle_command": [
     "python3",
     "-B",
     "tests/f1a_oracle.py",
     "--binary",
-    "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
+    "/home/bend/.cache/rusty-tiles-117-role-cli",
     "--json-output",
     "bench/architecture_audit/f1a/oracle.json"
   ],
@@ -96,7 +96,7 @@
     "-B",
     "tests/f1a_viewer.py",
     "--binary",
-    "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
+    "/home/bend/.cache/rusty-tiles-117-role-cli",
     "--cesium-dir",
     "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
     "--node-modules",
@@ -105,13 +105,10 @@
     "bench/architecture_audit/f1a/viewer.json"
   ],
   "scripts_sha256": {
-    "tests/f1a_oracle.py": "4d4768f6d848043ad1da3989467f74a34dc4557557024422e095034c6a120f08",
+    "tests/f1a_oracle.py": "4d65730bb142be8381cbbb11f43fd2aefc9dc44bb4cc31fc55286d977e353ce4",
     "tests/f1a_viewer.py": "e6285da58e3095b94ae840adff8ee5b1dc74af196955ec84e34cc20fd81a9fe1",
     "tests/fixtures/f1a_viewer.cjs": "72132843889ac9911c556bec68a4d555777324ce68fcac0a41c3167e9e30a023"
   },
-  "source_git_commit": "d444d82ac528b0173f1cad4cb0e347bbc8107e98",
-  "source_commit_verified_utc": "2026-10-09T04:53:35.796105+00:00",
-  "source_commit_proof": "Every production manifest path matches both the working-tree SHA256 and git show <source_git_commit>:<path>; git diff HEAD for those paths is empty.",
   "build": {
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
     "profile": "dev",
@@ -120,5 +117,8 @@
     "CARGO_INCREMENTAL": "0",
     "CARGO_BUILD_JOBS": "2",
     "target": "x86_64-unknown-linux-gnu"
-  }
+  },
+  "source_git_commit": "0b3af01e2e486b0d2336c8d1be7dd277147c73d8",
+  "source_commit_verified_utc": "2026-10-09T05:28:40.725593+00:00",
+  "source_commit_proof": "Final source is committed. Each production manifest path matches both the working tree and git show source_git_commit:path; production diff is empty."
 }

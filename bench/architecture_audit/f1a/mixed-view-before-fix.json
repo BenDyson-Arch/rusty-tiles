@@ -1,0 +1,63 @@
+{
+  "purpose": "before-fix source acceptance controls, separate from final candidate acceptance",
+  "source_git_commit": "d444d82ac528b0173f1cad4cb0e347bbc8107e98",
+  "binary": "/home/bend/.cache/rusty-tiles-117-accepted-cli",
+  "binary_sha256": "1c8246a3eabfe501222df3e9ee516b09690b5e73231caefb16983089c2f9e992",
+  "fixture_provenance": "Independent mixed_vertex_index_view_fixture(), vertex_accessors_without_stride_fixture(), unused_u32_accessor_fixture() in tests/f1a_oracle.py: valid byte ranges, three separately isolated glTF conformance violations.",
+  "cases": [
+    {
+      "case": "mixed_vertex_index_buffer_view",
+      "source_sha256": "cdd50e4e7aadd590998c52a5b152b42d0ffbfdf27c23afad73d30e69d89d0119",
+      "leaf_limit": 1,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    },
+    {
+      "case": "mixed_vertex_index_buffer_view",
+      "source_sha256": "cdd50e4e7aadd590998c52a5b152b42d0ffbfdf27c23afad73d30e69d89d0119",
+      "leaf_limit": 1000,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    },
+    {
+      "case": "distinct_vertex_accessors_without_stride",
+      "source_sha256": "7cd0042bc518b293e08b5a62c1d0528dd460617f9f3ef0f1858811225fc3096a",
+      "leaf_limit": 1,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    },
+    {
+      "case": "distinct_vertex_accessors_without_stride",
+      "source_sha256": "7cd0042bc518b293e08b5a62c1d0528dd460617f9f3ef0f1858811225fc3096a",
+      "leaf_limit": 1000,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    },
+    {
+      "case": "unused_u32_accessor",
+      "source_sha256": "8434f23718dffff1a05905c3bc57bd3eaea9ac1ad92fa41e20c1e98e0a10af35",
+      "leaf_limit": 1,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    },
+    {
+      "case": "unused_u32_accessor",
+      "source_sha256": "8434f23718dffff1a05905c3bc57bd3eaea9ac1ad92fa41e20c1e98e0a10af35",
+      "leaf_limit": 1000,
+      "exit_code": 0,
+      "output_exists": true,
+      "independent_geometry_archive_inspection": "passed",
+      "triangles": 8
+    }
+  ]
+}

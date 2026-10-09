@@ -34,8 +34,8 @@
     }
   },
   "candidate": {
-    "binary": "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
-    "binary_sha256": "1c8246a3eabfe501222df3e9ee516b09690b5e73231caefb16983089c2f9e992",
+    "binary": "/home/bend/.cache/rusty-tiles-117-role-cli",
+    "binary_sha256": "08306016ff3f67028f3e6f9dcb436d4c6fb3308f405c0473a84abc94685c8ad0",
     "cases": [
       {
         "variant": "standard",
@@ -597,6 +597,56 @@
           "leaf_triangles": 1000,
           "routing_geometric_error_metres": 58.079686638273124
         }
+      }
+    ],
+    "invalid_source_controls": [
+      {
+        "case": "mixed_vertex_index_buffer_view",
+        "leaf_limit": 1,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "cdd50e4e7aadd590998c52a5b152b42d0ffbfdf27c23afad73d30e69d89d0119"
+      },
+      {
+        "case": "mixed_vertex_index_buffer_view",
+        "leaf_limit": 1000,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "cdd50e4e7aadd590998c52a5b152b42d0ffbfdf27c23afad73d30e69d89d0119"
+      },
+      {
+        "case": "distinct_vertex_accessors_without_stride",
+        "leaf_limit": 1,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "7cd0042bc518b293e08b5a62c1d0528dd460617f9f3ef0f1858811225fc3096a"
+      },
+      {
+        "case": "distinct_vertex_accessors_without_stride",
+        "leaf_limit": 1000,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "7cd0042bc518b293e08b5a62c1d0528dd460617f9f3ef0f1858811225fc3096a"
+      },
+      {
+        "case": "unused_u32_accessor",
+        "leaf_limit": 1,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "8434f23718dffff1a05905c3bc57bd3eaea9ac1ad92fa41e20c1e98e0a10af35"
+      },
+      {
+        "case": "unused_u32_accessor",
+        "leaf_limit": 1000,
+        "status": "rejected",
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "source_sha256": "8434f23718dffff1a05905c3bc57bd3eaea9ac1ad92fa41e20c1e98e0a10af35"
       }
     ]
   }
