@@ -446,6 +446,142 @@ fn general_axes_are_applied_after_node_rotation_and_translation() {
     }
 }
 
+// Independent WGS84 ellipsoid equations, not the CRS resolver or ENU bake.
+fn geographic_reference(longitude: f64, latitude: f64, height: f64) -> ([f64; 3], [f64; 3]) {
+    let lon = longitude.to_radians();
+    let lat = latitude.to_radians();
+    let a = 6378137.;
+    let f = 1. / 298.257223563;
+    let e2 = f * (2. - f);
+    let radius = a / (1. - e2 * lat.sin().powi(2)).sqrt();
+    (
+        [
+            (radius + height) * lat.cos() * lon.cos(),
+            (radius + height) * lat.cos() * lon.sin(),
+            (radius * (1. - e2) + height) * lat.sin(),
+        ],
+        [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()],
+    )
+}
+
+#[test]
+fn geographic_domain_edges_keep_decoded_world_positions_and_authored_normals() {
+    const GRADS: &str = r#"GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["grad",0.015707963267948967]]"#;
+    let work = tempfile::tempdir().unwrap();
+    for (definition, factor, longitude_limit, latitude_limit) in [
+        ("EPSG:4326", 1., 180_f32, 90_f32),
+        (GRADS, 0.9, 200_f32, 100_f32),
+    ] {
+        let inside_latitude = f32::from_bits(latitude_limit.to_bits() - 1);
+        for sign in [-1_f32, 1.] {
+            for points in [
+                [
+                    [sign * longitude_limit, 0., 0.],
+                    [sign * (longitude_limit - 0.001), 0., 0.],
+                    [sign * longitude_limit, 0.001, 0.],
+                    [sign * (longitude_limit - 0.001), 0.001, 0.],
+                ],
+                [
+                    [12., sign * inside_latitude, 0.],
+                    [12.001, sign * inside_latitude, 0.],
+                    [12., sign * (inside_latitude - 0.001), 0.],
+                    [12.001, sign * (inside_latitude - 0.001), 0.],
+                ],
+            ] {
+                for axes in [SourceAxes::Xyz, SourceAxes::YUp] {
+                    let positions: Vec<_> = points
+                        .iter()
+                        .map(|p| match axes {
+                            SourceAxes::Xyz => *p,
+                            SourceAxes::YUp => [p[0], p[2], -p[1]],
+                        })
+                        .collect();
+                    let normal = match axes {
+                        SourceAxes::Xyz => [0., 0., 1.],
+                        SourceAxes::YUp => [0., 1., 0.],
+                    };
+                    for explicit in [false, true] {
+                        let input = work.path().join("boundary.glb");
+                        let output = work.path().join("boundary.3tz");
+                        let source = fixture(&positions, &[normal; 4]);
+                        fs::write(&input, &source).unwrap();
+                        let mut options = MeshTo3tzOptions {
+                            source_axes: Some(axes),
+                            height_offset: Some(0.),
+                            max_triangles: 1,
+                            tile_size: 64,
+                            meshopt: false,
+                            explicit,
+                            force: true,
+                            ..Default::default()
+                        };
+                        options.set_source_crs(definition).unwrap();
+                        mesh_to_3tz(&input, &output, &options).unwrap();
+                        rusty_tiles::validate_3tz(&output).unwrap();
+                        assert_eq!(fs::read(&input).unwrap(), source);
+                        let actual = leaves(&output);
+                        assert_eq!(actual.triangles.len(), 2);
+                        assert!(!actual.normals.is_empty());
+                        let references: Vec<_> = points
+                            .iter()
+                            .map(|p| {
+                                geographic_reference(
+                                    f64::from(p[0]) * factor,
+                                    f64::from(p[1]) * factor,
+                                    0.,
+                                )
+                            })
+                            .collect();
+                        for (position, normal) in actual.normals {
+                            let (expected, expected_normal) = references
+                                .iter()
+                                .min_by(|a, b| {
+                                    let distance = |p: &[f64; 3]| {
+                                        (0..3).map(|i| (position[i] - p[i]).powi(2)).sum::<f64>()
+                                    };
+                                    distance(&a.0).total_cmp(&distance(&b.0))
+                                })
+                                .unwrap();
+                            close(position, *expected, 0.00003);
+                            close(normal, *expected_normal, 0.0000003);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn normal_probe_adjustments_never_accept_invalid_geographic_vertices_or_pole_normals() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("invalid.glb");
+    let output = work.path().join("keep.3tz");
+    for (longitude, latitude, reason) in [
+        (180.01, 0., "outside longitude/latitude"),
+        (-180.01, 0., "outside longitude/latitude"),
+        (0., 90.01, "outside longitude/latitude"),
+        (0., -90.01, "outside longitude/latitude"),
+        (0., 90., "singular at a geographic pole"),
+        (0., -90., "singular at a geographic pole"),
+    ] {
+        let points = [[longitude, latitude, 0.]; 4];
+        fs::write(&input, fixture(&points, &[[0., 0., 1.]; 4])).unwrap();
+        fs::write(&output, b"KEEP").unwrap();
+        let mut options = MeshTo3tzOptions {
+            source_axes: Some(SourceAxes::Xyz),
+            height_offset: Some(0.),
+            force: true,
+            ..Default::default()
+        };
+        options.set_source_crs("EPSG:4326").unwrap();
+        let error = mesh_to_3tz(&input, &output, &options).unwrap_err();
+        assert!(error.to_string().contains(reason), "{error}");
+        assert_eq!(fs::read(&output).unwrap(), b"KEEP");
+        assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
+    }
+}
+
 #[test]
 fn cli_general_mesh_axes_height_and_offset_file_reach_world_reference() {
     let work = tempfile::tempdir().unwrap();

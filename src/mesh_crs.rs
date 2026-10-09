@@ -51,46 +51,69 @@ pub(crate) fn bake(
         ecef_to_cartographic(operation.transform(&[axes.coordinates(centre, offset)])?[0])?;
     let frame = EnuFrame::new(origin);
     // GDAL operations stay on this thread. Bound the extra coordinate/normal
-    // working set rather than allocating seven copies of a complete mesh.
+    // working set to a batch, including retries at a projection-domain edge.
     for vertices in scene.vertices.chunks_mut(4096) {
-        let mut points = Vec::with_capacity(vertices.len() * 7);
-        let mut derivatives = Vec::with_capacity(vertices.len());
-        for vertex in vertices.iter() {
-            points.push(axes.coordinates(vertex.pos.map(f64::from), offset));
-            let mut steps = [0.; 3];
+        let positions: Vec<_> = vertices
+            .iter()
+            .map(|v| axes.coordinates(v.pos.map(f64::from), offset))
+            .collect();
+        // Validate actual input before wrapping or replacing synthetic probes.
+        // A normal must never make an invalid source position acceptable.
+        let mut output = operation.transform(&positions)?;
+        let mut probes = Vec::with_capacity(vertices.len() * 6);
+        let mut deltas = Vec::with_capacity(vertices.len() * 3);
+        let mut normal_indices = Vec::with_capacity(vertices.len());
+        for (index, vertex) in vertices.iter().enumerate() {
             if vertex.nrm != [0.; 3] {
+                normal_indices.push(index);
                 for axis in 0..3 {
                     // Differentiate before adding a large offset. The CRS
                     // resolver receives f64 coordinates for both samples.
-                    steps[axis] = if (axes == SourceAxes::Xyz && axis == 2)
+                    let step = if (axes == SourceAxes::Xyz && axis == 2)
                         || (axes == SourceAxes::YUp && axis == 1)
                     {
                         0.1
                     } else {
                         horizontal_step
                     };
-                    for sign in [-1., 1.] {
-                        let mut sample = vertex.pos.map(f64::from);
-                        sample[axis] += sign * steps[axis];
-                        points.push(axes.coordinates(sample, offset));
-                    }
+                    let (pair, span) = samples(
+                        vertex.pos.map(f64::from),
+                        axes,
+                        offset,
+                        axis,
+                        step,
+                        geographic.then_some(factor),
+                    )?;
+                    probes.extend(pair);
+                    deltas.push(span);
                 }
             }
-            derivatives.push(steps);
         }
-        let output = operation.transform(&points)?;
-        let mut cursor = 0;
-        for (vertex, steps) in vertices.iter_mut().zip(derivatives) {
-            let point = to_y_up(frame.to_enu(output[cursor]));
-            cursor += 1;
+        let columns = loop {
+            let operation_kind = std::mem::discriminant(&operation);
+            let result = derivatives(
+                &mut operation,
+                &probes,
+                &deltas,
+                &output,
+                &normal_indices,
+                &frame,
+            );
+            if std::mem::discriminant(&operation) != operation_kind {
+                // Either bulk sampling or an individual retry may promote the
+                // resolver. Discard every derivative, including failures, and
+                // restart this complete batch before mutating any vertex.
+                // The resolver can promote Pure -> Native at most once.
+                output = operation.transform(&positions)?;
+                continue;
+            }
+            break result?;
+        };
+        let mut columns = columns.into_iter();
+        for (index, vertex) in vertices.iter_mut().enumerate() {
+            let point = to_y_up(frame.to_enu(output[index]));
             if vertex.nrm != [0.; 3] {
-                let columns = std::array::from_fn(|axis| {
-                    let a = to_y_up(frame.to_enu(output[cursor + axis * 2]));
-                    let b = to_y_up(frame.to_enu(output[cursor + axis * 2 + 1]));
-                    std::array::from_fn(|i| (b[i] - a[i]) / (2. * steps[axis]))
-                });
-                vertex.nrm = normal(columns, vertex.nrm)?;
-                cursor += 6;
+                vertex.nrm = normal(columns.next().unwrap(), vertex.nrm)?;
             }
             if point
                 .iter()
@@ -104,6 +127,111 @@ pub(crate) fn bake(
         }
     }
     Ok(origin)
+}
+
+fn derivatives(
+    operation: &mut Transform,
+    probes: &[[f64; 3]],
+    deltas: &[[f64; 2]],
+    positions: &[[f64; 3]],
+    normal_indices: &[usize],
+    frame: &EnuFrame,
+) -> Result<Vec<[[f64; 3]; 3]>, Error> {
+    let output = match operation.transform(probes) {
+        Ok(points) => Some(points),
+        // Actual vertices already passed the same strict operation. Only a
+        // coordinate-domain failure may use a valid one-sided sample.
+        Err(Error::Data(_)) => None,
+        Err(error) => return Err(error),
+    };
+    let mut result = Vec::with_capacity(normal_indices.len());
+    let mut cursor = 0;
+    for &index in normal_indices {
+        let mut columns = [[0.; 3]; 3];
+        for column in &mut columns {
+            let span = deltas[cursor / 2];
+            let (a, b, denominator) = if let Some(points) = &output {
+                (points[cursor], points[cursor + 1], span[1] - span[0])
+            } else {
+                one_sided(
+                    operation,
+                    &probes[cursor..cursor + 2],
+                    span,
+                    positions[index],
+                )?
+            };
+            let a = to_y_up(frame.to_enu(a));
+            let b = to_y_up(frame.to_enu(b));
+            *column = std::array::from_fn(|i| (b[i] - a[i]) / denominator);
+            cursor += 2;
+        }
+        result.push(columns);
+    }
+    Ok(result)
+}
+
+fn samples(
+    position: [f64; 3],
+    axes: SourceAxes,
+    offset: crate::georef::SourceOffset,
+    axis: usize,
+    step: f64,
+    degrees_per_unit: Option<f64>,
+) -> Result<([[f64; 3]; 2], [f64; 2]), Error> {
+    let base = axes.coordinates(position, offset);
+    let mut deltas = [-step, step];
+    let mut pair = deltas.map(|delta| {
+        let mut sample = position;
+        sample[axis] += delta;
+        axes.coordinates(sample, offset)
+    });
+    if let Some(factor) = degrees_per_unit {
+        if ((base[1] * factor).abs() - 90.).abs() < 1e-12 {
+            return Err(Error::Data(
+                "mesh CRS normal Jacobian is singular at a geographic pole".into(),
+            ));
+        }
+        for (sample, delta) in pair.iter_mut().zip(&mut deltas) {
+            // Longitude is periodic in ECEF; retain the original derivative
+            // span rather than differentiating the wrapped coordinate jump.
+            let longitude_limit = 180. / factor;
+            if sample[0] > longitude_limit {
+                sample[0] -= 2. * longitude_limit;
+            } else if sample[0] < -longitude_limit {
+                sample[0] += 2. * longitude_limit;
+            }
+            if (sample[1] * factor).abs() > 90. {
+                // Latitude is not periodic. Replace only the artificial point
+                // with the validated base, yielding an inward one-sided slope.
+                *sample = base;
+                *delta = 0.;
+            }
+        }
+    }
+    Ok((pair, deltas))
+}
+
+fn one_sided(
+    operation: &mut Transform,
+    probes: &[[f64; 3]],
+    span: [f64; 2],
+    base: [f64; 3],
+) -> Result<([f64; 3], [f64; 3], f64), Error> {
+    // Resource, datum-operation and unavailable-grid errors must still fail.
+    let a = match operation.transform(&probes[..1]) {
+        Err(error) if !matches!(error, Error::Data(_)) => return Err(error),
+        result => result,
+    };
+    let b = match operation.transform(&probes[1..]) {
+        Err(error) if !matches!(error, Error::Data(_)) => return Err(error),
+        result => result,
+    };
+    match (a, b) {
+        (Ok(a), Ok(b)) => Ok((a[0], b[0], span[1] - span[0])),
+        (Ok(a), Err(Error::Data(_))) if span[0] != 0. => Ok((a[0], base, -span[0])),
+        (Err(Error::Data(_)), Ok(b)) if span[1] != 0. => Ok((base, b[0], span[1])),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+    }
 }
 
 fn to_y_up([east, north, up]: [f64; 3]) -> [f64; 3] {
@@ -238,6 +366,115 @@ mod tests {
         assert_eq!(mesh.triangles[0].verts, [0, 1, 2]);
         assert_eq!(mesh.triangle_nodes, [17]);
         assert_eq!(mesh.node_names[&17], "Source");
+    }
+
+    #[test]
+    fn projected_accuracy_domain_uses_valid_one_sided_normals() {
+        // Independent ellipsoidal Albers forward equations put the origin just
+        // inside the resolver's verified 80-degree source-latitude domain.
+        let a = 6378137_f64;
+        let f = 1. / 298.257223563;
+        let e2: f64 = f * (2. - f);
+        let e = e2.sqrt();
+        let q = |lat: f64| {
+            let s = lat.sin();
+            (1. - e2) * (s / (1. - e2 * s * s) - ((1. - e * s) / (1. + e * s)).ln() / (2. * e))
+        };
+        let m2 = |lat: f64| lat.cos().powi(2) / (1. - e2 * lat.sin().powi(2));
+        let first = 20_f64.to_radians();
+        let second = 40_f64.to_radians();
+        let n = (m2(first) - m2(second)) / (q(second) - q(first));
+        let c = m2(first) + n * q(first);
+        let lat = 79.99999999_f64.to_radians();
+        let rho = a * (c - n * q(lat)).sqrt() / n;
+        let northing = a * c.sqrt() / n - rho;
+        let mut options = MeshTo3tzOptions {
+            source_axes: Some(SourceAxes::Xyz),
+            height_offset: Some(0.),
+            source_offset: Some(SourceOffset {
+                northing,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let definition = "+proj=aea +lat_1=20 +lat_2=40 +lat_0=0 +lon_0=0 +datum=WGS84 +units=m";
+        options.set_source_crs(definition).unwrap();
+        let mut mesh = scene();
+        let origin = bake(&mut mesh, definition, &options).unwrap();
+        let radius = a / (1. - e2 * lat.sin().powi(2)).sqrt();
+        let meridian = a * (1. - e2) / (1. - e2 * lat.sin().powi(2)).powf(1.5);
+        let q_prime = 2. * (1. - e2) * lat.cos() / (1. - e2 * lat.sin().powi(2)).powi(2);
+        let east_scale = radius * lat.cos() / (n * rho);
+        let north_scale = meridian * 2. * n * rho / (a * a * q_prime);
+        let expected = [
+            lat.cos() - lat.sin() / north_scale,
+            1. / east_scale,
+            lat.sin() + lat.cos() / north_scale,
+        ];
+        let length = expected.iter().map(|v| v * v).sum::<f64>().sqrt();
+        assert_close(
+            world_normal(origin, mesh.vertices[0].nrm),
+            expected.map(|v| v / length),
+            2e-6,
+        );
+        assert_close(
+            world_normal(origin, mesh.vertices[1].nrm),
+            [lat.cos(), 0., lat.sin()],
+            2e-6,
+        );
+        assert_eq!(mesh.vertices[2].nrm, [0.; 3]);
+    }
+
+    #[test]
+    fn pole_positions_without_normals_do_not_need_a_jacobian() {
+        let mut mesh = scene();
+        for vertex in &mut mesh.vertices {
+            vertex.pos[1] = 90.;
+            vertex.nrm = [0.; 3];
+        }
+        let mut options = MeshTo3tzOptions {
+            source_axes: Some(SourceAxes::Xyz),
+            height_offset: Some(0.),
+            ..Default::default()
+        };
+        options.set_source_crs("EPSG:4326").unwrap();
+        bake(&mut mesh, "EPSG:4326", &options).unwrap();
+        assert!(mesh
+            .vertices
+            .iter()
+            .all(|v| v.pos.iter().all(|n| n.is_finite()) && v.nrm == [0.; 3]));
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    #[test]
+    fn native_geographic_epoch_wraps_only_synthetic_longitudes() {
+        // An explicit coordinate epoch deliberately requires strict native
+        // resolution, retaining the known WGS84 datum and its eligible operation.
+        let definition = "EPSG:4326@2020";
+        let mut mesh = scene();
+        for vertex in &mut mesh.vertices {
+            vertex.pos = [0.; 3];
+            vertex.nrm = [0., 1., 0.];
+        }
+        let mut options = MeshTo3tzOptions {
+            source_axes: Some(SourceAxes::YUp),
+            height_offset: Some(0.),
+            source_offset: Some(SourceOffset {
+                easting: 180.,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        options.set_source_crs(definition).unwrap();
+        let origin = bake(&mut mesh, definition, &options).unwrap();
+        let lon = 180_f64.to_radians();
+        assert_close(
+            world_normal(origin, mesh.vertices[0].nrm),
+            [lon.cos(), lon.sin(), 0.],
+            2e-7,
+        );
+        options.source_offset.as_mut().unwrap().easting = 180.01;
+        assert!(bake(&mut mesh, definition, &options).is_err());
     }
     #[cfg(feature = "native-geospatial")]
     #[test]
