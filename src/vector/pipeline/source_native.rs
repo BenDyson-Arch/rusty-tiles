@@ -511,14 +511,13 @@ mod coordinate_fault_tests {
             );
         }
         let mut accepted = false;
-        let outcome = checked_coordinates(vec![[1., 2., 3.]]).and_then(|coordinates| {
+        let outcome = checked_coordinates(vec![[1., 2., 3.]]).inspect(|_| {
             // Acceptance's geometry operations reset CPL diagnostics. Source
             // failure must already have crossed the fatal boundary before this.
             accepted = true;
             unsafe {
                 gdal_sys::CPLErrorReset();
             }
-            Ok(coordinates)
         });
         assert!(!accepted);
         let failure = outcome.unwrap_err();

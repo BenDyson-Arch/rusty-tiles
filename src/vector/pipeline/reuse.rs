@@ -82,8 +82,8 @@ fn encoder() -> String {
         hasher.update([0]);
     }
     #[cfg(not(feature = "native-geospatial"))]
-    for source in [include_str!("geometry/portable.rs")] {
-        hasher.update(source.as_bytes());
+    {
+        hasher.update(include_str!("geometry/portable.rs").as_bytes());
         hasher.update([0]);
     }
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())

@@ -2,9 +2,9 @@
 //! formats retain their native source reader; geometry kernels are independent.
 use super::*;
 pub(super) enum Reader {
-    Portable(source_portable::Reader),
+    Portable(Box<source_portable::Reader>),
     #[cfg(feature = "native-geospatial")]
-    Native(source_native::Reader),
+    Native(Box<source_native::Reader>),
 }
 impl Reader {
     pub fn new(
@@ -23,9 +23,11 @@ impl Reader {
                 reader.finish()?;
                 return Err(Error::Environment("GeoJSON requires .geojson or .json input through the shared bounded reader; GeoJSON sequences are unsupported".into()));
             }
-            return Ok(Self::Native(reader));
+            return Ok(Self::Native(Box::new(reader)));
         }
-        source_portable::Reader::new(input, options, frame, scratch).map(Self::Portable)
+        source_portable::Reader::new(input, options, frame, scratch)
+            .map(Box::new)
+            .map(Self::Portable)
     }
     pub fn read(
         &mut self,
