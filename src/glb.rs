@@ -19,7 +19,7 @@ pub(crate) fn align_glb_eight(bytes: &mut Vec<u8>) -> Result<(), Error> {
     if bytes.len() < 20
         || &bytes[..4] != b"glTF"
         || &bytes[16..20] != b"JSON"
-        || bytes.len() % 4 != 0
+        || !bytes.len().is_multiple_of(4)
     {
         return Err(Error::Data("invalid GLB alignment input".into()));
     }
@@ -32,7 +32,7 @@ pub(crate) fn align_glb_eight(bytes: &mut Vec<u8>) -> Result<(), Error> {
     if declared != bytes.len() || json % 4 != 0 {
         return Err(Error::Data("invalid GLB length".into()));
     }
-    if bytes.len() % 8 == 0 {
+    if bytes.len().is_multiple_of(8) {
         return Ok(());
     }
     let length = bytes

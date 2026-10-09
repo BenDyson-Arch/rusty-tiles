@@ -4,7 +4,7 @@ import argparse,hashlib,json,pathlib,struct,subprocess,zipfile
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=pathlib.Path,required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
  source=pathlib.Path(__file__).parent/'fixtures/countries-source.geojson';before=hashlib.sha256(source.read_bytes()).hexdigest();a.work.mkdir(parents=True,exist_ok=False)
- target=a.work/'countries.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--explicit','--reproducible','--json']
+ target=a.work/'countries.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--explicit','--reproducible','--maxVertices','32','--maxBytes','16384','--json']
  run=subprocess.run(command,capture_output=True,text=True,timeout=120);assert run.returncode==0,(run.stdout,run.stderr)
  controls=[]
  with zipfile.ZipFile(target) as z:

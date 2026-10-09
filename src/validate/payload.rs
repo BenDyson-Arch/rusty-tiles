@@ -260,7 +260,7 @@ fn unwrap_b3dm(bytes: &[u8]) -> Result<&[u8]> {
     if word(4) != 1 {
         return Err(unsupported("b3dm version other than 1"));
     }
-    if word(8) != bytes.len() || bytes.len() % 8 != 0 {
+    if word(8) != bytes.len() || !bytes.len().is_multiple_of(8) {
         return Err(invalid("b3dm length/alignment invalid"));
     }
     let lengths = [word(12), word(16), word(20), word(24)];
@@ -287,7 +287,7 @@ fn unwrap_b3dm(bytes: &[u8]) -> Result<&[u8]> {
         offset = offset
             .checked_add(*length)
             .ok_or_else(|| invalid("b3dm table length overflow"))?;
-        if offset % 8 != 0 {
+        if !offset.is_multiple_of(8) {
             return Err(invalid("b3dm table boundary must be eight-byte aligned"));
         }
     }
@@ -1002,11 +1002,11 @@ mod tests {
     use serde_json::json;
     fn frame(doc: &Value, bin: &[u8]) -> Vec<u8> {
         let mut json = serde_json::to_vec(doc).unwrap();
-        while json.len() % 4 != 0 {
+        while !json.len().is_multiple_of(4) {
             json.push(b' ')
         }
         let mut bin = bin.to_vec();
-        while bin.len() % 4 != 0 {
+        while !bin.len().is_multiple_of(4) {
             bin.push(0)
         }
         let mut result = b"glTF".to_vec();
@@ -1025,7 +1025,7 @@ mod tests {
     }
     fn b3dm(glb: &[u8]) -> Vec<u8> {
         let mut table = br#"{"BATCH_LENGTH":0}"#.to_vec();
-        while (28 + table.len()) % 8 != 0 {
+        while !(28 + table.len()).is_multiple_of(8) {
             table.push(b' ');
         }
         let mut result = b"b3dm".to_vec();
@@ -1035,7 +1035,7 @@ mod tests {
         result.extend([0u8; 12]);
         result.extend(table);
         result.extend(glb);
-        while result.len() % 8 != 0 {
+        while !result.len().is_multiple_of(8) {
             result.push(0);
         }
         let length = result.len() as u32;
