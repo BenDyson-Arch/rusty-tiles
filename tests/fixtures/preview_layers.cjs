@@ -47,7 +47,7 @@ const assert=require('node:assert/strict');
     await page.reload({waitUntil:'load'});const refreshed=await inspect();
     console.log(JSON.stringify({first,refreshed,browserErrors:errors,externalRequests:external},null,2));
     for(const result of [first,refreshed]){
-      assert.equal(result.version,'1.143.0');assert.equal(result.meshLoaded,true);assert.equal(result.meshPicked,true);
+      assert.equal(result.version,'1.146.0');assert.equal(result.meshLoaded,true);assert.equal(result.meshPicked,true);
       assert.deepEqual(result.imagerySize,[256,256]);assert.deepEqual(result.failures,[]);
     }
     assert.deepEqual(errors,[]);assert.deepEqual(external,[]);

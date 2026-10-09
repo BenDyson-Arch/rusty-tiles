@@ -2,7 +2,7 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.4.0 - Unreleased
 
 ### Added
 
@@ -32,6 +32,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
 - Benchmark harnesses, public-data audits and recorded evidence now live in `bench/`.
 - Converter help lists `-i`, `-o` and `-f` first.
+- Installation and converter guides distinguish development capabilities from published releases, explain build selection, and retain the existing mesh offset options with application-neutral help.
 - `doctor --command` accepts aliased subcommand spellings. It takes its list from the same table as the readiness report.
 - `--json` conversion results add a `settings` object. `counts` now holds only genuine counts, such as `points`, `tiles` and `features`. Settings such as `heightOffset`, `grid` or `lodLevels` moved from `counts` to `settings`.
 - Without `--json`, every converter prints a one-to-three-line stderr summary: output, counts, warnings and next command. It replaces the previous ad hoc point-cloud summary and the per-level terrain lines.
@@ -52,6 +53,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Release acceptance checks the README route on default binaries as well as native builds. Missing optional raster/terrain support is reported separately from required mesh, validation and preview readiness.
 - Georeferenced polygons with constant source height now retain their source XY topology through globe placement, LOD and fragmentation. This restores Sudan and Antarctica fills in country conversions without changing source vertices or relaxing repair safeguards. Polar seam fragments retain original boundaries and conservative bounds. Previous vector archives need a fresh conversion to use the corrected encoder.
 - Native placement normalizes projected horizontal units and projection offsets to metres before adding an explicit metre height axis. This preserves feet, US survey feet and kilometre inputs under PROJ 9.9, including Albers and Helmert definitions, without scaling source Z.
 - Point-cloud WKT parameters retain their declared projection method: original names and EPSG identities are validated before flattening aliases; incomplete or mismatched sets, unverified spellings and colliding native-exported aliases use native interpretation. Albers (spherical or ellipsoidal) refuses source latitudes at or beyond ±80° in both builds because portable and native inverses can share a polar clamp. Native conic conditioning inspects canonical method/parameter identities and angular units, including Michigan and Belgium variants. Polar-point regressions verify native refusal as well as successful fallback across platforms.
@@ -71,7 +73,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - `glb-to-3tz`, and small `mesh-to-3tz` inputs, no longer stage in a fixed `<output>.tileset-work` folder, which deleted any existing folder of that name.
 - An output created by another process during a conversion is reported as an output conflict, exit 5, instead of an I/O error.
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-07
 
 ### Added
 

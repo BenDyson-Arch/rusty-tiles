@@ -40,7 +40,7 @@ const assert = require('node:assert/strict');
     console.log(JSON.stringify({first,refreshed,browserErrors:errors},null,2));
     assert.equal(errors.length,0);
     for(const result of [first,refreshed]) {
-      assert.equal(result.version,'1.143.0');assert.equal(result.failures.length,0);
+      assert.equal(result.version,'1.146.0');assert.equal(result.failures.length,0);
       assert.ok(Math.abs(result.covered-133.75)<=result.step/2+1e-6,`Covered height: ${result.covered}`);
       assert.ok(Math.abs(result.hole+999.125)<1e-6,`NoData height: ${result.hole}`);
       assert.ok(result.rootVertices>0);assert.equal(result.rootAvailable,true);assert.equal(result.rendered,true);

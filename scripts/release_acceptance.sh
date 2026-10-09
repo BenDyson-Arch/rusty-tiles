@@ -6,7 +6,7 @@
 # Required steps (any failure exits non-zero):
 #   1. build    cargo build --release --locked --features native-geospatial
 #               (skipped when RUSTY_TILES_BIN names an existing binary)
-#   2. doctor   doctor --json reports ok
+#   2. doctor   README mesh/validate/preview commands report ready
 #   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
 #   4. validate validate --json on the archive
 #   5. preview  preview --json starts on a free port, serves config.json and
@@ -19,8 +19,8 @@
 # Skipped steps are listed at the end; they never fail the run.
 #
 # Environment:
-#   RUSTY_TILES_BIN  use this binary instead of building
-#   CESIUM_DIR       Cesium 1.143 Build/Cesium directory (default
+#   RUSTY_TILES_BIN  use this default or native binary instead of building
+#   CESIUM_DIR       Cesium 1.146 Build/Cesium directory (default
 #                    target/preview-runtime/node_modules/cesium/Build/Cesium)
 #   NODE_PATH        directory exposing the playwright module to node
 #   CHROMIUM         Chromium executable for the probes (default /usr/bin/chromium)
@@ -86,8 +86,9 @@ else
 fi
 
 # 2. doctor
-env PATH="" "$BIN" doctor --json >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
-  || fail "doctor --json (exit $?)" "$WORK/doctor.json"
+env PATH="" "$BIN" doctor --command mesh-to-3tz --command validate --command preview --json \
+  >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
+  || fail "doctor for README commands (exit $?)" "$WORK/doctor.json"
 [[ $(json_field "$WORK/doctor.json" 'd["ok"]') == True ]] || fail "doctor not ok" "$WORK/doctor.json"
 pass doctor
 
@@ -127,6 +128,9 @@ pass preview
 
 # 6-7. optional browser acceptance
 missing=()
+env PATH="" "$BIN" doctor --command vector --command point-cloud --command raster --command terrain --json \
+  >"$WORK/browser-readiness.json" 2>"$WORK/browser-readiness.err" \
+  || missing+=("selected binary's vector/point-cloud/raster/terrain capabilities")
 command -v node >/dev/null || missing+=("node")
 [[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
 node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")

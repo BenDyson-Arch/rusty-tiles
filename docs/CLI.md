@@ -53,8 +53,8 @@ Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. S
 | `--nodeFeatures` | `--node-features` | off | Pick and style individual source nodes by `name` and `node_index`; also authors small inputs as tiles |
 | `--noMeshopt` | `--no-meshopt` | off | Disable lossless meshopt compression |
 | `--sourceCrs` | `--source-crs` | `auto` | Position convention: `auto`, `geographic` or `epsg:3857` |
-| `--sourceOffset E N [A]` | `--source-offset` | none | Metashape shift in metres, added in double precision |
-| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape `offset.txt` with `E:`, `N:` and `A:` lines |
+| `--sourceOffset E N [A]` | `--source-offset` | none | EPSG:3857 source shift in metres, added in double precision |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Source offset text file with `E:`, `N:` and optional `A:` metre values; existing `offset.txt` files remain supported |
 | `--cartographicPositionDegrees lon lat [height]` | `--cartographic-position-degrees` | none | Place a local model on the globe |
 | `--rotationDegrees heading pitch roll` | `--rotation-degrees` | none | Orient a placed model |
 
@@ -214,7 +214,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 | Option | Default | Serves |
 | --- | --- | --- |
-| `--cesium` | required | A Cesium 1.143.0 `Build/Cesium` directory containing `Cesium.js` |
+| `--cesium` | required | A Cesium 1.146.0 `Build/Cesium` directory containing `Cesium.js` |
 | `--host` | `127.0.0.1` | Listen address |
 | `--port` | `9227` | Listen port. 0 picks a free port. |
 | `--mesh` | none | Extracted mesh directory with `tileset.json` |
