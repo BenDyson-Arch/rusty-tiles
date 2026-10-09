@@ -1,6 +1,81 @@
 //! Shared vector acceptance for portable and native builds, without executables.
 mod support;
 
+#[cfg(not(feature = "native-geospatial"))]
+#[test]
+fn portable_case_distinct_property_filters_publish_or_refuse_without_clobbering() {
+    use serde_json::{json, Value};
+    use std::{fs, process::Command};
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("case-sensitive.geojson");
+    fs::write(
+        &input,
+        serde_json::to_vec(&json!({"type":"FeatureCollection","features":[
+            {"type":"Feature","properties":{"keep":1,"A":1,"a":2},
+                "geometry":{"type":"Point","coordinates":[1,2,3]}}
+        ]}))
+        .unwrap(),
+    )
+    .unwrap();
+    let before = fs::read(&input).unwrap();
+    for (name, expression, count) in [("matched", "keep = 1", 1), ("empty", "0", 0)] {
+        let output = directory.path().join(format!("{name}.3tz"));
+        let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+            .args(["vector", "--json", "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .args([
+                "--source-crs",
+                "local",
+                "--fields",
+                "keep",
+                "--where",
+                expression,
+            ])
+            .env("PATH", "")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut archive = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        let report: Value =
+            serde_json::from_reader(archive.by_name("conversion.json").unwrap()).unwrap();
+        assert_eq!(report["features"], count);
+        rusty_tiles::validate_3tz(&output).unwrap();
+    }
+    let output = directory.path().join("previous.3tz");
+    fs::write(&output, b"previous output").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .args(["vector", "--json", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .args([
+            "--force",
+            "--source-crs",
+            "local",
+            "--fields",
+            "keep",
+            "--where",
+            "\"a\" = 2",
+        ])
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(3));
+    let response: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(response["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("ambiguous GeoJSON property names"));
+    assert_eq!(fs::read(&output).unwrap(), b"previous output");
+    assert_eq!(fs::read(&input).unwrap(), before);
+}
+
 #[test]
 fn vector_is_reproducible_and_reuses_native_content_without_executables() {
     use serde_json::{json, Value};

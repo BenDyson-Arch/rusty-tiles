@@ -230,33 +230,7 @@ pub fn mesh_to_3tz_reported(
         if opts.explicit {
             return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
         }
-        let mut manifest = crate::tileset::create_tileset_json(
-            input,
-            &job.path().join("tileset.json"),
-            &CreateTilesetOptions::from(opts),
-        )?;
-        fs::copy(
-            input,
-            job.path().join(
-                input
-                    .file_name()
-                    .ok_or_else(|| Error::msg("input has no filename"))?,
-            ),
-        )?;
-        crate::implicit::write_tileset(
-            &mut manifest,
-            job.path(),
-            crate::implicit::SubdivisionScheme::Octree,
-            false,
-        )?;
-        fs::write(
-            job.path().join("tileset.json"),
-            serde_json::to_vec(&manifest)?,
-        )?;
-        let work = job.path().to_owned();
-        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":1,"leafTiles":1});
-        crate::output::write_report(&work, report.clone(), true)?;
-        return job.publish_tree_3tz(&work, Some(report));
+        return crate::tileset::implicit_glb_job(input, job, &CreateTilesetOptions::from(opts));
     }
     validate_source(input)?;
     if scene.vertices.iter().any(|v| {

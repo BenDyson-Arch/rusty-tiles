@@ -165,6 +165,35 @@ pub(crate) fn glb_job(
     job.publish_3tz(&files, None)
 }
 
+/// Wrap a small unchanged model in the implicit layout. Keep declared resources
+/// relative to the relocated content, without rewriting either model or resources.
+pub(crate) fn implicit_glb_job(
+    input: &Path,
+    job: Job,
+    opts: &CreateTilesetOptions,
+) -> Result<ConversionResult, Error> {
+    let files = resources::dependencies(input)?
+        .into_iter()
+        .map(|(name, path)| (format!("implicit-content/{name}"), path))
+        .collect::<Vec<_>>();
+    let mut manifest = create_tileset_json(input, &job.path().join("tileset.json"), opts)?;
+    fs::copy(input, job.path().join(file_name(input)?))?;
+    crate::implicit::write_tileset(
+        &mut manifest,
+        job.path(),
+        crate::implicit::SubdivisionScheme::Octree,
+        false,
+    )?;
+    fs::write(
+        job.path().join("tileset.json"),
+        serde_json::to_vec(&manifest)?,
+    )?;
+    let work = job.path().to_owned();
+    let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":1,"leafTiles":1});
+    crate::output::write_report(&work, report.clone(), true)?;
+    job.publish_tree_with_resources_3tz(&work, &files, Some(report))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
