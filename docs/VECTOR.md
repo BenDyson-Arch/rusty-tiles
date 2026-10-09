@@ -61,6 +61,8 @@ List fields fail by default. `--list-fields json` stores each list as JSON text.
 
 `--where "category = 'public'"` applies an attribute filter to every selected layer before geometry is processed. The standard build evaluates expressions using SQLite; the native build uses OGR. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset. Use a single read-only expression; multiple statements, comments and SQL parameters are refused by the portable reader.
 
+GeoJSON property names are case-sensitive, but SQLite field identifiers are ASCII case-insensitive. In the default build, properties such as `A` and `a` can coexist in the source and output, and unrelated or constant filters still work. Filters that read either colliding name are refused as ambiguous, including quoted identifiers; rename those properties before filtering them. SQL string literals such as `'A'` retain their ordinary meaning.
+
 Portable GeoJSON filtering refuses source integers beyond signed 64-bit range instead of converting them to SQLite floating-point values. Encoded integer metadata also requires signed 64-bit values. GeoPackage is opened read-only in immutable mode; checkpoint and close a writer with an active nonempty WAL before conversion so every committed row is available from the main file. Conversion refuses that WAL state rather than silently reading older rows. Recover a hot rollback journal with SQLite and close the writer before conversion; the immutable reader cannot safely perform database recovery.
 
 ## Coordinates and height

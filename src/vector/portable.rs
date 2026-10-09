@@ -7,7 +7,11 @@ use super::super::source_fields;
 use super::*;
 use geozero::{CoordDimensions, GeomProcessor, GeozeroGeometry};
 use rusqlite::{
-    config::DbConfig, params, params_from_iter, types::ValueRef, Connection, OpenFlags,
+    config::DbConfig,
+    hooks::{AuthAction, AuthContext, Authorization},
+    params, params_from_iter,
+    types::ValueRef,
+    Connection, OpenFlags,
 };
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use std::{
@@ -715,6 +719,8 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
     )?
     .remove(0);
     let mut row_column = String::new();
+    let mut ambiguous_columns = BTreeSet::new();
+    let mut ambiguous_names = Vec::new();
     if options.where_clause.is_some() {
         row_column = "_rusty_row".into();
 
@@ -725,10 +731,29 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
         {
             row_column.push('_');
         }
-        let definitions = layer
-            .fields
+        // GeoJSON property keys are case-sensitive, but SQLite identifiers use
+        // ASCII case folding. Retain a single inaccessible placeholder for
+        // each ambiguous group so it cannot fall back to a rowid or keyword.
+        let mut groups: BTreeMap<String, Vec<&Field>> = BTreeMap::new();
+        for field in &layer.fields {
+            groups
+                .entry(field.name.to_ascii_lowercase())
+                .or_default()
+                .push(field);
+        }
+        for (column, group) in &groups {
+            if group.len() > 1 {
+                ambiguous_columns.insert(column.clone());
+                ambiguous_names.push(group.iter().map(|f| f.name.clone()).collect::<Vec<_>>());
+            }
+        }
+        let filter_fields: Vec<_> = groups
+            .values()
+            .map(|group| (group[0], group.len() > 1))
+            .collect();
+        let definitions = filter_fields
             .iter()
-            .map(|f| quoted(&f.name))
+            .map(|(field, _)| quoted(&field.name))
             .collect::<Vec<_>>()
             .join(",");
         db.execute_batch(&format!(
@@ -738,7 +763,7 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
             definitions
         ))
         .map_err(input_sql)?;
-        let placeholders = (1..=layer.fields.len() + 1)
+        let placeholders = (1..=filter_fields.len() + 1)
             .map(|i| format!("?{i}"))
             .collect::<Vec<_>>()
             .join(",");
@@ -757,7 +782,11 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
             let mut values = vec![rusqlite::types::Value::Integer(
                 row.get(0).map_err(input_sql)?,
             )];
-            for field in &layer.fields {
+            for (field, ambiguous) in &filter_fields {
+                if *ambiguous {
+                    values.push(rusqlite::types::Value::Null);
+                    continue;
+                }
                 let value = &feature["properties"][&field.name];
                 values.push(match value {
                     Value::Null => rusqlite::types::Value::Null,
@@ -784,13 +813,36 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
         .map_err(input_sql)?;
     // Resolve and validate the expression before any callbacks can receive data.
     if options.where_clause.is_some() {
+        if !ambiguous_columns.is_empty() {
+            db.authorizer(Some(move |context: AuthContext<'_>| {
+                if let AuthAction::Read {
+                    table_name: "rusty_attributes",
+                    column_name,
+                } = context.action
+                {
+                    if ambiguous_columns.contains(&column_name.to_ascii_lowercase()) {
+                        return Authorization::Deny;
+                    }
+                }
+                Authorization::Allow
+            }))
+            .map_err(input_sql)?;
+        }
         let check = format!(
             "SELECT 1 FROM rusty_attributes WHERE ({})",
             options.where_clause.as_deref().unwrap_or("1")
         );
         let mut statement = db
             .prepare(&check)
-            .map_err(|e| data(format!("invalid attribute filter: {e}")))?;
+            .map_err(|e| {
+                if e.sqlite_error_code()
+                    == Some(rusqlite::ErrorCode::AuthorizationForStatementDenied)
+                {
+                    data(format!("invalid attribute filter: ambiguous GeoJSON property names {} use case-insensitive SQLite identifiers; rename these properties before filtering them", json!(ambiguous_names)))
+                } else {
+                    data(format!("invalid attribute filter: {e}"))
+                }
+            })?;
         statement
             .query([])
             .map_err(input_sql)?
@@ -1684,6 +1736,105 @@ mod tests {
         assert_eq!(features[0].source_id(), &json!("1"));
         assert!(!features[0].properties.contains_key("large"));
         assert!(!features[0].properties.contains_key("seq"));
+    }
+
+    #[test]
+    fn geojson_case_distinct_properties_allow_unrelated_and_constant_filters() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.geojson");
+        source(
+            &path,
+            json!([
+                feature(
+                    json!(1),
+                    json!({"keep":1,"A":1,"a":2,"ROWID":7,"rowid":8,
+                    "TRUE":5,"true":6,"with space":3,"quo\"te":4,"select":9,"Ä":10,"ä":11}),
+                    point(1.)
+                ),
+                feature(json!(2), json!({"keep":0,"A":3,"a":4}), point(2.))
+            ]),
+        );
+        let before = fs::read(&path).unwrap();
+        for (expression, count) in [
+            ("KEEP = 1", 1),
+            ("1", 2),
+            ("0", 0),
+            (
+                "'A' = 'A' AND 'rowid' = 'rowid' AND 'true' = 'true' AND keep = 1",
+                1,
+            ),
+            (r#""with space" = 3 AND "quo""te" = 4 AND "select" = 9"#, 1),
+            (r#""Ä" = 10 AND "ä" = 11"#, 1),
+        ] {
+            let options = VectorOptions {
+                where_clause: Some(expression.into()),
+                fields: vec!["keep".into()],
+                ..local_options()
+            };
+            let mut reader = Reader::new(&path, &options, None).unwrap();
+            let (features, reports) = read(&mut reader, &options);
+            assert_eq!(features.len(), count, "{expression}");
+            assert!(reports.is_empty());
+            for feature in features {
+                assert!(!feature.properties.contains_key("A"));
+                assert!(!feature.properties.contains_key("a"));
+            }
+        }
+        let options = VectorOptions {
+            where_clause: Some("keep = 1".into()),
+            ..local_options()
+        };
+        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let features = read(&mut reader, &options).0;
+        assert_eq!(features[0].properties["A"], 1);
+        assert_eq!(features[0].properties["a"], 2);
+        assert_eq!(features[0].properties["ROWID"], 7);
+        assert_eq!(features[0].properties["rowid"], 8);
+        assert_eq!(features[0].properties["TRUE"], 5);
+        assert_eq!(features[0].properties["true"], 6);
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn geojson_filters_refuse_ambiguous_identifiers_without_rowid_or_literal_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.geojson");
+        source(
+            &path,
+            json!([feature(
+                json!(1),
+                json!({"keep":1,"A":1,"a":2,
+                "ROWID":7,"rowid":8,"TRUE":5,"true":6}),
+                point(1.)
+            )]),
+        );
+        for expression in [
+            "A = 1",
+            "a = 2",
+            r#""A" = 1"#,
+            r#""a" = 2"#,
+            "[a] = 2",
+            "`A` = 1",
+            "rusty_attributes.a = 2",
+            "ROWID = 7",
+            r#""rowid" = 8"#,
+            "TRUE = 5",
+            r#""true" = 6"#,
+        ] {
+            let options = VectorOptions {
+                where_clause: Some(expression.into()),
+                fields: vec!["keep".into()],
+                ..local_options()
+            };
+            let error = Reader::new(&path, &options, None).err().unwrap();
+            assert!(
+                error
+                    .to_string()
+                    .contains("ambiguous GeoJSON property names"),
+                "{expression}: {error}"
+            );
+            assert!(error.to_string().contains("rename these properties"));
+        }
     }
 
     #[test]
