@@ -226,7 +226,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 | Input | Rule |
 | --- | --- |
-| Mesh | Local model coordinates are placed with `--cartographic-position-degrees lon lat height`. Geographic and EPSG:3857 export adapters use specific axis conventions; arbitrary projected mesh CRSs are not yet supported. See [mesh placement](docs/FORMATS.md#mesh-placement). |
+| Mesh | Place local models with `--cartographic-position-degrees lon lat height`, or use a horizontal CRS with explicit `--source-axes` and `--height-offset`. General placement shares the point-cloud CRS policy; legacy geographic/EPSG:3857 adapters remain compatible. See [mesh placement](docs/FORMATS.md#mesh-placement). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |

@@ -6,6 +6,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- General mesh horizontal CRS placement through the shared grid-free/native resolver, with explicit `--source-axes` and `--height-offset`, CRS-unit E/N shifts and metre heights. Authored normals retain hard edges through inverse-transpose projection; legacy geographic/Web Mercator placement defaults remain compatible. Python adds `source_axes` and `height_offset` keywords, and `doctor` reports the shared CRS tier.
 - `convert-to-implicit` and Rust/Python APIs migrate eligible explicit point-cloud/vector archives into regular implicit hierarchies while retaining GLB/b3dm payload bytes, placement and metadata. Irregular trees, unsupported content and malformed historical b3dm alignment are refused before publication; converted vector archives require a fresh source conversion before reuse.
 - GeoJSON and GeoPackage vector conversion in the default binary and Python wheel, using streaming Rust readers, bundled SQLite, grid-free CRS transforms and constrained polygon triangulation. Both builds share tiling, metadata, LOD, compression and reuse; `native-geospatial` retains OGR/GEOS/PROJ for all vector inputs. Python adds `vector_to_3tz`, and `doctor` reports supported inputs and CRS limits.
 - Grid-free point-cloud CRS transforms in the default binary and Python wheel using `proj4rs`: WGS84 geographic, UTM, Mercator and supported WKT/PROJ local projections with explicit Helmert datum shifts. Unsupported grids, epochs or unverified datums require strict native GDAL/PROJ; shifts are never silently discarded. `doctor` lists CRS classes and native fallback readiness. Python point-cloud conversion adds `source_crs` and `height_offset` keywords.
@@ -53,6 +54,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Retiling untextured mesh materials without a PBR object preserves that omission instead of inserting an invalid `pbrMetallicRoughness: null` member. Representative textured converter digests remain unchanged.
 - Release acceptance checks the README route on default binaries as well as native builds. Missing optional raster/terrain support is reported separately from required mesh, validation and preview readiness.
 - Georeferenced polygons with constant source height now retain their source XY topology through globe placement, LOD and fragmentation. This restores Sudan and Antarctica fills in country conversions without changing source vertices or relaxing repair safeguards. Polar seam fragments retain original boundaries and conservative bounds. Previous vector archives need a fresh conversion to use the corrected encoder.
 - Native placement normalizes projected horizontal units and projection offsets to metres before adding an explicit metre height axis. This preserves feet, US survey feet and kilometre inputs under PROJ 9.9, including Albers and Helmert definitions, without scaling source Z.

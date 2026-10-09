@@ -20,6 +20,7 @@ pub mod implicit;
 mod jpeg;
 mod lossless;
 pub mod mesh;
+mod mesh_crs;
 pub mod metadata;
 mod output;
 pub mod pack;
@@ -38,7 +39,9 @@ pub use convert_implicit::{
     convert_to_implicit, convert_to_implicit_reported, ConvertToImplicitOptions,
 };
 pub use error::Error;
-pub use georef::{parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset};
+pub use georef::{
+    parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
+};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
 pub use report::{ConversionResult, Event, EventSink, Reporter};
 pub use tile::{

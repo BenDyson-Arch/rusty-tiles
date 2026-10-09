@@ -340,6 +340,29 @@ pub enum SourceCrs {
     WebMercator,
 }
 
+/// Axes of general mesh POSITION after glTF node transforms.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum SourceAxes {
+    /// X=easting/longitude, Y=northing/latitude, Z=height in metres.
+    Xyz,
+    /// X=easting/longitude, Y=height in metres, Z=negative northing/latitude.
+    YUp,
+}
+
+impl SourceAxes {
+    pub(crate) fn coordinates(self, point: [f64; 3], offset: SourceOffset) -> [f64; 3] {
+        let [east, north, height] = match self {
+            Self::Xyz => point,
+            Self::YUp => [point[0], -point[2], point[1]],
+        };
+        [
+            east + offset.easting,
+            north + offset.northing,
+            height + offset.height,
+        ]
+    }
+}
+
 impl SourceCrs {
     pub fn parse_cli(s: &str) -> Result<Self, crate::error::Error> {
         match s.trim().to_ascii_lowercase().as_str() {
@@ -354,7 +377,8 @@ impl SourceCrs {
     }
 }
 
-/// Metashape Shift / offset.txt: world = local + (E, N, A).
+/// Source-coordinate shift: E/N use the declared horizontal CRS units, A is
+/// metres. Legacy Web Mercator adapters use metres for all three values.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SourceOffset {
     pub easting: f64,

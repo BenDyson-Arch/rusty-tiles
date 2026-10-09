@@ -65,12 +65,18 @@ Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, ima
 | `--source-crs auto` | The default. Detects the position convention from coordinate values. |
 | `--source-crs geographic` | Positions are longitude, height and negative latitude |
 | `--source-crs epsg:3857` | Positions are easting, height and negative northing |
-| `--source-offset E N [A]` | Restore an EPSG:3857 source shift in metres |
+| `--source-crs EPSG:32632 --source-axes xyz --height-offset 0` | General horizontal CRS: POSITION is easting, northing, metre height after node transforms |
+| `--source-axes y-up` | General CRS with easting, metre height, negative northing after node transforms |
+| `--source-offset E N [A]` | Restore a source shift: E/N in horizontal CRS units, A metres |
 | `--source-offset-file offset.txt` | Read that shift from `E:`, `N:` and optional `A:` lines |
 | `--cartographic-position-degrees lon lat [height]` | Place a local model on the globe |
 | `--rotation-degrees heading pitch roll` | Orient a placed model |
 
-Choose an explicit `--source-crs` when you know the export's reference. These adapters use the axis conventions in the table, including compatibility with existing shifted exports. They do not read arbitrary CRS metadata or accept other projected mesh CRSs. Float32 degree coordinates may already have lost precision that conversion cannot recover.
+Choose an explicit `--source-crs` when you know the export's reference. Existing `auto`, `geographic` and `epsg:3857` commands retain their original Y-up adapter behaviour when axes/height options are absent. Auto with an offset remains the EPSG:3857 shifted adapter; it does not infer another projected CRS. Mesh files carry no trusted CRS selection: supply a horizontal EPSG, WKT or PROJ definition for other systems. The general path requires explicit `--source-axes xyz` or `y-up` and `--height-offset`, including zero when heights are already ellipsoidal metres. Axes describe POSITION **after all glTF node transforms**, so inspect the exporter rather than assuming OBJ axes survived a glTF export unchanged.
+
+General placement shares the [point-cloud CRS policy below](#point-clouds): verified grid-free operations work in the default binary/wheel; other definitions need the native build and its locally available best non-ballpark operation. Source E/N offsets use the horizontal CRS's units and A uses metres. Source height remains metres regardless of horizontal units; `height-offset` is added after A. Compound/vertical or geocentric CRS input is refused. For RD New/NAP (`EPSG:7415`), select the horizontal `EPSG:28992` and supply a justified metre offset to ellipsoidal height; the converter does not infer or apply the NAP geoid. GDA2020/MGA (`EPSG:7850`) and GDA94/MGA (`EPSG:28350`) require native CRS resolution and may fail if the best operation needs unavailable grids. No ballpark datum shift is substituted.
+
+The general path projects every loaded vertex into ECEF, chooses a local metre ENU frame, and transforms authored normals by the local projection Jacobian's inverse transpose, preserving hard edges. This CRS bake preserves triangles, winding, UVs and source-node identity before the usual atlas/LOD pipeline. Output positions/normals are float32, so reprojection is not byte identity with source positions. Double-precision offsets avoid first rounding a large shifted coordinate to float32. Precision already lost in source POSITION values or node transforms cannot be recovered. Coordinate/normal working buffers are bounded to batches of 4096 vertices in addition to the existing in-memory mesh. General placement cannot be combined with manual cartographic placement or rotation.
 
 Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `name` and `node_index`. Instances with the same name remain separate features; unnamed nodes use `node_<index>`. The option authors new tile content even for small inputs and keeps node boundaries through parent simplification. It may increase primitive counts and metadata size.
 
