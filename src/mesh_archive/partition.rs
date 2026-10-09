@@ -150,7 +150,9 @@ mod tests {
         let triangle = Triangle {
             positions: [[-1e-38, 0.0, 0.0], [1e6, 0.0, 0.0], [1.0, 0.0, 0.0]],
             normals: None,
-            texcoords: None,
+            tangents: None,
+            texcoords: [None; 2],
+            colors: None,
             material: None,
         };
         let mut bounds = Bounds::empty();
@@ -166,7 +168,9 @@ mod tests {
         let triangle = Triangle {
             positions: [[0.0; 3]; 3],
             normals: None,
-            texcoords: None,
+            tangents: None,
+            texcoords: [None; 2],
+            colors: None,
             material: None,
         };
         let triangles = vec![triangle; 10];

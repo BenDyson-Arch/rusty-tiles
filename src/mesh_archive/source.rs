@@ -4,7 +4,9 @@ use crate::{JobError, JobErrorKind};
 use serde_json::{Map, Value};
 use std::ops::Range;
 mod json;
+mod material;
 mod texture;
+pub(super) use material::Material;
 
 pub(super) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub(super) const MAX_TRIANGLES: usize = 100_000;
@@ -24,7 +26,9 @@ const IDENTITY: Matrix = [
 pub(super) struct Triangle {
     pub positions: [[f32; 3]; 3],
     pub normals: Option<[[f32; 3]; 3]>,
-    pub texcoords: Option<[[f32; 2]; 3]>,
+    pub tangents: Option<[[f32; 4]; 3]>,
+    pub texcoords: [Option<[[f32; 2]; 3]>; 2],
+    pub colors: Option<[[f32; 4]; 3]>,
     pub material: Option<usize>,
 }
 
@@ -38,7 +42,7 @@ pub(super) struct Image {
 
 pub(super) struct Geometry {
     pub triangles: Vec<Triangle>,
-    pub materials: Vec<Value>,
+    pub materials: Vec<Material>,
     pub images: Vec<Image>,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
@@ -183,6 +187,8 @@ struct Accessor<'a> {
     stride: usize,
     count: usize,
     component: usize,
+    normalized: bool,
+    width: usize,
 }
 impl Accessor<'_> {
     fn scalar(&self, i: usize, c: usize) -> f64 {
@@ -203,13 +209,20 @@ impl Accessor<'_> {
     fn vec3(&self, i: usize) -> [f64; 3] {
         std::array::from_fn(|c| self.scalar(i, c))
     }
-    fn texcoord(&self, i: usize) -> [f32; 2] {
-        let divisor = match self.component {
-            5121 => u8::MAX as f64,
-            5123 => u16::MAX as f64,
-            _ => 1.,
+    fn value(&self, i: usize, c: usize) -> f64 {
+        let divisor = if self.normalized {
+            match self.component {
+                5121 => u8::MAX as f64,
+                5123 => u16::MAX as f64,
+                _ => unreachable!("admitted normalized component"),
+            }
+        } else {
+            1.
         };
-        std::array::from_fn(|c| (self.scalar(i, c) / divisor) as f32)
+        self.scalar(i, c) / divisor
+    }
+    fn decoded<const N: usize>(&self, i: usize) -> [f32; N] {
+        std::array::from_fn(|c| self.value(i, c) as f32)
     }
 }
 
@@ -220,6 +233,7 @@ struct AccessorLayout {
     stride: usize,
     count: usize,
     component: usize,
+    normalized: bool,
     width: usize,
     min: Option<Vec<f64>>,
     max: Option<Vec<f64>>,
@@ -316,18 +330,18 @@ fn accessor_layouts(
             Some("SCALAR") => 1,
             Some("VEC2") => 2,
             Some("VEC3") => 3,
-            Some("VEC4" | "MAT2" | "MAT3" | "MAT4") => {
+            Some("VEC4") => 4,
+            Some("MAT2" | "MAT3" | "MAT4") => {
                 return Err(unsupported("accessor shape outside F1a"))
             }
             _ => return Err(invalid("missing or invalid accessor type")),
         };
         let supported = match width {
             1 => [5121, 5123, 5125].contains(&component) && !normalized,
-            2 => {
+            2..=4 => {
                 (component == 5126 && !normalized)
                     || ([5121, 5123].contains(&component) && normalized)
             }
-            3 => component == 5126 && !normalized,
             _ => false,
         };
         if !supported {
@@ -407,6 +421,7 @@ fn accessor_layouts(
             stride,
             count,
             component,
+            normalized,
             width,
             min,
             max,
@@ -436,9 +451,11 @@ fn decode_accessors<'a>(
             stride: layout.stride,
             count: layout.count,
             component: layout.component,
+            normalized: layout.normalized,
+            width: layout.width,
         };
-        let mut actual_min = [f64::INFINITY; 3];
-        let mut actual_max = [f64::NEG_INFINITY; 3];
+        let mut actual_min = [f64::INFINITY; 4];
+        let mut actual_max = [f64::NEG_INFINITY; 4];
         for i in 0..layout.count {
             if i.is_multiple_of(1024) {
                 check()?;
@@ -468,95 +485,6 @@ fn decode_accessors<'a>(
     Ok(result)
 }
 
-fn materials(doc: &Value) -> Result<Vec<Value>> {
-    let input = list(doc, "materials")?;
-    if input.len() > 256 {
-        return Err(unsupported("F1a material ceiling exceeded"));
-    }
-    let unit = |value: &Value| -> Result<()> {
-        if !(0.0..=1.0).contains(&number(value)?) {
-            return Err(invalid("material factor outside [0,1]"));
-        }
-        Ok(())
-    };
-    for material in input {
-        object(
-            material,
-            &[
-                "name",
-                "pbrMetallicRoughness",
-                "emissiveFactor",
-                "alphaMode",
-                "alphaCutoff",
-                "doubleSided",
-            ],
-        )?;
-        if let Some(pbr) = material.get("pbrMetallicRoughness") {
-            object(
-                pbr,
-                &[
-                    "baseColorFactor",
-                    "metallicFactor",
-                    "roughnessFactor",
-                    "baseColorTexture",
-                ],
-            )?;
-            if let Some(info) = pbr.get("baseColorTexture") {
-                object(info, &["index", "texCoord"])?;
-                reference(list(doc, "textures")?, &info["index"])?;
-                if info.get("texCoord").map(uint).transpose()?.unwrap_or(0) != 0 {
-                    return Err(unsupported("baseColorTexture requires TEXCOORD_0"));
-                }
-            }
-            if let Some(v) = pbr.get("baseColorFactor") {
-                vector::<4>(v)?;
-                for c in array(v)? {
-                    unit(c)?;
-                }
-            }
-            for key in ["metallicFactor", "roughnessFactor"] {
-                if let Some(v) = pbr.get(key) {
-                    unit(v)?;
-                }
-            }
-        }
-        if let Some(v) = material.get("emissiveFactor") {
-            vector::<3>(v)?;
-            for c in array(v)? {
-                unit(c)?;
-            }
-        }
-        if let Some(v) = material.get("alphaMode") {
-            match v.as_str() {
-                Some("OPAQUE" | "MASK") => {}
-                Some("BLEND") => {
-                    return Err(unsupported("F1a does not preserve blended draw order"))
-                }
-                _ => return Err(invalid("invalid alphaMode")),
-            }
-        }
-        if material
-            .get("alphaCutoff")
-            .map(number)
-            .transpose()?
-            .is_some_and(|v| v < 0.)
-        {
-            return Err(invalid("negative alphaCutoff"));
-        }
-        if material.get("doubleSided").is_some_and(|v| !v.is_boolean()) {
-            return Err(invalid("doubleSided must be boolean"));
-        }
-    }
-    Ok(input
-        .iter()
-        .cloned()
-        .map(|mut v| {
-            v.as_object_mut().unwrap().remove("name");
-            v
-        })
-        .collect())
-}
-
 fn multiply(a: Matrix, b: Matrix) -> Matrix {
     std::array::from_fn(|r| std::array::from_fn(|c| (0..4).map(|k| a[r][k] * b[k][c]).sum()))
 }
@@ -583,6 +511,37 @@ fn linear(m: Matrix) -> Result<(f64, [[f64; 3]; 3])> {
         ));
     }
     Ok((det, cof.map(|row| row.map(|v| v / det))))
+}
+
+/// A baked tangent basis is supported only when the accumulated linear map
+/// preserves angles and relative axis lengths. Scale first to avoid overflow
+/// in the Gram matrix; reflections are allowed and adjust tangent handedness.
+fn conformal(m: Matrix) -> Result<()> {
+    let magnitude = (0..3)
+        .flat_map(|r| (0..3).map(move |c| m[r][c].abs()))
+        .fold(0.0_f64, f64::max);
+    let gram: [[f64; 3]; 3] = std::array::from_fn(|a| {
+        std::array::from_fn(|b| {
+            (0..3)
+                .map(|r| (m[r][a] / magnitude) * (m[r][b] / magnitude))
+                .sum()
+        })
+    });
+    let squared_scale = (0..3).map(|i| gram[i][i]).sum::<f64>() / 3.;
+    if !squared_scale.is_finite()
+        || squared_scale <= 0.
+        || (0..3).any(|r| {
+            (0..3).any(|c| {
+                let expected = if r == c { squared_scale } else { 0. };
+                (gram[r][c] - expected).abs() > squared_scale * 1e-10
+            })
+        })
+    {
+        return Err(unsupported(
+            "authored TANGENT requires a conformal accumulated transform",
+        ));
+    }
+    Ok(())
 }
 
 fn transform(node: &Value) -> Result<Matrix> {
@@ -678,13 +637,55 @@ fn transform(node: &Value) -> Result<Matrix> {
     Ok(result)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum VertexRole {
+    Position,
+    Normal,
+    Tangent,
+    Texcoord(usize),
+    Color,
+}
+impl VertexRole {
+    fn admits(self, accessor: &AccessorLayout) -> bool {
+        let float = accessor.component == 5126 && !accessor.normalized;
+        let normalized = [5121, 5123].contains(&accessor.component) && accessor.normalized;
+        match self {
+            Self::Position | Self::Normal => accessor.width == 3 && float,
+            Self::Tangent => accessor.width == 4 && float,
+            Self::Texcoord(_) => accessor.width == 2 && (float || normalized),
+            Self::Color => [3, 4].contains(&accessor.width) && (float || normalized),
+        }
+    }
+}
 struct Primitive {
     position: usize,
     normal: Option<usize>,
-    texcoord: Option<usize>,
+    tangent: Option<usize>,
+    texcoords: [Option<usize>; 2],
+    color: Option<usize>,
     indices: Option<usize>,
     count: usize,
     material: Option<usize>,
+}
+impl Primitive {
+    fn attributes(&self) -> impl Iterator<Item = (VertexRole, usize)> + '_ {
+        std::iter::once((VertexRole::Position, self.position))
+            .chain(self.normal.map(|i| (VertexRole::Normal, i)))
+            .chain(self.tangent.map(|i| (VertexRole::Tangent, i)))
+            .chain(
+                self.texcoords
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(set, &i)| i.map(|i| (VertexRole::Texcoord(set), i))),
+            )
+            .chain(self.color.map(|i| (VertexRole::Color, i)))
+    }
+    fn vertices(&self, data: &[Accessor<'_>], start: usize) -> [usize; 3] {
+        let vertices = [start, start + 1, start + 2];
+        self.indices.map_or(vertices, |a| {
+            vertices.map(|i| data[a].scalar(i, 0) as usize)
+        })
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BufferViewUse {
@@ -695,6 +696,7 @@ enum BufferViewUse {
 fn primitives(
     doc: &Value,
     data: &[AccessorLayout],
+    materials: &[Material],
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<Vec<Primitive>>> {
     let get = |i: usize| {
@@ -743,24 +745,35 @@ fn primitives(
             if p.get("mode").map(uint).transpose()?.unwrap_or(4) != 4 {
                 return Err(unsupported("F1a supports TRIANGLES only"));
             }
-            object(&p["attributes"], &["POSITION", "NORMAL", "TEXCOORD_0"])?;
-            let position = field(&p["attributes"], "POSITION")?;
-            let normal = p["attributes"].get("NORMAL").map(uint).transpose()?;
-            let texcoord = p["attributes"].get("TEXCOORD_0").map(uint).transpose()?;
-            let pos = get(position)?;
-            for (i, is_texcoord) in std::iter::once((position, false))
-                .chain(normal.map(|i| (i, false)))
-                .chain(texcoord.map(|i| (i, true)))
-            {
+            let attributes = object(
+                &p["attributes"],
+                &[
+                    "POSITION",
+                    "NORMAL",
+                    "TANGENT",
+                    "TEXCOORD_0",
+                    "TEXCOORD_1",
+                    "COLOR_0",
+                ],
+            )?;
+            let attribute = |name| attributes.get(name).map(uint).transpose();
+            let mut primitive = Primitive {
+                position: field(&p["attributes"], "POSITION")?,
+                normal: attribute("NORMAL")?,
+                tangent: attribute("TANGENT")?,
+                texcoords: [attribute("TEXCOORD_0")?, attribute("TEXCOORD_1")?],
+                color: attribute("COLOR_0")?,
+                indices: p.get("indices").map(uint).transpose()?,
+                count: 0,
+                material: p.get("material").map(uint).transpose()?,
+            };
+            let pos = get(primitive.position)?;
+            for (role, i) in primitive.attributes() {
                 let a = get(i)?;
-                if is_texcoord {
-                    if a.width != 2 || ![5121, 5123, 5126].contains(&a.component) {
-                        return Err(unsupported(
-                            "TEXCOORD_0 must be f32 or normalized unsigned VEC2",
-                        ));
-                    }
-                } else if a.component != 5126 || a.width != 3 {
-                    return Err(unsupported("POSITION/NORMAL must be f32 VEC3"));
+                if !role.admits(a) {
+                    return Err(unsupported(
+                        "vertex accessor encoding outside semantic profile",
+                    ));
                 }
                 if a.count != pos.count {
                     return Err(invalid("vertex attribute/POSITION count mismatch"));
@@ -778,16 +791,23 @@ fn primitives(
                     return Err(invalid("invalid vertex accessor alignment/target"));
                 }
             }
-            if doc["accessors"][position].get("min").is_none()
-                || doc["accessors"][position].get("max").is_none()
+            if doc["accessors"][primitive.position].get("min").is_none()
+                || doc["accessors"][primitive.position].get("max").is_none()
             {
                 return Err(invalid("POSITION requires min/max"));
             }
-            let indices = p.get("indices").map(uint).transpose()?;
-            let count = if let Some(i) = indices {
+            if primitive.texcoords[1].is_some() && primitive.texcoords[0].is_none() {
+                return Err(invalid("TEXCOORD_1 requires consecutive TEXCOORD_0"));
+            }
+            if primitive.tangent.is_some() && primitive.normal.is_none() {
+                return Err(unsupported(
+                    "authored TANGENT requires authored NORMAL in this profile",
+                ));
+            }
+            primitive.count = if let Some(i) = primitive.indices {
                 let a = get(i)?;
                 used_indices[i] = true;
-                if a.width != 1 || ![5121, 5123, 5125].contains(&a.component) {
+                if a.width != 1 || ![5121, 5123, 5125].contains(&a.component) || a.normalized {
                     return Err(unsupported("indices must be unsigned SCALAR"));
                 }
                 let view = use_view(i, BufferViewUse::Indices)?;
@@ -804,33 +824,37 @@ fn primitives(
             } else {
                 pos.count
             };
-            if !count.is_multiple_of(3) {
+            if !primitive.count.is_multiple_of(3) {
                 return Err(invalid("TRIANGLES count must be divisible by three"));
             }
-            total += count / 3;
+            total += primitive.count / 3;
             if total > MAX_TRIANGLES {
                 return Err(unsupported("declared triangle ceiling exceeded"));
             }
-            let material = p.get("material").map(uint).transpose()?;
-            if material.is_some_and(|i| i >= list(doc, "materials").unwrap_or(&[]).len()) {
-                return Err(invalid("material reference out of range"));
+            if let Some(i) = primitive.material {
+                let material = materials
+                    .get(i)
+                    .ok_or_else(|| invalid("material reference out of range"))?;
+                for binding in material.bindings() {
+                    if primitive
+                        .texcoords
+                        .get(binding.texcoord)
+                        .is_none_or(Option::is_none)
+                    {
+                        return Err(invalid(
+                            "material texture requires its bound primitive TEXCOORD set",
+                        ));
+                    }
+                }
+                if material.has_normal_texture()
+                    && (primitive.normal.is_none() || primitive.tangent.is_none())
+                {
+                    return Err(unsupported(
+                        "normalTexture requires authored NORMAL and TANGENT in this profile",
+                    ));
+                }
             }
-            if material.is_some_and(|i| {
-                doc["materials"][i]["pbrMetallicRoughness"]
-                    .get("baseColorTexture")
-                    .is_some()
-            }) && texcoord.is_none()
-            {
-                return Err(invalid("textured material requires primitive TEXCOORD_0"));
-            }
-            prepared.push(Primitive {
-                position,
-                normal,
-                texcoord,
-                indices,
-                count,
-                material,
-            });
+            prepared.push(primitive);
         }
         meshes.push(prepared);
     }
@@ -851,41 +875,50 @@ fn validate_primitive_payload(
     data: &[Accessor<'_>],
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<()> {
-    let mut positions = std::collections::HashSet::new();
-    let mut normals = std::collections::HashSet::new();
-    let mut texcoords = std::collections::HashSet::new();
+    let mut attributes = std::collections::HashSet::new();
     let mut indices = std::collections::HashSet::new();
     for p in meshes.iter().flatten() {
         check()?;
         let pos = &data[p.position];
-        if positions.insert(p.position) {
-            for i in 0..pos.count {
-                if i.is_multiple_of(1024) {
-                    check()?;
-                }
-                if pos.vec3(i).iter().any(|v| v.abs() > 1_000_000.) {
-                    return Err(unsupported("source position outside local mesh domain"));
-                }
+        for (role, accessor) in p.attributes() {
+            // UV sets share identical payload semantics even when an accessor
+            // is bound to both. Other semantic roles remain independently checked.
+            let cached_role = match role {
+                VertexRole::Texcoord(_) => VertexRole::Texcoord(0),
+                role => role,
+            };
+            if !attributes.insert((cached_role, accessor)) {
+                continue;
             }
-        }
-        if let Some(n) = p.normal.filter(|n| normals.insert(*n)) {
-            for i in 0..pos.count {
-                if i.is_multiple_of(1024) {
-                    check()?;
-                }
-                if (length(data[n].vec3(i)) - 1.).abs() > 1e-4 {
-                    return Err(invalid("source NORMAL must be unit length"));
-                }
-            }
-        }
-        if let Some(t) = p.texcoord.filter(|t| texcoords.insert(*t)) {
-            let a = &data[t];
+            let a = &data[accessor];
             for i in 0..a.count {
                 if i.is_multiple_of(1024) {
                     check()?;
                 }
-                if (0..2).any(|c| a.scalar(i, c).abs() > 1_000_000.) {
-                    return Err(unsupported("TEXCOORD_0 outside supported finite magnitude"));
+                match role {
+                    VertexRole::Position => {
+                        if a.vec3(i).iter().any(|v| v.abs() > 1_000_000.) {
+                            return Err(unsupported("source position outside local mesh domain"));
+                        }
+                    }
+                    VertexRole::Normal | VertexRole::Tangent => {
+                        if (length(a.vec3(i)) - 1.).abs() > 1e-4 {
+                            return Err(invalid("source NORMAL/TANGENT XYZ must be unit length"));
+                        }
+                        if role == VertexRole::Tangent && ![-1., 1.].contains(&a.scalar(i, 3)) {
+                            return Err(invalid("source TANGENT W must be exactly -1 or +1"));
+                        }
+                    }
+                    VertexRole::Texcoord(_) => {
+                        if (0..2).any(|c| a.value(i, c).abs() > 1_000_000.) {
+                            return Err(unsupported("TEXCOORD outside supported finite magnitude"));
+                        }
+                    }
+                    VertexRole::Color => {
+                        if (0..a.width).any(|c| !(0.0..=1.0).contains(&a.value(i, c))) {
+                            return Err(unsupported("COLOR_0 outside bounded [0,1] profile"));
+                        }
+                    }
                 }
             }
         }
@@ -904,6 +937,23 @@ fn validate_primitive_payload(
                 if index >= pos.count || index == reserved {
                     return Err(invalid(
                         "triangle index out of range or reserved restart value",
+                    ));
+                }
+            }
+        }
+        if let Some(tangent) = p.tangent {
+            for start in (0..p.count).step_by(3) {
+                if start.is_multiple_of(3072) {
+                    check()?;
+                }
+                let vertices = p.vertices(data, start);
+                let sign = data[tangent].scalar(vertices[0], 3);
+                if vertices[1..]
+                    .iter()
+                    .any(|&i| data[tangent].scalar(i, 3) != sign)
+                {
+                    return Err(unsupported(
+                        "mixed triangle TANGENT W has undefined tangent space",
                     ));
                 }
             }
@@ -939,7 +989,7 @@ pub(super) struct Document {
     meshes: Vec<Vec<Primitive>>,
     instances: Vec<Instance>,
     triangle_count: usize,
-    materials: Vec<Value>,
+    materials: Vec<Material>,
     textures: Vec<Value>,
     samplers: Vec<Value>,
 }
@@ -1014,9 +1064,9 @@ impl Document {
             }
         }
         let accessors = accessor_layouts(&doc, &buffer_lengths, &mut check)?;
-        let materials = materials(&doc)?;
+        let materials = material::parse(&doc)?;
         let (images, textures, samplers) = texture::metadata(&doc, &mut resources, &mut check)?;
-        let meshes = primitives(&doc, &accessors, &mut check)?;
+        let meshes = primitives(&doc, &accessors, &materials, &mut check)?;
         let (instances, triangle_count) = scene_plan(&doc, &meshes, &mut check)?;
         check()?;
         Ok(Self {
@@ -1170,6 +1220,9 @@ fn scene_plan(
         let (det, normal_matrix) = linear(world)?;
         if let Some(mesh) = nodes[i].get("mesh") {
             let mesh = uint(mesh)?;
+            if meshes[mesh].iter().any(|p| p.tangent.is_some()) {
+                conformal(world)?;
+            }
             for p in &meshes[mesh] {
                 triangle_count += p.count / 3;
             }
@@ -1227,16 +1280,15 @@ pub(super) fn decode(
                 if start.is_multiple_of(3072) {
                     check()?;
                 }
-                let mut vertices = [start, start + 1, start + 2];
-                if let Some(a) = p.indices {
-                    vertices = vertices.map(|i| data[a].scalar(i, 0) as usize);
-                }
+                let mut vertices = p.vertices(&data, start);
                 if det < 0. {
                     vertices.swap(1, 2);
                 }
                 let mut positions = [[0.; 3]; 3];
                 let mut normals = p.normal.map(|_| [[0.; 3]; 3]);
-                let mut texcoords = p.texcoord.map(|_| [[0.; 2]; 3]);
+                let mut tangents = p.tangent.map(|_| [[0.; 4]; 3]);
+                let mut texcoords = p.texcoords.map(|a| a.map(|_| [[0.; 2]; 3]));
+                let mut colors = p.color.map(|_| [[0.; 4]; 3]);
                 for (corner, index) in vertices.into_iter().enumerate() {
                     let pos = data[p.position].vec3(index);
                     for r in 0..3 {
@@ -1259,14 +1311,43 @@ pub(super) fn decode(
                         }
                         output[corner] = mapped.map(|v| (v / norm) as f32);
                     }
-                    if let (Some(a), Some(output)) = (p.texcoord, &mut texcoords) {
-                        output[corner] = data[a].texcoord(index);
+                    if let (Some(a), Some(output)) = (p.tangent, &mut tangents) {
+                        let t = data[a].vec3(index);
+                        let mapped: [f64; 3] =
+                            std::array::from_fn(|r| (0..3).map(|c| world[r][c] * t[c]).sum());
+                        let norm = length(mapped);
+                        if !norm.is_finite() || norm == 0. {
+                            return Err(unsupported("tangent transform outside numeric domain"));
+                        }
+                        let xyz = mapped.map(|v| (v / norm) as f32);
+                        output[corner] = [
+                            xyz[0],
+                            xyz[1],
+                            xyz[2],
+                            (data[a].scalar(index, 3) * det.signum()) as f32,
+                        ];
+                    }
+                    for (accessor, output) in p.texcoords.into_iter().zip(&mut texcoords) {
+                        if let (Some(a), Some(output)) = (accessor, output) {
+                            output[corner] = data[a].decoded(index);
+                        }
+                    }
+                    if let (Some(a), Some(output)) = (p.color, &mut colors) {
+                        let rgb = data[a].decoded::<3>(index);
+                        let alpha = if data[a].width == 3 {
+                            1.
+                        } else {
+                            data[a].value(index, 3) as f32
+                        };
+                        output[corner] = [rgb[0], rgb[1], rgb[2], alpha];
                     }
                 }
                 triangles.push(Triangle {
                     positions,
                     normals,
+                    tangents,
                     texcoords,
+                    colors,
                     material: p.material,
                 });
             }

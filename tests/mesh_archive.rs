@@ -277,7 +277,7 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
             d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
             d["nodes"][0]["scale"] = json!([1, 1, 1]);
         }),
-        ("texture", JobErrorKind::Unsupported, |d, _| {
+        ("missing-texture-reference", JobErrorKind::InvalidInput, |d, _| {
             d["materials"] = json!([{"normalTexture":{"index":0}}])
         }),
         ("extras", JobErrorKind::Unsupported, |d, _| {
@@ -286,7 +286,7 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
         ("unknown-extension", JobErrorKind::Unsupported, |d, _| {
             d["extensionsUsed"] = json!(["EXT_unknown"])
         }),
-        ("uv", JobErrorKind::Unsupported, |d, _| {
+        ("uv1-non-vec2", JobErrorKind::Unsupported, |d, _| {
             d["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_1"] = json!(0)
         }),
         ("blend", JobErrorKind::Unsupported, |d, _| {

@@ -5,7 +5,7 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | Input and goal | Command | Build and limits |
 | --- | --- | --- |
 | Static textured GLB/glTF needing spatial tiles and coarser geometry | `mesh-to-3tz` | Standard for local/manual or grid-free placement; other eligible CRS operations need native-geospatial. Supported triangle geometry and base-colour materials only |
-| Local static GLB/glTF with PNG/JPEG base-color textures and full-detail leaves | `mesh-local-to-3tz` | New bounded foundation: explicit local metres/Y-up, source image bytes and UV/material/sampler associations preserved; bounded relative local resources; no coarse LOD. See the [profile](architecture/f1b2-contract.md) |
+| Local static GLB/glTF with PNG/JPEG core PBR textures and full-detail leaves | `mesh-local-to-3tz` | Bounded foundation: explicit local metres/Y-up, exact shared resources, UV0/UV1, authored tangents/colors; normal maps require authored companions and conformal accumulated transforms. No coarse LOD. See the [profile](architecture/f1b3-contract.md) |
 | Existing GLB/glTF to preserve, without creating LOD | `glb-to-3tz` | Standard; bundles supported local resources and preserves source content |
 | Existing tileset directory to package | `convert` | Standard; packages existing content without generating geometry or LOD |
 | Eligible rusty-tiles explicit point/vector archive to migrate | `convert-to-implicit` | Standard; requires a regular tree and valid existing content, retains payload bytes; see [eligibility](CLI.md#convert-to-implicit) |
