@@ -20,6 +20,19 @@ symlink to replace or delete its referent. This is not a comparison against the
 entry inspected during preparation. The new output is always the completed
 directory, with the private staging permissions described by D1.
 
+The raster consumer rejects source/output overlap before loading pixels,
+emitting events or staging. An existing regular-file output must not identify
+the source file, including hard-link aliases. An existing directory output must
+not identify any source ancestor. These are filesystem identity comparisons,
+so path spelling, parent aliases and case aliases do not defeat the check.
+The final output symlink remains unfollowed: replacing a link to the source or
+its containing directory preserves the referent and remains allowed.
+
+These admission checks do not reserve source locations against unrelated
+writers. Source files and their ancestors must not be relocated by another
+actor between admission and publication; no hostile-writer snapshot protection
+is claimed. Runtime publication remains format-independent.
+
 ## State transitions and visibility
 
 The publisher allocates a private recovery container beside the destination.

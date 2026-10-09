@@ -128,6 +128,58 @@ def run(binary, evidence_path=None):
             assert inventory(output) == before
             assert not list(root.glob('.tiles-*'))
             evidence['preservation_cases'].append({'name': kind, 'checks': ['create-new-conflict', 'producer-refusal']})
+        overlap_root = root / 'overlap'
+        overlap_root.mkdir()
+        same = overlap_root / 'same.tif'
+        make_source(same)
+        containing = overlap_root / 'containing'
+        old_tree(containing)
+        nested_source = containing / 'nested/source.tif'
+        make_source(nested_source)
+        hard_source = overlap_root / 'hard-source.tif'
+        make_source(hard_source)
+        hard_output = overlap_root / 'hard-output'
+        os.link(hard_source, hard_output)
+        alias_parent = overlap_root / 'parent-alias'
+        alias_parent.symlink_to(overlap_root, target_is_directory=True)
+        overlap_cases = [('same-file', same, same),
+                         ('source-inside-output', nested_source, containing),
+                         ('containing-through-parent-alias', nested_source, alias_parent / 'containing'),
+                         ('source-parent-alias', alias_parent / 'containing/nested/source.tif', containing),
+                         ('same-through-parent-alias', same, alias_parent / 'same.tif'),
+                         ('hardlink-alias', hard_source, hard_output)]
+        if os.name == 'nt':
+            case_output = overlap_root / 'CaseOutput'
+            case_output.mkdir()
+            case_source = case_output / 'source.tif'
+            make_source(case_source)
+            overlap_cases.append(('windows-case-alias', case_source, overlap_root / 'caseoutput'))
+        evidence['overlap_refusals'] = []
+        for name, input_path, output_path in overlap_cases:
+            before = inventory(overlap_root)
+            input_before = input_path.read_bytes()
+            refused, parsed = invoke(input_path, output_path)
+            assert refused.returncode == 2 and parsed['error']['kind'] == 'invalid_request', (name, parsed)
+            assert input_path.read_bytes() == input_before
+            assert inventory(overlap_root) == before
+            assert not list(root.glob('.tiles-*')) and not list(overlap_root.glob('.tiles-*'))
+            evidence['overlap_refusals'].append({'name': name, 'exit_code': refused.returncode,
+                                                'input_sha256': hashlib.sha256(input_before).hexdigest()})
+        evidence['unfollowed_symlink_positives'] = []
+        for name, input_path, referent in [('source-file', hard_source, hard_source),
+                                            ('containing-input-directory', nested_source, containing)]:
+            output = overlap_root / ('leaf-link-' + name)
+            output.symlink_to(referent, target_is_directory=referent.is_dir())
+            reference_before = inventory(referent)
+            input_before = input_path.read_bytes()
+            supplied_input = output / 'nested/source.tif' if name == 'containing-input-directory' else input_path
+            result, parsed = invoke(supplied_input, output)
+            assert result.returncode == 0, (name, parsed)
+            report = check_output(output, 0)
+            assert parsed['rasterReport'] == report
+            assert inventory(referent) == reference_before and input_path.read_bytes() == input_before
+            assert not list(overlap_root.glob('.tiles-*'))
+            evidence['unfollowed_symlink_positives'].append({'name': name, 'report': report})
         other_source = root / 'other-source.tif'
         make_source(other_source, 55)
         earlier_holders = set()
@@ -182,10 +234,12 @@ def run(binary, evidence_path=None):
             earlier_holders = allowed_holders
             evidence['concurrent_cases'].append({'number': number, 'final_variant': winner, 'processes': results})
     evidence['counts'] = {'positive': len(evidence['positive_cases']), 'preservation': len(evidence['preservation_cases']),
-                          'concurrent': len(evidence['concurrent_cases'])}
+                          'concurrent': len(evidence['concurrent_cases']),
+                          'overlap_refusals': len(evidence['overlap_refusals']),
+                          'unfollowed_symlink_positives': len(evidence['unfollowed_symlink_positives'])}
     if evidence_path:
         Path(evidence_path).write_text(json.dumps(evidence, indent=2) + '\n')
-    print('D2 real CLI oracle passed: 6 replacement leaves, 6 preservation checks, 8 cross-process races')
+    print(f"D2 real CLI oracle passed: 6 replacement leaves, 6 preservation checks, {len(evidence['overlap_refusals'])} overlap refusals, 2 unfollowed-link positives, 8 cross-process races")
     return evidence
 
 

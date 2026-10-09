@@ -105,6 +105,49 @@ fn same_source(a: &Metadata, b: &Metadata) -> bool {
     }
     a.len() == b.len() && a.modified().ok() == b.modified().ok()
 }
+// Source identity follows ancestors; destination identity deliberately leaves
+// its final symlink unfollowed because Replace moves that entry, not its target.
+#[cfg(feature = "native-geospatial")]
+fn reject_source_overlap(source: &Path, output: &Path) -> Result<(), JobError> {
+    let metadata = match fs::symlink_metadata(output) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(JobError::io(
+                "inspect raster source/output overlap",
+                output,
+                e,
+            ))
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    let same = |a: &Path, b: &Path| {
+        same_file::is_same_file(a, b)
+            .map_err(|e| JobError::io("compare raster source/output identity", b, e))
+    };
+    let mut overlap = false;
+    if metadata.is_file() {
+        overlap |= same(source, output)?;
+    }
+    if metadata.is_dir() {
+        for ancestor in source.ancestors().skip(1) {
+            if same(ancestor, output)? {
+                overlap = true;
+                break;
+            }
+        }
+    }
+    if overlap {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "raster output must not replace the source file or a directory containing it",
+        ));
+    }
+    Ok(())
+}
+
 // Narrow TIFF tag admission, not a pixel or metadata decoder. GDAL does not
 // expose standalone transfer functions in its COLOR_PROFILE domain.
 #[cfg(feature = "native-geospatial")]
@@ -354,6 +397,7 @@ pub fn raster_to_directory(
             let source = fs::canonicalize(&request.input)
                 .map_err(|e| JobError::io("resolve raster source", &request.input, e))?;
             let target = DirectoryTarget::prepare(&request.output, request.policy)?;
+            reject_source_overlap(&source, target.output())?;
             for suffix in [".aux.xml", ".msk", ".ovr"] {
                 let mut companion = source.as_os_str().to_os_string();
                 companion.push(suffix);

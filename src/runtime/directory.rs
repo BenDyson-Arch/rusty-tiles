@@ -25,6 +25,11 @@ pub(crate) struct DirectoryTarget {
     policy: OutputPolicy,
 }
 impl DirectoryTarget {
+    #[cfg(feature = "native-geospatial")]
+    pub(crate) fn output(&self) -> &Path {
+        &self.output
+    }
+
     pub(crate) fn prepare(output: &Path, policy: OutputPolicy) -> Result<Self, JobError> {
         let name = output.file_name().ok_or_else(|| {
             JobError::new(

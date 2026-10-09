@@ -431,3 +431,8 @@ filename units alongside the readable recovery paths: `encoding` is
 `unix-bytes` or `windows-utf16`, with `output` and `previousOutput` arrays.
 Use these native values when a filename is not representable as a Unicode
 string. Postcommit cleanup diagnostics do not change a successful exit status.
+
+Raster `--force` rejects source/output overlap before work: the output cannot
+be the source file, a hard-link alias, or a directory containing the source.
+Parent aliases are checked by filesystem identity. Replacing a final output
+symlink remains allowed because its referent is preserved.
