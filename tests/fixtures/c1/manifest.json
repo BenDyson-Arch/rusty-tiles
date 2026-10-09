@@ -889,6 +889,22 @@
       "exitCode": 3,
       "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
       "sha256": "aa6af4d01072028b64953b4927e75a7744e4da841ebdf21f0e49f8f595d12d32"
+    },
+    {
+      "name": "zip_descriptor_32_crc_equals_signature",
+      "path": "zip_descriptor_32_crc_equals_signature.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.",
+      "sha256": "7d15f388a4a6c7a5662ff7dffc16b8b6a356a953bf70ce22246605f25cfcd23f"
+    },
+    {
+      "name": "zip_descriptor_64_crc_equals_signature",
+      "path": "zip_descriptor_64_crc_equals_signature.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.",
+      "sha256": "1efec1a49ba11a9c7300eb01421830520296ec1822cd510126b3180809f60a60"
     }
   ]
 }

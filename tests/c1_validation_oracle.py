@@ -414,6 +414,18 @@ def generate(directory):
                 container_case(name + '_' + field + '_mismatch',
                                framed_archive(zip_files, zip64=wide, descriptor=signature, corrupt='descriptor_' + field),
                                'invalid_input', 'Immediate descriptor ' + field + ' contradicts actual data and central directory.')
+    # Four literal bytes analytically selected so CRC equals descriptor signature.
+    # Unsigned descriptor must not lose its CRC to an assumed signature prefix.
+    signature_crc_bytes = bytes.fromhex('ac0a7ad5')
+    assert zlib.crc32(signature_crc_bytes) == 0x08074b50
+    signature_doc = {'asset': {'version': '2.0'}, 'buffers': [{'uri': 'data.bin', 'byteLength': 4}]}
+    signature_tileset = copy.deepcopy(tileset); signature_tileset['root']['content']['uri'] = 'tile.gltf'
+    signature_files = {'data.bin': signature_crc_bytes, 'tileset.json': json.dumps(signature_tileset).encode(),
+                       'tile.gltf': json.dumps(signature_doc).encode()}
+    for wide in [False, True]:
+        container_case('zip_descriptor_' + ('64' if wide else '32') + '_crc_equals_signature',
+                       framed_archive(signature_files, zip64=wide, descriptor='unsigned'), None,
+                       'Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.')
     manifest = {'schemaVersion': 1, 'generator': 'Independent standard-library glTF/GLB/ZIP/3TZ byte fixtures', 'cases': cases}
     (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
