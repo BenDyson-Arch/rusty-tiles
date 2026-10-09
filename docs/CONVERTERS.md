@@ -19,7 +19,7 @@ The three spatial tilers write 3D Tiles 1.1 implicit hierarchies by default. The
 
 ## Choose placement before conversion
 
-- **Meshes:** place local model coordinates with `--cartographic-position-degrees`. Geographic and EPSG:3857 export adapters use specific axis conventions and optional source offsets. Arbitrary projected mesh CRS support is still pending; see [mesh placement](FORMATS.md#mesh-placement).
+- **Meshes:** place local model coordinates with `--cartographic-position-degrees`, or select a general horizontal CRS with explicit source axes, height offset and optional shift. Geographic and EPSG:3857 adapters retain their existing conventions. General placement follows the shared grid-free/native CRS policy; see [mesh placement](FORMATS.md#mesh-placement).
 - **Point clouds:** choose `--source-crs local` for metre XYZ, `header` for a LAS CRS, or an explicit supported CRS. Georeferenced conversion requires an explicit offset to ellipsoidal metre heights. Use zero only if the source already has those heights.
 - **Vectors:** GeoJSON defaults to longitude/latitude; GeoPackage uses its layer CRS. Select layers and decide height handling explicitly. The default build refuses CRS definitions outside its verified grid-free tier. See [vector requirements](VECTOR.md#requirements).
 - **Imagery and terrain:** use the native build and locally installed CRS resources. Terrain additionally requires metre heights, an explicit height offset and a fill height; see the [terrain guide](TERRAIN.md).

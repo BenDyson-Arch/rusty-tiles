@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use rusty_tiles::error::Error;
 use rusty_tiles::georef::{
-    parse_metashape_offset, Cartographic, RotationDegrees, SourceCrs, SourceOffset,
+    parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
 };
 use rusty_tiles::pack::{convert_to_3tz_reported, PackOptions};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
@@ -471,14 +471,24 @@ struct MeshArgs {
         default_value_t = rusty_tiles::DEFAULT_MAX_TEXEL_DENSITY
     )]
     max_texel_density: f64,
-    /// POSITION CRS: auto (detect), geographic (lon°/height/−lat°), or epsg:3857.
+    /// Source CRS: auto/legacy adapters, or an EPSG, WKT or PROJ horizontal CRS.
     #[arg(
         long = "sourceCrs",
         visible_alias = "source-crs",
         default_value = "auto"
     )]
     source_crs: String,
-    /// Source shift E N [A] in metres (EPSG:3857). Added in double precision.
+    /// General CRS axes after node transforms: xyz (E,N,height), y-up (E,height,-N).
+    #[arg(long = "sourceAxes", visible_alias = "source-axes", value_enum)]
+    source_axes: Option<SourceAxes>,
+    /// Metres added to source height plus A to give ellipsoidal height; required for general CRS.
+    #[arg(
+        long = "heightOffset",
+        visible_alias = "height-offset",
+        allow_hyphen_values = true
+    )]
+    height_offset: Option<f64>,
+    /// Source shift E N [A]: E/N in horizontal CRS units, A metres; added in f64.
     #[arg(
         long = "sourceOffset",
         visible_alias = "source-offset",
@@ -486,7 +496,7 @@ struct MeshArgs {
         allow_hyphen_values = true
     )]
     source_offset: Vec<f64>,
-    /// Source offset text file with `E:`, `N:` and optional `A:` metre values.
+    /// Offset file: E/N in source horizontal units and optional A in metres.
     #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
     source_offset_file: Option<PathBuf>,
     /// Disable lossless meshopt compression. Both modes retain float32 geometry.
@@ -917,7 +927,6 @@ fn tileset_opts(io: &IoArgs, a: &PlacementArgs) -> Result<CreateTilesetOptions, 
 
 fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
     let ts = tileset_opts(&a.io, &a.placement)?;
-    let source_crs = SourceCrs::parse_cli(&a.source_crs)?;
     if !a.source_offset.is_empty() && a.source_offset_file.is_some() {
         return Err(Error::msg(
             "pass only one of --sourceOffset and --sourceOffsetFile",
@@ -936,27 +945,31 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
     } else {
         None
     };
-    if source_offset.is_some() && source_crs == SourceCrs::Geographic {
-        return Err(Error::msg(
-            "--sourceOffset requires --sourceCrs auto or epsg:3857",
-        ));
-    }
-    Ok(MeshTo3tzOptions {
+    let mut options = MeshTo3tzOptions {
         explicit: a.explicit,
         texture_format: a.texture_format,
         basisu: a.basisu.clone(),
         cartographic: ts.cartographic,
         rotation: ts.rotation,
-        force: ts.force,
+        force: a.io.force,
         max_triangles: a.max_triangles,
         max_bytes: a.max_bytes,
         tile_size: a.tile_size,
         max_texel_density: a.max_texel_density,
-        source_crs,
         source_offset,
+        source_axes: a.source_axes,
+        height_offset: a.height_offset,
         meshopt: !a.no_meshopt,
         node_features: a.node_features,
-    })
+        ..MeshTo3tzOptions::default()
+    };
+    options.set_source_crs(&a.source_crs)?;
+    if source_offset.is_some() && options.source_crs == SourceCrs::Geographic {
+        return Err(Error::msg(
+            "--sourceOffset requires --sourceCrs auto or epsg:3857",
+        ));
+    }
+    Ok(options)
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ use tiles_core::{
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, CreateTilesetOptions, Error, Event, EventSink, MeshTo3tzOptions, Reporter,
-    SourceCrs,
+    SourceAxes,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -182,7 +182,8 @@ fn placement(
 #[pyfunction]
 #[pyo3(signature = (input, output, *, cartographic=None, rotation=None, force=false,
     max_triangles=20_000, max_bytes=204_800, tile_size=2048, texture_format="lossless",
-    source_crs="auto", source_offset=None, meshopt=true, explicit=false, node_features=false, callback=None))]
+    source_crs="auto", source_offset=None, meshopt=true, explicit=false, node_features=false,
+    source_axes=None, height_offset=None, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_3tz(
     py: Python<'_>,
@@ -200,6 +201,8 @@ fn mesh_to_3tz(
     meshopt: bool,
     explicit: bool,
     node_features: bool,
+    source_axes: Option<&str>,
+    height_offset: Option<f64>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<ConversionResult> {
     let (cartographic, rotation) = placement(cartographic, rotation)?;
@@ -213,14 +216,19 @@ fn mesh_to_3tz(
             ))
         }
     };
-    let source_crs =
-        SourceCrs::parse_cli(source_crs).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let source_axes = source_axes
+        .map(|axes| match axes {
+            "xyz" => Ok(SourceAxes::Xyz),
+            "y-up" => Ok(SourceAxes::YUp),
+            _ => Err(PyValueError::new_err("source_axes must be xyz or y-up")),
+        })
+        .transpose()?;
     if source_offset.is_some_and(|v| v.iter().any(|n| !n.is_finite())) {
         return Err(PyValueError::new_err(
-            "source_offset must contain finite metre offsets",
+            "source_offset must contain finite offsets (E/N in horizontal units, A in metres)",
         ));
     }
-    let options = MeshTo3tzOptions {
+    let mut options = MeshTo3tzOptions {
         cartographic,
         rotation,
         force,
@@ -228,7 +236,8 @@ fn mesh_to_3tz(
         max_bytes,
         tile_size,
         texture_format,
-        source_crs,
+        source_axes,
+        height_offset,
         source_offset: source_offset.map(|[easting, northing, height]| SourceOffset {
             easting,
             northing,
@@ -239,6 +248,9 @@ fn mesh_to_3tz(
         node_features,
         ..MeshTo3tzOptions::default()
     };
+    options
+        .set_source_crs(source_crs)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     run_conversion(py, callback, |reporter| {
         tiles_core::tile::mesh_to_3tz_reported(&input, &output, &options, reporter)
     })
