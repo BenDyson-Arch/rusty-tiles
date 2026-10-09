@@ -74,7 +74,8 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
     if uri.is_empty() {
         return Err(invalid("resource URI must not be empty"));
     }
-    if uri.len() > MAX_URI_BYTES || uri.split('/').count() > MAX_COMPONENTS {
+    let component_count = uri.split('/').count();
+    if uri.len() > MAX_URI_BYTES || component_count > MAX_COMPONENTS {
         return Err(unsupported("resource URI exceeds length/component ceiling"));
     }
     if uri.starts_with('/') || uri.contains([':', '?', '#']) {
@@ -86,7 +87,7 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
         return Err(invalid("resource URI must name a file"));
     }
     let mut parts = Vec::new();
-    for raw in uri.split('/') {
+    for (index, raw) in uri.split('/').enumerate() {
         let mut decoded = Vec::with_capacity(raw.len());
         let bytes = raw.as_bytes();
         let mut cursor = 0;
@@ -108,9 +109,7 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
                 decoded.push(high * 16 + low);
                 cursor += 3;
             } else {
-                if byte.is_ascii()
-                    && !(byte.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=@".contains(&byte))
-                {
+                if byte.is_ascii() && !(byte.is_ascii_alphanumeric() || b"-._~".contains(&byte)) {
                     return Err(invalid("invalid unescaped resource URI character"));
                 }
                 decoded.push(byte);
@@ -124,6 +123,11 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
         }
         if part.contains(['/', '\\']) {
             return Err(unsupported("resource URI contains an encoded separator"));
+        }
+        if index + 1 == component_count && matches!(part.as_str(), "." | "..") {
+            return Err(invalid(
+                "resource URI terminal dot component denotes a directory",
+            ));
         }
         match part.as_str() {
             "" | "." => continue,
@@ -271,9 +275,51 @@ struct Output {
 }
 impl Output {
     fn bind(path: &Path) -> Result<Self> {
+        // Some platforms report a missing descendant of a regular file as
+        // NotFound rather than NotADirectory. Inspect the nearest existing
+        // parent so those requests receive the same classification everywhere.
+        let absolute = std::path::absolute(path)
+            .map_err(|error| JobError::io("resolve absolute mesh output", path, error))?;
+        let mut parent = absolute.parent().ok_or_else(|| {
+            JobError::new(
+                JobErrorKind::InvalidRequest,
+                "mesh output needs a parent directory",
+            )
+        })?;
+        loop {
+            match fs::metadata(parent) {
+                Ok(entry) if entry.is_dir() => break,
+                Ok(_) => {
+                    return Err(JobError::new(
+                        JobErrorKind::InvalidRequest,
+                        "mesh output parent must be a directory",
+                    ))
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    parent = parent
+                        .parent()
+                        .ok_or_else(|| JobError::io("inspect mesh output parent", parent, error))?;
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotADirectory => {
+                    return Err(JobError::new(
+                        JobErrorKind::InvalidRequest,
+                        "mesh output parent must be a directory",
+                    ));
+                }
+                Err(error) => {
+                    return Err(JobError::io("inspect mesh output parent", parent, error))
+                }
+            }
+        }
         let existing = match fs::symlink_metadata(path) {
             Ok(entry) => Some(entry),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) if error.kind() == io::ErrorKind::NotADirectory => {
+                return Err(JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "mesh output parent must be a directory",
+                ));
+            }
             Err(error) => return Err(JobError::io("inspect mesh output", path, error)),
         };
         if existing.as_ref().is_some_and(|entry| !entry.is_file()) {
@@ -533,7 +579,7 @@ pub(super) fn load(
             }
             index
         } else {
-            if captures.len() >= MAX_REQUESTS + 1 {
+            if captures.len() > MAX_REQUESTS {
                 return Err(unsupported("mesh unique source files exceed 65"));
             }
             if before.len() > MAX_TOTAL_BYTES - unique_bytes {
@@ -633,6 +679,39 @@ mod tests {
     }
 
     #[test]
+    fn terminal_dot_components_cannot_be_normalized_into_file_names() {
+        for uri in ["data.bin/.", "folder/..", "data.bin/%2e", "folder/%2e%2e"] {
+            let error = relative_uri(uri).unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::InvalidInput, "{uri}");
+        }
+        assert_eq!(
+            relative_uri("./folder/../data.bin").unwrap(),
+            PathBuf::from("data.bin")
+        );
+    }
+
+    #[test]
+    fn reserved_filename_characters_require_one_percent_decoding_pass() {
+        for uri in [
+            "a!b.bin", "a$b.bin", "a&b.bin", "a'b.bin", "a(b.bin", "a)b.bin", "a*b.bin", "a+b.bin",
+            "a,b.bin", "a;b.bin", "a=b.bin", "a@b.bin",
+        ] {
+            let error = relative_uri(uri).unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::InvalidInput, "{uri}");
+        }
+        assert_eq!(relative_uri("a%2Bb.bin").unwrap(), PathBuf::from("a+b.bin"));
+        assert_eq!(
+            relative_uri("a%252fb.bin").unwrap(),
+            PathBuf::from("a%2fb.bin")
+        );
+        assert_eq!(relative_uri("a%23b.bin").unwrap(), PathBuf::from("a#b.bin"));
+        assert_eq!(
+            relative_uri("a%2fb.bin").unwrap_err().kind(),
+            JobErrorKind::Unsupported
+        );
+    }
+
+    #[test]
     fn encoded_aliases_capture_one_immutable_resource() {
         let (directory, input, output) = setup(&["data.bin", "%64ata.bin"]);
         fs::write(directory.path().join("data.bin"), [0; 36]).unwrap();
@@ -661,6 +740,28 @@ mod tests {
         let error = load(&input, &output, || Ok(())).err().unwrap();
         assert_eq!(error.kind(), JobErrorKind::InvalidRequest);
         assert_eq!(fs::read(output).unwrap(), [0; 36]);
+    }
+
+    #[test]
+    fn output_descendants_of_regular_source_files_are_invalid_requests() {
+        let (directory, input, _) = setup(&["data.bin"]);
+        let dependency = directory.path().join("data.bin");
+        fs::write(&dependency, [0; 36]).unwrap();
+        let original = fs::read(&input).unwrap();
+        let unrelated = directory.path().join("unrelated-file");
+        fs::write(&unrelated, b"preserve").unwrap();
+        for output in [
+            input.join("out.3tz"),
+            dependency.join("out.3tz"),
+            unrelated.join("nested/out.3tz"),
+        ] {
+            let error = load(&input, &output, || Ok(())).err().unwrap();
+            assert_eq!(error.kind(), JobErrorKind::InvalidRequest);
+            assert!(!output.exists());
+            assert_eq!(fs::read(&input).unwrap(), original);
+            assert_eq!(fs::read(&dependency).unwrap(), [0; 36]);
+            assert_eq!(fs::read(&unrelated).unwrap(), b"preserve");
+        }
     }
 
     #[cfg(unix)]

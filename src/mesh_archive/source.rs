@@ -393,6 +393,13 @@ fn accessor_layouts(
             });
         let [min, max] = bounds;
         let (min, max) = (min?, max?);
+        if min
+            .as_ref()
+            .zip(max.as_ref())
+            .is_some_and(|(min, max)| min.iter().zip(max).any(|(min, max)| min > max))
+        {
+            return Err(invalid("accessor minimum exceeds maximum"));
+        }
         result.push(AccessorLayout {
             buffer: field(view, "buffer")?,
             start,
@@ -430,21 +437,31 @@ fn decode_accessors<'a>(
             count: layout.count,
             component: layout.component,
         };
+        let mut actual_min = [f64::INFINITY; 3];
+        let mut actual_max = [f64::NEG_INFINITY; 3];
         for i in 0..layout.count {
             if i.is_multiple_of(1024) {
                 check()?;
             }
             for c in 0..layout.width {
                 let x = accessor.scalar(i, c);
-                if !x.is_finite()
-                    || layout.min.as_ref().is_some_and(|v| x < v[c])
-                    || layout.max.as_ref().is_some_and(|v| x > v[c])
-                {
-                    return Err(invalid(
-                        "nonfinite accessor data or data outside declared bounds",
-                    ));
+                if !x.is_finite() {
+                    return Err(invalid("nonfinite accessor data"));
                 }
+                actual_min[c] = actual_min[c].min(x);
+                actual_max[c] = actual_max[c].max(x);
             }
+        }
+        if layout
+            .min
+            .as_ref()
+            .is_some_and(|values| values.as_slice() != &actual_min[..layout.width])
+            || layout
+                .max
+                .as_ref()
+                .is_some_and(|values| values.as_slice() != &actual_max[..layout.width])
+        {
+            return Err(invalid("accessor bounds disagree with actual extrema"));
         }
         result.push(accessor);
     }

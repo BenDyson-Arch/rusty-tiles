@@ -438,6 +438,61 @@ fn unused_external_dependency_output_alias_is_rejected_before_observation() {
     }
     assert_eq!(fs::read_dir(work.path()).unwrap().count(), 4);
 }
+
+#[test]
+fn contradictory_accessor_bounds_are_rejected_before_missing_dependency_io() {
+    let work = tempfile::tempdir().unwrap();
+    for unused in [false, true] {
+        let (input, dependency, _) = external_source(work.path());
+        fs::remove_file(dependency).unwrap();
+        let mut doc: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        if unused {
+            doc["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView":0, "componentType":5126, "count":1, "type":"VEC2",
+                "min":[2,0], "max":[1,1]
+            }));
+        } else {
+            doc["accessors"][0]["min"] = json!([4, 0, 0]);
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("absent/out.3tz");
+        let failure = mesh_to_archive(
+            MeshRequest::local_gltf(&input, &output, 1),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidInput);
+        assert!(!output.parent().unwrap().exists());
+        assert!(failure.retained_paths.is_empty());
+    }
+}
+
+#[test]
+fn enclosing_accessor_bounds_must_equal_actual_extrema_even_when_unused() {
+    let work = tempfile::tempdir().unwrap();
+    for unused in [false, true] {
+        let (input, _, _) = external_source(work.path());
+        let mut doc: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        if unused {
+            doc["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView":0, "componentType":5126, "count":1, "type":"VEC2",
+                "min":[-1,-1], "max":[1,1]
+            }));
+        } else {
+            doc["accessors"][0]["max"] = json!([4, 1, 0]);
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("absent/out.3tz");
+        let failure = mesh_to_archive(
+            MeshRequest::local_gltf(&input, &output, 1),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidInput);
+        assert!(!output.parent().unwrap().exists());
+        assert!(failure.retained_paths.is_empty());
+    }
+}
 #[test]
 fn observer_cancel_conflict_and_alias_preserve_source_and_destination() {
     let work = tempfile::tempdir().unwrap();

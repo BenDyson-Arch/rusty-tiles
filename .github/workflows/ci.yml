@@ -289,6 +289,10 @@ jobs:
             --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
             --node-modules target/terrain-browser/node_modules \
             --json-output "${{ runner.temp }}/f1b-appearance.json"
+          python3 -B tests/f1b_viewer.py --binary target/debug/rusty-tiles --external-resources \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/f1b-resource-appearance.json"
       - name: Retain mesh consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
