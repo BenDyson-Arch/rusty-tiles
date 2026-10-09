@@ -504,14 +504,36 @@
       "command": "cargo fmt --all --check",
       "status": "passed",
       "scope": "Final binding file separately rustfmt checked; final workspace formatting rechecked before package."
+    },
+    {
+      "command": "cargo package --locked (including verification)",
+      "status": "passed",
+      "package_snapshot_commit": "97177bd",
+      "packaged_files": 689,
+      "package_sha256": "ebe85fec6ac04c7ca9231e3c4e001d9b207c047288c8b1a49a94beca134fe88f",
+      "compiled_code_resource_hashes_verified": 83,
+      "scope": "Packaged Rust source/resources match final production pin. Subsequent evidence-only changes archive historical receipts and complete this verification summary; no production, oracle or fixture inputs changed.",
+      "log_sha256": "b5bf729f62ac32cdb29e9b7a16737d759013b92c50753f9a3b76f65cf5ceae3b"
     }
   ],
-  "remaining_checks": [
-    "source package verification"
-  ],
-  "note": "Final verification receipt will record these checks only after execution finishes.",
+  "remaining_checks": [],
   "execution_notes": [
     "An initial installed-API harness run omitted the required empty PATH and failed the environment assertion; the final run used the declared clean environment, passed all 37 tests, and needed no implementation change.",
     "Two observed-growth mutation tests first failed against the unchanged pre-fix production body; final full portable/native suites pass them plus all short-prefix controls. See growth-regression.json."
-  ]
+  ],
+  "final_receipts_sha256": {
+    "appearance-embedded-final.json": "ce89c36319753d1d49459bbc43478db899d191e1040ad709b02176bb0bb12d8b",
+    "appearance-external-final.json": "b8345a00861cd9355e8d991c7bd2e3580444e45f61fb36b9bf18378c22ee2b83",
+    "embedded-resource-final.json": "a4dddf3b1cfb683ee011c6d06e8f139bb921eb2b284f7db4d2d3b94f59306f7d",
+    "native-embedded-final.json": "8477b5ddd551becedaf6286bf704c82ecc5ead68922458366b9e168ccfa9e0e3",
+    "native-oracle-final.json": "978f763cefd41078dfde18e99697cd1bd4e9c703457a974f425c97649f72b099",
+    "portable-embedded-final.json": "290480c5698f0cc08cf4430fc6386768416fbaac97d93da92b6c809f023c8990",
+    "portable-geometry-final.json": "a3430325e63aa1fe48b1a0e830618cf9cbabfa381f6c7519c228cb16ad866c53",
+    "portable-oracle-final.json": "b99a0dc8e00455f8be446fc113038b853bdc67e0287b2fa439993e93364147d9",
+    "resource-final.json": "aa5c9033092fc1b88067cebdc7e243c07bb204d205697fb5c7e73fb00aa47913",
+    "routing-final.json": "2b25f2d85300feeb4d19559273d5c32d332107a5df1ef999ed64cad6c71b6d52",
+    "static-fixture-final.json": "175c37136c7934297445840d4a23f10f00bfbdd5ca42b5cb09ab2a6223bde86c",
+    "wheel-embedded-final.json": "d054567834abe927e1dda3b7420fb772ba36b9d86af6e5fd4844b9918691c9e6",
+    "wheel-parity-final.json": "00dded13ab61e2bb5dc77e027d28ba03ebeebe5ef06e67de6df2668ad1d26ebe"
+  }
 }
