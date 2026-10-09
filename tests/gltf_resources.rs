@@ -327,6 +327,9 @@ fn implicit_small_mesh_preserves_nested_buffer_image_and_schema_uri_bases() {
         // actual directory, then independently decodes positions and both images.
         let extracted = work.path().join("extracted");
         zip.extract(&extracted).unwrap();
+        // Release the archive before the later replacement check: Windows
+        // can refuse replacing a file while this inspection handle is open.
+        drop(zip);
         let (document, buffers, images) = gltf::import(extracted.join(model)).unwrap();
         let primitive = document
             .meshes()

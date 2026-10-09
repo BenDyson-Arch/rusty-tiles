@@ -139,5 +139,15 @@
   "publication": {
     "tagCreated": false,
     "pypiPublished": false
+  },
+  "windowsTestFollowup": {
+    "initialFailureJob": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37870520937/job/113627303054",
+    "finding": "The new extracted-resource regression kept its ZipArchive inspection handle open during forced replacement; Windows returned Access is denied.",
+    "change": "Close the inspection reader after extraction, retaining all replacement and byte-equality assertions. Production code is unchanged.",
+    "localFocusedResult": {
+      "resourceTestsPassed": 9,
+      "failed": 0
+    },
+    "hostedVerification": "See the current Windows CLI check on PR112 for the rerun."
   }
 }
