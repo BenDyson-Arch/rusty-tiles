@@ -610,6 +610,206 @@
     },
     {
       "action_edge_counts": {
+        "cancel_after_permission": 11,
+        "cancel_before_permission": 8,
+        "competitor_creates_destination": 16,
+        "discard_candidate": 44,
+        "encoder_error": 2,
+        "external_return_diagnostic": 5,
+        "grant_publication": 14,
+        "install_refused_existing_destination": 8,
+        "install_success": 8,
+        "publication_error": 16,
+        "seal": 22,
+        "secondary_abort_error": 22,
+        "secondary_cancellation": 12
+      },
+      "case": {
+        "callbacks": [],
+        "mode": "revive_failed_producer",
+        "name": "producer_failure_then_publication",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 188,
+      "invariants_hold": false,
+      "max_shortest_path_length": 8,
+      "reachable_state_monitor_pairs": 121,
+      "terminal_primary_cause_counts": {
+        "cancellation": 8,
+        "encoder_error": 16,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 5,
+        "precommit_failure": 32
+      },
+      "violations": {
+        "abort_before_permission_prevents_commit": {
+          "shortest_witness": [
+            {
+              "action": "encoder_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 34
+        },
+        "first_gate_cause_remains_primary": {
+          "shortest_witness": [
+            {
+              "action": "encoder_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            },
+            {
+              "action": "cancel_before_permission",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "cancellation",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 10
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
         "cancel_after_permission": 4,
         "cancel_before_permission": 8,
         "competitor_creates_destination": 6,
@@ -1489,34 +1689,9 @@
                 "primary_cause": "cancellation",
                 "workers": []
               }
-            },
-            {
-              "action": "install_success",
-              "after": {
-                "backup": "none",
-                "cancellation": "requested_before_permission",
-                "candidate": "no_candidate",
-                "destination": "new_destination",
-                "diagnostic": "none",
-                "events": [],
-                "phase": "committed",
-                "primary_cause": "cancellation",
-                "workers": []
-              },
-              "before": {
-                "backup": "none",
-                "cancellation": "requested_before_permission",
-                "candidate": "closed_checked_candidate",
-                "destination": "absent",
-                "diagnostic": "none",
-                "events": [],
-                "phase": "publishing",
-                "primary_cause": "cancellation",
-                "workers": []
-              }
             }
           ],
-          "violating_edges": 2
+          "violating_edges": 5
         }
       }
     },
@@ -2826,7 +3001,7 @@
       }
     }
   ],
-  "checkout_commit": "7f6abf0545453ae3948a2173efa3e5d26b899620",
+  "checkout_commit": "e54c32b9b26de88e7ac373fc740532abeb526023",
   "command": [
     "/usr/bin/python3",
     "bench/architecture_audit/foundation/model.py"
@@ -2836,12 +3011,13 @@
     "cleanup_error_reclassifies_commit": "committed_outcome_is_sticky",
     "discard_failed_restore_backup": "restore_failure_has_recovery",
     "later_abort_overwrites_primary": "first_gate_cause_remains_primary",
+    "producer_failure_then_publication": "abort_before_permission_prevents_commit",
     "publish_before_worker_event_drain": "closed_drained_before_publication",
     "replace_competitor_without_permission": "no_clobber_preserves_competitor",
     "split_abort_check_and_permission": "abort_before_permission_prevents_commit"
   },
   "invariants": {
-    "abort_before_permission_prevents_commit": "An accepted cancellation/observer abort before publication permission forbids later installation.",
+    "abort_before_permission_prevents_commit": "Every accepted fatal cause before publication permission forbids permission and installation.",
     "closed_drained_before_publication": "At permission grant and installation, all workers and events are drained and the candidate is sealed.",
     "committed_outcome_is_sticky": "After installation succeeds, no later error changes the outcome to precommit failure or recovery-required.",
     "first_gate_cause_remains_primary": "The first abort/fatal cause accepted at the synchronized gate remains primary; later errors are secondary. Publisher errors select the cause after publication permission.",
@@ -2852,7 +3028,7 @@
     "restore_failure_has_recovery": "Failure to restore a held previous destination yields recovery-required with the backup retained.",
     "terminal_resources_are_drained": "Committed, failed and recovery outcomes own no candidate, workers or pending observer events."
   },
-  "model_sha256": "d4c45893cb9c0814615a8019d536d63b0d69f684056a53c0edb67c9f9210fa15",
+  "model_sha256": "94aca84cb5fd1fde471171a7adc7200ca98b340e0bb2a65e615de8b7606e8a35",
   "not_proven": [
     "Production behavior",
     "Filesystem/OS primitives",

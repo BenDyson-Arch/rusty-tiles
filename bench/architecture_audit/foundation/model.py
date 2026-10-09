@@ -144,6 +144,8 @@ def transitions(state: State, case: Case):
             yield "publication_error", replace(state, phase=failed_phase, primary_cause=state.primary_cause if state.primary_cause != Cause.NONE else Cause.PUBLISHER)
 
     elif phase == Phase.ABORTING:
+        if case.mode == "revive_failed_producer" and state.primary_cause == Cause.ENCODER and not state.workers and not state.events:
+            yield "seal", replace(state, phase=Phase.SEALED, candidate=Candidate.SEALED)
         if state.diagnostic == "none":
             cause = Cause.OBSERVER if case.mode == "overwrite_primary" else state.primary_cause
             yield "secondary_abort_error", replace(state, diagnostic="secondary_worker_or_observer_error", primary_cause=cause)
@@ -185,7 +187,7 @@ class History:
 
 
 INVARIANTS = {
-    "abort_before_permission_prevents_commit": "An accepted cancellation/observer abort before publication permission forbids later installation.",
+    "abort_before_permission_prevents_commit": "Every accepted fatal cause before publication permission forbids permission and installation.",
     "closed_drained_before_publication": "At permission grant and installation, all workers and events are drained and the candidate is sealed.",
     "committed_outcome_is_sticky": "After installation succeeds, no later error changes the outcome to precommit failure or recovery-required.",
     "no_clobber_preserves_competitor": "Without replace permission, a successful install cannot overwrite an existing destination.",
@@ -200,7 +202,6 @@ INVARIANTS = {
 
 def check_edge(before: State, action: str, after: State, history: History, case: Case):
     """Specification checks observe events/resources, not transition helpers."""
-    abort = history.abort_before_permission or action in ("cancel_before_permission", "observer_error_before_permission")
     committed = history.saw_commit or action == "install_success"
     primary = history.selected_primary
     accepted = {
@@ -210,10 +211,15 @@ def check_edge(before: State, action: str, after: State, history: History, case:
         "publication_error": Cause.PUBLISHER,
         "install_refused_existing_destination": Cause.PUBLISHER,
     }
+    # Publisher failures happen after permission; they do not establish a
+    # pre-permission abort. All accepted producer-side causes do.
+    abort = history.abort_before_permission or (
+        action in accepted and accepted[action] != Cause.PUBLISHER
+    )
     if primary == Cause.NONE and action in accepted:
         primary = accepted[action]
     violations = []
-    if abort and (action == "install_success" or after.phase == Phase.COMMITTED):
+    if abort and (action in ("grant_publication", "install_success") or after.phase in (Phase.PUBLISHING, Phase.COMMITTED)):
         violations.append("abort_before_permission_prevents_commit")
     if action in ("grant_publication", "install_success") and (before.workers or before.events or before.candidate != Candidate.SEALED):
         violations.append("closed_drained_before_publication")
@@ -297,6 +303,7 @@ def main():
             name = f"{policy}_{'_'.join(callbacks) or 'no_workers'}"
             cases.append(Case(name, "contract", policy, callbacks))
     controls = [
+        Case("producer_failure_then_publication", "revive_failed_producer", "no_clobber", ()),
         Case("callback_after_publish", "callback_after_publish", "no_clobber", ("ok",)),
         Case("split_abort_check_and_permission", "split_gate", "no_clobber", ("ok",)),
         Case("publish_before_worker_event_drain", "premature_gate", "no_clobber", ("ok", "ok")),
@@ -309,6 +316,7 @@ def main():
     valid = results[:len(cases)]
     negative = results[len(cases):]
     expected_control_properties = {
+        "producer_failure_then_publication": "abort_before_permission_prevents_commit",
         "callback_after_publish": "committed_outcome_is_sticky",
         "split_abort_check_and_permission": "abort_before_permission_prevents_commit",
         "publish_before_worker_event_drain": "closed_drained_before_publication",

@@ -28,8 +28,8 @@ python3 bench/architecture_audit/foundation/model.py --results /tmp/foundation-m
 `results.json` records the exact command, model SHA-256, checkout commit,
 Python/platform versions, bounds, invariants, reachable-state/edge counts and
 shortest counterexample witnesses. The recorded Python 3.14.7/Linux run passes
-14 contract cases and detects seven deliberately broken variants, exploring
-2,354 state/history pairs and 4,258 edges. The process exits nonzero if any
+14 contract cases and detects eight deliberately broken variants, exploring
+2,475 state/history pairs and 4,446 edges. The process exits nonzero if any
 contract case fails or any negative control misses its designated property.
 There is no dependency install, Rust build or production binary invocation.
 
@@ -49,8 +49,8 @@ staging -> sealed -> publication permission -> install -> committed
       drain/discard -> precommit failure
 ```
 
-Cancellation or callback failure accepted before publication permission prevents
-installation. The first abort/fatal cause accepted by that gate remains primary;
+Every accepted fatal cause (including producer failure), cancellation or callback
+failure before publication permission prevents permission and installation. The first abort/fatal cause accepted by that gate remains primary;
 later causes are secondary. Selection order is gate order, not wall-clock time.
 Once publication permission is granted, cancellation does not stop the attempt,
 and a publisher error can become primary. Permission is not installation: a
@@ -92,6 +92,7 @@ The safety limit raises an error rather than reporting a truncated run as proof.
 
 | Deliberately broken variant | Designated property that detects it |
 | --- | --- |
+| Encoder failure followed by invalid reseal/publication | Every pre-permission fatal cause prevents permission and installation |
 | Callback invoked after installation and reclassified as failure | Committed outcome remains committed |
 | Abort checked separately from publication permission | Abort before permission prevents installation |
 | Permission granted before workers/events drain | Closed/drained candidate required before publication |
@@ -123,3 +124,15 @@ publishers, process signals, crash recovery, durability, arbitrary retries,
 larger worker counts, staging deletion failure and format/report correctness
 are not proved. In particular, the one-attempt bound is not proof that a real
 implementation prevents double publication.
+
+## Independent review correction
+
+The original `e54c32b` monitor recorded encoder failure as the first cause but
+failed to remember it as a pre-permission abort. An externally supplied invalid
+encoder-error → seal → permission → commit trace therefore escaped detection.
+The transition generator prevented that trace; this was a checker gap, not an
+observed production defect. The corrected monitor covers every accepted
+pre-permission fatal cause and rejects permission itself after abort. Publisher
+errors after permission remain distinct. The eighth negative control exercises
+the exact producer-failure revival defect. Earlier seven-control evidence does
+not establish this newly tested property.
