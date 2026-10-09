@@ -196,40 +196,12 @@ fn regular(path: &Path) -> Result<fs::Metadata, JobError> {
     Ok(value)
 }
 
-/// Canonicalize existing ancestors without creating missing output parents.
-fn prospective_path(path: &Path) -> Result<PathBuf, JobError> {
-    let absolute =
-        std::path::absolute(path).map_err(|error| JobError::io("resolve output", path, error))?;
-    let mut ancestor = absolute.as_path();
-    let mut missing = Vec::new();
-    loop {
-        match fs::canonicalize(ancestor) {
-            Ok(mut resolved) => {
-                for name in missing.into_iter().rev() {
-                    resolved.push(name);
-                }
-                return Ok(resolved);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let name = ancestor
-                    .file_name()
-                    .ok_or_else(|| JobError::io("resolve output", path, error))?;
-                missing.push(name.to_os_string());
-                ancestor = ancestor
-                    .parent()
-                    .expect("an absolute path with a filename has a parent");
-            }
-            Err(error) => return Err(JobError::io("resolve output", path, error)),
-        }
-    }
-}
-
 fn resolve(
     Validated(mut request): Validated,
     mut checkpoint: impl FnMut() -> Result<(), JobError>,
 ) -> Result<Resolved, JobError> {
     checkpoint()?;
-    let output = prospective_path(&request.output)?;
+    let output = crate::output_path::resolve(&request.output)?;
     let output_metadata = match fs::symlink_metadata(&request.output) {
         Ok(value) => Some(value),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,

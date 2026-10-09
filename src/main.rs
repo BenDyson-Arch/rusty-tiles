@@ -15,8 +15,8 @@ use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
 use rusty_tiles::{
-    doctor, terrain, vector, ConversionResult, JobError, JobErrorKind, Observer, OutputPolicy,
-    Reporter, RunControl, RunEvent,
+    doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
+    MeshRequest, MeshResult, Observer, OutputPolicy, Reporter, RunControl, RunEvent,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -75,6 +75,9 @@ enum Command {
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
+    /// Static embedded untextured GLB in local metre/Y-up coordinates → explicit .3tz
+    #[command(name = "mesh-local-to-3tz")]
+    MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
@@ -97,6 +100,7 @@ impl Command {
             Self::ConvertToImplicit(_) => "convert-to-implicit",
             Self::GlbTo3tz(_) => "glb-to-3tz",
             Self::MeshTo3tz(_) => "mesh-to-3tz",
+            Self::MeshLocalTo3tz(_) => "mesh-local-to-3tz",
             Self::Vector(_) => "vector",
             Self::PointCloud(_) => "point-cloud",
             Self::Terrain(_) => "terrain",
@@ -512,6 +516,15 @@ struct MeshArgs {
     node_features: bool,
 }
 
+#[derive(Args)]
+struct LocalMeshArgs {
+    #[command(flatten)]
+    io: IoArgs,
+    /// Positive maximum triangle count per leaf; not a byte or memory budget
+    #[arg(long = "leaf-triangles")]
+    leaf_triangles: usize,
+}
+
 /// What a successful command produced.
 enum Outcome {
     /// A command with its own single machine result (validate, doctor).
@@ -520,6 +533,8 @@ enum Outcome {
     Converted(ConversionResult),
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
+    /// Published F1a local mesh with its finalized report.
+    Mesh(MeshResult),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
     Done,
@@ -572,6 +587,7 @@ fn main() -> ExitCode {
                     result.output,
                 )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
+                Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
                 Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
                 Outcome::Done => None,
             };
@@ -635,9 +651,9 @@ fn job_category(kind: JobErrorKind) -> (&'static str, u8) {
     }
 }
 
-struct CliPackageObserver;
+struct CliRunObserver;
 
-impl Observer for CliPackageObserver {
+impl Observer for CliRunObserver {
     fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
         let value = match event {
             RunEvent::Progress { phase, done, total } => {
@@ -653,6 +669,20 @@ impl Observer for CliPackageObserver {
     }
 }
 
+fn cleanup_diagnostics_summary(diagnostics: &[rusty_tiles::CleanupDiagnostic]) -> Value {
+    json!(diagnostics.iter().map(|diagnostic| {
+        json!({"path":diagnostic.path.to_string_lossy(),"kind":job_category(diagnostic.error.kind()).0,"message":diagnostic.error.to_string()})
+    }).collect::<Vec<_>>())
+}
+
+fn mesh_summary(result: &MeshResult) -> Value {
+    let report = json!(&result.report);
+    let mut summary = output_summary(&result.output, Some(&report), true);
+    summary["meshReport"] = report;
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
 fn package_summary(result: &PackageResult) -> Value {
     let mut summary = output_summary(&result.output, None, true);
     summary["packageReceipt"] = json!({
@@ -660,9 +690,7 @@ fn package_summary(result: &PackageResult) -> Value {
         "sourceBytes": result.receipt.source_bytes,
         "archiveBytes": result.receipt.archive_bytes,
     });
-    summary["cleanupDiagnostics"] = json!(result.cleanup_diagnostics.iter().map(|diagnostic| {
-        json!({"path":diagnostic.path.to_string_lossy(),"kind":job_category(diagnostic.error.kind()).0,"message":diagnostic.error.to_string()})
-    }).collect::<Vec<_>>());
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
 }
 
@@ -670,6 +698,9 @@ fn package_summary(result: &PackageResult) -> Value {
 /// things. Every other numeric field is a setting or a derived measurement and
 /// is reported under `settings`.
 const COUNT_KEYS: &[&str] = &[
+    // F1a local mesh
+    "triangles",
+    "leaf_tiles",
     // point-cloud, terrain and vector
     "points",
     "tiles",
@@ -740,6 +771,8 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
         ("features", "feature"),
         ("points", "point"),
         ("tiles", "tile"),
+        ("triangles", "triangle"),
+        ("leaf_tiles", "leaf"),
     ]
     .into_iter()
     .filter_map(|(key, noun)| counts[key].as_u64().map(|n| plural(n, noun)))
@@ -881,7 +914,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         }
         Command::Convert(a) => {
             let observer: Option<Arc<dyn Observer>> =
-                pack_events.then(|| Arc::new(CliPackageObserver) as Arc<dyn Observer>);
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             let run = RunControl::new(observer);
             let policy = if a.force {
                 OutputPolicy::Replace
@@ -902,6 +935,19 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::GlbTo3tz(a) => {
             let opts = tileset_opts(&a.io, &a.placement)?;
             Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
+        }
+        Command::MeshLocalTo3tz(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
+                .with_policy(policy);
+            Outcome::Mesh(mesh_to_archive(request, &run)?)
         }
         Command::MeshTo3tz(a) => {
             let opts = mesh_opts(&a)?;
@@ -1075,6 +1121,47 @@ mod tests {
                     .chain([lower])
             })
             .collect()
+    }
+
+    #[test]
+    fn local_mesh_requires_explicit_limit_and_rejects_legacy_options() {
+        assert!(Cli::try_parse_from([
+            "rusty-tiles",
+            "mesh-local-to-3tz",
+            "-i",
+            "in.glb",
+            "-o",
+            "out.3tz"
+        ])
+        .is_err());
+        let parsed = Cli::try_parse_from([
+            "rusty-tiles",
+            "mesh-local-to-3tz",
+            "-i",
+            "in.glb",
+            "-o",
+            "out.3tz",
+            "--leaf-triangles",
+            "1",
+        ])
+        .unwrap();
+        let Command::MeshLocalTo3tz(args) = parsed.command else {
+            panic!("wrong command")
+        };
+        assert_eq!(args.leaf_triangles, 1);
+        assert!(Cli::try_parse_from([
+            "rusty-tiles",
+            "mesh-local-to-3tz",
+            "-i",
+            "in.glb",
+            "-o",
+            "out.3tz",
+            "--leaf-triangles",
+            "1",
+            "--source-crs",
+            "auto"
+        ])
+        .is_err());
     }
 
     #[test]

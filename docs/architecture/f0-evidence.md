@@ -120,7 +120,8 @@ checks do not constitute a snapshot.
 
 ## Remaining limits
 
-The F0 runtime is used only by packaging. Other converters retain their old job,
+F0 established the runtime with packaging. [F1a](f1a-contract.md) adds the bounded
+local static mesh producer as its second consumer. Other converters retain their old job,
 callback/reporting and writer behavior, including the old ZIP writer's possible
 stderr output during failed destruction. Their implementation remains unproven
 under #113. No directory recovery, scene resource closure, semantic tileset
