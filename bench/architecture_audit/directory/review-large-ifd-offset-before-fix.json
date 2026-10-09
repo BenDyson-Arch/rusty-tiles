@@ -1,0 +1,56 @@
+[
+  {
+    "name": "within-signed-range",
+    "offset": 1099511627776,
+    "exit_code": 3,
+    "response": {
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "truncated TIFF tag directory",
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      },
+      "exitCode": 3,
+      "ok": false
+    },
+    "output_exists": false,
+    "stderr": ""
+  },
+  {
+    "name": "above-signed-range",
+    "offset": 9223372036854775808,
+    "exit_code": 1,
+    "response": {
+      "error": {
+        "code": "io",
+        "kind": "io",
+        "message": "read raster tag directory: Invalid argument (os error 22) (/tmp/rusty-tiles-d1-review-oyshnm5b/above-signed-range.tif)",
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      },
+      "exitCode": 1,
+      "ok": false
+    },
+    "output_exists": false,
+    "stderr": ""
+  },
+  {
+    "name": "u64-max",
+    "offset": 18446744073709551615,
+    "exit_code": 1,
+    "response": {
+      "error": {
+        "code": "io",
+        "kind": "io",
+        "message": "read raster tag directory: Invalid argument (os error 22) (/tmp/rusty-tiles-d1-review-oyshnm5b/u64-max.tif)",
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      },
+      "exitCode": 1,
+      "ok": false
+    },
+    "output_exists": false,
+    "stderr": ""
+  }
+]

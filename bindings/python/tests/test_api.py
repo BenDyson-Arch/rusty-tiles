@@ -69,6 +69,27 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_d1_native_capability_is_explicit_and_leaves_no_output(self):
+        output = self.root / "d1-raster"
+        events = []
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.raster_tile_to_directory(
+                ROOT / "tests/fixtures/d1-rgb.tif", output,
+                zoom=3, x=5, y=2, callback=events.append,
+            )
+        self.assertEqual(caught.exception.kind, "unsupported")
+        self.assertIn("native-geospatial", str(caught.exception))
+        self.assertFalse(output.exists())
+        self.assertEqual(events, [])
+
+    def test_d1_invalid_request_precedes_capability(self):
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.raster_tile_to_directory(
+                ROOT / "tests/fixtures/d1-rgb.tif", self.root / "invalid-d1",
+                zoom=25, x=0, y=0,
+            )
+        self.assertEqual(caught.exception.kind, "invalid_request")
+
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)

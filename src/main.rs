@@ -16,7 +16,8 @@ use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
 use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshRequest, MeshResult, Observer, OutputPolicy, Reporter, RunControl, RunEvent,
+    MeshRequest, MeshResult, Observer, OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult,
+    Reporter, RunControl, RunEvent,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -86,6 +87,8 @@ enum Command {
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
     Raster(RasterArgs),
+    /// Copy one aligned RGB GeoTIFF tile into a new directory (native-geospatial)
+    RasterTileToDirectory(RasterTileArgs),
 }
 
 impl Command {
@@ -105,6 +108,7 @@ impl Command {
             Self::PointCloud(_) => "point-cloud",
             Self::Terrain(_) => "terrain",
             Self::Raster(_) => "raster",
+            Self::RasterTileToDirectory(_) => "raster-tile-to-directory",
         }
     }
 }
@@ -122,6 +126,21 @@ struct IoArgs {
     /// Replace an existing output after successful conversion
     #[arg(short = 'f', long)]
     force: bool,
+}
+
+#[derive(Args)]
+struct RasterTileArgs {
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    /// New directory in an existing supported local parent
+    #[arg(short = 'o', long)]
+    output: PathBuf,
+    #[arg(long)]
+    zoom: u8,
+    #[arg(long)]
+    x: u32,
+    #[arg(long)]
+    y: u32,
 }
 
 /// 3d-tiles-tools placement of the generated root tile.
@@ -535,6 +554,7 @@ enum Outcome {
     Pack(PackageResult),
     /// Published F1a local mesh with its finalized report.
     Mesh(MeshResult),
+    RasterDirectory(RasterDirectoryResult),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
     Done,
@@ -588,6 +608,9 @@ fn main() -> ExitCode {
                 )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
+                Outcome::RasterDirectory(result) => {
+                    Some((raster_directory_summary(&result), result.output))
+                }
                 Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
                 Outcome::Done => None,
             };
@@ -673,6 +696,14 @@ fn cleanup_diagnostics_summary(diagnostics: &[rusty_tiles::CleanupDiagnostic]) -
     json!(diagnostics.iter().map(|diagnostic| {
         json!({"path":diagnostic.path.to_string_lossy(),"kind":job_category(diagnostic.error.kind()).0,"message":diagnostic.error.to_string()})
     }).collect::<Vec<_>>())
+}
+
+fn raster_directory_summary(result: &RasterDirectoryResult) -> Value {
+    let mut summary = output_summary(&result.output, None, false);
+    summary["rasterReport"] = json!(result.report);
+    summary["counts"] = json!({"tiles":1});
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
 }
 
 fn mesh_summary(result: &MeshResult) -> Value {
@@ -825,6 +856,9 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     }
     let path = shell_path(output);
     let next = match command {
+        "raster-tile-to-directory" => {
+            format!("serve {path}/tilejson.json with its tiles directory")
+        }
         "raster" => format!("rusty-tiles preview --cesium <Build/Cesium> --imagery {path}"),
         "terrain" => format!("rusty-tiles preview --cesium <Build/Cesium> --terrain {path}"),
         "createTilesetJson" => format!("rusty-tiles convert -i {path} -o <archive>.3tz"),
@@ -935,6 +969,14 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::GlbTo3tz(a) => {
             let opts = tileset_opts(&a.io, &a.placement)?;
             Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
+        }
+        Command::RasterTileToDirectory(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            let request =
+                RasterDirectoryRequest::web_mercator_rgb(a.input, a.output, a.zoom, a.x, a.y);
+            Outcome::RasterDirectory(rusty_tiles::raster_to_directory(request, &run)?)
         }
         Command::MeshLocalTo3tz(a) => {
             let observer: Option<Arc<dyn Observer>> =
@@ -1165,6 +1207,27 @@ mod tests {
     }
 
     #[test]
+    fn d1_requires_explicit_tile_address_and_has_no_replace_mode() {
+        let args = [
+            "rusty-tiles",
+            "raster-tile-to-directory",
+            "-i",
+            "source.tif",
+            "-o",
+            "output",
+            "--zoom",
+            "3",
+            "--x",
+            "5",
+            "--y",
+            "2",
+        ];
+        assert!(Cli::try_parse_from(args).is_ok());
+        assert!(Cli::try_parse_from(&args[..6]).is_err());
+        assert!(Cli::try_parse_from(args.into_iter().chain(["--force"])).is_err());
+    }
+
+    #[test]
     fn camel_case_options_and_subcommands_have_visible_kebab_aliases() {
         let cli = Cli::command();
         for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
@@ -1187,7 +1250,10 @@ mod tests {
                     .take(3)
                     .map(|arg| arg.get_id().as_str().to_owned())
                     .collect();
-                assert_eq!(first, ["input", "output", "force"], "{name}");
+                assert_eq!(&first[..2], ["input", "output"], "{name}");
+                if command.get_arguments().any(|arg| arg.get_id() == "force") {
+                    assert_eq!(first[2], "force", "{name}");
+                }
             }
         }
     }

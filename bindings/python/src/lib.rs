@@ -273,6 +273,47 @@ fn mesh_local_to_3tz(
     })
 }
 
+/// Published D1 raster directory; the standard wheel reports Unsupported.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct RasterDirectoryResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+#[pymethods]
+impl RasterDirectoryResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+#[pyfunction]
+#[pyo3(signature = (input, output, *, zoom, x, y, callback=None))]
+fn raster_tile_to_directory(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    zoom: u8,
+    x: u32,
+    y: u32,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<RasterDirectoryResult> {
+    let request = tiles_core::RasterDirectoryRequest::web_mercator_rgb(input, output, zoom, x, y);
+    let result = run_job(py, callback, |run| {
+        tiles_core::raster_to_directory(request, run)
+    })?;
+    Ok(RasterDirectoryResult {
+        output: result.output,
+        report: serde_json::json!(result.report),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
+}
+
 fn json_to_python(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
     Ok(match value {
         Value::Null => py.None(),
@@ -696,6 +737,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;
+    module.add_class::<RasterDirectoryResult>()?;
     module.add_class::<CleanupDiagnostic>()?;
     module.add("TilesError", module.py().get_type::<TilesError>())?;
     module.add(
@@ -720,6 +762,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(point_cloud_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
