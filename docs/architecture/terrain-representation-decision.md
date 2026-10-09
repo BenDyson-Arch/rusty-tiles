@@ -3,8 +3,10 @@
 Tracking: [#135](https://github.com/BenDyson-Arch/rusty-tiles/issues/135), under
 [#124](https://github.com/BenDyson-Arch/rusty-tiles/issues/124) and release gate #113.
 Audit baseline develop `5df15e7`; point P1 subsequently merged as `c4912f8`.
-Status: replacement implementation and independent acceptance are in progress;
-this decision document alone earns no producer acceptance. The user selected investigation of a
+Status: replacement implementation and focused independent local checks are
+complete; final PR CI is pending. [Executed evidence](../../bench/architecture_audit/terrain_acceptance/README.md)
+retains candidate pins and review limits. This decision document alone earns no
+producer acceptance. The user selected investigation of a
 standard replacement rather than a custom quantized-mesh viewer contract.
 
 ## Decision and consequences
@@ -54,7 +56,7 @@ becoming sidecar `100000000.0` before height quantization. The mask fixture was
 honored in that one exercised case; it is not proof of arbitrary mask support.
 See [baseline records](../../bench/architecture_audit/terrain_acceptance/README.md).
 
-## Revised T1 contract to implement
+## Revised T1 contract
 
 The initial source profile remains bounded: a standalone one-band Float32 or
 Float64 GeoTIFF with internal WGS84/EPSG:4326 PixelIsArea north-up georeferencing.

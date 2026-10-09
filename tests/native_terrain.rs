@@ -227,3 +227,179 @@ fn tiled_lossless_sources_and_oversized_decoded_block_admission() {
     assert!(error.error.to_string().contains("decoded-block"));
     assert!(!output.exists());
 }
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
+    use rusty_tiles::{JobError, JobErrorKind, Observer, RunEvent};
+    use std::{
+        collections::BTreeMap,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc, Barrier,
+        },
+    };
+
+    struct SourceGate {
+        barrier: Arc<Barrier>,
+        reached: AtomicBool,
+    }
+    impl Observer for SourceGate {
+        fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+            if matches!(
+                event,
+                RunEvent::Progress {
+                    phase: "terrain_source",
+                    ..
+                }
+            ) && !self.reached.swap(true, Ordering::SeqCst)
+            {
+                // Both independently owned GDAL datasets are live at this point.
+                self.barrier.wait();
+            }
+            Ok(())
+        }
+    }
+    fn inventory(root: &Path) -> BTreeMap<String, Vec<u8>> {
+        fn visit(root: &Path, path: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                let kind = entry.file_type().unwrap();
+                if kind.is_dir() {
+                    visit(root, &path, files);
+                } else {
+                    assert!(kind.is_file());
+                    let name = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .components()
+                        .map(|part| part.as_os_str().to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join("/");
+                    assert!(files.insert(name, std::fs::read(path).unwrap()).is_none());
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        visit(root, root, &mut files);
+        files
+    }
+    fn verify(result: &rusty_tiles::terrain::TerrainResult) -> BTreeMap<String, Vec<u8>> {
+        let files = inventory(&result.output);
+        let manifest: Value = serde_json::from_slice(&files["tileset.json"]).unwrap();
+        let report: Value = serde_json::from_slice(&files["conversion.json"]).unwrap();
+        assert_eq!(report, serde_json::to_value(&result.report).unwrap());
+        let mut expected = vec!["conversion.json".to_owned(), "tileset.json".to_owned()];
+        expected.extend(
+            manifest["root"]["children"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tile| tile["content"]["uri"].as_str().unwrap().to_owned()),
+        );
+        expected.sort();
+        assert_eq!(files.keys().cloned().collect::<Vec<_>>(), expected);
+        assert_eq!(
+            files.values().map(|bytes| bytes.len() as u64).sum::<u64>(),
+            result.report.generated_bytes
+        );
+        assert!(result.cleanup_diagnostics.is_empty());
+        files
+    }
+    fn configured(input: &Path, output: &Path, offset: f64, cells: u16) -> TerrainRequest {
+        TerrainRequest::new(
+            input,
+            output,
+            TerrainHeights::RawMetres {
+                height_offset_metres: offset,
+                fill_height_metres: -999.,
+            },
+            TerrainOptions::new(cells),
+        )
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let input_a = root.path().join("a.tif");
+    let input_b = root.path().join("b.tif");
+    let bytes_a = include_bytes!("fixtures/t1-multipatch-plane.tif");
+    let bytes_b = include_bytes!("fixtures/t1-plane.tif");
+    std::fs::write(&input_a, bytes_a).unwrap();
+    std::fs::write(&input_b, bytes_b).unwrap();
+    let output_a = root.path().join("a-output");
+    let output_b = root.path().join("b-output");
+    let barrier = Arc::new(Barrier::new(2));
+    let (a, b) = std::thread::scope(|scope| {
+        let spawn = |input: &Path, output: &Path, offset, cells| {
+            let request = configured(input, output, offset, cells);
+            let observer = Arc::new(SourceGate {
+                barrier: barrier.clone(),
+                reached: AtomicBool::new(false),
+            });
+            scope.spawn(move || {
+                let control = RunControl::new(Some(observer.clone()));
+                let result = terrain_to_directory(request, &control).unwrap();
+                assert!(observer.reached.load(Ordering::SeqCst));
+                (result, control)
+            })
+        };
+        let a = spawn(&input_a, &output_a, 10., 16);
+        let b = spawn(&input_b, &output_b, 100., 32);
+        (a.join().unwrap(), b.join().unwrap())
+    });
+    assert_eq!(
+        (
+            a.0.report.tiles,
+            a.0.report.cells_per_leaf,
+            a.0.report.height_offset_metres
+        ),
+        (6, 16, 10.)
+    );
+    assert_eq!(
+        (
+            b.0.report.tiles,
+            b.0.report.cells_per_leaf,
+            b.0.report.height_offset_metres
+        ),
+        (1, 32, 100.)
+    );
+    assert_ne!(
+        (a.0.report.width, a.0.report.height),
+        (b.0.report.width, b.0.report.height)
+    );
+    let first_a = verify(&a.0);
+    let first_b = verify(&b.0);
+    assert_ne!(first_a["tiles/0/0.glb"], first_b["tiles/0/0.glb"]);
+
+    // A used control cannot claim another job, and fresh CreateNew cannot alter publication.
+    let error = terrain_to_directory(configured(&input_a, &output_a, 250., 64), &a.1).unwrap_err();
+    assert_eq!(error.error.kind(), JobErrorKind::InvalidState);
+    let error = terrain_to_directory(
+        configured(&input_a, &output_a, 250., 64),
+        &RunControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.error.kind(), JobErrorKind::Conflict);
+    assert_eq!(inventory(&output_a), first_a);
+    assert_eq!(inventory(&output_b), first_b);
+
+    let replaced = terrain_to_directory(
+        configured(&input_a, &output_a, 250., 64).with_policy(OutputPolicy::Replace),
+        &RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            replaced.report.tiles,
+            replaced.report.cells_per_leaf,
+            replaced.report.height_offset_metres
+        ),
+        (1, 64, 250.)
+    );
+    let replacement = verify(&replaced);
+    assert_ne!(replacement, first_a);
+    assert_eq!(inventory(&output_b), first_b);
+    assert_eq!(std::fs::read(input_a).unwrap(), bytes_a.as_slice());
+    assert_eq!(std::fs::read(input_b).unwrap(), bytes_b.as_slice());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 4);
+}
