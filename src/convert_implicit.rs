@@ -136,12 +136,6 @@ pub fn convert_to_implicit_reported(
         &mut count,
     )?;
     crate::validate::inspect(crate::validate::ValidationRequest::new(input))?;
-    for index in 0..zip.len() {
-        let member = zip.by_index(index)?;
-        if member.name().ends_with(".b3dm") && !member.size().is_multiple_of(8) {
-            return Err(invalid(format!("unaligned b3dm payload {}; preserving its bytes would retain invalid content; re-run vector from source without --explicit",member.name())));
-        }
-    }
     let job = Job::begin(output, options.force)?;
     let staging = job.staging("tileset")?;
     let mut names = BTreeSet::new();
