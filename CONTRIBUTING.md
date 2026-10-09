@@ -151,6 +151,16 @@ Normal CI checks the wheel on CPython 3.10 and 3.14. Tag builds produce and
 smoke-test one `cp310-abi3` wheel per release platform; the stable ABI covers
 CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 
+The separate [Wheel acceptance workflow](.github/workflows/wheel-acceptance.yml)
+runs on relevant PRs into `develop` and is a mandatory release-workflow gate.
+It tests all five wheels with CPython 3.10 and 3.14, then installs the matching
+candidate wheels inside checksum-pinned official Blender 4.5.14 LTS bundles on
+Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS. Its uploaded JSON
+records the archive and executable hashes, actual runtime and wheel identity,
+and completed API tests. The optional Linux distribution Blender job is
+distinct; Linux ARM64 has no official Blender 4.5 bundle. See the
+[local reproduction and pin-update instructions](bindings/python/README.md).
+
 The Python suite drives the built CLI and checks its output with independent readers. It needs GDAL Python bindings that match your native GDAL, NumPy, laspy and pyproj.
 
 ```sh

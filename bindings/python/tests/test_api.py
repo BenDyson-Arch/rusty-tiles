@@ -1,5 +1,6 @@
 """Exercise the installed native extension using only the Python standard library."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 import importlib.metadata
 import json
 import math
@@ -80,7 +81,7 @@ class WheelAPI(unittest.TestCase):
 
     def test_vector_geopackage_readonly_height_and_layer_selection(self):
         source = self.root / "survey.gpkg"
-        with sqlite3.connect(source) as db:
+        with closing(sqlite3.connect(source)) as db, db:
             db.executescript("""
                 PRAGMA application_id=1196444487;
                 CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT,srs_id INTEGER PRIMARY KEY,
@@ -440,6 +441,7 @@ if __name__ == "__main__":
     if "bpy" in sys.modules:
         import bpy
         evidence["blender"] = bpy.app.version_string
+        evidence["blender_version"] = list(bpy.app.version)
         evidence["blender_build_hash"] = bpy.app.build_hash.decode("ascii")
     if report := os.environ.get("RUSTY_TILES_ACCEPTANCE_REPORT"):
         destination = Path(report)

@@ -1,6 +1,7 @@
 """Install a wheel into temporary storage using Blender's Python, then test it."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -9,6 +10,7 @@ import tempfile
 import venv
 
 from wheel_acceptance import clear_requested_report, copy_evidence, failure_reason, require_completion
+from download_blender import validate_distribution
 
 
 def main():
@@ -16,6 +18,8 @@ def main():
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--blender", default="blender", help="Blender executable name or path")
     parser.add_argument("--report-json", type=Path, help="Write runtime and test evidence as JSON")
+    parser.add_argument("--distribution-json", type=Path,
+                        help="Require the pinned official bundle recorded by download_blender.py")
     args = parser.parse_args()
     requested_report = clear_requested_report(args.report_json, args.wheel)
     wheel = args.wheel.resolve(strict=True)
@@ -23,6 +27,10 @@ def main():
     blender = shutil.which(args.blender)
     if blender is None:
         parser.error(f"Blender executable not found: {args.blender}")
+    distribution = None
+    if args.distribution_json is not None:
+        distribution = json.loads(args.distribution_json.read_text())
+        manifest, spec = validate_distribution(distribution, Path(blender))
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="rusty-tiles-blender-") as work:
         work = Path(work)
@@ -61,6 +69,14 @@ def main():
                     timeout=240,
                 )
             require_completion(evidence, wheel_sha256, require_blender=True)
+            if distribution is not None:
+                report = json.loads(evidence.read_text())
+                if report.get("blender_version") != [int(part) for part in manifest["version"].split(".")]:
+                    raise RuntimeError("The API suite ran a different Blender version from the pinned bundle")
+                if report.get("machine", "").lower() not in spec["machines"]:
+                    raise RuntimeError("The API suite ran a different architecture from the pinned bundle")
+                report["blender_distribution"] = distribution
+                evidence.write_text(json.dumps(report, indent=2) + "\n")
             completed = True
         except BaseException as error:
             runner_error = failure_reason(error)
