@@ -1,0 +1,77 @@
+{
+  "binary_sha256": "4856a19d5670acc83235b91bc5041faca9afb98913acccacc61696ecd0c6e075",
+  "cases": [
+    {
+      "case": "same-path",
+      "exit_code": 0,
+      "response": {
+        "cleanupDiagnostics": [],
+        "conversionReport": null,
+        "counts": {
+          "tiles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-tiles-d2-overlap-review-avos88dj/same-path/source.tif",
+        "rasterReport": {
+          "height": 256,
+          "profile": "d1-web-mercator-rgb",
+          "schema_version": 1,
+          "source_bytes": 196896,
+          "width": 256,
+          "x": 5,
+          "y": 2,
+          "z": 3
+        },
+        "reuse": null,
+        "settings": {},
+        "skippedFeatures": null
+      },
+      "source_original_sha256": "cf99cb9236f5ee97cdec885fae09db655b3679c8de629fc0b81407f5a4aad508",
+      "source_still_regular_file": false,
+      "source_exists": true,
+      "output_is_directory": true,
+      "backup_paths": [],
+      "output_members": [
+        "report.json",
+        "tilejson.json",
+        "tiles/3/5/2.png"
+      ]
+    },
+    {
+      "case": "source-inside-output",
+      "exit_code": 0,
+      "response": {
+        "cleanupDiagnostics": [],
+        "conversionReport": null,
+        "counts": {
+          "tiles": 1
+        },
+        "ok": true,
+        "output": "/tmp/rusty-tiles-d2-overlap-review-avos88dj/source-inside-output/dataset",
+        "rasterReport": {
+          "height": 256,
+          "profile": "d1-web-mercator-rgb",
+          "schema_version": 1,
+          "source_bytes": 196896,
+          "width": 256,
+          "x": 5,
+          "y": 2,
+          "z": 3
+        },
+        "reuse": null,
+        "settings": {},
+        "skippedFeatures": null
+      },
+      "source_original_sha256": "cf99cb9236f5ee97cdec885fae09db655b3679c8de629fc0b81407f5a4aad508",
+      "source_still_regular_file": false,
+      "source_exists": false,
+      "output_is_directory": true,
+      "backup_paths": [],
+      "output_members": [
+        "report.json",
+        "tilejson.json",
+        "tiles/3/5/2.png"
+      ]
+    }
+  ]
+}

@@ -132,3 +132,58 @@ including separately held file/symlink restoration and original directory modes.
 Full-suite and frontend-mapping results are recorded separately in
 `d2-implementation-results.json`. Windows-specific symlink and UTF-16 controls
 remain dependent on CI execution; Linux success does not qualify them.
+
+## Source/output overlap review correction
+
+The earlier "no remaining source blocker" assessment missed a consumer-level
+precondition: Replace must not retire the source itself or a directory containing
+it. The review on #130 identified this destructive admission gap. Independent
+reproduction in `d2-overlap-before.json` records candidate
+`4856a19d5670acc83235b91bc5041faca9afb98913acccacc61696ecd0c6e075` returning
+success for both identical source/output and source-inside-output. Both runs
+replaced/deleted the source. These were executed defects on disposable fixtures,
+not hypothetical namespace races or injected I/O failures.
+
+The external oracle now requires InvalidRequest / exit 2, exact input bytes and
+complete original inventory, and no hidden staging/recovery work for identical
+paths, containing output directories, source/output parent symlink aliases and
+hardlink aliases. It also positively requires replacement of a final-leaf symlink
+to the source file or containing source directory to preserve the referent. The
+source canonical path must be compared with the bound target leaf without
+following that leaf's symlink referent; otherwise the safe symlink cases would be
+incorrectly rejected. The containing-directory positive supplies its source
+through that very output symlink (`output/nested/source.tif`), proving canonical
+source binding survives retiring the alias while referent bytes remain intact.
+
+On Windows, merely appending the caller's leaf spelling to a canonical parent
+and comparing path strings is insufficient evidence against case/alternate-name
+aliases. Existing non-symlink directory identity must be compared with source
+ancestry, or equivalent native normalization must be established. Existing regular
+file hardlink identity is a separate admission check. Stable parent namespace and
+stable input assumptions remain explicit; these checks are not a source filesystem
+snapshot or identity-conditional rename against unrelated concurrent mutations.
+Final corrected candidate replay is pending and must supersede the earlier
+acceptance conclusion.
+
+Corrective guard source re-review: the consumer inspects the bound output leaf
+without following symlinks; existing regular files use native same-file identity,
+and existing directories compare that identity against each canonical source
+ancestor. This avoids path-spelling-only checks and covers hardlinks, parent
+aliases and filesystem case aliases without retiring a source container. The
+leaf-symlink early return preserves the intentionally safe symlink replacement
+semantics. Admission occurs before staging, and the existing source/parent
+stability assumptions remain necessary. No additional source defect was found
+in that guard. Windows case-alias execution is not qualified by the Linux run;
+its conditional oracle control is available but current native CI is Linux-only.
+
+## Corrected overlap replay
+
+The fixed candidate from `5c4bd6d` passes the complete independent D2 oracle:
+six overlap refusals with exact inventory preservation, two safe final-link
+positives (including input through the link), six general replacement cases,
+six preservation checks and eight subprocess races. It also passes all 40
+raster positives, 38 refusals and three sensitivity controls. The full native
+suite and Clippy pass; `d2-overlap-results.json` records totals and log hashes.
+`d2-overlap-source-manifest.json` verifies the tested source and candidate hash.
+The original source-deletion reproductions remain recorded separately. This
+supersedes the earlier no-blocker assessment; #130 remains held for review.

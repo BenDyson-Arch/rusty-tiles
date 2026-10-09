@@ -102,3 +102,14 @@ Replay the real-consumer replacement oracle after a native build:
 python3 -B tests/d2_directory_oracle.py target/debug/rusty-tiles \
   --json-output bench/architecture_audit/directory/d2-oracle.json
 ```
+
+### D2 overlap correction
+
+The review at `3d17e4` reproduced source deletion when the output identified the
+source or contained it. That candidate is not accepted. The raster consumer now
+compares filesystem identities before decoding, events or staging, including
+hard links and ancestor aliases, while leaving the final output symlink
+unfollowed. Corrected evidence is in `d2-overlap-oracle.json`,
+`d2-overlap-raster-regression.json`, `d2-overlap-results.json`, and
+`d2-overlap-source-manifest.json`. Earlier D2 receipts remain historical evidence
+and do not override this correction. #130 remains held for corrected review.
