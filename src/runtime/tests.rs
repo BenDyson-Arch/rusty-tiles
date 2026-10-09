@@ -492,3 +492,68 @@ fn staged_and_published_files_are_owner_only() {
         0o600
     );
 }
+
+#[test]
+fn concurrent_create_new_publishers_install_exactly_one_candidate() {
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("result");
+    let ready = Barrier::new(2);
+    let outcomes = thread::scope(|scope| {
+        let handles: Vec<_> = [b"first".as_slice(), b"second".as_slice()]
+            .into_iter()
+            .map(|bytes| {
+                let output = &output;
+                let ready = &ready;
+                scope.spawn(move || {
+                    let control = RunControl::default();
+                    let attempt = control.begin().unwrap();
+                    let mut staging = Staging::create(output, &attempt).unwrap();
+                    staging.writer().write_all(bytes).unwrap();
+                    attempt.close_events().unwrap();
+                    let artifact = staging.seal().unwrap();
+                    ready.wait();
+                    (bytes, artifact.publish(output, OutputPolicy::CreateNew))
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let winners: Vec<_> = outcomes
+        .iter()
+        .filter(|(_, result)| result.is_ok())
+        .collect();
+    assert_eq!(winners.len(), 1);
+    assert_eq!(fs::read(&output).unwrap(), winners[0].0);
+    for (_, outcome) in outcomes {
+        if let Err(failure) = outcome {
+            assert_eq!(failure.error.kind(), JobErrorKind::Conflict);
+            assert!(failure.retained_paths.is_empty());
+        }
+    }
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn real_replace_failure_preserves_competing_directory_and_cleans_candidate() {
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("result");
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let artifact = sealed(&output, &attempt);
+    fs::create_dir(&output).unwrap();
+    fs::write(output.join("competitor"), b"retained directory content").unwrap();
+    let failure = failed(artifact.publish(&output, OutputPolicy::Replace));
+    assert!(matches!(
+        failure.error.kind(),
+        JobErrorKind::Io | JobErrorKind::Conflict
+    ));
+    assert_eq!(
+        fs::read(output.join("competitor")).unwrap(),
+        b"retained directory content"
+    );
+    assert!(failure.retained_paths.is_empty());
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 1);
+}
