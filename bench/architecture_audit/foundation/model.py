@@ -144,8 +144,12 @@ def transitions(state: State, case: Case):
             yield "publication_error", replace(state, phase=failed_phase, primary_cause=state.primary_cause if state.primary_cause != Cause.NONE else Cause.PUBLISHER)
 
     elif phase == Phase.ABORTING:
-        if case.mode == "revive_failed_producer" and state.primary_cause == Cause.ENCODER and not state.workers and not state.events:
-            yield "seal", replace(state, phase=Phase.SEALED, candidate=Candidate.SEALED)
+        if (case.mode == "revive_failed_producer" and state.primary_cause == Cause.ENCODER
+                and state.diagnostic == "none" and not state.workers and not state.events):
+            # Only one deliberate revival: preserve the one-publication bound
+            # even if a later publisher failure returns to ABORTING.
+            yield "seal", replace(state, phase=Phase.SEALED, candidate=Candidate.SEALED,
+                                  diagnostic="invalid_producer_revival")
         if state.diagnostic == "none":
             cause = Cause.OBSERVER if case.mode == "overwrite_primary" else state.primary_cause
             yield "secondary_abort_error", replace(state, diagnostic="secondary_worker_or_observer_error", primary_cause=cause)
@@ -184,6 +188,7 @@ class History:
     abort_before_permission: bool = False
     saw_commit: bool = False
     selected_primary: Cause = Cause.NONE
+    saw_permission: bool = False
 
 
 INVARIANTS = {
@@ -194,6 +199,7 @@ INVARIANTS = {
     "restore_failure_has_recovery": "Failure to restore a held previous destination yields recovery-required with the backup retained.",
     "precommit_failure_preserves_destination": "Precommit failure cannot own a new destination; replace failure preserves the previous destination.",
     "terminal_resources_are_drained": "Committed, failed and recovery outcomes own no candidate, workers or pending observer events.",
+    "no_producer_work_after_seal": "Encoder errors and worker completion occur only during staging; producer work cannot resume after sealing.",
     "no_callbacks_after_seal": "Core callback delivery occurs only during staging, before seal/drain completes.",
     "postcommit_destination_survives_cleanup": "Cleanup and return diagnostics after installation preserve the installed destination.",
     "first_gate_cause_remains_primary": "The first abort/fatal cause accepted at the synchronized gate remains primary; later errors are secondary. Publisher errors select the cause after publication permission.",
@@ -211,11 +217,13 @@ def check_edge(before: State, action: str, after: State, history: History, case:
         "publication_error": Cause.PUBLISHER,
         "install_refused_existing_destination": Cause.PUBLISHER,
     }
-    # Publisher failures happen after permission; they do not establish a
-    # pre-permission abort. All accepted producer-side causes do.
+    # Observe permission independently: every accepted fatal cause before that
+    # event establishes the prohibition, regardless of its producer identity.
+    # Publisher failures in valid traces occur after permission, not before it.
     abort = history.abort_before_permission or (
-        action in accepted and accepted[action] != Cause.PUBLISHER
+        action in accepted and not history.saw_permission
     )
+    permission = history.saw_permission or action == "grant_publication"
     if primary == Cause.NONE and action in accepted:
         primary = accepted[action]
     violations = []
@@ -235,11 +243,13 @@ def check_edge(before: State, action: str, after: State, history: History, case:
         violations.append("terminal_resources_are_drained")
     if action in ("deliver_worker_event", "observer_error_before_permission", "postcommit_callback_error") and before.phase != Phase.STAGING:
         violations.append("no_callbacks_after_seal")
+    if (action == "encoder_error" or (action.startswith("worker_") and action.endswith("_finishes"))) and before.phase != Phase.STAGING:
+        violations.append("no_producer_work_after_seal")
     if history.saw_commit and after.destination != Destination.OURS:
         violations.append("postcommit_destination_survives_cleanup")
     if after.primary_cause != primary:
         violations.append("first_gate_cause_remains_primary")
-    return History(abort, committed, primary), violations
+    return History(abort, committed, primary, permission), violations
 
 
 def snapshot(state):

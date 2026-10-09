@@ -13,9 +13,16 @@ The directory adapter accepts a directory or its `tileset.json` path. Named
 members provide explicit archive names and source paths. Accepted inventory must
 contain exactly one `tileset.json`; its bytes are opaque and need not parse as JSON.
 
-Member names are UTF-8 relative paths using `/`, without empty, `.` or `..`
+Member names fit the ZIP header’s 65,535-byte filename field and are UTF-8
+relative paths using `/`, without empty, `.` or `..`
 components, backslashes, NUL or absolute/drive-qualified paths. Duplicate names
-and the generated `@3dtilesIndex1@` name are rejected. Directory traversal rejects
+and the generated `@3dtilesIndex1@` name are rejected. Names containing `.3tz`
+or `.3dtiles.zip` are rejected; output names end in `.3tz` or `.3dtiles.zip`.
+Each source member and the generated index must be smaller than `u32::MAX`
+bytes, so local headers contain actual 32-bit sizes rather than ZIP64 sentinels.
+These container restrictions follow the [Maxar 3TZ v1.4 specification](https://github.com/Maxar-Public/3tz-specification/blob/main/Specification.md).
+Archive-level ZIP64 offsets remain possible. Semantic tileset validity is outside
+this opaque packaging contract. Directory traversal rejects
 symlink entries, including a symlink input root, and nonregular members; it does
 not silently omit them. Existing symlinks in ancestors of the supplied root are
 resolved for overlap checks. Output may not lie within the source tree or alias
@@ -42,13 +49,17 @@ separate failure point. Synchronous callbacks finish before sealing; no user
 callback runs under the gate lock or after sealing. Nested calls use independent
 runs. Reuse fails without aborting a concurrent original operation.
 
-Staging is in the destination filesystem. A writable candidate is consumed into
+Staging is in the destination filesystem. On Unix, new F0 files retain
+`tempfile` mode 0600 (subject to umask) after publication; replacement installs these permissions
+instead of preserving the old file mode. Legacy converter publication is unchanged. A writable candidate is consumed into
 a closed, synced sealed candidate; that candidate is consumed by one publication
 attempt. Pinned `tempfile` 3.27 primitives provide `persist_noclobber` for
 create-new and `persist` for file replacement. There is no copy fallback and no
 predelete of the old destination. Namespace installation establishes commitment;
 subsequent cleanup failure produces diagnostics and retained paths, not failure
-of the committed operation. Atomic installation does not imply atomic cleanup,
+of the committed operation. If successful persistence leaves a temporary name,
+retain and report it: success returns no ownership token proving that the name
+has not been reoccupied, so an unconditional unlink would be unsafe. Atomic installation does not imply atomic cleanup,
 filesystem snapshotting, or power-loss durability. Platform validation must be
 reported separately for the operating systems actually exercised.
 

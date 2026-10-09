@@ -17,6 +17,7 @@ From the repository root, with Python's standard library only:
 
 ```sh
 python3 bench/architecture_audit/foundation/model.py
+python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
 ```
 
 To preserve the checked-in run:
@@ -29,7 +30,7 @@ python3 bench/architecture_audit/foundation/model.py --results /tmp/foundation-m
 Python/platform versions, bounds, invariants, reachable-state/edge counts and
 shortest counterexample witnesses. The recorded Python 3.14.7/Linux run passes
 14 contract cases and detects eight deliberately broken variants, exploring
-2,475 state/history pairs and 4,446 edges. The process exits nonzero if any
+2,455 state/history pairs and 4,382 edges. The process exits nonzero if any
 contract case fails or any negative control misses its designated property.
 There is no dependency install, Rust build or production binary invocation.
 
@@ -82,9 +83,9 @@ ownership/recovery test.
 ## Independent checks and negative controls
 
 `transitions()` defines the candidate design. `check_edge()` independently
-specifies ten temporal/resource invariants using observed actions, destination
+specifies eleven temporal/resource invariants using observed actions, destination
 ownership and artifact/worker/event state. Its separate history monitor remembers
-abort acceptance, commitment and the selected primary cause. Breadth-first
+abort acceptance, publication permission, commitment and the selected primary cause. Breadth-first
 exploration visits the product of job state and this specification history,
 checking every reachable edge. Equivalent product states are merged; the model
 is finite, acyclic and explored to exhaustion, not stopped at an arbitrary depth.
@@ -136,3 +137,8 @@ pre-permission fatal cause and rejects permission itself after abort. Publisher
 errors after permission remain distinct. The eighth negative control exercises
 the exact producer-failure revival defect. Earlier seven-control evidence does
 not establish this newly tested property.
+
+Additional external traces reject producer work resumed after seal/permission.
+The monitor does not assume the generator enforces that boundary. A separate
+DAG check of all 22 declared cases confirms acyclicity and at most one permission
+grant on any path; the deliberately invalid producer revival occurs only once.

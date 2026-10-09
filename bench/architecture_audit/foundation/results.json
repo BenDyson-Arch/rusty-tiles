@@ -610,19 +610,19 @@
     },
     {
       "action_edge_counts": {
-        "cancel_after_permission": 11,
-        "cancel_before_permission": 8,
-        "competitor_creates_destination": 16,
-        "discard_candidate": 44,
+        "cancel_after_permission": 7,
+        "cancel_before_permission": 6,
+        "competitor_creates_destination": 9,
+        "discard_candidate": 36,
         "encoder_error": 2,
-        "external_return_diagnostic": 5,
-        "grant_publication": 14,
-        "install_refused_existing_destination": 8,
-        "install_success": 8,
-        "publication_error": 16,
-        "seal": 22,
-        "secondary_abort_error": 22,
-        "secondary_cancellation": 12
+        "external_return_diagnostic": 2,
+        "grant_publication": 6,
+        "install_refused_existing_destination": 5,
+        "install_success": 5,
+        "publication_error": 10,
+        "seal": 6,
+        "secondary_abort_error": 14,
+        "secondary_cancellation": 10
       },
       "case": {
         "callbacks": [],
@@ -631,18 +631,18 @@
         "policy": "no_clobber"
       },
       "exhaustive_within_bounds": true,
-      "explored_edges": 188,
+      "explored_edges": 118,
       "invariants_hold": false,
-      "max_shortest_path_length": 8,
-      "reachable_state_monitor_pairs": 121,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 93,
       "terminal_primary_cause_counts": {
-        "cancellation": 8,
+        "cancellation": 6,
         "encoder_error": 16,
         "none": 1,
         "publisher_error": 12
       },
       "terminal_state_monitor_counts": {
-        "committed": 5,
+        "committed": 3,
         "precommit_failure": 32
       },
       "violations": {
@@ -680,7 +680,7 @@
                 "cancellation": "not_requested",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "sealed",
                 "primary_cause": "encoder_error",
@@ -705,7 +705,7 @@
                 "cancellation": "not_requested",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "publishing",
                 "primary_cause": "encoder_error",
@@ -716,7 +716,7 @@
                 "cancellation": "not_requested",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "sealed",
                 "primary_cause": "encoder_error",
@@ -724,7 +724,7 @@
               }
             }
           ],
-          "violating_edges": 34
+          "violating_edges": 13
         },
         "first_gate_cause_remains_primary": {
           "shortest_witness": [
@@ -760,7 +760,7 @@
                 "cancellation": "not_requested",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "sealed",
                 "primary_cause": "encoder_error",
@@ -785,7 +785,7 @@
                 "cancellation": "requested_before_permission",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "aborting",
                 "primary_cause": "cancellation",
@@ -796,7 +796,7 @@
                 "cancellation": "not_requested",
                 "candidate": "closed_checked_candidate",
                 "destination": "absent",
-                "diagnostic": "none",
+                "diagnostic": "invalid_producer_revival",
                 "events": [],
                 "phase": "sealed",
                 "primary_cause": "encoder_error",
@@ -804,7 +804,7 @@
               }
             }
           ],
-          "violating_edges": 10
+          "violating_edges": 4
         }
       }
     },
@@ -1494,7 +1494,7 @@
         "check_abort_separately": 2,
         "competitor_creates_destination": 9,
         "deliver_worker_event": 2,
-        "discard_candidate": 28,
+        "discard_candidate": 32,
         "discard_undelivered_event": 12,
         "encoder_error": 6,
         "external_return_diagnostic": 3,
@@ -1503,7 +1503,7 @@
         "install_success": 3,
         "publication_error": 6,
         "seal": 2,
-        "secondary_abort_error": 26,
+        "secondary_abort_error": 28,
         "secondary_cancellation": 16,
         "worker_0_acknowledges_abort": 12,
         "worker_0_finishes": 2
@@ -1517,19 +1517,19 @@
         "policy": "no_clobber"
       },
       "exhaustive_within_bounds": true,
-      "explored_edges": 150,
+      "explored_edges": 156,
       "invariants_hold": false,
       "max_shortest_path_length": 10,
-      "reachable_state_monitor_pairs": 100,
+      "reachable_state_monitor_pairs": 108,
       "terminal_primary_cause_counts": {
-        "cancellation": 5,
+        "cancellation": 9,
         "encoder_error": 8,
         "none": 1,
         "publisher_error": 12
       },
       "terminal_state_monitor_counts": {
         "committed": 2,
-        "precommit_failure": 24
+        "precommit_failure": 28
       },
       "violations": {
         "abort_before_permission_prevents_commit": {
@@ -3001,7 +3001,7 @@
       }
     }
   ],
-  "checkout_commit": "e54c32b9b26de88e7ac373fc740532abeb526023",
+  "checkout_commit": "ca1b72759a38cb58588f0a89aa83516aafcb41d1",
   "command": [
     "/usr/bin/python3",
     "bench/architecture_audit/foundation/model.py"
@@ -3023,12 +3023,13 @@
     "first_gate_cause_remains_primary": "The first abort/fatal cause accepted at the synchronized gate remains primary; later errors are secondary. Publisher errors select the cause after publication permission.",
     "no_callbacks_after_seal": "Core callback delivery occurs only during staging, before seal/drain completes.",
     "no_clobber_preserves_competitor": "Without replace permission, a successful install cannot overwrite an existing destination.",
+    "no_producer_work_after_seal": "Encoder errors and worker completion occur only during staging; producer work cannot resume after sealing.",
     "postcommit_destination_survives_cleanup": "Cleanup and return diagnostics after installation preserve the installed destination.",
     "precommit_failure_preserves_destination": "Precommit failure cannot own a new destination; replace failure preserves the previous destination.",
     "restore_failure_has_recovery": "Failure to restore a held previous destination yields recovery-required with the backup retained.",
     "terminal_resources_are_drained": "Committed, failed and recovery outcomes own no candidate, workers or pending observer events."
   },
-  "model_sha256": "94aca84cb5fd1fde471171a7adc7200ca98b340e0bb2a65e615de8b7606e8a35",
+  "model_sha256": "21d0af85fe8328850aa91520c21f9dfa817c70a318f08acf0c39757762f145d5",
   "not_proven": [
     "Production behavior",
     "Filesystem/OS primitives",
