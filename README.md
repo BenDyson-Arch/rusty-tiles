@@ -2,7 +2,9 @@
 
 **Turn geospatial files into tiles you can view, share and update.**
 
-rusty-tiles is a local command-line tool and Rust library. It converts textured meshes, point clouds, vector features, imagery and elevation rasters into 3D Tiles, XYZ imagery and quantized-mesh terrain. It runs offline, checks its own readiness, and includes a local Cesium preview. This page is for anyone installing it for the first time.
+rusty-tiles converts textured meshes, LAS/LAZ point clouds and GeoJSON/GeoPackage vectors into 3D Tiles. The **standard package needs no GDAL, PROJ or GEOS installation**. It is available as a command-line tool, Rust library and Python wheel for scripts and Blender addons.
+
+The optional **`native-geospatial` build** adds imagery, terrain, other OGR vector formats and native CRS operations. It needs GDAL/PROJ/GEOS, supplied by the native container or installed alongside a source build. Conversion runs offline in both builds; the CLI includes archive validation and a local Cesium preview.
 
 ![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
@@ -10,11 +12,26 @@ rusty-tiles is a local command-line tool and Rust library. It converts textured 
 
 This branch describes the upcoming 0.4.0 release. Build `develop` to use its new capabilities; published 0.3.0 downloads have the feature set documented at that tag.
 
+## Choose a build
+
+Start with the **standard package** unless your input needs one of the native capabilities below. “Default” and “portable” in build instructions refer to this standard build.
+
+| Capability | Standard package | `native-geospatial` build |
+| --- | --- | --- |
+| Mesh tiling, local LAS/LAZ, GeoJSON and GeoPackage | Included | Included |
+| Georeferenced mesh, point-cloud and vector conversion | Verified grid-free CRS operations | Also supports eligible native GDAL/PROJ operations using local resources |
+| Shapefile, PostGIS, GeoParquet and other OGR inputs | Not included | Available through installed GDAL drivers |
+| Imagery and terrain conversion | Not included | Included |
+| CLI packaging, validation and preview | Included | Included |
+| How to install | Standard CLI downloads, Python wheels, or default Cargo build | Native container, or Cargo with `--features native-geospatial` and system libraries |
+
+Python wheels contain the standard conversion APIs; there is no native-geospatial wheel or pip extra. Installing GDAL does not add capabilities to an existing standard binary or wheel. Use the native CLI/container or build the Rust library with the feature enabled. See the [installation guide](docs/INSTALL.md).
+
 ## Choose a command
 
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
-| Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | No |
+| Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
@@ -30,7 +47,7 @@ Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build.
 
 The [installation guide](docs/INSTALL.md) compares the released downloads, current source builds and Python wheels, and explains how to check the installed build.
 
-The default build supports mesh tiling, local and grid-free georeferenced point clouds, GeoJSON and GeoPackage vector conversion, packaging, validation and preview. Vector conversion includes polygons with holes, repair, level of detail, metadata, compression and archive reuse, using bundled SQLite and Rust geometry libraries. For other vector formats, CRS operations outside the grid-free tier, imagery and terrain, use the [container](#run-the-full-toolset-in-a-container) or [build with Cargo](#build-with-cargo). See the [vector input limits](docs/VECTOR.md#requirements) and [point-cloud CRS limits](docs/FORMATS.md#point-clouds).
+The macOS/Linux installer and Windows ZIP below install the **standard CLI**, not the native-geospatial build. Standard vector conversion includes polygons with holes, repair, level of detail, metadata, compression and archive reuse. See the [vector input limits](docs/VECTOR.md#requirements) and [CRS limits](docs/FORMATS.md#point-clouds). For native capabilities, use the [native container](#run-the-native-geospatial-container) or the native Cargo command below.
 
 ### macOS / Linux
 
@@ -58,9 +75,9 @@ Supports Intel/AMD and ARM64. Requires macOS 15+, or Linux with glibc 2.35+ and 
 
 To run `rusty-tiles` from any folder, add the extracted folder to your user `PATH` and reopen PowerShell. The Windows download is for x64.
 
-### Run the full toolset in a container
+### Run the native-geospatial container
 
-The published image bundles GDAL and PROJ. No host geospatial libraries are needed. It is a Linux amd64 image; other architectures need Docker's amd64 emulation.
+The published image contains the **native-geospatial CLI** and its GDAL/PROJ/GEOS/SQLite libraries. No host geospatial libraries are needed. It is a Linux amd64 image; other architectures need Docker's amd64 emulation.
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
@@ -68,7 +85,7 @@ docker run --rm --platform linux/amd64 --network none \
 
 docker run --rm --platform linux/amd64 --network none \
   -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:latest \
-  vector -i mapping.gpkg -o mapping.3tz --layer roads
+  raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 
 Replace the example input with a file in the mounted directory. Pin the image to `:v0.3.0` for a repeatable setup. The image contains no datasets, Cesium runtime, Basis Universal encoder or extra datum grids. Mount required grids and set `PROJ_DATA` to include them and `proj.db`.
@@ -77,7 +94,7 @@ With a rootful Docker daemon, add `--user "$(id -u):$(id -g)"` so new outputs be
 
 ### Build with Cargo
 
-You need current stable Rust with Cargo and a C++ compiler. For a default build:
+You need current stable Rust with Cargo and a C++ compiler. For the **standard CLI**, with no system geospatial libraries:
 
 ```sh
 git clone --branch develop https://github.com/BenDyson-Arch/rusty-tiles.git
@@ -85,16 +102,18 @@ cd rusty-tiles
 cargo install --path . --locked
 ```
 
-Add `--features native-geospatial` to enable every converter. This build needs GDAL 3.12+, PROJ 9.2+, GEOS 3.10+ for vector, SQLite, development headers, `pkg-config` and libclang. The same library versions must be present at run time. CI tests GDAL 3.12 and 3.13. PROJ's database and any datum grids must be installed locally; conversion never downloads them.
+For the **native-geospatial CLI**, first install GDAL 3.12+, PROJ 9.2+, GEOS 3.10+, SQLite, development headers, `pkg-config` and libclang. Then, from the checkout:
 
-For native builds, set `LIBSQLITE3_SYS_USE_PKG_CONFIG=1` in the Cargo environment
-so Rust, GDAL and PROJ use the same system SQLite. The build rejects a missing
-override to prevent incompatible SQLite copies from sharing symbols. Leave it
-unset when building portable binaries or wheels, which bundle SQLite.
+```sh
+LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo install --path . --locked --features native-geospatial
+rusty-tiles doctor --command raster --command terrain --command vector
+```
+
+The SQLite override makes Rust, GDAL and PROJ use the same system library. Leave it unset for standard builds and wheels, which bundle SQLite. Both CLI builds install the same `rusty-tiles` executable name; the native command replaces the standard installation at the same Cargo install root. Matching native libraries must also be present at runtime. CI tests GDAL 3.12 and 3.13. PROJ's database and required datum grids must be installed locally; conversion never downloads them. See [native setup](docs/INSTALL.md#native-geospatial-cli) for details.
 
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
 
-The default build uses the portable Rust JPEG encoder. Add `--features native-jpeg` to use system libjpeg-turbo instead; this needs `pkg-config` at build time and libjpeg-turbo at runtime. `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides that feature for portable packaging.
+Both builds use the portable Rust JPEG encoder unless `native-jpeg` is selected separately. That optional codec feature uses system libjpeg-turbo; it does not enable geospatial converters. See [optional build features](CONTRIBUTING.md#build).
 
 If you already have `cargo-binstall`, run `cargo binstall --manifest-path Cargo.toml rusty-tiles` from a source checkout to download the prebuilt binary instead.
 
@@ -117,7 +136,7 @@ This example works with the prebuilt binary or either Cargo build. It converts a
 rusty-tiles doctor --command mesh-to-3tz
 ```
 
-Look for `mesh-to-3tz: ready`. The default build can run this command without GDAL. `doctor` exits with code 4 if a selected command is missing a dependency.
+Look for `mesh-to-3tz: ready`. The standard build can run this command without GDAL. `doctor` exits with code 4 if a selected command is missing a dependency.
 
 ### 2. Make tiles
 
@@ -153,7 +172,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the pyramid; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
 
-Try the [invented vector fixture](tests/fixtures/vector.geojson) with the default build too:
+From a 0.4 source checkout, try the [invented vector fixture](tests/fixtures/vector.geojson) with the standard build too. This example needs 0.4; the published 0.3 standard binary does not include vector conversion:
 
 ```sh
 rusty-tiles vector -i tests/fixtures/vector.geojson -o output/vector.3tz --max-features 2
@@ -164,14 +183,14 @@ rusty-tiles validate output/vector.3tz
 
 Every converter takes `-i` for input and `-o` for output. The file names below are placeholders for your own data.
 
-| Data | Example | Details |
+| Data | Example | Build and details |
 | --- | --- | --- |
-| Mesh | `rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz` | [Mesh guide](docs/FORMATS.md#meshes) |
-| Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | [Point-cloud guide](docs/FORMATS.md#point-clouds) |
-| Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | [Point-cloud guide](docs/FORMATS.md#point-clouds) |
-| Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | [Vector guide](docs/VECTOR.md) |
-| Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | [Imagery guide](docs/FORMATS.md#imagery) |
-| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --max-zoom 14 --height-offset 0 --fill-height 0` | [Terrain guide](docs/TERRAIN.md) |
+| Mesh | `rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz` | Standard; [mesh placement](docs/FORMATS.md#meshes) may need native CRS support |
+| Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | Standard; [point-cloud guide](docs/FORMATS.md#point-clouds) |
+| Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
+| Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
+| Imagery | `rusty-tiles raster -i orthophoto.tif -o output/imagery --min-zoom 10 --max-zoom 18` | **Native-geospatial only**; [imagery guide](docs/FORMATS.md#imagery) |
+| Terrain | `rusty-tiles terrain -i elevation.tif -o output/terrain --max-zoom 14 --height-offset 0 --fill-height 0` | **Native-geospatial only**; [terrain guide](docs/TERRAIN.md) |
 
 A height offset of 0 is correct only when source heights are already ellipsoidal metres. Read [Coordinates and height](#coordinates-and-height) before you choose one.
 
@@ -182,6 +201,8 @@ To update a vector archive after editing its source, add `--reuse-tileset` with 
 ## Preview
 
 `preview` serves your outputs and a Cesium runtime on `127.0.0.1:9227`. It needs no Cesium ion token and no external basemap. It offers layer toggles, extent buttons and feature picking.
+
+Preview is included in both CLI builds. The standard CLI can serve imagery and terrain already produced by a native build; only their **conversion** requires native-geospatial. The Python wheel does not expose the preview server.
 
 ```sh
 unzip output/model.3tz -d output/model
@@ -231,11 +252,11 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Point clouds and default-build vectors use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. Point clouds use strict native PROJ fallback when built with `native-geospatial`; vectors use the native GDAL/GEOS/PROJ backend throughout that build. The default build refuses other CRS operations with a message naming that feature. Datum shifts are never silently discarded. Native operations use local PROJ resources only; a missing grid fails the job and ballpark operations are refused.
+A constant height offset is not a geoid transformation. In the standard package, meshes, point clouds and vectors use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. In the native-geospatial build, mesh and point-cloud placement can fall back to strict native PROJ; vectors use the native GDAL/GEOS/PROJ backend throughout. The standard package refuses operations outside its supported tier. Switching builds does not remove converter-specific limits: mesh and point-cloud general placement still require a horizontal CRS and explicit ellipsoidal-metre heights. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
 
 ## Library use
 
-Python and Blender addons can call the default converters directly. After the first PyPI publication, install a released wheel with:
+Python and Blender addons can call the standard converters directly. After the first PyPI publication, install a released wheel with:
 
 ```sh
 python -m pip install rusty-tiles
@@ -252,7 +273,7 @@ result = rusty_tiles.mesh_to_3tz(
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-The wheels need CPython 3.10+ and include the default Rust build, with no GDAL, CLI subprocess or extra Python packages. See the [Python API and source build guide](bindings/python/README.md) for supported platforms, path-based options, progress callbacks and exceptions. Point clouds accept local LAS/LAZ XYZ metre coordinates or grid-free georeferenced coordinates with an explicit CRS or LAS header CRS and an explicit height offset to ellipsoidal metres.
+The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits.
 
 Each converter has a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
 

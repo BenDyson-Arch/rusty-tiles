@@ -2,7 +2,9 @@
 
 This page explains what the `terrain` command produces and how to read it. It is for users who build terrain from elevation rasters and for developers who load that terrain in a viewer. Option defaults are in the [command reference](CLI.md#terrain).
 
-`terrain` is a prototype. It needs a build with the `native-geospatial` feature. It runs offline and needs no Python.
+**Terrain conversion is available only in the native-geospatial CLI/Rust build.** Use the [native container or build against system libraries](INSTALL.md#native-geospatial-cli). The standard CLI downloads and Python wheels cannot convert DEMs; installing GDAL alongside them does not enable this feature. Both CLI builds can preview existing terrain output.
+
+`terrain` is a prototype. Native conversion runs offline and needs no Python.
 
 ## Convert an elevation raster
 

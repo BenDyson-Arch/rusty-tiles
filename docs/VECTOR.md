@@ -1,6 +1,6 @@
 # Vector guide
 
-This page explains how the `vector` command turns GIS features into 3D Tiles. It is for users converting GeoPackage, GeoJSON or Shapefile data, and for developers who style and pick the result in CesiumJS. Every option and default is in the [command reference](CLI.md#vector).
+This page explains how the `vector` command turns GIS features into 3D Tiles. **GeoPackage and GeoJSON work in the standard package**, including its Python API, subject to the grid-free CRS limits below. **Shapefile and other OGR formats require native-geospatial**, available through the native container or a CLI/Rust source build. Every option and default is in the [command reference](CLI.md#vector).
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
@@ -8,11 +8,13 @@ Implicit tiling is the default. The existing spatial partition and LOD chains ar
 
 ## Requirements
 
-- The default build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
+The [installation guide](INSTALL.md#choose-a-build) separates the two builds. Installing GDAL does not enable native-geospatial in a standard binary or Python wheel.
+
+- The standard build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
 - Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build keeps its native ingestion, geometry and CRS backend for every vector conversion.
 - CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
 
-Conversion runs offline and needs no Python or executable helpers. The default build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.
+Conversion runs offline and needs no Python or executable helpers. The standard build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.
 
 ## Convert a layer
 
@@ -57,7 +59,7 @@ List fields fail by default. `--list-fields json` stores each list as JSON text.
 
 ### Filter features
 
-`--where "category = 'public'"` applies an attribute filter to every selected layer before geometry is processed. The default build evaluates expressions using SQLite; the native build uses OGR. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset. Use a single read-only expression; multiple statements, comments and SQL parameters are refused by the portable reader.
+`--where "category = 'public'"` applies an attribute filter to every selected layer before geometry is processed. The standard build evaluates expressions using SQLite; the native build uses OGR. The expression must be valid in every selected layer. A filter may use fields that you exclude from the output. A filter that matches nothing publishes an empty tileset. Use a single read-only expression; multiple statements, comments and SQL parameters are refused by the portable reader.
 
 Portable GeoJSON filtering refuses source integers beyond signed 64-bit range instead of converting them to SQLite floating-point values. Encoded integer metadata also requires signed 64-bit values. GeoPackage is opened read-only in immutable mode; checkpoint and close a writer with an active nonempty WAL before conversion so every committed row is available from the main file. Conversion refuses that WAL state rather than silently reading older rows. Recover a hot rollback journal with SQLite and close the writer before conversion; the immutable reader cannot safely perform database recovery.
 
@@ -72,7 +74,7 @@ Each layer uses its declared CRS with traditional X and Y axis order. `--source-
 | Compound or 3D CRS | Need the native build to use the declared height reference |
 | GeoJSON | Uses its conventional ellipsoidal metre heights |
 
-The default build accepts verified grid-free WGS84 geographic (`EPSG:4326`), UTM north/south and Mercator operations, plus supported WKT/PROJ projections with explicit WGS84 or three-/seven-parameter Helmert datum parameters. It uses the same [strict CRS classes and projection domains as point clouds](FORMATS.md#point-clouds). Unsupported datums, required grids, compound/geoid heights and coordinate epochs fail with an environment error naming `native-geospatial`; no archive is published. Undefined GeoPackage CRS declarations need an explicit `--source-crs` override, including `local` when those coordinates are known to be local metres.
+The standard build accepts verified grid-free WGS84 geographic (`EPSG:4326`), UTM north/south and Mercator operations, plus supported WKT/PROJ projections with explicit WGS84 or three-/seven-parameter Helmert datum parameters. It uses the same [strict CRS classes and projection domains as point clouds](FORMATS.md#point-clouds). Unsupported datums, required grids, compound/geoid heights and coordinate epochs fail with an environment error naming `native-geospatial`; no archive is published. Undefined GeoPackage CRS declarations need an explicit `--source-crs` override, including `local` when those coordinates are known to be local metres.
 
 With the native build, three-axis geographic CRSs such as EPSG:7843 use their declared height. Declared coordinate epochs are kept. A missing epoch stays unspecified.
 

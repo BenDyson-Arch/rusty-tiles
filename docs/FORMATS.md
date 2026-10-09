@@ -2,7 +2,9 @@
 
 This page explains what `mesh-to-3tz`, `point-cloud` and `raster` produce, and where their limits are. It is for users choosing settings for their own data. Every option and default is in the [command reference](CLI.md). Vector and terrain have their own guides: [vector](VECTOR.md) and [terrain](TERRAIN.md).
 
-The default build also converts GeoJSON and GeoPackage vectors with the same verified grid-free CRS tier used by point clouds, plus local metre XYZ. It includes Rust polygon processing and bundled SQLite; Shapefile, other OGR drivers and operations requiring datum grids need `native-geospatial`. Vector height conventions and reader limits are in the [vector guide](VECTOR.md#coordinates-and-height).
+**Build choice:** mesh and point-cloud conversion work in the standard package for local/manual placement and verified grid-free CRS operations. Other eligible horizontal CRS operations need the native-geospatial build. Imagery conversion always needs native-geospatial. The standard CLI downloads and Python wheels do not include that feature; use the [native container or source build](INSTALL.md#native-geospatial-cli).
+
+Standard GeoJSON/GeoPackage vector conversion shares the grid-free CRS tier and bundles SQLite. Other OGR formats require native-geospatial. See [vector requirements](VECTOR.md#requirements) for reader and height limits.
 
 The commands below use placeholder file names. Replace them with your own data.
 
@@ -82,7 +84,7 @@ Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `n
 
 ## Point clouds
 
-Local metre XYZ data needs no globe placement and works in the default build:
+Local metre XYZ data needs no globe placement and works in the standard build:
 
 ```sh
 rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz \
@@ -107,7 +109,7 @@ PROJ UTM definitions require an explicit `+zone` from 1 to 60. Projection scales
 
 Other EPSG codes, unknown datums, non-Greenwich prime meridians, geographic `+lon_0` offsets, non-decimal PROJ angles, quoted PROJ values, PROJ `+init` references or spaced assignments, unsupported WKT syntax (including mixed delimiters), spherical transverse Mercator, projection parameters outside the portable domain, Lambert azimuthal equal area, unusual axes, coordinate epochs (including `EPSG:32632@2020`) and grid parameters require strict native GDAL/PROJ. LAEA uses native PROJ because the portable implementation exceeds the 1 mm ECEF accuracy threshold for some definitions. An ellipsoid alone does not establish a datum.
 
-The converter automatically uses native fallback when that feature is built. Otherwise it refuses the input with `pure-Rust point-cloud CRS transform unavailable: …; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids`. Compound CRS headers declaring a geoid are refused with this message by the default build; point-cloud conversion still requires a 2D horizontal CRS and explicitly established ellipsoidal heights even in a native build. No datum shift or grid requirement is silently dropped. `doctor --command point-cloud` lists the tier, CRS classes and native fallback readiness.
+The converter automatically uses native fallback when that feature is built. Otherwise it refuses the input with `pure-Rust point-cloud CRS transform unavailable: …; use a build with --features native-geospatial (GDAL >= 3.12, PROJ >= 9.2) and the required local PROJ database/grids`. Compound CRS headers declaring a geoid are refused with this message by the standard build; point-cloud conversion still requires a 2D horizontal CRS and explicitly established ellipsoidal heights even in a native build. No datum shift or grid requirement is silently dropped. `doctor --command point-cloud` lists the tier, CRS classes and native fallback readiness.
 
 ### What the output keeps
 
