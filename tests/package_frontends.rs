@@ -153,7 +153,13 @@ fn cli_package_non_utf8_output_ancestor_returns_success_json_after_installation(
     );
     let summary: Value = serde_json::from_slice(&completed.stdout).unwrap();
     assert_eq!(summary["ok"], true);
-    assert_eq!(summary["output"], output.to_string_lossy().as_ref());
+    assert_eq!(
+        summary["output"],
+        fs::canonicalize(&output)
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
     assert_eq!(
         summary["packageReceipt"]["archiveBytes"],
         fs::metadata(&output).unwrap().len()

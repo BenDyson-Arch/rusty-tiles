@@ -30,7 +30,9 @@ any selected member, including through hardlinks. These are core domain rules.
 
 Accepted bytes, including `conversion.json`, are copied unchanged. The caller
 must keep sources stable for the operation; this is not a filesystem snapshot.
-Resolution is read-only and precedes output-parent/scratch creation. Copying uses
+Resolution is read-only and precedes output-parent/scratch creation. The resolved
+absolute destination is retained for staging, installation and result identity;
+callbacks changing the process working directory cannot redirect publication. Copying uses
 bounded chunks and one open source at a time; inventory and index memory grow
 with member count. Archive serialization owns ordering and index construction,
 with no job or runtime dependencies.

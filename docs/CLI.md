@@ -171,6 +171,8 @@ Packaging preserves selected bytes, including an existing `conversion.json`,
 and does not interpret that source report or certify scene/resource semantics.
 Its `--json` result adds `packageReceipt` with `memberCount` (excluding the
 generated index), `sourceBytes` and `archiveBytes`, plus `cleanupDiagnostics`.
+Its `output` is the resolved absolute destination used for validation and
+installation, including when `--output` is relative.
 `conversionReport` is null for this operation: the package receipt is separate
 from source content. Cleanup diagnostics contain `path`, `kind` and `message`
 for retained temporary work beside a committed output.

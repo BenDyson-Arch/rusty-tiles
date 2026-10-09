@@ -88,6 +88,8 @@ the original LAS property tables for picking and table styling.
 `convert_to_3tz` packs the regular files beneath a tileset directory or the
 directory containing its exact `tileset.json` path. It returns `PackageResult`
 with `output`, `archive=True`, a `PackageReceipt`, and `cleanup_diagnostics`.
+Its `output` is the resolved absolute destination used for validation and
+installation; later callback changes to the working directory cannot redirect it.
 The receipt has `member_count` (excluding the generated index), `source_bytes`
 and `archive_bytes`. A cleanup diagnostic has `path`, `kind` and `message`;
 it identifies a temporary-name path needing inspection beside a successfully

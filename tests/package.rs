@@ -161,7 +161,7 @@ fn opaque_bytes_receipt_local_headers_and_index_are_independently_checked() {
         &run,
     )
     .unwrap();
-    assert_eq!(result.output, output);
+    assert_eq!(result.output, fs::canonicalize(&output).unwrap());
     assert_eq!(result.receipt.member_count, 3);
     assert_eq!(
         result.receipt.source_bytes,
@@ -610,4 +610,57 @@ fn explicit_replace_commits_an_independently_readable_archive() {
     )
     .unwrap();
     inspect(&output, &expected);
+}
+
+#[test]
+fn relative_output_is_bound_before_observer_changes_working_directory() {
+    const CHILD: &str = "RUSTY_TILES_PACKAGE_CWD_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        // CWD is process-global: isolate this mutation from parallel test cases.
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "relative_output_is_bound_before_observer_changes_working_directory",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            child.status.success(),
+            "isolated CWD regression failed:\n{}\n{}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let initial = work.path().join("initial");
+    let sources = work.path().join("selected-source");
+    fs::create_dir(&initial).unwrap();
+    fs::create_dir(&sources).unwrap();
+    let source = sources.join("out.3tz");
+    let original = b"unchanged opaque source bytes";
+    fs::write(&source, original).unwrap();
+    let original_cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&initial).unwrap();
+    let expected_output = fs::canonicalize(&initial).unwrap().join("out.3tz");
+    let changed = AtomicBool::new(false);
+    let run = control(move |_| {
+        if !changed.swap(true, Ordering::SeqCst) {
+            std::env::set_current_dir(&sources).unwrap();
+        }
+        Ok(())
+    });
+    let request =
+        PackageRequest::members(vec![PackageMember::new("tileset.json", &source)], "out.3tz")
+            .with_policy(OutputPolicy::Replace);
+    let result = package(request, &run).unwrap();
+    assert_eq!(result.output, expected_output);
+    assert_eq!(fs::read(&source).unwrap(), original);
+    inspect(
+        &expected_output,
+        &BTreeMap::from([("tileset.json".to_owned(), original.to_vec())]),
+    );
+    std::env::set_current_dir(original_cwd).unwrap();
 }

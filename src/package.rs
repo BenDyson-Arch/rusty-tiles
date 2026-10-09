@@ -225,7 +225,7 @@ fn prospective_path(path: &Path) -> Result<PathBuf, JobError> {
 }
 
 fn resolve(
-    Validated(request): Validated,
+    Validated(mut request): Validated,
     mut checkpoint: impl FnMut() -> Result<(), JobError>,
 ) -> Result<Resolved, JobError> {
     checkpoint()?;
@@ -378,6 +378,10 @@ fn resolve(
             "output must be a regular file, without symlinks",
         ));
     }
+    // Bind side effects and the returned identity to the location checked above.
+    // An observer may change process CWD after resolution; retaining a relative
+    // request path would redirect staging/publication and invalidate overlap checks.
+    request.output = output;
     Ok(Resolved {
         request,
         members,
