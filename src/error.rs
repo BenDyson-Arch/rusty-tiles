@@ -5,6 +5,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Job(#[from] crate::JobFailure),
+
     #[error("{0}")]
     Message(String),
 

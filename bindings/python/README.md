@@ -48,7 +48,7 @@ assert rusty_tiles.validate(result.output)["ok"]
 ```
 
 All inputs and outputs are filesystem paths (`str` or `os.PathLike`).
-Conversions return `ConversionResult` with `output` (a `pathlib.Path`), `archive`
+Mesh, point-cloud, vector and implicit conversions return `ConversionResult` with `output` (a `pathlib.Path`), `archive`
 (a boolean) and `report` (a dictionary or `None`). Existing outputs are
 preserved unless `force=True`; publication uses the Rust library's private
 staging and atomic archive replacement.
@@ -59,7 +59,7 @@ staging and atomic archive replacement.
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage |
-| `convert_to_3tz(input, output, ...)` | `force=False` |
+| `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `convert_to_implicit(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
 
@@ -85,7 +85,31 @@ is outside this wheel's API because it requires an external encoder.
 the original LAS property tables for picking and table styling.
 
 `glb_to_3tz` wraps GLB/glTF without making new levels of detail.
-`convert_to_3tz` packs a tileset directory or a `tileset.json` path.
+`convert_to_3tz` packs the regular files beneath a tileset directory or the
+directory containing its exact `tileset.json` path. It returns `PackageResult`
+with `output`, `archive=True`, a `PackageReceipt`, and `cleanup_diagnostics`.
+The receipt has `member_count` (excluding the generated index), `source_bytes`
+and `archive_bytes`. A cleanup diagnostic has `path`, `kind` and `message`;
+it identifies a temporary-name path needing inspection beside a successfully
+installed output. Its message distinguishes cleanup failure from uncertain
+post-installation ownership; do not assume every reported path is disposable.
+Selected source bytes, including `conversion.json`, pass through unchanged;
+the returned receipt is separate from those files. Packaging does not check
+scene semantics or discover resources outside the selected directory.
+
+Package outputs must end in `.3tz` or `.3dtiles.zip`. Member names may not contain
+either extension, and each member must be smaller than `2**32 - 1` bytes;
+the archive as a whole may exceed that size.
+Package sources must remain stable during the call. Symlinks, special files,
+unsafe/duplicate member names and the reserved `@3dtilesIndex1@` are rejected.
+Remove a generated index explicitly before repacking an extracted archive.
+The destination must be outside the source tree and must not alias a selected
+file. `force=False` refuses a competing destination; `force=True` permits
+completed-file replacement. A failure before installation preserves an
+existing output. Namespace installation and temporary-name cleanup are
+separate; neither policy promises power-loss durability. On Unix, packaged output is
+created with private mode `0600` (subject to umask), including when replacing a previous file;
+change its permissions explicitly if other users need access.
 Point-cloud input defaults to local XYZ metres with Z up. For globe placement,
 pass `source_crs="header"` or an explicit CRS such as `"EPSG:32656"`, and
 `height_offset=0` only when source Z is already ellipsoidal metres:
@@ -136,19 +160,41 @@ Callbacks receive dictionaries using the Rust reporter's event contract:
 `{"event": "progress", "phase": ..., "done": ..., "total": ...}`,
 `{"event": "warning", ...}` or `{"event": "log", "message": ...}`.
 `total` can be `None`. Structured warnings preserve their detail fields.
-The other entry points have no reporter events in the Rust API.
+`convert_to_3tz` also accepts a callback, with `encoding` and
+`ready_to_publish` progress phases. Other entry points have no reporter events.
 Without a callback, converters are silent.
 
 Conversions release the GIL. A callback can run on a Rust worker thread;
 Blender callers should queue events for their main thread before changing
 Blender state. The first callback exception is saved, later callbacks are
 skipped, and the original exception is raised after Rust finishes. A callback
-exception does not cancel conversion, so the output may already exist.
+exception does not cancel these converters, so the output may already exist.
+
+Packaging uses a fallible synchronous callback. Every package callback finishes
+before sealing and installation, including `ready_to_publish`. A callback
+exception aborts before publication and preserves the existing destination,
+including with `force=True`. The original exception is raised when observer
+failure is the job's selected primary cause; the first fatal cause accepted by
+the job gate is primary and later failures are secondary. Nested calls and
+concurrent package calls use independent state. Packaging checks pending Python
+signals during preparation and events, and does not deliberately check them
+after installation. Python asynchronous interruption or allocation failure
+after commitment can still interrupt caller-side execution.
 
 Rust failures raise subclasses of `TilesError`: `DataError`,
 `EnvironmentError`, `OutputExistsError`, `TilesIOError` or `UnsupportedError`.
 Invalid Python arguments raise `TypeError` or `ValueError`. Original callback
 exceptions are preserved.
+
+Packaging additionally raises `InvalidRequestError` for invalid choices or
+reserved names, `CancelledError` for cancellation and `ObserverError` when no
+original Python exception is available. These are `TilesError` subclasses.
+Package domain errors carry `kind`, `secondary_diagnostics` and `retained_paths`.
+Stable kinds are `invalid_request`, `invalid_input`, `unsupported`, `io`,
+`output_conflict`, `cancelled`, `observer_failure` and `invalid_state`.
+Invalid source content maps to `DataError`, source/storage I/O to `TilesIOError`
+and competing outputs to `OutputExistsError`. Original callback exceptions are
+returned unchanged and need not have these domain metadata attributes.
 
 Build and test from a source checkout with stable Rust and a C++ compiler:
 

@@ -1,5 +1,7 @@
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::builder::{PossibleValue, PossibleValuesParser};
 use clap::{Args, Parser, Subcommand};
@@ -9,10 +11,13 @@ use rusty_tiles::error::Error;
 use rusty_tiles::georef::{
     parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
 };
-use rusty_tiles::pack::{convert_to_3tz_reported, PackOptions};
+use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
-use rusty_tiles::{doctor, terrain, vector, ConversionResult, Reporter};
+use rusty_tiles::{
+    doctor, terrain, vector, ConversionResult, JobError, JobErrorKind, Observer, OutputPolicy,
+    Reporter, RunControl, RunEvent,
+};
 
 // Option spelling: multi-word options keep their camelCase name as the primary
 // spelling (3d-tiles-tools compatibility, scripts and machine contracts) and
@@ -513,6 +518,8 @@ enum Outcome {
     Report(Value),
     /// A published conversion.
     Converted(ConversionResult),
+    /// Installed package with a typed receipt separate from source reports.
+    Pack(PackageResult),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
     Done,
@@ -564,6 +571,7 @@ fn main() -> ExitCode {
                     output_summary(&result.output, result.report.as_ref(), result.archive),
                     result.output,
                 )),
+                Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
                 Outcome::Done => None,
             };
@@ -579,12 +587,26 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let (category, code) = error.category();
+            let (category, code) = match &error {
+                Error::Job(failure) => job_category(failure.error.kind()),
+                _ => error.category(),
+            };
             if json {
-                println!(
-                    "{}",
-                    json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code})
-                );
+                let mut failure = json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code});
+                if let Error::Job(job) = &error {
+                    failure["error"]["kind"] = json!(category);
+                    failure["error"]["secondaryDiagnostics"] = json!(job
+                        .secondary
+                        .iter()
+                        .map(|cause| cause.to_string())
+                        .collect::<Vec<_>>());
+                    failure["error"]["retainedPaths"] = json!(job
+                        .retained_paths
+                        .iter()
+                        .map(|path| path.to_string_lossy())
+                        .collect::<Vec<_>>());
+                }
+                println!("{failure}");
             } else {
                 eprintln!("{error}");
             }
@@ -597,6 +619,51 @@ fn main() -> ExitCode {
             ExitCode::from(code)
         }
     }
+}
+
+/// Transport categories and process statuses belong to this CLI adapter.
+fn job_category(kind: JobErrorKind) -> (&'static str, u8) {
+    match kind {
+        JobErrorKind::InvalidRequest => ("invalid_request", 2),
+        JobErrorKind::InvalidInput => ("invalid_input", 3),
+        JobErrorKind::Unsupported => ("unsupported", 2),
+        JobErrorKind::Io => ("io", 1),
+        JobErrorKind::Conflict => ("output_conflict", 5),
+        JobErrorKind::Cancelled => ("cancelled", 1),
+        JobErrorKind::ObserverFailure => ("observer_failure", 1),
+        JobErrorKind::InvalidState => ("invalid_state", 1),
+    }
+}
+
+struct CliPackageObserver;
+
+impl Observer for CliPackageObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        let value = match event {
+            RunEvent::Progress { phase, done, total } => {
+                json!({"event":"progress","phase":phase,"done":done,"total":total})
+            }
+            RunEvent::Warning { code, message } => {
+                json!({"event":"warning","code":code,"message":message})
+            }
+            RunEvent::Note { message } => json!({"event":"log","message":message}),
+        };
+        writeln!(io::stderr().lock(), "{value}")
+            .map_err(|error| JobError::new(JobErrorKind::ObserverFailure, error.to_string()))
+    }
+}
+
+fn package_summary(result: &PackageResult) -> Value {
+    let mut summary = output_summary(&result.output, None, true);
+    summary["packageReceipt"] = json!({
+        "memberCount": result.receipt.member_count,
+        "sourceBytes": result.receipt.source_bytes,
+        "archiveBytes": result.receipt.archive_bytes,
+    });
+    summary["cleanupDiagnostics"] = json!(result.cleanup_diagnostics.iter().map(|diagnostic| {
+        json!({"path":diagnostic.path.to_string_lossy(),"kind":job_category(diagnostic.error.kind()).0,"message":diagnostic.error.to_string()})
+    }).collect::<Vec<_>>());
+    summary
 }
 
 /// Top-level numeric conversion.json fields that count produced or skipped
@@ -627,8 +694,8 @@ const COUNT_KEYS: &[&str] = &[
 fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value {
     let location = match report {
         None => Value::Null,
-        Some(_) if archive => json!({"archive":output,"entry":"conversion.json"}),
-        Some(_) => json!({"path":output.join("conversion.json")}),
+        Some(_) if archive => json!({"archive":output.to_string_lossy(),"entry":"conversion.json"}),
+        Some(_) => json!({"path":output.join("conversion.json").to_string_lossy()}),
     };
     let report = report.unwrap_or(&Value::Null);
     let mut counts = serde_json::Map::new();
@@ -643,7 +710,7 @@ fn output_summary(output: &Path, report: Option<&Value>, archive: bool) -> Value
             target.insert(key.clone(), value.clone());
         }
     }
-    json!({"ok":true,"output":output,"counts":counts,"settings":settings,
+    json!({"ok":true,"output":output.to_string_lossy(),"counts":counts,"settings":settings,
         "skippedFeatures":report["skippedFeatures"],"reuse":report["reuse"],"conversionReport":location})
 }
 
@@ -710,6 +777,19 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
             ));
         }
     }
+    for diagnostic in summary["cleanupDiagnostics"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(path), Some(message)) =
+            (diagnostic["path"].as_str(), diagnostic["message"].as_str())
+        {
+            lines.push(format!(
+                "cleanup warning: {message}; retained work at {path}"
+            ));
+        }
+    }
     let path = shell_path(output);
     let next = match command {
         "raster" => format!("rusty-tiles preview --cesium <Build/Cesium> --imagery {path}"),
@@ -722,6 +802,7 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
 }
 
 fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
+    let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
         Command::Validate {
@@ -798,11 +879,18 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 reporter,
             )?)
         }
-        Command::Convert(a) => Outcome::Converted(convert_to_3tz_reported(
-            &a.input,
-            &a.output,
-            &PackOptions { force: a.force },
-        )?),
+        Command::Convert(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliPackageObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            let policy = if a.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = PackageRequest::directory(a.input, a.output).with_policy(policy);
+            Outcome::Pack(package(request, &run)?)
+        }
         Command::ConvertToImplicit(a) => {
             Outcome::Converted(rusty_tiles::convert_to_implicit_reported(
                 &a.input,

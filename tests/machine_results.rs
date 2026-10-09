@@ -131,9 +131,9 @@ fn failed_conversion_emits_ndjson_without_completion() {
         .args(["--progress", "json"])
         .output()
         .unwrap();
-    assert_eq!(result.status.code(), Some(3));
+    assert_eq!(result.status.code(), Some(1));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(report["error"]["code"], "data");
+    assert_eq!(report["error"]["code"], "io");
     let events: Vec<Value> = String::from_utf8(result.stderr)
         .unwrap()
         .lines()
@@ -141,7 +141,7 @@ fn failed_conversion_emits_ndjson_without_completion() {
         .collect();
     assert_eq!(
         events.last().unwrap(),
-        &json!({"event":"failed","phase":"conversion","code":"data"})
+        &json!({"event":"failed","phase":"conversion","code":"io"})
     );
     assert!(!events
         .iter()
