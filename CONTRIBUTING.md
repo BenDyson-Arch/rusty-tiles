@@ -37,6 +37,10 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 
 ## Crate layout
 
+The proposed [0.4.0 architecture foundations](docs/architecture/README.md) track the
+release-blocking audit in #113. That proposal describes future boundaries; the
+table below describes the current implementation.
+
 | Module | Responsibility |
 | --- | --- |
 | `main.rs`, `lib.rs` | CLI parsing, summaries, `--json` results and exit codes; public library exports |

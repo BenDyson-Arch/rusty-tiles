@@ -1,0 +1,656 @@
+{
+  "baseline_commit": "8dfd74bd87dd23c86278e98d736c3f5912c246cf",
+  "build": {
+    "binding_path": "/home/bend/.cache/rusty-tiles-113-api-target/debug/librusty_tiles.so",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-p",
+      "rusty-tiles",
+      "-p",
+      "rusty-tiles-python",
+      "--features",
+      "pyo3/extension-module"
+    ],
+    "cwd": "/tmp/rusty-tiles-113-api",
+    "driver_command": [
+      "rustc",
+      "--edition=2021",
+      "-C",
+      "debuginfo=0",
+      "/tmp/rusty-tiles-113-api/bench/architecture_audit/api/core_probe.rs",
+      "--extern",
+      "rusty_tiles=/home/bend/.cache/rusty-tiles-113-api-target/debug/librusty_tiles.rlib",
+      "--extern",
+      "serde_json=/home/bend/.cache/rusty-tiles-113-api-target/debug/deps/libserde_json-e87b4fa5bf61b483.rlib",
+      "-L",
+      "dependency=/home/bend/.cache/rusty-tiles-113-api-target/debug/deps",
+      "-o",
+      "/home/bend/.cache/rusty-tiles-113-api-target/api-core-probe"
+    ],
+    "environment": {
+      "CARGO_BUILD_JOBS": "2",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_DEV_INCREMENTAL": "false",
+      "CARGO_TARGET_DIR": "/home/bend/.cache/rusty-tiles-113-api-target"
+    }
+  },
+  "built_artifact_sha256": {
+    "cli": "fe14194ae81b5711aac7ca552302c8dfd840aa77674129e954af1dff1fa0e6d3",
+    "core_driver": "e3c80f82386bcabca176e7a4aa996f9337f34162049651c644b2cddc85e31b8a",
+    "python_binding": "c22588595f07a5bb8a306caee38a614ac573725319f529760c22ca5870dbec17"
+  },
+  "cargo_lock_sha256": "75ce51081cef8d2bda2f6b677b1ba4944b834529210c86a6d1f896058ae9586f",
+  "checkout_commit": "8dfd74bd87dd23c86278e98d736c3f5912c246cf",
+  "comparisons": [
+    {
+      "comparable": true,
+      "control": "core_geographic_control",
+      "identical_logical_payload": true,
+      "variant": "core_geographic_offset"
+    },
+    {
+      "comparable": true,
+      "control": "python_geographic_control",
+      "identical_logical_payload": true,
+      "variant": "python_geographic_offset"
+    },
+    {
+      "comparable": true,
+      "control": "core_mesh_rotation_control",
+      "identical_logical_payload": true,
+      "variant": "core_mesh_rotation_only"
+    },
+    {
+      "comparable": true,
+      "control": "core_glb_rotation_control",
+      "identical_logical_payload": true,
+      "variant": "core_glb_rotation_only"
+    },
+    {
+      "comparable": true,
+      "control": "python_mesh_rotation_control",
+      "identical_logical_payload": true,
+      "variant": "python_mesh_rotation_only"
+    },
+    {
+      "comparable": true,
+      "control": "python_glb_rotation_control",
+      "identical_logical_payload": true,
+      "variant": "python_glb_rotation_only"
+    }
+  ],
+  "desired_contracts": {
+    "callback_failure": "Define whether callback failure cancels conversion or is an observer failure; expose publication status unambiguously to callers.",
+    "default_codec": "Choose an intentional shared default or explicitly document frontend-specific fidelity and codec defaults.",
+    "geographic_offset": "Uniformly reject an unsupported offset or apply documented offset semantics; do not silently discard it.",
+    "rotation_without_placement": "Uniformly reject a rotation that cannot be applied without placement, or document and implement placement-independent rotation."
+  },
+  "fixtures": {
+    "geographic.glb": {
+      "bytes": 480,
+      "sha256": "8c0878d4a78747877e3ca59265edbb8754d6879a5f4e5aa6c8fb32bc6e4d2e45"
+    },
+    "local.glb": {
+      "bytes": 460,
+      "sha256": "1ca11d498a31b065575a4d489d4bebe49439a3680c37eff417ccc4122cde7c9f"
+    },
+    "textured.glb": {
+      "bytes": 940,
+      "sha256": "63a8cbf0161822ef5f380e61d81fb345349d82ce18fc0daf071a5f92e9e159dd"
+    }
+  },
+  "issue": 113,
+  "not_tested": [
+    "Geographic general-CRS adapter with explicit source_axes/height_offset",
+    "NaN/infinite placement",
+    "Force overwrite of an existing output on callback failure",
+    "Signal cancellation",
+    "Windows/macOS bindings",
+    "Native geospatial/JPEG builds"
+  ],
+  "production_changes_in_worktree": [],
+  "production_snapshot": {
+    "baseline_git_tree_sha256": "e7a4b4d9e1adb407b145cf9b42bdb2c56571b12a82a2751def692ae0cd164555",
+    "baseline_worktree_diff_files": [],
+    "checkout_git_tree_sha256": "e7a4b4d9e1adb407b145cf9b42bdb2c56571b12a82a2751def692ae0cd164555",
+    "paths": [
+      "src",
+      "bindings",
+      "build.rs",
+      "Cargo.toml",
+      "Cargo.lock"
+    ],
+    "tracked_file_count": 67,
+    "working_files_sha256": "137ff7b7b7f9b93978837fab39e2747400ebf732f6fba992ad96796849ceb9c1"
+  },
+  "records": {
+    "cli_default_codec": {
+      "arguments": [
+        "<built-cli>",
+        "--json",
+        "meshTo3tz",
+        "-i",
+        "<probe-work>/fixtures/textured.glb",
+        "-o",
+        "<probe-work>/cli_default_codec.3tz",
+        "--maxBytes",
+        "1",
+        "--tileSize",
+        "64",
+        "--explicit",
+        "--noMeshopt"
+      ],
+      "exit_code": 0,
+      "output": {
+        "bytes": 2613,
+        "exists": true,
+        "image_mime_types": [
+          "image/jpeg"
+        ],
+        "logical_payload_sha256": "176a562e62317fac56800077f2af4a3bebeb41e96872384229d3964e6d936d54",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "stderr": "mesh-to-3tz: portable JPEG (quality 95, full chroma)\nmesh-to-3tz: load 0.00s triangles=1 images=1\nmesh-to-3tz: plan 0.00s leaves=1 nodes=1\nmesh-to-3tz: chart extraction 0.00s\nmesh-to-3tz: leaves 0.00s\nmesh-to-3tz: cpu simplify=0.0s bake=0.0s(unwrap=0.0 sampler=0.0 raster=0.0 encode=0.0) error=0.0s\nmesh-to-3tz: root triangles=1 geometry_error=0.0000 refinement_error=0.0000\nmesh-to-3tz: done 0.01s bytes=2613",
+      "stdout": "{\"conversionReport\":null,\"counts\":{},\"ok\":true,\"output\":\"<probe-work>/cli_default_codec.3tz\",\"reuse\":null,\"settings\":{},\"skippedFeatures\":null}"
+    },
+    "cli_geographic_offset": {
+      "arguments": [
+        "<built-cli>",
+        "--json",
+        "meshTo3tz",
+        "-i",
+        "<probe-work>/fixtures/geographic.glb",
+        "-o",
+        "<probe-work>/cli_geographic_offset.3tz",
+        "--sourceCrs",
+        "geographic",
+        "--sourceOffset",
+        "1000",
+        "2000",
+        "300"
+      ],
+      "exit_code": 3,
+      "output": {
+        "exists": false
+      },
+      "stderr": "",
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"--sourceOffset requires --sourceCrs auto or epsg:3857\"},\"exitCode\":3,\"ok\":false}"
+    },
+    "cli_glb_rotation_only": {
+      "arguments": [
+        "<built-cli>",
+        "--json",
+        "glbTo3tz",
+        "-i",
+        "<probe-work>/fixtures/local.glb",
+        "-o",
+        "<probe-work>/cli_glb_rotation_only.3tz",
+        "--rotationDegrees",
+        "37",
+        "11",
+        "5"
+      ],
+      "exit_code": 3,
+      "output": {
+        "exists": false
+      },
+      "stderr": "",
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"--rotationDegrees requires --cartographicPositionDegrees\"},\"exitCode\":3,\"ok\":false}"
+    },
+    "cli_mesh_rotation_only": {
+      "arguments": [
+        "<built-cli>",
+        "--json",
+        "meshTo3tz",
+        "-i",
+        "<probe-work>/fixtures/local.glb",
+        "-o",
+        "<probe-work>/cli_mesh_rotation_only.3tz",
+        "--rotationDegrees",
+        "37",
+        "11",
+        "5"
+      ],
+      "exit_code": 3,
+      "output": {
+        "exists": false
+      },
+      "stderr": "",
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"--rotationDegrees requires --cartographicPositionDegrees\"},\"exitCode\":3,\"ok\":false}"
+    },
+    "core_default_codec": {
+      "archive": true,
+      "output": {
+        "bytes": 2313,
+        "exists": true,
+        "image_mime_types": [
+          "image/png"
+        ],
+        "logical_payload_sha256": "7d969d8c744109f9eeceff51b84ab31f8e5f0e2747d6fe41557b309a0c2063c9",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_geographic_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1622,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "9e8678b4856a3592b4df09b6e6f27052d9daea6554b9d961bab99643bff97e21",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": [
+          -0.4539896692264826,
+          -0.8910069473554226,
+          0.0,
+          0.0,
+          -0.4045093764372555,
+          0.20610734692117405,
+          0.891006131246838,
+          0.0,
+          -0.7938926530772102,
+          0.40450757880351995,
+          -0.4539912709298963,
+          0.0,
+          -5067061.32025142,
+          2581790.7476019035,
+          -2878225.2394448435,
+          1.0
+        ],
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_geographic_offset": {
+      "archive": true,
+      "output": {
+        "bytes": 1622,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "9e8678b4856a3592b4df09b6e6f27052d9daea6554b9d961bab99643bff97e21",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": [
+          -0.4539896692264826,
+          -0.8910069473554226,
+          0.0,
+          0.0,
+          -0.4045093764372555,
+          0.20610734692117405,
+          0.891006131246838,
+          0.0,
+          -0.7938926530772102,
+          0.40450757880351995,
+          -0.4539912709298963,
+          0.0,
+          -5067061.32025142,
+          2581790.7476019035,
+          -2878225.2394448435,
+          1.0
+        ],
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_glb_rotation_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_glb_rotation_only": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_mesh_rotation_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "core_mesh_rotation_only": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_callback_after_publication": {
+      "events": [
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: load 0.00s triangles=1 images=1"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: plan 0.00s leaves=1 nodes=1"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: chart extraction 0.00s"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: leaves 0.00s"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: cpu simplify=0.0s bake=0.0s(unwrap=0.0 sampler=0.0 raster=0.0 encode=0.0) error=0.0s"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: root triangles=1 geometry_error=0.0000 refinement_error=0.0000"
+          },
+          "output_exists_during_callback": false
+        },
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: done 0.01s bytes=2313"
+          },
+          "output_exists_during_callback": true,
+          "raised": true
+        }
+      ],
+      "exception": "RuntimeError",
+      "message": "audit callback failure: after_publication",
+      "output": {
+        "bytes": 2313,
+        "exists": true,
+        "image_mime_types": [
+          "image/png"
+        ],
+        "logical_payload_sha256": "7d969d8c744109f9eeceff51b84ab31f8e5f0e2747d6fe41557b309a0c2063c9",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "raised_exception",
+      "validates_after_exception": true,
+      "validation_stderr": "",
+      "validation_stdout": "{\"archive\":\"<probe-work>/python_callback_after_publication.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}"
+    },
+    "python_callback_first_event": {
+      "events": [
+        {
+          "event": {
+            "event": "log",
+            "message": "mesh-to-3tz: load 0.00s triangles=1 images=1"
+          },
+          "output_exists_during_callback": false,
+          "raised": true
+        }
+      ],
+      "exception": "RuntimeError",
+      "message": "audit callback failure: first_event",
+      "output": {
+        "bytes": 2313,
+        "exists": true,
+        "image_mime_types": [
+          "image/png"
+        ],
+        "logical_payload_sha256": "7d969d8c744109f9eeceff51b84ab31f8e5f0e2747d6fe41557b309a0c2063c9",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "raised_exception",
+      "validates_after_exception": true,
+      "validation_stderr": "",
+      "validation_stdout": "{\"archive\":\"<probe-work>/python_callback_first_event.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}"
+    },
+    "python_default_codec": {
+      "archive": true,
+      "output": {
+        "bytes": 2313,
+        "exists": true,
+        "image_mime_types": [
+          "image/png"
+        ],
+        "logical_payload_sha256": "7d969d8c744109f9eeceff51b84ab31f8e5f0e2747d6fe41557b309a0c2063c9",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_geographic_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1622,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "9e8678b4856a3592b4df09b6e6f27052d9daea6554b9d961bab99643bff97e21",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": [
+          -0.4539896692264826,
+          -0.8910069473554226,
+          0.0,
+          0.0,
+          -0.4045093764372555,
+          0.20610734692117405,
+          0.891006131246838,
+          0.0,
+          -0.7938926530772102,
+          0.40450757880351995,
+          -0.4539912709298963,
+          0.0,
+          -5067061.32025142,
+          2581790.7476019035,
+          -2878225.2394448435,
+          1.0
+        ],
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_geographic_offset": {
+      "archive": true,
+      "output": {
+        "bytes": 1622,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "9e8678b4856a3592b4df09b6e6f27052d9daea6554b9d961bab99643bff97e21",
+        "members": [
+          "@3dtilesIndex1@",
+          "t/0.glb",
+          "tileset.json"
+        ],
+        "root_transform": [
+          -0.4539896692264826,
+          -0.8910069473554226,
+          0.0,
+          0.0,
+          -0.4045093764372555,
+          0.20610734692117405,
+          0.891006131246838,
+          0.0,
+          -0.7938926530772102,
+          0.40450757880351995,
+          -0.4539912709298963,
+          0.0,
+          -5067061.32025142,
+          2581790.7476019035,
+          -2878225.2394448435,
+          1.0
+        ],
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_glb_rotation_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_glb_rotation_only": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_mesh_rotation_control": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    },
+    "python_mesh_rotation_only": {
+      "archive": true,
+      "output": {
+        "bytes": 1224,
+        "exists": true,
+        "image_mime_types": [],
+        "logical_payload_sha256": "4c08fefee47908c10114371332381be82cf2cba989f2f106abf5b43d0f577387",
+        "members": [
+          "@3dtilesIndex1@",
+          "local.glb",
+          "tileset.json"
+        ],
+        "root_transform": null,
+        "zip_readable": true
+      },
+      "status": "returned_success"
+    }
+  },
+  "schema_version": 1,
+  "toolchain": {
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8"
+  }
+}

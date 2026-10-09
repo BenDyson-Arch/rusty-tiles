@@ -1,0 +1,3056 @@
+{
+  "all_contract_cases_pass": true,
+  "all_negative_controls_detected": true,
+  "artifact_kind": "bounded_design_model_not_production_runtime_test",
+  "assumptions": [
+    "Permission grant is synchronized with pre-permission abort acceptance.",
+    "Install-if-absent is a linearizable namespace operation preserving an existing destination.",
+    "No assumed atomic temp-name cleanup, filesystem crash durability or FFI callback correctness.",
+    "Replacement restore scenarios are a future contract, not an F0 implementation commitment.",
+    "Workers eventually finish or acknowledge abort, and sealed candidates have no open writers.",
+    "Callback delivery completes atomically; event admission is closed before seal, not modeled as a real lock.",
+    "Failures are represented at modeled boundaries, not at every filesystem instruction."
+  ],
+  "bounds": {
+    "cancellation_requests": 1,
+    "cleanup_attempts": 1,
+    "competitor_creates": 1,
+    "events_per_worker": 1,
+    "external_return_diagnostics": 1,
+    "publication_attempts": 1,
+    "restore_attempts": 1,
+    "workers": [
+      0,
+      1,
+      2
+    ]
+  },
+  "cases": [
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 4,
+        "competitor_creates_destination": 4,
+        "discard_candidate": 28,
+        "encoder_error": 2,
+        "external_return_diagnostic": 2,
+        "grant_publication": 2,
+        "install_refused_existing_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "seal": 2,
+        "secondary_abort_error": 14,
+        "secondary_cancellation": 8
+      },
+      "case": {
+        "callbacks": [],
+        "mode": "contract",
+        "name": "no_clobber_no_workers",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 78,
+      "invariants_hold": true,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 64,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 1,
+        "precommit_failure": 24
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 8,
+        "competitor_creates_destination": 6,
+        "deliver_worker_event": 2,
+        "discard_candidate": 28,
+        "discard_undelivered_event": 12,
+        "encoder_error": 6,
+        "external_return_diagnostic": 2,
+        "grant_publication": 2,
+        "install_refused_existing_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "seal": 2,
+        "secondary_abort_error": 26,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_ok",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 136,
+      "invariants_hold": true,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 92,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 1,
+        "precommit_failure": 24
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 4,
+        "competitor_creates_destination": 2,
+        "discard_candidate": 20,
+        "discard_undelivered_event": 12,
+        "encoder_error": 4,
+        "observer_error_before_permission": 2,
+        "secondary_abort_error": 22,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "error"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_error",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 96,
+      "invariants_hold": true,
+      "max_shortest_path_length": 6,
+      "reachable_state_monitor_pairs": 68,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "observer_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 20
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 22,
+        "competitor_creates_destination": 13,
+        "deliver_worker_event": 12,
+        "discard_candidate": 28,
+        "discard_undelivered_event": 72,
+        "encoder_error": 20,
+        "external_return_diagnostic": 2,
+        "grant_publication": 2,
+        "install_refused_existing_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "seal": 2,
+        "secondary_abort_error": 68,
+        "secondary_cancellation": 44,
+        "worker_0_acknowledges_abort": 36,
+        "worker_0_finishes": 6,
+        "worker_1_acknowledges_abort": 36,
+        "worker_1_finishes": 6
+      },
+      "case": {
+        "callbacks": [
+          "ok",
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_ok_ok",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 381,
+      "invariants_hold": true,
+      "max_shortest_path_length": 11,
+      "reachable_state_monitor_pairs": 190,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 1,
+        "precommit_failure": 24
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 14,
+        "competitor_creates_destination": 7,
+        "deliver_worker_event": 4,
+        "discard_candidate": 20,
+        "discard_undelivered_event": 80,
+        "encoder_error": 14,
+        "observer_error_before_permission": 6,
+        "secondary_abort_error": 72,
+        "secondary_cancellation": 52,
+        "worker_0_acknowledges_abort": 36,
+        "worker_0_finishes": 6,
+        "worker_1_acknowledges_abort": 44,
+        "worker_1_finishes": 4
+      },
+      "case": {
+        "callbacks": [
+          "error",
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_error_ok",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 359,
+      "invariants_hold": true,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 178,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "observer_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 20
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 14,
+        "competitor_creates_destination": 7,
+        "deliver_worker_event": 4,
+        "discard_candidate": 20,
+        "discard_undelivered_event": 80,
+        "encoder_error": 14,
+        "observer_error_before_permission": 6,
+        "secondary_abort_error": 72,
+        "secondary_cancellation": 52,
+        "worker_0_acknowledges_abort": 44,
+        "worker_0_finishes": 4,
+        "worker_1_acknowledges_abort": 36,
+        "worker_1_finishes": 6
+      },
+      "case": {
+        "callbacks": [
+          "ok",
+          "error"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_ok_error",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 359,
+      "invariants_hold": true,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 178,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "observer_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 20
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 10,
+        "competitor_creates_destination": 5,
+        "discard_candidate": 20,
+        "discard_undelivered_event": 88,
+        "encoder_error": 10,
+        "observer_error_before_permission": 8,
+        "secondary_abort_error": 80,
+        "secondary_cancellation": 60,
+        "worker_0_acknowledges_abort": 44,
+        "worker_0_finishes": 4,
+        "worker_1_acknowledges_abort": 44,
+        "worker_1_finishes": 4
+      },
+      "case": {
+        "callbacks": [
+          "error",
+          "error"
+        ],
+        "mode": "contract",
+        "name": "no_clobber_error_error",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 377,
+      "invariants_hold": true,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 190,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "observer_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 20
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "backup_cleanup_error": 4,
+        "backup_cleanup_success": 4,
+        "cancel_after_permission": 9,
+        "cancel_before_permission": 2,
+        "discard_candidate": 14,
+        "encoder_error": 1,
+        "external_return_diagnostic": 6,
+        "grant_publication": 1,
+        "hold_old_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "restore_error": 2,
+        "restore_success": 2,
+        "seal": 1,
+        "secondary_abort_error": 7,
+        "secondary_cancellation": 4
+      },
+      "case": {
+        "callbacks": [],
+        "mode": "contract",
+        "name": "replace_no_workers",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 65,
+      "invariants_hold": true,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 48,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "none": 2,
+        "publisher_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 2,
+        "precommit_failure": 12,
+        "recovery_required": 2
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "backup_cleanup_error": 4,
+        "backup_cleanup_success": 4,
+        "cancel_after_permission": 9,
+        "cancel_before_permission": 4,
+        "deliver_worker_event": 1,
+        "discard_candidate": 14,
+        "discard_undelivered_event": 6,
+        "encoder_error": 3,
+        "external_return_diagnostic": 6,
+        "grant_publication": 1,
+        "hold_old_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "restore_error": 2,
+        "restore_success": 2,
+        "seal": 1,
+        "secondary_abort_error": 13,
+        "secondary_cancellation": 8,
+        "worker_0_acknowledges_abort": 6,
+        "worker_0_finishes": 1
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "replace_ok",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 93,
+      "invariants_hold": true,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 62,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "none": 2,
+        "publisher_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 2,
+        "precommit_failure": 12,
+        "recovery_required": 2
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 2,
+        "discard_candidate": 10,
+        "discard_undelivered_event": 6,
+        "encoder_error": 2,
+        "observer_error_before_permission": 1,
+        "secondary_abort_error": 11,
+        "secondary_cancellation": 8,
+        "worker_0_acknowledges_abort": 6,
+        "worker_0_finishes": 1
+      },
+      "case": {
+        "callbacks": [
+          "error"
+        ],
+        "mode": "contract",
+        "name": "replace_error",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 47,
+      "invariants_hold": true,
+      "max_shortest_path_length": 5,
+      "reachable_state_monitor_pairs": 34,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "observer_error": 4
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 10
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "backup_cleanup_error": 4,
+        "backup_cleanup_success": 4,
+        "cancel_after_permission": 9,
+        "cancel_before_permission": 11,
+        "deliver_worker_event": 6,
+        "discard_candidate": 14,
+        "discard_undelivered_event": 36,
+        "encoder_error": 10,
+        "external_return_diagnostic": 6,
+        "grant_publication": 1,
+        "hold_old_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "restore_error": 2,
+        "restore_success": 2,
+        "seal": 1,
+        "secondary_abort_error": 34,
+        "secondary_cancellation": 22,
+        "worker_0_acknowledges_abort": 18,
+        "worker_0_finishes": 3,
+        "worker_1_acknowledges_abort": 18,
+        "worker_1_finishes": 3
+      },
+      "case": {
+        "callbacks": [
+          "ok",
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "replace_ok_ok",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 212,
+      "invariants_hold": true,
+      "max_shortest_path_length": 11,
+      "reachable_state_monitor_pairs": 111,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "none": 2,
+        "publisher_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 2,
+        "precommit_failure": 12,
+        "recovery_required": 2
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 7,
+        "deliver_worker_event": 2,
+        "discard_candidate": 10,
+        "discard_undelivered_event": 40,
+        "encoder_error": 7,
+        "observer_error_before_permission": 3,
+        "secondary_abort_error": 36,
+        "secondary_cancellation": 26,
+        "worker_0_acknowledges_abort": 18,
+        "worker_0_finishes": 3,
+        "worker_1_acknowledges_abort": 22,
+        "worker_1_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "error",
+          "ok"
+        ],
+        "mode": "contract",
+        "name": "replace_error_ok",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 176,
+      "invariants_hold": true,
+      "max_shortest_path_length": 6,
+      "reachable_state_monitor_pairs": 89,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "observer_error": 4
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 10
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 7,
+        "deliver_worker_event": 2,
+        "discard_candidate": 10,
+        "discard_undelivered_event": 40,
+        "encoder_error": 7,
+        "observer_error_before_permission": 3,
+        "secondary_abort_error": 36,
+        "secondary_cancellation": 26,
+        "worker_0_acknowledges_abort": 22,
+        "worker_0_finishes": 2,
+        "worker_1_acknowledges_abort": 18,
+        "worker_1_finishes": 3
+      },
+      "case": {
+        "callbacks": [
+          "ok",
+          "error"
+        ],
+        "mode": "contract",
+        "name": "replace_ok_error",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 176,
+      "invariants_hold": true,
+      "max_shortest_path_length": 6,
+      "reachable_state_monitor_pairs": 89,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "observer_error": 4
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 10
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 5,
+        "discard_candidate": 10,
+        "discard_undelivered_event": 44,
+        "encoder_error": 5,
+        "observer_error_before_permission": 4,
+        "secondary_abort_error": 40,
+        "secondary_cancellation": 30,
+        "worker_0_acknowledges_abort": 22,
+        "worker_0_finishes": 2,
+        "worker_1_acknowledges_abort": 22,
+        "worker_1_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "error",
+          "error"
+        ],
+        "mode": "contract",
+        "name": "replace_error_error",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 186,
+      "invariants_hold": true,
+      "max_shortest_path_length": 6,
+      "reachable_state_monitor_pairs": 95,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "observer_error": 4
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 10
+      },
+      "violations": {}
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 7,
+        "cancel_before_permission": 6,
+        "competitor_creates_destination": 9,
+        "discard_candidate": 36,
+        "encoder_error": 2,
+        "external_return_diagnostic": 2,
+        "grant_publication": 6,
+        "install_refused_existing_destination": 5,
+        "install_success": 5,
+        "publication_error": 10,
+        "seal": 6,
+        "secondary_abort_error": 14,
+        "secondary_cancellation": 10
+      },
+      "case": {
+        "callbacks": [],
+        "mode": "revive_failed_producer",
+        "name": "producer_failure_then_publication",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 118,
+      "invariants_hold": false,
+      "max_shortest_path_length": 7,
+      "reachable_state_monitor_pairs": 93,
+      "terminal_primary_cause_counts": {
+        "cancellation": 6,
+        "encoder_error": 16,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 3,
+        "precommit_failure": 32
+      },
+      "violations": {
+        "abort_before_permission_prevents_commit": {
+          "shortest_witness": [
+            {
+              "action": "encoder_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 13
+        },
+        "first_gate_cause_remains_primary": {
+          "shortest_witness": [
+            {
+              "action": "encoder_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            },
+            {
+              "action": "cancel_before_permission",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "cancellation",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "invalid_producer_revival",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "encoder_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 8,
+        "competitor_creates_destination": 6,
+        "deliver_worker_event": 2,
+        "discard_candidate": 28,
+        "discard_undelivered_event": 12,
+        "encoder_error": 6,
+        "external_return_diagnostic": 2,
+        "grant_publication": 2,
+        "install_refused_existing_destination": 2,
+        "install_success": 2,
+        "postcommit_callback_error": 4,
+        "publication_error": 4,
+        "seal": 2,
+        "secondary_abort_error": 26,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "callback_after_publish",
+        "name": "callback_after_publish",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 140,
+      "invariants_hold": false,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 96,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 4,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 28
+      },
+      "violations": {
+        "committed_outcome_is_sticky": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "postcommit_callback_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        },
+        "no_callbacks_after_seal": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "postcommit_callback_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        },
+        "precommit_failure_preserves_destination": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "postcommit_callback_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        },
+        "terminal_resources_are_drained": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [
+                  -1
+                ],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 6
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 10,
+        "check_abort_separately": 2,
+        "competitor_creates_destination": 9,
+        "deliver_worker_event": 2,
+        "discard_candidate": 32,
+        "discard_undelivered_event": 12,
+        "encoder_error": 6,
+        "external_return_diagnostic": 3,
+        "grant_publication": 4,
+        "install_refused_existing_destination": 3,
+        "install_success": 3,
+        "publication_error": 6,
+        "seal": 2,
+        "secondary_abort_error": 28,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "split_gate",
+        "name": "split_abort_check_and_permission",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 156,
+      "invariants_hold": false,
+      "max_shortest_path_length": 10,
+      "reachable_state_monitor_pairs": 108,
+      "terminal_primary_cause_counts": {
+        "cancellation": 9,
+        "encoder_error": 8,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 2,
+        "precommit_failure": 28
+      },
+      "violations": {
+        "abort_before_permission_prevents_commit": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "check_abort_separately",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "split_gate_check",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "cancel_before_permission",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "split_gate_check",
+                "primary_cause": "cancellation",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "split_gate_check",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "cancellation",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "split_gate_check",
+                "primary_cause": "cancellation",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 5
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 42,
+        "cancel_before_permission": 22,
+        "competitor_creates_destination": 33,
+        "deliver_worker_event": 12,
+        "discard_candidate": 40,
+        "discard_undelivered_event": 144,
+        "encoder_error": 20,
+        "external_return_diagnostic": 20,
+        "grant_publication": 22,
+        "install_refused_existing_destination": 22,
+        "install_success": 22,
+        "publication_error": 44,
+        "seal": 2,
+        "secondary_abort_error": 128,
+        "secondary_cancellation": 84,
+        "worker_0_acknowledges_abort": 72,
+        "worker_0_finishes": 6,
+        "worker_1_acknowledges_abort": 72,
+        "worker_1_finishes": 6
+      },
+      "case": {
+        "callbacks": [
+          "ok",
+          "ok"
+        ],
+        "mode": "premature_gate",
+        "name": "publish_before_worker_event_drain",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 813,
+      "invariants_hold": false,
+      "max_shortest_path_length": 10,
+      "reachable_state_monitor_pairs": 386,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 10,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 10,
+        "precommit_failure": 24
+      },
+      "violations": {
+        "closed_drained_before_publication": {
+          "shortest_witness": [
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              }
+            }
+          ],
+          "violating_edges": 40
+        },
+        "terminal_resources_are_drained": {
+          "shortest_witness": [
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": [
+                  0,
+                  1
+                ]
+              }
+            }
+          ],
+          "violating_edges": 54
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "cancel_after_permission": 4,
+        "cancel_before_permission": 8,
+        "competitor_creates_destination": 6,
+        "deliver_worker_event": 2,
+        "discard_candidate": 28,
+        "discard_undelivered_event": 12,
+        "encoder_error": 6,
+        "external_return_diagnostic": 2,
+        "grant_publication": 2,
+        "install_success": 4,
+        "publication_error": 4,
+        "seal": 2,
+        "secondary_abort_error": 26,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "clobbering_install",
+        "name": "replace_competitor_without_permission",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 136,
+      "invariants_hold": false,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 92,
+      "terminal_primary_cause_counts": {
+        "cancellation": 4,
+        "encoder_error": 8,
+        "none": 1,
+        "publisher_error": 12
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 1,
+        "precommit_failure": 24
+      },
+      "violations": {
+        "no_clobber_preserves_competitor": {
+          "shortest_witness": [
+            {
+              "action": "competitor_creates_destination",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "competitor_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 2
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "backup_cleanup_error": 4,
+        "backup_cleanup_success": 4,
+        "cancel_after_permission": 9,
+        "cancel_before_permission": 4,
+        "deliver_worker_event": 1,
+        "discard_candidate": 14,
+        "discard_undelivered_event": 6,
+        "encoder_error": 3,
+        "external_return_diagnostic": 6,
+        "grant_publication": 1,
+        "hold_old_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "restore_error": 2,
+        "restore_success": 2,
+        "seal": 1,
+        "secondary_abort_error": 13,
+        "secondary_cancellation": 8,
+        "worker_0_acknowledges_abort": 6,
+        "worker_0_finishes": 1
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "lost_recovery",
+        "name": "discard_failed_restore_backup",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 93,
+      "invariants_hold": false,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 62,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "none": 2,
+        "publisher_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 2,
+        "precommit_failure": 14
+      },
+      "violations": {
+        "precommit_failure_preserves_destination": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "hold_old_destination",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "publication_error",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "restoring_old_destination",
+                "primary_cause": "publisher_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "restore_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "publisher_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "restoring_old_destination",
+                "primary_cause": "publisher_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 2
+        },
+        "restore_failure_has_recovery": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "hold_old_destination",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "publication_error",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "restoring_old_destination",
+                "primary_cause": "publisher_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "restore_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "publisher_error",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "restoring_old_destination",
+                "primary_cause": "publisher_error",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 2
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "backup_cleanup_error": 4,
+        "backup_cleanup_success": 4,
+        "cancel_after_permission": 7,
+        "cancel_before_permission": 4,
+        "deliver_worker_event": 1,
+        "discard_candidate": 14,
+        "discard_undelivered_event": 6,
+        "encoder_error": 3,
+        "external_return_diagnostic": 4,
+        "grant_publication": 1,
+        "hold_old_destination": 2,
+        "install_success": 2,
+        "publication_error": 4,
+        "restore_error": 2,
+        "restore_success": 2,
+        "seal": 1,
+        "secondary_abort_error": 13,
+        "secondary_cancellation": 8,
+        "worker_0_acknowledges_abort": 6,
+        "worker_0_finishes": 1
+      },
+      "case": {
+        "callbacks": [
+          "ok"
+        ],
+        "mode": "cleanup_reclassifies_commit",
+        "name": "cleanup_error_reclassifies_commit",
+        "policy": "replace"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 89,
+      "invariants_hold": false,
+      "max_shortest_path_length": 9,
+      "reachable_state_monitor_pairs": 62,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "none": 5,
+        "publisher_error": 8
+      },
+      "terminal_state_monitor_counts": {
+        "committed": 1,
+        "precommit_failure": 16,
+        "recovery_required": 2
+      },
+      "violations": {
+        "committed_outcome_is_sticky": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "hold_old_destination",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "backup_cleanup_error",
+              "after": {
+                "backup": "old_destination_retained_with_cleanup_notice",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        },
+        "precommit_failure_preserves_destination": {
+          "shortest_witness": [
+            {
+              "action": "worker_0_finishes",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "deliver_worker_event",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [
+                  0
+                ],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "seal",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "grant_publication",
+              "after": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "sealed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "hold_old_destination",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "previous_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "install_success",
+              "after": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "closed_checked_candidate",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "publishing",
+                "primary_cause": "none",
+                "workers": []
+              }
+            },
+            {
+              "action": "backup_cleanup_error",
+              "after": {
+                "backup": "old_destination_retained_with_cleanup_notice",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "precommit_failure",
+                "primary_cause": "none",
+                "workers": []
+              },
+              "before": {
+                "backup": "old_destination_held",
+                "cancellation": "not_requested",
+                "candidate": "no_candidate",
+                "destination": "new_destination",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "committed",
+                "primary_cause": "none",
+                "workers": []
+              }
+            }
+          ],
+          "violating_edges": 4
+        }
+      }
+    },
+    {
+      "action_edge_counts": {
+        "cancel_before_permission": 4,
+        "competitor_creates_destination": 2,
+        "discard_candidate": 20,
+        "discard_undelivered_event": 12,
+        "encoder_error": 4,
+        "observer_error_before_permission": 2,
+        "secondary_abort_error": 22,
+        "secondary_cancellation": 16,
+        "worker_0_acknowledges_abort": 12,
+        "worker_0_finishes": 2
+      },
+      "case": {
+        "callbacks": [
+          "error"
+        ],
+        "mode": "overwrite_primary",
+        "name": "later_abort_overwrites_primary",
+        "policy": "no_clobber"
+      },
+      "exhaustive_within_bounds": true,
+      "explored_edges": 96,
+      "invariants_hold": false,
+      "max_shortest_path_length": 6,
+      "reachable_state_monitor_pairs": 68,
+      "terminal_primary_cause_counts": {
+        "cancellation": 2,
+        "encoder_error": 4,
+        "observer_error": 14
+      },
+      "terminal_state_monitor_counts": {
+        "precommit_failure": 20
+      },
+      "violations": {
+        "first_gate_cause_remains_primary": {
+          "shortest_witness": [
+            {
+              "action": "cancel_before_permission",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "cancellation",
+                "workers": [
+                  0
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "not_requested",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "staging",
+                "primary_cause": "none",
+                "workers": [
+                  0
+                ]
+              }
+            },
+            {
+              "action": "secondary_abort_error",
+              "after": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "secondary_worker_or_observer_error",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "observer_error",
+                "workers": [
+                  0
+                ]
+              },
+              "before": {
+                "backup": "none",
+                "cancellation": "requested_before_permission",
+                "candidate": "writable_staging",
+                "destination": "absent",
+                "diagnostic": "none",
+                "events": [],
+                "phase": "aborting",
+                "primary_cause": "cancellation",
+                "workers": [
+                  0
+                ]
+              }
+            }
+          ],
+          "violating_edges": 42
+        }
+      }
+    }
+  ],
+  "checkout_commit": "ca1b72759a38cb58588f0a89aa83516aafcb41d1",
+  "command": [
+    "/usr/bin/python3",
+    "bench/architecture_audit/foundation/model.py"
+  ],
+  "expected_negative_control_properties": {
+    "callback_after_publish": "committed_outcome_is_sticky",
+    "cleanup_error_reclassifies_commit": "committed_outcome_is_sticky",
+    "discard_failed_restore_backup": "restore_failure_has_recovery",
+    "later_abort_overwrites_primary": "first_gate_cause_remains_primary",
+    "producer_failure_then_publication": "abort_before_permission_prevents_commit",
+    "publish_before_worker_event_drain": "closed_drained_before_publication",
+    "replace_competitor_without_permission": "no_clobber_preserves_competitor",
+    "split_abort_check_and_permission": "abort_before_permission_prevents_commit"
+  },
+  "invariants": {
+    "abort_before_permission_prevents_commit": "Every accepted fatal cause before publication permission forbids permission and installation.",
+    "closed_drained_before_publication": "At permission grant and installation, all workers and events are drained and the candidate is sealed.",
+    "committed_outcome_is_sticky": "After installation succeeds, no later error changes the outcome to precommit failure or recovery-required.",
+    "first_gate_cause_remains_primary": "The first abort/fatal cause accepted at the synchronized gate remains primary; later errors are secondary. Publisher errors select the cause after publication permission.",
+    "no_callbacks_after_seal": "Core callback delivery occurs only during staging, before seal/drain completes.",
+    "no_clobber_preserves_competitor": "Without replace permission, a successful install cannot overwrite an existing destination.",
+    "no_producer_work_after_seal": "Encoder errors and worker completion occur only during staging; producer work cannot resume after sealing.",
+    "postcommit_destination_survives_cleanup": "Cleanup and return diagnostics after installation preserve the installed destination.",
+    "precommit_failure_preserves_destination": "Precommit failure cannot own a new destination; replace failure preserves the previous destination.",
+    "restore_failure_has_recovery": "Failure to restore a held previous destination yields recovery-required with the backup retained.",
+    "terminal_resources_are_drained": "Committed, failed and recovery outcomes own no candidate, workers or pending observer events."
+  },
+  "model_sha256": "21d0af85fe8328850aa91520c21f9dfa817c70a318f08acf0c39757762f145d5",
+  "not_proven": [
+    "Production behavior",
+    "Filesystem/OS primitives",
+    "Crash recovery",
+    "Power-loss durability",
+    "Thread synchronization implementation",
+    "Python FFI/GIL",
+    "Unbounded workers or retries",
+    "Active/reentrant callbacks or actual event-admission synchronization",
+    "Duplicate publication and consumed-handle enforcement (one-attempt bound)",
+    "Exception object identity",
+    "Liveness under unfair scheduling",
+    "Process signals",
+    "Concurrent replace publishers",
+    "Failed staging deletion",
+    "Format correctness"
+  ],
+  "schema_version": 1,
+  "success": true,
+  "toolchain": {
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]"
+  }
+}

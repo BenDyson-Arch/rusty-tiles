@@ -1,0 +1,865 @@
+{
+  "baseline": "8dfd74bd87dd23c86278e98d736c3f5912c246cf",
+  "system": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+  "build": {
+    "features": [],
+    "jobs": 2,
+    "dev_debug": 0
+  },
+  "binaries": {
+    "baseline": {
+      "path": "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+      "sha256": "c6aa47a12031ccfebe9d52ddea0e51f8a0a18b64af3a692198087965f19217ad"
+    },
+    "instrumented": {
+      "path": "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/rusty-tiles",
+      "sha256": "a2616b9643a1e996b3759499b9f987be3cece60086b8d7363827082aaa6a4721"
+    },
+    "publication": {
+      "path": "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/examples/audit-publication",
+      "sha256": "b2b310000c0f2453ce136891119facaaeb47328c1d435309609d74afbc5b205b"
+    }
+  },
+  "probes": {
+    "accepted_content_inventory_control": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/inventory.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/inventory.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--maxVertices",
+        "4"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"conversionReport\":{\"archive\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/inventory.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"features\":20,\"featuresWithoutGeometry\":0,\"fragmentedPolygons\":0,\"fragments\":20,\"geometryReportCount\":0,\"leafTiles\":8,\"lockedSharedVertices\":0,\"maximumTileBytes\":1736,\"maximumTileVertices\":3,\"routingTiles\":7,\"skippedFeatures\":0,\"tiles\":15},\"ok\":true,\"output\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/inventory.3tz\",\"reuse\":{\"incompatibleReason\":null,\"previousTileset\":false,\"publishedContents\":8,\"rebuiltContents\":8,\"requestedPreviousTileset\":false,\"reusedContentReferences\":0,\"reusedContents\":0,\"reusedSubtrees\":0,\"reusedTiles\":0},\"settings\":{\"lodLevels\":1,\"lodToleranceMetres\":0.1},\"skippedFeatures\":0}\n",
+      "stderr": "",
+      "injected": false,
+      "source_sha256": "7eff7e62780cf6eb19a5516c62d58ab506c9f9660b51766bdab485b8b04da4a5",
+      "artifact": {
+        "published": true,
+        "archive_bytes": 28282,
+        "sha256": "481fd8d9f00f824b5fbd029569383753ab808b4ccecc288990a15f6f40d0cbf5",
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "geometry-reports.jsonl",
+          "t/07cd3654c62e017cc133dffccdbe669e75198eeee16954411d65958e01f27153.glb",
+          "t/136af3d9241a320145e2e61b87aecf74db3fb844584b4c44d0de26a6a5eb6e82.glb",
+          "t/5a606407858a0719c703c58e869cb8078aee06d00d43314900b6b1eeffe41232.glb",
+          "t/6a2847e2bf886f102cdd21865a0d458de7d8dfa484c7ceda8f77c756cddf2695.glb",
+          "t/970a7f505c95d19b0865de6494e47d6202df127c5bfa396c601e836196a97c90.glb",
+          "t/98269b7d7202e2b0d874640c4904f715ab33f9ddc3d978c06b7c5b079e3b26a0.glb",
+          "t/bc3663c956b7e579f35f0387b0ac202d652ec0631e4cbf1a0e64e2364bdd5c50.glb",
+          "t/c6d79275f9462a6f6f40bc2e844814ddbe40de00a6f1ea383776c3b540c1162b.glb",
+          "tileset.json",
+          "vector-build.json"
+        ],
+        "referenced_contents": [
+          "t/07cd3654c62e017cc133dffccdbe669e75198eeee16954411d65958e01f27153.glb",
+          "t/136af3d9241a320145e2e61b87aecf74db3fb844584b4c44d0de26a6a5eb6e82.glb",
+          "t/5a606407858a0719c703c58e869cb8078aee06d00d43314900b6b1eeffe41232.glb",
+          "t/6a2847e2bf886f102cdd21865a0d458de7d8dfa484c7ceda8f77c756cddf2695.glb",
+          "t/970a7f505c95d19b0865de6494e47d6202df127c5bfa396c601e836196a97c90.glb",
+          "t/98269b7d7202e2b0d874640c4904f715ab33f9ddc3d978c06b7c5b079e3b26a0.glb",
+          "t/bc3663c956b7e579f35f0387b0ac202d652ec0631e4cbf1a0e64e2364bdd5c50.glb",
+          "t/c6d79275f9462a6f6f40bc2e844814ddbe40de00a6f1ea383776c3b540c1162b.glb"
+        ],
+        "unreferenced_content_members": [],
+        "missing_referenced_contents": [],
+        "root_extras": {
+          "buildPath": "",
+          "routing": true,
+          "routingReason": "vertices"
+        },
+        "report": {
+          "attributeFilter": null,
+          "budgets": {
+            "bytes": 4194304,
+            "features": 64,
+            "parentFeatures": 4096,
+            "tiles": 100000,
+            "vertices": 4
+          },
+          "encoding": {
+            "encodedTileBytes": 13676,
+            "maximumQuantizationErrorMetres": 0.0,
+            "maximumTilePrimitives": 1,
+            "meshopt": false,
+            "primitiveReferences": 8,
+            "quantize": false,
+            "uncompressedTileBytes": 13676
+          },
+          "errorPolicy": "direct original-to-parent distance plus float32 rounding; all source bounds retained",
+          "features": 20,
+          "featuresWithoutGeometry": 0,
+          "fragmentedPolygons": 0,
+          "fragments": 20,
+          "geometryReportCount": 0,
+          "geometryReports": "geometry-reports.jsonl",
+          "geometryReportsScope": "current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
+          "inputDriver": "GeoJSON",
+          "layers": [
+            {
+              "attributeFilter": null,
+              "features": 20,
+              "featuresWithoutGeometry": 0,
+              "heightMode": "local metres",
+              "heightOffset": null,
+              "invalidFeatures": 0,
+              "jsonFields": [],
+              "name": "inventory",
+              "sourceCrs": null
+            }
+          ],
+          "leafTiles": 8,
+          "lockedSharedVertices": 0,
+          "lodFallbacks": [],
+          "lodLevels": 1,
+          "lodToleranceMetres": 0.1,
+          "maximumTileBytes": 1736,
+          "maximumTileVertices": 3,
+          "metadata": {
+            "dropFields": [],
+            "fields": [],
+            "listFields": "error"
+          },
+          "parentRepairEnabled": false,
+          "pointAggregation": {
+            "contentTiles": 0,
+            "enabled": false
+          },
+          "pointPolicy": "retain every semantic point feature; oversized parents route without content",
+          "polygonFragmentPolicy": "standard glTF fills plus vector source boundaries; no internal fragment outlines",
+          "repairEnabled": false,
+          "reuse": {
+            "incompatibleReason": null,
+            "previousTileset": false,
+            "publishedContents": 8,
+            "rebuiltContents": 8,
+            "requestedPreviousTileset": false,
+            "reusedContentReferences": 0,
+            "reusedContents": 0,
+            "reusedSubtrees": 0,
+            "reusedTiles": 0
+          },
+          "routingTiles": 7,
+          "skipInvalidEnabled": false,
+          "skippedFeatures": 0,
+          "tiles": 15
+        },
+        "geometry_reports": []
+      }
+    },
+    "rejected_encoded_candidate_cleanup_control": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/encoded-budget.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/encoded-budget.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"conversionReport\":{\"archive\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/encoded-budget.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"features\":2,\"featuresWithoutGeometry\":0,\"fragmentedPolygons\":0,\"fragments\":2,\"geometryReportCount\":0,\"leafTiles\":2,\"lockedSharedVertices\":0,\"maximumTileBytes\":3224,\"maximumTileVertices\":1,\"routingTiles\":1,\"skippedFeatures\":0,\"tiles\":3},\"ok\":true,\"output\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/encoded-budget.3tz\",\"reuse\":{\"incompatibleReason\":null,\"previousTileset\":false,\"publishedContents\":2,\"rebuiltContents\":2,\"requestedPreviousTileset\":false,\"reusedContentReferences\":0,\"reusedContents\":0,\"reusedSubtrees\":0,\"reusedTiles\":0},\"settings\":{\"lodLevels\":1,\"lodToleranceMetres\":0.1},\"skippedFeatures\":0}\n",
+      "stderr": "",
+      "injected": false,
+      "source_sha256": "705b92c56c97cc52d27a862017eb16fdc8397511e74511f0b670ec1d2fd4a2fd",
+      "artifact": {
+        "published": true,
+        "archive_bytes": 12669,
+        "sha256": "b854502f771ad5c7029ba834a657a950ca78f22261e795db1fa3879808a4c3a1",
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "geometry-reports.jsonl",
+          "t/601ba97aff777bbaf8b2b30103e662b1dcf093d43a77c213e0f34241d0486630.glb",
+          "t/fd8296e12694c9f47de9e745113cedaeb82878392e854605d209c9ced4671724.glb",
+          "tileset.json",
+          "vector-build.json"
+        ],
+        "referenced_contents": [
+          "t/601ba97aff777bbaf8b2b30103e662b1dcf093d43a77c213e0f34241d0486630.glb",
+          "t/fd8296e12694c9f47de9e745113cedaeb82878392e854605d209c9ced4671724.glb"
+        ],
+        "unreferenced_content_members": [],
+        "missing_referenced_contents": [],
+        "root_extras": {
+          "buildPath": "",
+          "routing": true,
+          "routingReason": "bytes"
+        },
+        "report": {
+          "attributeFilter": null,
+          "budgets": {
+            "bytes": 4096,
+            "features": 64,
+            "parentFeatures": 4096,
+            "tiles": 100000,
+            "vertices": 65536
+          },
+          "encoding": {
+            "encodedTileBytes": 6448,
+            "maximumQuantizationErrorMetres": 0.0,
+            "maximumTilePrimitives": 1,
+            "meshopt": false,
+            "primitiveReferences": 2,
+            "quantize": false,
+            "uncompressedTileBytes": 6448
+          },
+          "errorPolicy": "direct original-to-parent distance plus float32 rounding; all source bounds retained",
+          "features": 2,
+          "featuresWithoutGeometry": 0,
+          "fragmentedPolygons": 0,
+          "fragments": 2,
+          "geometryReportCount": 0,
+          "geometryReports": "geometry-reports.jsonl",
+          "geometryReportsScope": "current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
+          "inputDriver": "GeoJSON",
+          "layers": [
+            {
+              "attributeFilter": null,
+              "features": 2,
+              "featuresWithoutGeometry": 0,
+              "heightMode": "local metres",
+              "heightOffset": null,
+              "invalidFeatures": 0,
+              "jsonFields": [],
+              "name": "encoded-budget",
+              "sourceCrs": null
+            }
+          ],
+          "leafTiles": 2,
+          "lockedSharedVertices": 0,
+          "lodFallbacks": [],
+          "lodLevels": 1,
+          "lodToleranceMetres": 0.1,
+          "maximumTileBytes": 3224,
+          "maximumTileVertices": 1,
+          "metadata": {
+            "dropFields": [],
+            "fields": [],
+            "listFields": "error"
+          },
+          "parentRepairEnabled": false,
+          "pointAggregation": {
+            "contentTiles": 0,
+            "enabled": false
+          },
+          "pointPolicy": "retain every semantic point feature; oversized parents route without content",
+          "polygonFragmentPolicy": "standard glTF fills plus vector source boundaries; no internal fragment outlines",
+          "repairEnabled": false,
+          "reuse": {
+            "incompatibleReason": null,
+            "previousTileset": false,
+            "publishedContents": 2,
+            "rebuiltContents": 2,
+            "requestedPreviousTileset": false,
+            "reusedContentReferences": 0,
+            "reusedContents": 0,
+            "reusedSubtrees": 0,
+            "reusedTiles": 0
+          },
+          "routingTiles": 1,
+          "skipInvalidEnabled": false,
+          "skippedFeatures": 0,
+          "tiles": 3
+        },
+        "geometry_reports": []
+      }
+    },
+    "natural_feature_rollback_side_effects": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback-skipped.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--maxBytes",
+        "4096",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"conversionReport\":{\"archive\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback-skipped.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"features\":1,\"featuresWithoutGeometry\":0,\"fragmentedPolygons\":1,\"fragments\":1,\"geometryReportCount\":2,\"leafTiles\":1,\"lockedSharedVertices\":0,\"maximumTileBytes\":1504,\"maximumTileVertices\":1,\"routingTiles\":0,\"skippedFeatures\":1,\"tiles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback-skipped.3tz\",\"reuse\":{\"incompatibleReason\":null,\"previousTileset\":false,\"publishedContents\":1,\"rebuiltContents\":1,\"requestedPreviousTileset\":false,\"reusedContentReferences\":0,\"reusedContents\":0,\"reusedSubtrees\":0,\"reusedTiles\":0},\"settings\":{\"lodLevels\":1,\"lodToleranceMetres\":0.1},\"skippedFeatures\":1}\n",
+      "stderr": "layer 'rollback', feature \"oversize\": indivisible polygon fill/boundary or metadata exceeds tile budget\n",
+      "injected": false,
+      "source_sha256": "e0f2e468a5dea6caf8ba44ca30c174ed2e6a0cf1bf35a51a02b7a7d60e8545b5",
+      "artifact": {
+        "published": true,
+        "archive_bytes": 7560,
+        "sha256": "8743afb0ba66653f55412235bec737d8456553d28cd7ae141a7bc29be9b00d88",
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "geometry-reports.jsonl",
+          "t/21ea2a3ac8c7d2a2af63ddaa570b6baa59a8cdb48f0dd201f524715d121bca99.glb",
+          "tileset.json",
+          "vector-build.json"
+        ],
+        "referenced_contents": [
+          "t/21ea2a3ac8c7d2a2af63ddaa570b6baa59a8cdb48f0dd201f524715d121bca99.glb"
+        ],
+        "unreferenced_content_members": [],
+        "missing_referenced_contents": [],
+        "root_extras": {
+          "buildPath": "",
+          "encodedBytes": 1504,
+          "featureFragments": 1,
+          "geometryErrorMetres": 0.0,
+          "positionRoundingMetres": 0.0,
+          "primitives": 1,
+          "quantizationErrorMetres": 0.0,
+          "toleranceMetres": 0.0,
+          "uncompressedBytes": 1504,
+          "vertices": 1
+        },
+        "report": {
+          "attributeFilter": null,
+          "budgets": {
+            "bytes": 4096,
+            "features": 64,
+            "parentFeatures": 4096,
+            "tiles": 100000,
+            "vertices": 65536
+          },
+          "encoding": {
+            "encodedTileBytes": 1504,
+            "maximumQuantizationErrorMetres": 0.0,
+            "maximumTilePrimitives": 1,
+            "meshopt": false,
+            "primitiveReferences": 1,
+            "quantize": false,
+            "uncompressedTileBytes": 1504
+          },
+          "errorPolicy": "direct original-to-parent distance plus float32 rounding; all source bounds retained",
+          "features": 1,
+          "featuresWithoutGeometry": 0,
+          "fragmentedPolygons": 1,
+          "fragments": 1,
+          "geometryReportCount": 2,
+          "geometryReports": "geometry-reports.jsonl",
+          "geometryReportsScope": "current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
+          "inputDriver": "GeoJSON",
+          "layers": [
+            {
+              "attributeFilter": null,
+              "features": 1,
+              "featuresWithoutGeometry": 0,
+              "heightMode": "local metres",
+              "heightOffset": null,
+              "invalidFeatures": 1,
+              "jsonFields": [],
+              "name": "rollback",
+              "sourceCrs": null
+            }
+          ],
+          "leafTiles": 1,
+          "lockedSharedVertices": 0,
+          "lodFallbacks": [
+            {
+              "addedIntersectionVertices": 0,
+              "collapsedPoleTriangles": 0,
+              "duplicateVertices": 0,
+              "maximumIntersectionAdjustmentMetres": 0.0,
+              "planarityDeviationMetres": 0.0,
+              "polygonParts": 1,
+              "reason": "oversized polygon surfaces partitioned; original boundary rendered separately without internal edges",
+              "sourceId": "\"oversize\"",
+              "sourceLayer": "rollback",
+              "topologyRepaired": false,
+              "triangulationSpace": "best-fit 3D"
+            },
+            {
+              "outcome": "skipped",
+              "reason": "indivisible polygon fill/boundary or metadata exceeds tile budget",
+              "sourceId": "\"oversize\"",
+              "sourceLayer": "rollback"
+            }
+          ],
+          "lodLevels": 1,
+          "lodToleranceMetres": 0.1,
+          "maximumTileBytes": 1504,
+          "maximumTileVertices": 1,
+          "metadata": {
+            "dropFields": [],
+            "fields": [],
+            "listFields": "error"
+          },
+          "parentRepairEnabled": false,
+          "pointAggregation": {
+            "contentTiles": 0,
+            "enabled": false
+          },
+          "pointPolicy": "retain every semantic point feature; oversized parents route without content",
+          "polygonFragmentPolicy": "standard glTF fills plus vector source boundaries; no internal fragment outlines",
+          "repairEnabled": false,
+          "reuse": {
+            "incompatibleReason": null,
+            "previousTileset": false,
+            "publishedContents": 1,
+            "rebuiltContents": 1,
+            "requestedPreviousTileset": false,
+            "reusedContentReferences": 0,
+            "reusedContents": 0,
+            "reusedSubtrees": 0,
+            "reusedTiles": 0
+          },
+          "routingTiles": 0,
+          "skipInvalidEnabled": true,
+          "skippedFeatures": 1,
+          "tiles": 1
+        },
+        "geometry_reports": [
+          {
+            "addedIntersectionVertices": 0,
+            "collapsedPoleTriangles": 0,
+            "duplicateVertices": 0,
+            "maximumIntersectionAdjustmentMetres": 0.0,
+            "planarityDeviationMetres": 0.0,
+            "polygonParts": 1,
+            "reason": "oversized polygon surfaces partitioned; original boundary rendered separately without internal edges",
+            "sourceId": "\"oversize\"",
+            "sourceLayer": "rollback",
+            "topologyRepaired": false,
+            "triangulationSpace": "best-fit 3D"
+          },
+          {
+            "outcome": "skipped",
+            "reason": "indivisible polygon fill/boundary or metadata exceeds tile budget",
+            "sourceId": "\"oversize\"",
+            "sourceLayer": "rollback"
+          }
+        ]
+      }
+    },
+    "natural_rollback_strict_control": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/rollback-strict.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--maxBytes",
+        "4096"
+      ],
+      "exit_code": 3,
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"1 unconvertible feature(s); first failure: indivisible polygon fill/boundary or metadata exceeds tile budget. No tileset published. Fix the reported features or explicitly use --skipInvalid.\"},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "layer 'rollback', feature \"oversize\": indivisible polygon fill/boundary or metadata exceeds tile budget\n",
+      "injected": false,
+      "source_sha256": "e0f2e468a5dea6caf8ba44ca30c174ed2e6a0cf1bf35a51a02b7a7d60e8545b5",
+      "artifact": {
+        "published": false
+      }
+    },
+    "accept_io_baseline_control": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-baseline-rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-control.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"conversionReport\":{\"archive\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-control.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"features\":2,\"featuresWithoutGeometry\":0,\"fragmentedPolygons\":0,\"fragments\":2,\"geometryReportCount\":0,\"leafTiles\":1,\"lockedSharedVertices\":0,\"maximumTileBytes\":1708,\"maximumTileVertices\":2,\"routingTiles\":0,\"skippedFeatures\":0,\"tiles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-control.3tz\",\"reuse\":{\"incompatibleReason\":null,\"previousTileset\":false,\"publishedContents\":1,\"rebuiltContents\":1,\"requestedPreviousTileset\":false,\"reusedContentReferences\":0,\"reusedContents\":0,\"reusedSubtrees\":0,\"reusedTiles\":0},\"settings\":{\"lodLevels\":1,\"lodToleranceMetres\":0.1},\"skippedFeatures\":0}\n",
+      "stderr": "",
+      "injected": false,
+      "source_sha256": "a1d2953474ee18ca37f513012cfb6cc50b2174bb96be3739a4eb89b99b39e6b4",
+      "artifact": {
+        "published": true,
+        "archive_bytes": 6569,
+        "sha256": "bd121dd7fc088f1438fe11a9763ae7eb22fed33b23bc09b8b06f2c45ad205700",
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "geometry-reports.jsonl",
+          "t/b125969080daba7d5ee8fa37f951df7d24fb7818bf0ca7847027dfdde4b65f5d.glb",
+          "tileset.json",
+          "vector-build.json"
+        ],
+        "referenced_contents": [
+          "t/b125969080daba7d5ee8fa37f951df7d24fb7818bf0ca7847027dfdde4b65f5d.glb"
+        ],
+        "unreferenced_content_members": [],
+        "missing_referenced_contents": [],
+        "root_extras": {
+          "buildPath": "",
+          "encodedBytes": 1708,
+          "featureFragments": 2,
+          "geometryErrorMetres": 0.0,
+          "positionRoundingMetres": 0.0,
+          "primitives": 1,
+          "quantizationErrorMetres": 0.0,
+          "toleranceMetres": 0.0,
+          "uncompressedBytes": 1708,
+          "vertices": 2
+        },
+        "report": {
+          "attributeFilter": null,
+          "budgets": {
+            "bytes": 4194304,
+            "features": 64,
+            "parentFeatures": 4096,
+            "tiles": 100000,
+            "vertices": 65536
+          },
+          "encoding": {
+            "encodedTileBytes": 1708,
+            "maximumQuantizationErrorMetres": 0.0,
+            "maximumTilePrimitives": 1,
+            "meshopt": false,
+            "primitiveReferences": 1,
+            "quantize": false,
+            "uncompressedTileBytes": 1708
+          },
+          "errorPolicy": "direct original-to-parent distance plus float32 rounding; all source bounds retained",
+          "features": 2,
+          "featuresWithoutGeometry": 0,
+          "fragmentedPolygons": 0,
+          "fragments": 2,
+          "geometryReportCount": 0,
+          "geometryReports": "geometry-reports.jsonl",
+          "geometryReportsScope": "current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
+          "inputDriver": "GeoJSON",
+          "layers": [
+            {
+              "attributeFilter": null,
+              "features": 2,
+              "featuresWithoutGeometry": 0,
+              "heightMode": "local metres",
+              "heightOffset": null,
+              "invalidFeatures": 0,
+              "jsonFields": [],
+              "name": "accept-io",
+              "sourceCrs": null
+            }
+          ],
+          "leafTiles": 1,
+          "lockedSharedVertices": 0,
+          "lodFallbacks": [],
+          "lodLevels": 1,
+          "lodToleranceMetres": 0.1,
+          "maximumTileBytes": 1708,
+          "maximumTileVertices": 2,
+          "metadata": {
+            "dropFields": [],
+            "fields": [],
+            "listFields": "error"
+          },
+          "parentRepairEnabled": false,
+          "pointAggregation": {
+            "contentTiles": 0,
+            "enabled": false
+          },
+          "pointPolicy": "retain every semantic point feature; oversized parents route without content",
+          "polygonFragmentPolicy": "standard glTF fills plus vector source boundaries; no internal fragment outlines",
+          "repairEnabled": false,
+          "reuse": {
+            "incompatibleReason": null,
+            "previousTileset": false,
+            "publishedContents": 1,
+            "rebuiltContents": 1,
+            "requestedPreviousTileset": false,
+            "reusedContentReferences": 0,
+            "reusedContents": 0,
+            "reusedSubtrees": 0,
+            "reusedTiles": 0
+          },
+          "routingTiles": 0,
+          "skipInvalidEnabled": true,
+          "skippedFeatures": 0,
+          "tiles": 1
+        },
+        "geometry_reports": []
+      }
+    },
+    "injected_accept_io_swallowed_by_skip_invalid": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-skipped.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64",
+        "--skipInvalid"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"conversionReport\":{\"archive\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-skipped.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"features\":1,\"featuresWithoutGeometry\":0,\"fragmentedPolygons\":0,\"fragments\":1,\"geometryReportCount\":1,\"leafTiles\":1,\"lockedSharedVertices\":0,\"maximumTileBytes\":1644,\"maximumTileVertices\":1,\"routingTiles\":0,\"skippedFeatures\":1,\"tiles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-skipped.3tz\",\"reuse\":{\"incompatibleReason\":null,\"previousTileset\":false,\"publishedContents\":1,\"rebuiltContents\":1,\"requestedPreviousTileset\":false,\"reusedContentReferences\":0,\"reusedContents\":0,\"reusedSubtrees\":0,\"reusedTiles\":0},\"settings\":{\"lodLevels\":1,\"lodToleranceMetres\":0.1},\"skippedFeatures\":1}\n",
+      "stderr": "layer 'accept-io', feature \"storage-failure\": No space left on device (os error 28)\n",
+      "injected": true,
+      "source_sha256": "a1d2953474ee18ca37f513012cfb6cc50b2174bb96be3739a4eb89b99b39e6b4",
+      "artifact": {
+        "published": true,
+        "archive_bytes": 6797,
+        "sha256": "4e7b2c771d93657608bec4f0cf951b68ee9bc18d0dbda7759c5f3267bdfa08cc",
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "geometry-reports.jsonl",
+          "t/ab4f7f88ce5d3dacfa49629b806967c1984d5ba5721c351c1e82dd6b62a157c2.glb",
+          "tileset.json",
+          "vector-build.json"
+        ],
+        "referenced_contents": [
+          "t/ab4f7f88ce5d3dacfa49629b806967c1984d5ba5721c351c1e82dd6b62a157c2.glb"
+        ],
+        "unreferenced_content_members": [],
+        "missing_referenced_contents": [],
+        "root_extras": {
+          "buildPath": "",
+          "encodedBytes": 1644,
+          "featureFragments": 1,
+          "geometryErrorMetres": 0.0,
+          "positionRoundingMetres": 0.0,
+          "primitives": 1,
+          "quantizationErrorMetres": 0.0,
+          "toleranceMetres": 0.0,
+          "uncompressedBytes": 1644,
+          "vertices": 1
+        },
+        "report": {
+          "attributeFilter": null,
+          "budgets": {
+            "bytes": 4194304,
+            "features": 64,
+            "parentFeatures": 4096,
+            "tiles": 100000,
+            "vertices": 65536
+          },
+          "encoding": {
+            "encodedTileBytes": 1644,
+            "maximumQuantizationErrorMetres": 0.0,
+            "maximumTilePrimitives": 1,
+            "meshopt": false,
+            "primitiveReferences": 1,
+            "quantize": false,
+            "uncompressedTileBytes": 1644
+          },
+          "errorPolicy": "direct original-to-parent distance plus float32 rounding; all source bounds retained",
+          "features": 1,
+          "featuresWithoutGeometry": 0,
+          "fragmentedPolygons": 0,
+          "fragments": 1,
+          "geometryReportCount": 1,
+          "geometryReports": "geometry-reports.jsonl",
+          "geometryReportsScope": "current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
+          "inputDriver": "GeoJSON",
+          "layers": [
+            {
+              "attributeFilter": null,
+              "features": 1,
+              "featuresWithoutGeometry": 0,
+              "heightMode": "local metres",
+              "heightOffset": null,
+              "invalidFeatures": 1,
+              "jsonFields": [],
+              "name": "accept-io",
+              "sourceCrs": null
+            }
+          ],
+          "leafTiles": 1,
+          "lockedSharedVertices": 0,
+          "lodFallbacks": [
+            {
+              "outcome": "skipped",
+              "reason": "No space left on device (os error 28)",
+              "sourceId": "\"storage-failure\"",
+              "sourceLayer": "accept-io"
+            }
+          ],
+          "lodLevels": 1,
+          "lodToleranceMetres": 0.1,
+          "maximumTileBytes": 1644,
+          "maximumTileVertices": 1,
+          "metadata": {
+            "dropFields": [],
+            "fields": [],
+            "listFields": "error"
+          },
+          "parentRepairEnabled": false,
+          "pointAggregation": {
+            "contentTiles": 0,
+            "enabled": false
+          },
+          "pointPolicy": "retain every semantic point feature; oversized parents route without content",
+          "polygonFragmentPolicy": "standard glTF fills plus vector source boundaries; no internal fragment outlines",
+          "repairEnabled": false,
+          "reuse": {
+            "incompatibleReason": null,
+            "previousTileset": false,
+            "publishedContents": 1,
+            "rebuiltContents": 1,
+            "requestedPreviousTileset": false,
+            "reusedContentReferences": 0,
+            "reusedContents": 0,
+            "reusedSubtrees": 0,
+            "reusedTiles": 0
+          },
+          "routingTiles": 0,
+          "skipInvalidEnabled": true,
+          "skippedFeatures": 1,
+          "tiles": 1
+        },
+        "geometry_reports": [
+          {
+            "outcome": "skipped",
+            "reason": "No space left on device (os error 28)",
+            "sourceId": "\"storage-failure\"",
+            "sourceLayer": "accept-io"
+          }
+        ]
+      }
+    },
+    "injected_accept_io_reclassified_as_data": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/rusty-tiles",
+        "--json",
+        "vector",
+        "-i",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io.geojson",
+        "-o",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/accept-io-strict.3tz",
+        "--explicit",
+        "--reproducible",
+        "--sourceCrs",
+        "local",
+        "--jobs",
+        "1",
+        "--lodLevels",
+        "1",
+        "--maxFeatures",
+        "64"
+      ],
+      "exit_code": 3,
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"1 unconvertible feature(s); first failure: No space left on device (os error 28). No tileset published. Fix the reported features or explicitly use --skipInvalid.\"},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": "layer 'accept-io', feature \"storage-failure\": No space left on device (os error 28)\n",
+      "injected": true,
+      "source_sha256": "a1d2953474ee18ca37f513012cfb6cc50b2174bb96be3739a4eb89b99b39e6b4",
+      "artifact": {
+        "published": false
+      }
+    },
+    "injected_directory_no_clobber_interleaving": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/examples/audit-publication",
+        "directory",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/directory"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"competitor_bytes_after\":null,\"competitor_inode\":\"27078779\",\"error\":null,\"error_category\":null,\"force\":false,\"injected_interleaving\":true,\"mode\":\"directory\",\"output_contains_staged_tileset\":true,\"output_inode\":27078777,\"staging_exists_after\":false,\"staging_inode\":27078777,\"success\":true}\n",
+      "stderr": "",
+      "result": {
+        "competitor_bytes_after": null,
+        "competitor_inode": "27078779",
+        "error": null,
+        "error_category": null,
+        "force": false,
+        "injected_interleaving": true,
+        "mode": "directory",
+        "output_contains_staged_tileset": true,
+        "output_inode": 27078777,
+        "staging_exists_after": false,
+        "staging_inode": 27078777,
+        "success": true
+      }
+    },
+    "archive_no_clobber_interleaving_control": {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-113-runtime-target/debug/examples/audit-publication",
+        "archive",
+        "/home/bend/.cache/rt-publication-vector-o0zt9klf/archive"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"competitor_bytes_after\":\"competing archive writer\",\"competitor_inode\":null,\"error\":\"output exists (pass --force): /home/bend/.cache/rt-publication-vector-o0zt9klf/archive/output\",\"error_category\":\"output_conflict\",\"force\":false,\"injected_interleaving\":true,\"mode\":\"archive\",\"output_contains_staged_tileset\":false,\"output_inode\":27078785,\"staging_exists_after\":true,\"staging_inode\":27078782,\"success\":false}\n",
+      "stderr": "",
+      "result": {
+        "competitor_bytes_after": "competing archive writer",
+        "competitor_inode": null,
+        "error": "output exists (pass --force): /home/bend/.cache/rt-publication-vector-o0zt9klf/archive/output",
+        "error_category": "output_conflict",
+        "force": false,
+        "injected_interleaving": true,
+        "mode": "archive",
+        "output_contains_staged_tileset": false,
+        "output_inode": 27078785,
+        "staging_exists_after": true,
+        "staging_inode": 27078782,
+        "success": false
+      }
+    }
+  }
+}

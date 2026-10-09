@@ -1,0 +1,22 @@
+{
+  "baseline": "8dfd74bd87dd23c86278e98d736c3f5912c246cf",
+  "method": "full git archive copy; only copied source instrumented",
+  "files": {
+    "src/output.rs": {
+      "baseline_sha256": "6cbf3a4840ecb2cba3fefd3e29f44ee24e86ffc67f73cc45f8c829eda11da67a",
+      "instrumented_sha256": "80dc9e403f6d9bc2f3792e131dba4e30466588f6307fc43410c93f5ad6c1c4fc"
+    },
+    "src/vector/pipeline/store.rs": {
+      "baseline_sha256": "835395b68e10c87b49e844bb3594a82a406e84610e33f9c09679854606d16b13",
+      "instrumented_sha256": "58966472af8b451729ba25c8f78acbf97e677fb7bbb4c6c87a87dbf3a6e6a993"
+    },
+    "src/lib.rs": {
+      "baseline_sha256": "bc801a9aa525bc5fdd824772561cd218cd9c6014106ca041f3b1892da067b3c3",
+      "instrumented_sha256": "ff9c83e45c54047b0224b0923702ea77781261b0f6d1c9ab8492b2335e8bb390"
+    },
+    "Cargo.toml": {
+      "baseline_sha256": "2c2dcb8575a9fe109cf4d1c2f5af89eb9f5357573046692723a4c9c2ad2d030c",
+      "instrumented_sha256": "346d8496b9c9afe88e3e872d7c720caf0dd083d08342c066076d50994541087a"
+    }
+  }
+}
