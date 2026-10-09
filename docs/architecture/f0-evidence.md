@@ -1,6 +1,7 @@
 # F0 implementation evidence (#115)
 
 Implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
+Final namespace tests and verification: `ae37e808601a7daf66cc66d52d4d8867c30b3f11`.
 The [implementation contract](f0-implementation.md) defines the supported scope
 and deliberate migrations. This evidence does not close #113 or release 0.4.0.
 
@@ -13,8 +14,8 @@ record source/toolchain identity, test totals, log hashes and wheel identity.
 
 | Check | Result |
 | --- | --- |
-| `cargo test --locked --no-fail-fast` | 305 passed; 8 existing ignored tests |
-| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 330 passed; 9 existing ignored tests |
+| `cargo test --locked --no-fail-fast` | 307 passed; 8 existing ignored tests |
+| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 332 passed; 9 existing ignored tests |
 | `cargo clippy --locked --workspace --all-targets -- -D warnings` | Passed |
 | Native-feature all-target clippy with warnings denied | Passed |
 | `cargo fmt --all --check`, `git diff --check` | Passed |
@@ -29,8 +30,9 @@ Python versions require CI evidence; no local claim is made for them.
 
 ## Proof boundaries
 
-The 18 runtime tests exercise actual temporary files and installation primitives,
-including a competing destination, replacement, pre/post-permission cancellation,
+The 20 runtime tests exercise actual temporary files and installation primitives,
+including simultaneous create-new publishers, a competing destination,
+actual replacement failure against a competing directory, replacement, pre/post-permission cancellation,
 producer/observer first cause, callback reentry, in-flight admission, run reuse,
 duplicate publication, sync/install faults, cleanup failure with retained paths,
 postcommit reoccupied temporary names and Unix permissions. Faults and schedules
