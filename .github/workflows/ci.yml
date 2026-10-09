@@ -45,6 +45,8 @@ jobs:
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
       - name: Independently verify vector acceptance and archive inventory
         run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
+      - name: Independently verify point records, rendered placement and hierarchy
+        run: python3 -B tests/p1_point_oracle.py --binary target/debug/rusty-tiles --output-dir "${{ runner.temp }}/point-acceptance" --json-output "${{ runner.temp }}/point-acceptance.json"
       - name: Check source packaging
         run: cargo package --locked --no-verify
       - name: Test portable JPEG
@@ -167,11 +169,12 @@ jobs:
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo test --locked --features native-geospatial
-      - name: Independently verify native vector acceptance and archive inventory
+      - name: Independently verify native vector and point acceptance
         shell: bash -el {0}
         run: |
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native" --native
+          python3 -B tests/p1_point_oracle.py --binary target/debug/rusty-tiles --output-dir "${{ runner.temp }}/point-acceptance-native" --json-output "${{ runner.temp }}/point-acceptance-native.json"
       - name: Check native geospatial lint
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
@@ -232,12 +235,18 @@ jobs:
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - name: Independently verify native LAZ delivery
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-native.json"
       - name: Test portable vectors against independent fixtures and Python oracle
         shell: bash -el {0}
         run: |
           cargo build --locked
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_vector_*.py'
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_native_vector.py'
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-portable.json"
 
   python-free-runtime:
     name: Python-free runtime

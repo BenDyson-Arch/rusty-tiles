@@ -2,7 +2,8 @@
 //! representatives/full-detail records are held in memory at a time.
 use super::source::{position, Layout, RAW};
 use super::PointCloudOptions;
-use crate::report::Reporter;
+use super::{checkpoint, progress, ProducerIo};
+use crate::runtime::Attempt;
 use crate::{
     metadata::MetadataGlb,
     tileset_node::{
@@ -60,8 +61,10 @@ impl Records {
     }
 }
 
-pub(super) struct Tree<'a> {
-    pub reporter: &'a Reporter,
+pub(super) struct Tree<'a, O: ProducerIo> {
+    pub operations: &'a mut O,
+    pub attempt: &'a Attempt,
+    pub members: Vec<String>,
     pub layout: &'a Layout,
     pub options: &'a PointCloudOptions,
     pub output: &'a Path,
@@ -71,7 +74,7 @@ pub(super) struct Tree<'a> {
     pub leaf_points: u64,
 }
 
-impl Tree<'_> {
+impl<O: ProducerIo> Tree<'_, O> {
     pub fn build(
         &mut self,
         path: &Path,
@@ -79,11 +82,13 @@ impl Tree<'_> {
         depth: usize,
         cell: Option<([f64; 3], [f64; 3])>,
     ) -> Result<Value, Error> {
+        checkpoint(self.attempt)?;
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         let mut lo = [f64::INFINITY; 3];
         let mut hi = [f64::NEG_INFINITY; 3];
         let mut count = 0_u64;
         loop {
+            checkpoint(self.attempt)?;
             let batch = records.next()?;
             if batch.is_empty() {
                 break;
@@ -126,7 +131,10 @@ impl Tree<'_> {
             self.layout,
             self.options.metadata_attributes,
             &self.output.join(&uri),
+            self.attempt,
+            self.operations,
         )?;
+        self.members.push(uri.clone());
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6));
@@ -137,8 +145,7 @@ impl Tree<'_> {
         if leaf {
             std::fs::remove_file(path)?;
             self.leaf_points += count;
-            self.reporter
-                .progress("tiling", self.leaf_points, self.total_points);
+            progress(self.attempt, "tiling", self.leaf_points, self.total_points)?;
             return Ok(node);
         }
         let depth_limit = if self.options.explicit { 64 } else { 31 };
@@ -167,6 +174,7 @@ impl Tree<'_> {
             let mut records =
                 Records::new(path, self.layout.record_len, self.options.chunk_points)?;
             loop {
+                checkpoint(self.attempt)?;
                 let batch = records.next()?;
                 if batch.is_empty() {
                     break;
@@ -248,8 +256,10 @@ impl Tree<'_> {
     fn sample(&self, path: &Path, lo: [f64; 3], extent: [f64; 3]) -> Result<(Vec<u8>, f64), Error> {
         let grid = crate::point_sampling::VoxelGrid::new(lo, extent, self.options.max_points);
         let mut representatives = BTreeMap::new();
+        checkpoint(self.attempt)?;
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         loop {
+            checkpoint(self.attempt)?;
             let batch = records.next()?;
             if batch.is_empty() {
                 break;
@@ -273,6 +283,8 @@ fn emit(
     layout: &Layout,
     metadata_attributes: bool,
     path: &Path,
+    attempt: &Attempt,
+    operations: &mut impl ProducerIo,
 ) -> Result<f64, Error> {
     let count = rows.len() / layout.record_len;
     if count > 16_777_217 {
@@ -286,6 +298,9 @@ fn emit(
     let mut hi = [f32::NEG_INFINITY; 3];
     let mut rounding: f64 = 0.;
     for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
+        if index % 4096 == 0 {
+            checkpoint(attempt)?;
+        }
         let p = position(row);
         let local = [p[0] - center[0], p[2] - center[2], -(p[1] - center[1])];
         let encoded = local.map(|v| v as f32);
@@ -331,14 +346,15 @@ fn emit(
     let mut property_attributes = BTreeMap::new();
     let mut attribute_schema = serde_json::Map::new();
     for dim in &layout.dimensions {
+        checkpoint(attempt)?;
         values.clear();
-        for row in rows.chunks_exact(layout.record_len) {
+        for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
+            if index % 4096 == 0 {
+                checkpoint(attempt)?;
+            }
             dim.append(row, &mut values);
         }
-        schema.insert(
-            dim.name.clone(),
-            json!({"type":"SCALAR","componentType":dim.kind.component()}),
-        );
+        schema.insert(dim.name.clone(), dim.schema());
         columns.insert(dim.name.clone(), json!({"values":glb.view(&values)}));
         if metadata_attributes
             && matches!(
@@ -411,7 +427,8 @@ fn emit(
         glb.document["meshes"][0]["primitives"][0]["extensions"]
             [crate::metadata::STRUCTURAL_METADATA] = json!({"propertyAttributes":[0]});
     }
-    std::fs::write(path, glb.finish()?)?;
+    checkpoint(attempt)?;
+    operations.member(path, &glb.finish()?)?;
     Ok(rounding)
 }
 

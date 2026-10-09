@@ -1,0 +1,129 @@
+{
+  "recorded_utc": "2026-10-09T09:40:44.352644+00:00",
+  "production_commit": "12d98ab93e979142291a56178ac5bdfbd29593f4",
+  "later_commits": "oracle, fixture, CI, documentation and evidence changes only; no producer/Rust adapter differences from this commit",
+  "source_files_sha256": {
+    "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+    "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+    "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+    "src/implicit.rs": "74cbaa1f67d6e4d202e37bddcfefac2f527ad8de04c5e44c7205acaefa6ddfa8",
+    "src/implicit/tileset.rs": "589ad4c3704fbf7005ba470407483f2a281b9289fb26c476e209d1d0b1ae7703",
+    "src/main.rs": "36042201828744f6b8197fd65ec938fa88425cee6d54b639aceab1f7c5e1d92d",
+    "bindings/python/src/lib.rs": "43b3e2a868f7d10edc6412fdf932db46e0492944c41b7291e548045c229c73d4"
+  },
+  "build_environment": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "gdal": "3.13.3",
+    "CARGO_TARGET_DIR": "/home/bend/.cache/rusty-tiles-115-target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "2"
+  },
+  "binaries": {
+    "portable": {
+      "path": "/home/bend/.cache/rusty-tiles-132-12d98ab-portable",
+      "sha256": "9a63cd41f9a983cb06e73b7bb839682910d6366a7577a2735a2b088fdfd2bc01"
+    },
+    "native": {
+      "path": "/home/bend/.cache/rusty-tiles-132-12d98ab-native",
+      "sha256": "b38d6726bb4271b725b3a08292b8b45fb9be977ac6368f70e465814d5146b334"
+    }
+  },
+  "checks": [
+    {
+      "name": "portable-final",
+      "command": "cargo test --workspace --no-fail-fast",
+      "exit_code": 0,
+      "log_sha256": "ff26dcee04c1dcf80850634afc77e0249dca8e08924e24b0d3a69ed49151605a",
+      "summary": {
+        "passed_executions": 398,
+        "failed": 0,
+        "ignored": 8,
+        "note": "isolated CWD regression subprocess executions are included; ignored existing live/large tests are not acceptance claims"
+      }
+    },
+    {
+      "name": "native-final",
+      "command": "LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --features native-geospatial,native-jpeg --no-fail-fast",
+      "exit_code": 0,
+      "log_sha256": "140bb8e0c2acf168168752791ab9ecd9b8ccdc0984b11bfcad66fd7162ee2d77",
+      "summary": {
+        "passed_executions": 462,
+        "failed": 0,
+        "ignored": 9,
+        "note": "isolated CWD regression subprocess executions are included; ignored existing live/large tests are not acceptance claims"
+      }
+    },
+    {
+      "name": "lint",
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log_sha256": "b2e00d84fd12f991de202f5c267034b987119ec031237526877d7ce43cac1d88"
+    },
+    {
+      "name": "native-lint-final",
+      "command": "LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo clippy --features native-geospatial,native-jpeg --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log_sha256": "c4f7afb0064096b857e3038722bbad13b01ef5625fb991f5155e660448867b85"
+    },
+    {
+      "name": "python-point-portable",
+      "command": "RUSTY_TILES_BIN=/home/bend/.cache/rusty-tiles-132-12d98ab-portable RUSTY_TILES_REQUIRE_BIN=1 /tmp/rusty-tiles-119-python-acceptance/bin/python -m unittest discover -s tests -p test_point_cloud.py -v",
+      "exit_code": 0,
+      "log_sha256": "eb9cf6352a70f53534f6fefbe7062b0d8c3a7b727b93340397f4d16019224ff0",
+      "summary": {
+        "passed": 16,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "python-point-native",
+      "command": "RUSTY_TILES_BIN=/home/bend/.cache/rusty-tiles-132-12d98ab-native RUSTY_TILES_REQUIRE_BIN=1 /tmp/rusty-tiles-119-python-acceptance/bin/python -m unittest discover -s tests -p test_point_cloud.py -v",
+      "exit_code": 0,
+      "log_sha256": "a58fcb44c4228430434ffbcba0e3236351decfed7bf48155d886aca4ab810713",
+      "summary": {
+        "passed": 16,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "python-all",
+      "command": "RUSTY_TILES_BIN=/home/bend/.cache/rusty-tiles-132-12d98ab-native RUSTY_TILES_REQUIRE_BIN=1 /tmp/rusty-tiles-119-python-acceptance/bin/python -m unittest discover -s tests -p test_*.py",
+      "exit_code": 0,
+      "summary": {
+        "tests_run": 125,
+        "passed": 123,
+        "skipped": 2,
+        "failed": 0,
+        "note": "existing release/browser environment gates skipped; not claimed as executed"
+      },
+      "log_sha256": "be6f6ae03b2c58f9b19c4ef4cf90af9721816754a0f17dbf016a7faa76f47561"
+    },
+    {
+      "name": "package",
+      "command": "cargo package --locked --no-verify",
+      "exit_code": 0,
+      "summary": {
+        "files": 352,
+        "note": "source archive only; no rebuild/verification claim"
+      },
+      "log_sha256": "865388dbb9272a9be78d34ee86e33f38c39ae0e9e92da119857d8d209c1fc162"
+    }
+  ],
+  "wheel": {
+    "path": "/home/bend/.cache/rusty-tiles-132-wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl",
+    "sha256": "1529a5c5a11194368fe2f6f3d8b05fe57e5f8e93d2a142322903e58db67b8c1b",
+    "command": "maturin build --locked --out /home/bend/.cache/rusty-tiles-132-wheels",
+    "profile": "dev abi3-py3.10 portable linux wheel; local package evidence, not release-wheel/platform certification",
+    "installed_python_report": "wheel-python.json",
+    "installed_blender_report": "wheel-blender.json",
+    "blender_scope": "system Blender 5.2.2; official pinned distribution matrix remains a CI/release gate"
+  },
+  "format": "cargo fmt --all --check passed",
+  "diff_check": "git diff --check passed",
+  "limitations": [
+    "No claim that existing ignored live/large Rust tests ran.",
+    "No release-wheel, cross-platform or official Blender matrix claim from these local runs.",
+    "#133 actual payload validator remains separate."
+  ]
+}

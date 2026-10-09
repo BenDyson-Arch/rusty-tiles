@@ -186,12 +186,34 @@ component. No whole subsystem receives unconditional retention.
 
 ## Release gate and next action
 
-F0 and the bounded F1a profile are accepted and merged through #116 and #128.
-Next implement #118 D1 together with one minimal raster pilot from #124.
-A bounded #82 feasibility review informs the source boundary without adding
-a GDAL replacement to D1. Vector contracts and remaining proof work can proceed
-in parallel with named owners. Update the disposition ledger as
-actual evidence lands, including counterexamples and withdrawn suspicions.
+F0, bounded F1a, D1/D2 and vector V1/V2 are accepted through #116, #128,
+#129/#130 and #131. Vector merge `5df15e7` passed final-head CI, installed-wheel
+and official-Blender checks; independent Sol 6.1 review replayed 27 portable and
+30 native acceptance cases. This is lifecycle/feature acceptance, not full
+vector geometry/CRS/LOD certification.
+
+The current implementation candidate is [#132 P1](https://github.com/BenDyson-Arch/rusty-tiles/issues/132):
+a real LAS/LAZ archive consumer under one F0 run, with explicit coordinate/source
+preparation, independent record/attribute/POSITION multiplicity, accepted member
+receipts and required reports, then deletion of the replaced point-cloud paths.
+The [P1 contract](point-acceptance-contract.md) defines the finite profile.
+Production `12d98ab` has completed local portable/native, independent decoded
+LAS/LAZ, lifecycle, installed-wheel and resource checks; the
+[evidence ledger](../../bench/architecture_audit/point_acceptance/README.md)
+records exact identities and remaining CI/release gates.
+
+[#133 C1](https://github.com/BenDyson-Arch/rusty-tiles/issues/133) can proceed in
+parallel: actual GLB payload/accessor/index ranges and truthful validator claims.
+The [#126 surface inventory](public-surface-inventory.md) records intentional
+facades, incidental exports and migration/removal owners. Neither a shared
+production validator nor a file move substitutes for independent acceptance.
+
+After P1 acceptance, scope terrain's real directory migration under #124 using
+D1/D2, then broader mesh/resources/LOD under #121 and remaining utility operations
+under #126. #120 supplies each needed numerical subset; #123 and the remaining
+#125 format work stay open. #82 informs raster/terrain boundaries without making
+GDAL replacement a prerequisite. Each implementation has a bounded audit,
+independent final review and relevant final-candidate checks.
 
 Issue #126 owns the otherwise uncovered operation/API inventory: wrapping and
 createTilesetJson, convertImplicit, in-place compression, preview/doctor/fixtures,

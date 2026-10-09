@@ -405,10 +405,10 @@ fn force_replaces_only_successful_output() {
     );
 }
 
-/// tempfile creates 0600 files. The published archive must follow the umask.
+/// F0 publishes the private candidate permissions (0600, subject to umask).
 #[cfg(unix)]
 #[test]
-fn legacy_point_cloud_follows_umask_and_f0_packaging_is_private() {
+fn point_cloud_and_packaging_use_private_publication() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 2, false, vec![]);
@@ -427,7 +427,7 @@ fn legacy_point_cloud_follows_umask_and_f0_packaging_is_private() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(support::mode(&output), 0o644);
+    assert_eq!(support::mode(&output), 0o600);
     let tree = work.path().join("tree");
     std::fs::create_dir(&tree).unwrap();
     std::fs::write(tree.join("tileset.json"), "{}").unwrap();
@@ -560,8 +560,9 @@ fn unverified_datum_on_a_default_build_names_the_required_feature() {
         &out,
         &["--sourceCrs", "EPSG:26910", "--heightOffset", "0"],
     );
-    assert_eq!(result.status.code(), Some(4));
+    assert_eq!(result.status.code(), Some(2));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "unsupported");
     assert!(report["error"]["message"]
         .as_str()
         .unwrap()
@@ -715,8 +716,9 @@ fn compound_geoid_header_refuses_default_build_without_publishing() {
         &output,
         &["--source-crs", "header", "--height-offset", "0"],
     );
-    assert_eq!(result.status.code(), Some(4));
+    assert_eq!(result.status.code(), Some(2));
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "unsupported");
     let message = report["error"]["message"].as_str().unwrap();
     assert!(
         message.contains("--features native-geospatial"),
@@ -880,11 +882,12 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
             {
                 assert_eq!(
                     result.status.code(),
-                    Some(4),
+                    Some(2),
                     "{definition}: {}",
                     String::from_utf8_lossy(&result.stdout)
                 );
                 let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                assert_eq!(report["error"]["kind"], "unsupported");
                 assert!(report["error"]["message"]
                     .as_str()
                     .unwrap()
@@ -976,10 +979,19 @@ fn wkt_method_parameters_and_albers_preserve_native_or_refuse() {
                 Some(if definition.starts_with("+proj=aea") {
                     3
                 } else {
-                    4
+                    2
                 }),
                 "{definition}: {}",
                 String::from_utf8_lossy(&result.stdout)
+            );
+            let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(
+                report["error"]["kind"],
+                if definition.starts_with("+proj=aea") {
+                    "invalid_input"
+                } else {
+                    "unsupported"
+                }
             );
             assert!(!output.exists());
         }
@@ -1089,14 +1101,11 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
                     expected[0]
                 }
                 Err(error) => {
-                    assert_eq!(
-                        result.status.code(),
-                        Some(i32::from(error.category().1)),
-                        "{definition}"
-                    );
-                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-                    assert_eq!(report["error"]["code"], error.category().0);
                     assert!(matches!(error, rusty_tiles::Error::Data(_)), "{error}");
+                    assert_eq!(result.status.code(), Some(3), "{definition}");
+                    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+                    assert_eq!(report["error"]["code"], "invalid_input");
+                    assert_eq!(report["error"]["kind"], "invalid_input");
                     assert!(!output.exists());
                     continue;
                 }
@@ -1116,8 +1125,9 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
         }
         #[cfg(not(feature = "native-geospatial"))]
         {
-            assert_eq!(result.status.code(), Some(4));
+            assert_eq!(result.status.code(), Some(2));
             let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(report["error"]["kind"], "unsupported");
             assert!(report["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1150,7 +1160,7 @@ fn native_lcc_variant_b_conditioning_cannot_be_bypassed_with_alternate_syntax() 
         #[cfg(feature = "native-geospatial")]
         let (code, message) = (3, "conic standard parallels");
         #[cfg(not(feature = "native-geospatial"))]
-        let (code, message) = (4, "pure-Rust point-cloud CRS transform unavailable");
+        let (code, message) = (2, "pure-Rust point-cloud CRS transform unavailable");
         assert_eq!(
             result.status.code(),
             Some(code),
@@ -1158,6 +1168,8 @@ fn native_lcc_variant_b_conditioning_cannot_be_bypassed_with_alternate_syntax() 
             String::from_utf8_lossy(&result.stdout)
         );
         let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+        #[cfg(not(feature = "native-geospatial"))]
+        assert_eq!(report["error"]["kind"], "unsupported");
         assert!(report["error"]["message"]
             .as_str()
             .unwrap()
