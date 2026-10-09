@@ -2,6 +2,7 @@
 use crate::{JobError, JobErrorKind};
 use serde_json::{Map, Value};
 mod json;
+mod texture;
 
 pub(super) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub(super) const MAX_TRIANGLES: usize = 100_000;
@@ -20,12 +21,24 @@ const IDENTITY: Matrix = [
 pub(super) struct Triangle {
     pub positions: [[f32; 3]; 3],
     pub normals: Option<[[f32; 3]; 3]>,
+    pub texcoords: Option<[[f32; 2]; 3]>,
     pub material: Option<usize>,
+}
+
+pub(super) struct Image {
+    pub bytes: Vec<u8>,
+    pub mime_type: &'static str,
+    pub extension: &'static str,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub(super) struct Geometry {
     pub triangles: Vec<Triangle>,
     pub materials: Vec<Value>,
+    pub images: Vec<Image>,
+    pub textures: Vec<Value>,
+    pub samplers: Vec<Value>,
     pub source_bytes: u64,
 }
 
@@ -186,6 +199,14 @@ impl Accessor<'_> {
     fn vec3(&self, i: usize) -> [f64; 3] {
         std::array::from_fn(|c| self.scalar(i, c))
     }
+    fn texcoord(&self, i: usize) -> [f32; 2] {
+        let divisor = match self.component {
+            5121 => u8::MAX as f64,
+            5123 => u16::MAX as f64,
+            _ => 1.,
+        };
+        std::array::from_fn(|c| (self.scalar(i, c) / divisor) as f32)
+    }
 }
 
 fn accessors<'a>(
@@ -270,13 +291,14 @@ fn accessors<'a>(
         if count == 0 {
             return Err(invalid("empty accessor"));
         }
-        if let Some(normalized) = value.get("normalized") {
-            match normalized.as_bool() {
-                Some(false) => {}
-                Some(true) => return Err(unsupported("normalized accessors outside F1a")),
-                None => return Err(invalid("normalized must be boolean")),
-            }
-        }
+        let normalized = value
+            .get("normalized")
+            .map(|v| {
+                v.as_bool()
+                    .ok_or_else(|| invalid("normalized must be boolean"))
+            })
+            .transpose()?
+            .unwrap_or(false);
         let component = field(value, "componentType")?;
         let size = match component {
             5121 => 1,
@@ -287,15 +309,25 @@ fn accessors<'a>(
         };
         let width = match value["type"].as_str() {
             Some("SCALAR") => 1,
+            Some("VEC2") => 2,
             Some("VEC3") => 3,
-            Some("VEC2" | "VEC4" | "MAT2" | "MAT3" | "MAT4") => {
+            Some("VEC4" | "MAT2" | "MAT3" | "MAT4") => {
                 return Err(unsupported("accessor shape outside F1a"))
             }
             _ => return Err(invalid("missing or invalid accessor type")),
         };
-        if (component == 5126) != (width == 3) {
+        let supported = match width {
+            1 => [5121, 5123, 5125].contains(&component) && !normalized,
+            2 => {
+                (component == 5126 && !normalized)
+                    || ([5121, 5123].contains(&component) && normalized)
+            }
+            3 => component == 5126 && !normalized,
+            _ => false,
+        };
+        if !supported {
             return Err(unsupported(
-                "F1a accessors are f32 VEC3 or unsigned SCALAR only",
+                "accessor component/shape/normalization outside the supported mesh profile",
             ));
         }
         let view = reference(views, &value["bufferView"])?;
@@ -413,8 +445,20 @@ fn materials(doc: &Value) -> Result<Vec<Value>> {
         if let Some(pbr) = material.get("pbrMetallicRoughness") {
             object(
                 pbr,
-                &["baseColorFactor", "metallicFactor", "roughnessFactor"],
+                &[
+                    "baseColorFactor",
+                    "metallicFactor",
+                    "roughnessFactor",
+                    "baseColorTexture",
+                ],
             )?;
+            if let Some(info) = pbr.get("baseColorTexture") {
+                object(info, &["index", "texCoord"])?;
+                reference(list(doc, "textures")?, &info["index"])?;
+                if info.get("texCoord").map(uint).transpose()?.unwrap_or(0) != 0 {
+                    return Err(unsupported("baseColorTexture requires TEXCOORD_0"));
+                }
+            }
             if let Some(v) = pbr.get("baseColorFactor") {
                 vector::<4>(v)?;
                 for c in array(v)? {
@@ -588,6 +632,7 @@ fn transform(node: &Value) -> Result<Matrix> {
 struct Primitive {
     position: usize,
     normal: Option<usize>,
+    texcoord: Option<usize>,
     indices: Option<usize>,
     count: usize,
     material: Option<usize>,
@@ -634,6 +679,7 @@ fn primitives(
     let mut used_indices = vec![false; data.len()];
     let mut checked_positions = std::collections::HashSet::new();
     let mut checked_normals = std::collections::HashSet::new();
+    let mut checked_texcoords = std::collections::HashSet::new();
     for mesh in list(doc, "meshes")? {
         object(mesh, &["name", "primitives"])?;
         let values = array(&mesh["primitives"])?;
@@ -651,17 +697,27 @@ fn primitives(
             if p.get("mode").map(uint).transpose()?.unwrap_or(4) != 4 {
                 return Err(unsupported("F1a supports TRIANGLES only"));
             }
-            object(&p["attributes"], &["POSITION", "NORMAL"])?;
+            object(&p["attributes"], &["POSITION", "NORMAL", "TEXCOORD_0"])?;
             let position = field(&p["attributes"], "POSITION")?;
             let normal = p["attributes"].get("NORMAL").map(uint).transpose()?;
+            let texcoord = p["attributes"].get("TEXCOORD_0").map(uint).transpose()?;
             let pos = get(position)?;
-            for i in std::iter::once(position).chain(normal) {
+            for (i, is_texcoord) in std::iter::once((position, false))
+                .chain(normal.map(|i| (i, false)))
+                .chain(texcoord.map(|i| (i, true)))
+            {
                 let a = get(i)?;
-                if a.component != 5126 || a.width != 3 {
+                if is_texcoord {
+                    if a.width != 2 || ![5121, 5123, 5126].contains(&a.component) {
+                        return Err(unsupported(
+                            "TEXCOORD_0 must be f32 or normalized unsigned VEC2",
+                        ));
+                    }
+                } else if a.component != 5126 || a.width != 3 {
                     return Err(unsupported("POSITION/NORMAL must be f32 VEC3"));
                 }
                 if a.count != pos.count {
-                    return Err(invalid("NORMAL/POSITION count mismatch"));
+                    return Err(invalid("vertex attribute/POSITION count mismatch"));
                 }
                 let raw = &doc["accessors"][i];
                 let view = use_view(i, BufferViewUse::Vertex(i))?;
@@ -674,6 +730,17 @@ fn primitives(
                         .is_some_and(|n| n != 34962)
                 {
                     return Err(invalid("invalid vertex accessor alignment/target"));
+                }
+            }
+            if let Some(i) = texcoord.filter(|i| checked_texcoords.insert(*i)) {
+                let a = get(i)?;
+                for index in 0..a.count {
+                    if index.is_multiple_of(1024) {
+                        check()?;
+                    }
+                    if (0..2).any(|c| a.scalar(index, c).abs() > 1_000_000.) {
+                        return Err(unsupported("TEXCOORD_0 outside supported finite magnitude"));
+                    }
                 }
             }
             if doc["accessors"][position].get("min").is_none()
@@ -749,9 +816,18 @@ fn primitives(
             if material.is_some_and(|i| i >= list(doc, "materials").unwrap_or(&[]).len()) {
                 return Err(invalid("material reference out of range"));
             }
+            if material.is_some_and(|i| {
+                doc["materials"][i]["pbrMetallicRoughness"]
+                    .get("baseColorTexture")
+                    .is_some()
+            }) && texcoord.is_none()
+            {
+                return Err(invalid("textured material requires primitive TEXCOORD_0"));
+            }
             prepared.push(Primitive {
                 position,
                 normal,
+                texcoord,
                 indices,
                 count,
                 material,
@@ -789,6 +865,9 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
             "buffers",
             "bufferViews",
             "accessors",
+            "images",
+            "textures",
+            "samplers",
         ],
     )?;
     object(
@@ -816,6 +895,7 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
     }
     let material_values = materials(&doc)?;
     let data = accessors(&doc, bin, &mut check)?;
+    let (images, textures, samplers) = texture::decode(&doc, bin, &mut check)?;
     let meshes = primitives(&doc, &data, &mut check)?;
     let nodes = list(&doc, "nodes")?;
     if nodes.len() > 4096 {
@@ -924,6 +1004,7 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
                 }
                 let mut positions = [[0.; 3]; 3];
                 let mut normals = p.normal.map(|_| [[0.; 3]; 3]);
+                let mut texcoords = p.texcoord.map(|_| [[0.; 2]; 3]);
                 for (corner, index) in vertices.into_iter().enumerate() {
                     let pos = data[p.position].vec3(index);
                     for r in 0..3 {
@@ -946,10 +1027,14 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
                         }
                         output[corner] = mapped.map(|v| (v / norm) as f32);
                     }
+                    if let (Some(a), Some(output)) = (p.texcoord, &mut texcoords) {
+                        output[corner] = data[a].texcoord(index);
+                    }
                 }
                 triangles.push(Triangle {
                     positions,
                     normals,
+                    texcoords,
                     material: p.material,
                 });
             }
@@ -958,6 +1043,9 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
     Ok(Geometry {
         triangles,
         materials: material_values,
+        images,
+        textures,
+        samplers,
         source_bytes: bytes.len() as u64,
     })
 }

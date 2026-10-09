@@ -1,0 +1,100 @@
+{
+  "authoring": "tests/f1b_oracle.py fixture author: raw GLB struct/json encoding; stdlib PNG struct/zlib; JPEG prebuilt Pillow analytic six-color receipt",
+  "sha256": {
+    "basecolor.glb": "0bedcb1621daabb130a9bd2cb95de27eb6275a43eb933510c2c1ab9af28756f8",
+    "basecolor-jpeg.glb": "be01c6294250e9dc0e42928d17037e58093415b5f28d0cbb607dbe0fb88e64ab",
+    "source-rgb.jpg": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+    "source-rgba.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab"
+  },
+  "JPEG": {
+    "sha256": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+    "size": [
+      3,
+      2
+    ],
+    "rgba": [
+      [
+        254,
+        0,
+        0,
+        255
+      ],
+      [
+        1,
+        255,
+        2,
+        255
+      ],
+      [
+        0,
+        0,
+        254,
+        255
+      ],
+      [
+        255,
+        255,
+        0,
+        255
+      ],
+      [
+        255,
+        0,
+        254,
+        255
+      ],
+      [
+        0,
+        255,
+        255,
+        255
+      ]
+    ],
+    "author": "Pillow 12.3.0 JPEG quality=100, subsampling=0; RGB analytic six-color input"
+  },
+  "PNG": {
+    "size": [
+      3,
+      2
+    ],
+    "rgba": [
+      [
+        255,
+        0,
+        0,
+        255
+      ],
+      [
+        0,
+        255,
+        0,
+        128
+      ],
+      [
+        0,
+        0,
+        255,
+        0
+      ],
+      [
+        255,
+        255,
+        0,
+        64
+      ],
+      [
+        255,
+        0,
+        255,
+        255
+      ],
+      [
+        0,
+        255,
+        255,
+        192
+      ]
+    ]
+  },
+  "source_semantics": "8 triangles, reflected nonuniform matrix, two materials/textures sharing one asymmetric RGBA base color image, distinct sampler presence, one valid unused image; exact source image forwarding contract"
+}

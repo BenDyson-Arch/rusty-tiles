@@ -208,6 +208,22 @@ The [#126 surface inventory](public-surface-inventory.md) records intentional
 facades, incidental exports and migration/removal owners. Neither a shared
 production validator nor a file move substitutes for independent acceptance.
 
+### Current mesh follow-on after C1
+
+C1 merged through #137. The first bounded #121 slice is
+[F1b1](f1b-contract.md): the existing local mesh producer now carries embedded
+PNG/JPEG base-color textures, complete UV/material/sampler associations, and a
+shared image closure under F0. It forwards source bytes without invoking legacy
+atlas, LOD or encoder paths. This deliberately advances the existing operation
+and report profile rather than maintaining an F1a compatibility mode.
+
+Next, define external glTF/GLB resource binding and source stability before
+accepting local resource URIs. Then settle additional material/attribute support,
+placement and identity requirements, followed by an independently justified
+coarse approximation/error contract. Implicit delivery follows the accepted
+geometry/resource contract. These remain #121/#120/#125 obligations; no legacy
+mesh/report API can be deleted merely because this embedded-image slice passes.
+
 After P1 acceptance, scope terrain's real directory migration under #124 using
 D1/D2, then broader mesh/resources/LOD under #121 and remaining utility operations
 under #126. #120 supplies each needed numerical subset; #123 and the remaining

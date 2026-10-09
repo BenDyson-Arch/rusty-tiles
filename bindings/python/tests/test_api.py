@@ -69,6 +69,68 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_local_textured_mesh_independent_profile_oracle(self):
+        # Loading an independently authored fixture/reader is allowed here;
+        # rusty_tiles itself has already been imported from the installed wheel.
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1b_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        for variant in oracle.VARIANTS:
+            source = self.root / (variant + ".glb")
+            source.write_bytes(oracle.fixture(variant=variant))
+            before = hashlib.sha256(source.read_bytes()).hexdigest()
+            for limit in (1, 3, 1000):
+                with self.subTest(variant=variant, leaf_triangles=limit):
+                    output = self.root / (variant + "-" + str(limit) + ".3tz")
+                    value = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+                    inspected = oracle.inspect(source, output, limit)
+                    self.assertEqual(value.report, inspected["report"])
+                    self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), before)
+        for name, data, kind in oracle.rejection_fixtures():
+            source = self.root / (name + ".glb")
+            source.write_bytes(data)
+            expected = rusty_tiles.UnsupportedError if kind == "unsupported" else rusty_tiles.DataError
+            for limit in (1, 1000):
+                with self.subTest(refusal=name, leaf_triangles=limit):
+                    output = self.root / (name + "-" + str(limit)) / "out.3tz"
+                    with self.assertRaises(expected) as caught:
+                        rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+                    self.assertEqual(caught.exception.kind, kind)
+                    self.assertFalse(output.parent.exists())
+                    self.assertEqual(source.read_bytes(), data)
+
+    def test_local_textured_mesh_forwards_one_prepared_image(self):
+        source = self.root / "textured.glb"
+        original = (ROOT / "tests/fixtures/f1b/basecolor.glb").read_bytes()
+        expected_image = (ROOT / "tests/fixtures/f1b/source-rgba.png").read_bytes()
+        source.write_bytes(original)
+        output = self.root / "textured.3tz"
+        events = []
+
+        def observe(event):
+            self.assertFalse(output.exists())
+            events.append(event)
+            if event.get("phase") == "mesh_leaves" and event.get("done") == 0:
+                source.write_bytes(b"changed after preparation")
+
+        result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
+        self.assertEqual(result.report["schema_version"], 2)
+        self.assertEqual(result.report["profile"], "f1b-local-textured-glb-v1")
+        self.assertEqual(result.report["source_bytes"], len(original))
+        self.assertEqual(result.report["triangles"], 8)
+        self.assertEqual(result.report["leaf_tiles"], 8)
+        self.assertEqual(result.report["images"], 1)
+        self.assertEqual(result.report["image_bytes"], len(expected_image))
+        self.assertEqual(result.report["image_pixels"], 6)
+        self.assertTrue(events)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.read("textures/0.png"), expected_image)
+            self.assertNotIn("textures/1.png", archive.namelist())
+            self.assertEqual(len(archive.namelist()), 12)
+            self.assertEqual(json.loads(archive.read("conversion.json")), result.report)
+
     def test_d1_native_capability_is_explicit_and_leaves_no_output(self):
         output = self.root / "d1-raster"
         events = []
@@ -128,7 +190,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1a-local-static-glb-v1")
+        self.assertEqual(result.report["profile"], "f1b-local-textured-glb-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
