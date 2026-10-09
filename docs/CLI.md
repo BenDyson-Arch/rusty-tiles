@@ -73,6 +73,16 @@ General CRS placement uses the shared [conservative CRS resolver](FORMATS.md#poi
 ### point-cloud
 
 Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leaves.
+The typed point-cloud facade validates resolvable source/coordinate requirements
+before output work and uses one run for observation, cancellation and publication.
+`--force` selects replacement policy; it cannot authorize overwriting the source or
+an alias. All required reports and producer work finish before publication.
+
+[The P1 contract](architecture/point-acceptance-contract.md) defines admitted LAS
+formats, scalar Extra Bytes, duplicate multiplicity, coordinate precision and
+remaining proof limits. Scaled 64-bit integer Extra Bytes are unsupported; unscaled
+64-bit integers remain exact. No-data/min/max declarations are preserved in schema.
+The point and chunk counts below are not whole-job memory bounds.
 
 Grid-free globe placement works in the default build. CRS selection automatically uses pure Rust for verified definitions and strict native GDAL/PROJ for other operations when enabled. Unsupported grid/datum operations name `--features native-geospatial` in the error. See the [supported CRS classes and height rules](FORMATS.md#point-clouds).
 

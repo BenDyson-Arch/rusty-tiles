@@ -58,7 +58,7 @@ staging and atomic archive replacement.
 | `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
+| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `convert_to_implicit(input, output, ...)` | `force=False` |
@@ -153,13 +153,13 @@ rusty_tiles.point_cloud_to_3tz(
 The wheel supports verified grid-free WGS84 geographic, UTM and Mercator
 transforms, plus supported WKT/PROJ local projections with explicit WGS84
 or Helmert datum parameters. It refuses grid-dependent, compound/geoid,
-dynamic or unknown datum definitions with `EnvironmentError` naming the
+dynamic or unknown datum definitions with `UnsupportedError` naming the
 native build. See the [CRS limits](../../docs/FORMATS.md#point-clouds).
 Text `.xyz` files and in-memory buffers are not supported in this release.
 
 Vector conversion uses the same disk-backed tiling, metadata, LOD and encoding
 pipeline as the CLI. GeoJSON defaults to WGS84 longitude/latitude; GeoPackage
-uses its layer CRS. Use `source_crs="local"` for metre XYZ coordinates. A 3D
+uses its layer CRS. Use required `source_crs` for metre XYZ coordinates. A 3D
 GeoPackage with a horizontal CRS requires an explicit `height_offset`; GeoJSON
 Z is ellipsoidal metres. The same grid-free CRS restrictions apply to vectors.
 
@@ -317,3 +317,16 @@ the restoration failure. Native filesystem paths preserve non-UTF-8 Unix names.
 Successful installation remains success if backup cleanup fails, with the backup
 path in the result's existing `cleanup_diagnostics`. Standard wheels still report
 `UnsupportedError` for either policy without changing existing output.
+
+Point-cloud conversion requires an explicit `source_crs` keyword. Choose `"local"`
+for XYZ metres, `"header"` for the LAS horizontal CRS, or an explicit horizontal
+CRS definition. Geospatial input requires finite `height_offset` in metres to
+ellipsoidal height; local input forbids it. The result is `PointCloudResult`,
+with `output`, `archive`, required `report`, and `cleanup_diagnostics`. Callback
+failures abort before publication and preserve an existing output.
+
+Rust callers migrate to `PointCloudRequest::new(input, output, coordinates,
+options).with_policy(policy)` and `point_cloud_to_archive(request, &run)`.
+`PointCloudOptions` contains only tiling options; coordinate selection is typed,
+and publication uses `OutputPolicy` rather than an options `force` field.
+The old Rust `point_cloud_to_3tz` and reported overload are removed.

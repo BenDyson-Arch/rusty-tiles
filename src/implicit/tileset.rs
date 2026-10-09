@@ -86,7 +86,9 @@ fn collect(
     delta: [f64; 3],
     scheme: SubdivisionScheme,
     out: &mut Vec<Tile>,
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
 ) -> Result<(), Error> {
+    checkpoint()?;
     let mut bounds: [f64; 12] = serde_json::from_value(node["boundingVolume"]["box"].clone())?;
     for i in 0..3 {
         bounds[i] += delta[i];
@@ -132,7 +134,14 @@ fn collect(
                 offset[i] += matrix[12 + i];
             }
         }
-        collect(node, child(coordinates, slot, scheme)?, offset, scheme, out)?;
+        collect(
+            node,
+            child(coordinates, slot, scheme)?,
+            offset,
+            scheme,
+            out,
+            checkpoint,
+        )?;
     }
     Ok(())
 }
@@ -232,6 +241,18 @@ pub(crate) fn write_tileset(
     scheme: SubdivisionScheme,
     retain_sources: bool,
 ) -> Result<(), Error> {
+    write_tileset_recorded(manifest, directory, scheme, retain_sources, &mut || Ok(())).map(drop)
+}
+
+pub(crate) fn write_tileset_recorded(
+    manifest: &mut Value,
+    directory: &Path,
+    scheme: SubdivisionScheme,
+    retain_sources: bool,
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
+) -> Result<Vec<String>, Error> {
+    checkpoint()?;
+    let mut members = Vec::new();
     let mut tiles = Vec::new();
     collect(
         &manifest["root"],
@@ -244,6 +265,7 @@ pub(crate) fn write_tileset(
         [0.; 3],
         scheme,
         &mut tiles,
+        checkpoint,
     )?;
     let mut slot_keys = BTreeSet::new();
     for tile in &tiles {
@@ -288,9 +310,9 @@ pub(crate) fn write_tileset(
             directory,
             scheme,
             &tiles,
-            &slot_keys,
-            &headers,
+            (&slot_keys, &headers),
             retain_sources,
+            checkpoint,
         );
     }
     let template = if scheme == SubdivisionScheme::Octree {
@@ -317,6 +339,7 @@ pub(crate) fn write_tileset(
         .max()
         .unwrap();
     for mut tile in tiles {
+        checkpoint()?;
         let root = ancestor(tile.coordinates, tile.coordinates.level / LEVELS * LEVELS);
         let mut flags = vec![false; slot_keys.len()];
         let mut bytes_total = 0usize;
@@ -329,13 +352,12 @@ pub(crate) fn write_tileset(
                 .unwrap();
             let bytes = translate_content(&std::fs::read(directory.join(uri))?, tile.delta)?;
             bytes_total += bytes.len();
-            std::fs::write(
-                directory.join(format!(
-                    "implicit-content/{}-{slot}.{suffix}",
-                    key(tile.coordinates, scheme)
-                )),
-                bytes,
-            )?;
+            let name = format!(
+                "implicit-content/{}-{slot}.{suffix}",
+                key(tile.coordinates, scheme)
+            );
+            std::fs::write(directory.join(&name), bytes)?;
+            members.push(name);
             source_names.insert(uri.to_owned());
             flags[slot] = true;
         }
@@ -360,10 +382,10 @@ pub(crate) fn write_tileset(
         }
     }
     for (coordinates, tree) in trees {
-        std::fs::write(
-            directory.join(format!("subtrees/{}.subtree", key(coordinates, scheme))),
-            tree.to_bytes()?,
-        )?;
+        checkpoint()?;
+        let name = format!("subtrees/{}.subtree", key(coordinates, scheme));
+        std::fs::write(directory.join(&name), tree.to_bytes()?)?;
+        members.push(name);
     }
     let root = manifest["root"].as_object_mut().unwrap();
     root.remove("children");
@@ -380,10 +402,11 @@ pub(crate) fn write_tileset(
         manifest["extras"]["rustyTilesSourceContents"] = json!(source_names);
     } else {
         for uri in source_names {
+            checkpoint()?;
             std::fs::remove_file(directory.join(uri))?;
         }
     }
-    Ok(())
+    Ok(members)
 }
 
 fn derived_box(root: [f64; 12], c: Coordinates, scheme: SubdivisionScheme) -> [f64; 12] {
@@ -461,10 +484,13 @@ fn write_chunks(
     directory: &Path,
     scheme: SubdivisionScheme,
     tiles: &[Tile],
-    slots: &[(usize, String)],
-    headers: &[Value],
+    content_layout: (&[(usize, String)], &[Value]),
     retain_sources: bool,
-) -> Result<(), Error> {
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
+) -> Result<Vec<String>, Error> {
+    let (slots, headers) = content_layout;
+    let mut members = Vec::new();
+    checkpoint()?;
     let stride = LEVELS - 1;
     let parents: BTreeSet<_> = tiles
         .iter()
@@ -488,6 +514,7 @@ fn write_chunks(
     std::fs::create_dir_all(directory.join("subtrees"))?;
     let mut source_names = BTreeSet::new();
     for (root, tiles) in groups {
+        checkpoint()?;
         let prefix = key(root, scheme);
         let links = tiles.iter().any(|(_, link)| *link);
         let count = slots.len() + usize::from(links);
@@ -504,6 +531,7 @@ fn write_chunks(
             .max()
             .unwrap();
         for (mut tile, link) in tiles {
+            checkpoint()?;
             let coord = local(tile.coordinates, root);
             let mut flags = vec![false; count];
             if link {
@@ -520,13 +548,12 @@ fn write_chunks(
                     let bytes =
                         translate_content(&std::fs::read(directory.join(uri))?, tile.delta)?;
                     size += bytes.len();
-                    std::fs::write(
-                        directory.join(format!(
-                            "implicit-content/{prefix}-{}-{slot}.{suffix}",
-                            key(coord, scheme)
-                        )),
-                        bytes,
-                    )?;
+                    let name = format!(
+                        "implicit-content/{prefix}-{}-{slot}.{suffix}",
+                        key(coord, scheme)
+                    );
+                    std::fs::write(directory.join(&name), bytes)?;
+                    members.push(name);
                     source_names.insert(uri.to_owned());
                     flags[slot] = true;
                 }
@@ -537,21 +564,21 @@ fn write_chunks(
             tree.set_tile(coord, &flags)?;
             tree.set_metadata(coord, tile.metadata)?;
         }
-        std::fs::write(
-            directory.join(format!(
-                "subtrees/{prefix}-{}.subtree",
-                key(
-                    Coordinates {
-                        level: 0,
-                        x: 0,
-                        y: 0,
-                        z: 0
-                    },
-                    scheme
-                )
-            )),
-            tree.to_bytes()?,
-        )?;
+        checkpoint()?;
+        let name = format!(
+            "subtrees/{prefix}-{}.subtree",
+            key(
+                Coordinates {
+                    level: 0,
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                scheme
+            )
+        );
+        std::fs::write(directory.join(&name), tree.to_bytes()?)?;
+        members.push(name);
         let document = chunk_document(&first, scheme, slots, headers, links, available);
         if root.level == 0 {
             let transform = manifest["root"].get("transform").cloned();
@@ -567,17 +594,20 @@ fn write_chunks(
                 key(parent, scheme),
                 key(local(root, parent), scheme)
             );
-            std::fs::write(directory.join(name), serde_json::to_vec(&document)?)?;
+            checkpoint()?;
+            std::fs::write(directory.join(&name), serde_json::to_vec(&document)?)?;
+            members.push(name);
         }
     }
     if retain_sources {
         manifest["extras"]["rustyTilesSourceContents"] = json!(source_names);
     } else {
         for name in source_names {
+            checkpoint()?;
             std::fs::remove_file(directory.join(name))?;
         }
     }
-    Ok(())
+    Ok(members)
 }
 
 /// Expand implicit converter output for audits and built-in validation. Resource

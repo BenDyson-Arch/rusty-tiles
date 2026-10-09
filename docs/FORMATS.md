@@ -117,13 +117,13 @@ The converter automatically uses native fallback when that feature is built. Oth
 
 The default output uses a disk-backed midpoint octree and binary implicit subtrees. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
 
-- Points stream through disk-backed partitions, so memory stays bounded.
+- Points stream through disk-backed partitions. Chunk/leaf budgets limit record counts; schema, hierarchy and encoded metadata still contribute memory. P1 records measured RSS/scratch/descriptor growth rather than promising a whole-job bound.
 - Parents hold voxel samples. Leaves keep every point, including coincident points.
 - Metadata keeps source coordinates, source record indices, original RGB and supported numeric LAS fields.
 - Rendered positions are float32, and their rounding is reported.
-- Scalar metadata keeps source values. Scaled extra dimensions are stored as decoded float64.
+- Scalar metadata keeps exact raw values, including unscaled 64-bit integers, and no-data/min/max declarations in the property schema. Admitted scaled fields are stored as decoded float64; scaled INT64/UINT64 Extra Bytes are explicitly unsupported to prevent silent integer rounding.
 
-Waveforms, array extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported.
+Waveforms, array/untyped or undocumented extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported. Source and Extra Bytes scales must be positive finite. Source metadata is limited to 65,536 VLR/EVLR records and 16 MiB; point data streams separately. The [P1 contract](architecture/point-acceptance-contract.md) records the exact source, coordinate, precision and lifecycle boundaries.
 
 `point-cloud --metadata-attributes` exposes `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes for shader access. The existing table properties (`classification`, `intensity`, `return_number`) remain available for feature picking and table styling. The distinct attribute names prevent shader field collisions in CesiumJS 1.146.
 
