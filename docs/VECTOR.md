@@ -8,6 +8,12 @@ Implicit tiling is the default. The existing spatial partition and LOD chains ar
 
 ## Acceptance and library API
 
+GeoJSON `.geojson` and `.json` inputs use the same bounded Rust semantic reader
+in standard and native builds. Native geometry operations remain independent
+of source parsing. GeoJSON under other extensions and GeoJSON text sequences
+are refused; they cannot bypass the shared admission rules through OGR.
+Native GeoPackage and other admitted OGR formats retain their native reader.
+
 Rust callers use one `vector::vector_to_archive(VectorRequest, &RunControl)`
 entry point. Construct `VectorRequest::new(input, output, VectorOptions)` and
 select `OutputPolicy::Replace` with `with_policy` when replacement is intended.
@@ -34,7 +40,7 @@ contract does not certify topology, CRS transformations or geometric error.
 The [installation guide](INSTALL.md#choose-a-build) separates the two builds. Installing GDAL does not enable native-geospatial in a standard binary or Python wheel.
 
 - The standard build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
-- Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build keeps its native ingestion, geometry and CRS backend for every vector conversion.
+- Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build uses the shared Rust reader for GeoJSON and native ingestion for other admitted OGR formats; geometry processing remains native.
 - CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
 
 Conversion runs offline and needs no Python or executable helpers. The standard build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.

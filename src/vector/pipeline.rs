@@ -1,17 +1,18 @@
 //! Shared disk-backed vector hierarchy, LOD, encoding and reuse. Source readers
-//! and polygon operations are selected by build; workers receive owned data.
+//! follow admitted formats; polygon operations are selected by build. Workers
+//! receive owned data.
 pub(super) mod acceptance;
 mod aggregation;
 use acceptance::{FeatureFailure, FeatureResult};
 mod encoding;
 mod geometry;
 mod reuse;
+mod source;
 #[cfg(feature = "native-geospatial")]
 #[path = "pipeline/source_native.rs"]
-mod source;
-#[cfg(not(feature = "native-geospatial"))]
+mod source_native;
 #[path = "portable.rs"]
-mod source;
+mod source_portable;
 mod store;
 
 use super::{

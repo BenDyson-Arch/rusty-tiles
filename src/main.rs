@@ -684,6 +684,22 @@ impl Observer for CliRunObserver {
     }
 }
 
+struct VectorCliObserver {
+    progress_json: bool,
+}
+impl Observer for VectorCliObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        if self.progress_json {
+            return CliRunObserver.observe(event);
+        }
+        if let RunEvent::Warning { message, .. } = event {
+            writeln!(io::stderr().lock(), "warning: {message}")
+                .map_err(|error| JobError::new(JobErrorKind::ObserverFailure, error.to_string()))?;
+        }
+        Ok(())
+    }
+}
+
 // Display paths remain convenient, while recovery also preserves exact native
 // filename units for tools operating on names that are not Unicode strings.
 #[cfg(unix)]
@@ -1043,9 +1059,9 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             )?)
         }
         Command::Vector(a) => {
-            let observer: Option<Arc<dyn Observer>> =
-                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = RunControl::new(Some(Arc::new(VectorCliObserver {
+                progress_json: pack_events,
+            })));
             let policy = if a.io.force {
                 OutputPolicy::Replace
             } else {

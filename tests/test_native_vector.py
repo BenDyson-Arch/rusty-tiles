@@ -39,7 +39,7 @@ class NativeVectorTests(unittest.TestCase):
                     for name, run in (('native', native_run), ('python', python_run)):
                         args = types.SimpleNamespace(input=str(source), output=str(case/name),
                             source_crs='local', max_features=64)
-                        with self.assertRaisesRegex(ValueError, 'large integers as float64 without loss'):
+                        with self.assertRaisesRegex(ValueError, 'large integers as float64 without loss|outside signed INT64 range'):
                             run(args)
                     self.assertFalse((case/'native').exists())
 

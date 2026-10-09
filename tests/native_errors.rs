@@ -74,7 +74,10 @@ fn missing_python_modules_do_not_hide_invalid_input() {
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(!result.status.success());
     assert!(!out.exists());
-    assert!(stderr.contains("OGR cannot open vector input"), "{stderr}");
+    assert!(
+        stderr.contains("invalid GeoJSON root type or features array"),
+        "{stderr}"
+    );
     assert!(!stderr.contains("Python dependency import failed"));
     assert!(!stderr.contains("Traceback"));
 }

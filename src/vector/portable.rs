@@ -27,7 +27,11 @@ fn input_sql(error: rusqlite::Error) -> Error {
 // Only SQL expression errors are bad input; allocation, storage and access
 // failures keep the original SQLite cause and abort the operation.
 fn filter_sql(error: rusqlite::Error) -> Error {
-    if error.sqlite_error_code() == Some(rusqlite::ErrorCode::Unknown) {
+    let code = match &error {
+        rusqlite::Error::SqlInputError { error, .. } => Some(error.code),
+        _ => error.sqlite_error_code(),
+    };
+    if code == Some(rusqlite::ErrorCode::Unknown) {
         data(format!("invalid attribute filter: {error}"))
     } else {
         input_sql(error)
@@ -110,7 +114,8 @@ impl Reader {
             .chain(&options.drop_fields)
             .any(|f| !known.contains(f))
         {
-            return Err(data("unknown selected/excluded fields"));
+            let primary = data("unknown selected/excluded fields");
+            return Err(combine_source_results(Err(primary), close_source(source)).unwrap_err());
         }
         Ok(Self {
             driver: driver.into(),
@@ -132,16 +137,7 @@ impl Reader {
             return Err(data("vector reader has already been consumed"));
         }
         let result = self.read_features(options, &mut accept, &mut report);
-        let closed = match self.source.take().unwrap() {
-            Source::GeoJson(GeoJsonSource { db, _file, .. }) => {
-                let closed = db.close().map_err(|(_, error)| input_sql(error));
-                let removed = _file.close().map_err(Error::from);
-                combine_source_results(closed, removed)
-            }
-            Source::Gpkg(GpkgSource { db, .. }) => {
-                db.close().map_err(|(_, error)| input_sql(error))
-            }
-        };
+        let closed = close_source(self.source.take().unwrap());
         combine_source_results(result, closed)
     }
     fn read_features(
@@ -392,6 +388,17 @@ impl Reader {
         self.schemas.insert("_source_id".into(), "string".into());
         self.schemas.insert("_source_layer".into(), "string".into());
         Ok(())
+    }
+}
+
+fn close_source(source: Source) -> Result<(), Error> {
+    match source {
+        Source::GeoJson(GeoJsonSource { db, _file, .. }) => {
+            let closed = db.close().map_err(|(_, error)| input_sql(error));
+            let removed = _file.close().map_err(Error::from);
+            combine_source_results(closed, removed)
+        }
+        Source::Gpkg(GpkgSource { db, .. }) => db.close().map_err(|(_, error)| input_sql(error)),
     }
 }
 
@@ -1885,6 +1892,11 @@ mod tests {
 
     #[test]
     fn sqlite_filter_storage_failure_preserves_original_cause() {
+        let db = Connection::open_in_memory().unwrap();
+        let invalid = db.prepare("SELECT missing_column").unwrap_err();
+        assert!(
+            matches!(filter_sql(invalid), Error::Data(message) if message.contains("attribute filter"))
+        );
         let error = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_FULL),
             Some("injected disk full".into()),

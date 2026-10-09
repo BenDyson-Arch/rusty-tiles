@@ -96,7 +96,7 @@ def point(identity, xyz, properties=None):
     return dict(type='Feature', id=identity, properties=properties or {}, geometry=dict(type='Point', coordinates=xyz))
 
 
-def run(binary, evidence):
+def run(binary, evidence, native=False):
     evidence.mkdir(parents=True, exist_ok=True)
     results = dict(binary_sha256=sha(binary.read_bytes()), cases={})
     with tempfile.TemporaryDirectory(prefix='vector-acceptance-') as temporary:
@@ -110,7 +110,9 @@ def run(binary, evidence):
                 output.write_bytes(existing)
             command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output),
                        '--explicit', '--reproducible', '--sourceCrs', 'local', '--jobs', '1', '--lodLevels', '1', *flags]
+            source_before = source.read_bytes()
             proc = subprocess.run(command, capture_output=True, text=True)
+            assert source.read_bytes() == source_before, 'conversion changed source bytes'
             record = dict(command=command, exit_code=proc.returncode, stdout=proc.stdout, stderr=proc.stderr,
                           source_sha256=sha(source.read_bytes()))
             (evidence / (name + '.geojson')).write_bytes(source.read_bytes())
@@ -120,6 +122,7 @@ def run(binary, evidence):
                 (evidence / (name + '.3tz')).write_bytes(output.read_bytes())
             elif existing is not None:
                 assert output.read_bytes() == existing, 'fatal conversion changed existing output'
+                record['preserved_output_sha256'] = sha(existing)
             else:
                 assert not output.exists(), 'failed conversion published output'
             (evidence / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
@@ -138,6 +141,21 @@ def run(binary, evidence):
         assert actual['root_transform'] == control['inventory']['root_transform']
         assert actual['payloads'] == control['inventory']['payloads'], 'rejection changed accepted schema/frame/content'
         assert len(actual['diagnostics']) == 1 and actual['diagnostics'][0]['outcome'] == 'skipped'
+        malformed = [dict(type='Unsupported', coordinates=[1,2]), dict(type='Point', coordinates=[1]),
+                     dict(type='Point', coordinates=[1,2,3,4]), dict(type='Point', coordinates=['x',2]), dict(type='Point')]
+        for index, geometry in enumerate(malformed):
+            feature = dict(type='Feature', id='malformed', properties={'rejected_only':17}, geometry=geometry)
+            strict_bad, _, _ = convert('malformed-strict-' + str(index), [feature, valid], ['--force'], b'existing-output')
+            assert strict_bad['exit_code'] != 0, 'malformed geometry published in strict mode'
+            skipped_bad, _, _ = convert('malformed-skip-' + str(index), [feature, valid], ['--skipInvalid'])
+            assert skipped_bad['exit_code'] == 0
+            observed = skipped_bad['inventory']
+            assert observed['identities'] == [('source', json.dumps('valid'))]
+            assert observed['report']['features'] == observed['report']['fragments'] == 1
+            assert observed['report']['skippedFeatures'] == 1 and observed['report']['featuresWithoutGeometry'] == 0
+            assert observed['root_transform'] == control['inventory']['root_transform']
+            assert observed['payloads'] == control['inventory']['payloads']
+            assert len(observed['diagnostics']) == 1 and observed['diagnostics'][0]['outcome'] == 'skipped'
         partial = dict(type='Feature', id='partial', properties={'rejected_only':17},
                        geometry=dict(type='MultiLineString', coordinates=[[[1000,1000,0],[1001,1000,0],[1002,1000,0]], [[-1e39,0,0],[0,0,0],[1e39,0,0]]]))
         rejected_partial, _, _ = convert('partial-fragment', [partial, valid], ['--maxVertices', '4', '--skipInvalid'])
@@ -172,6 +190,24 @@ def run(binary, evidence):
         assert reused_edit['inventory']['root_transform'] == fresh_edit['inventory']['root_transform']
         assert reused_edit['inventory']['report']['reuse']['rebuiltContents'] > 0
         assert budget['inventory']['payloads'] != fresh_edit['inventory']['payloads']
+        prior_sha = sha(previous.read_bytes())
+        for name, features, without in [('delete-all-reuse', [], 0),
+                                        ('all-null-reuse', [dict(type='Feature', id='null', properties={}, geometry=None)], 1)]:
+            empty, _, _ = convert(name, features, ['--maxBytes', '4096', '--reuseTileset', str(previous)])
+            assert empty['exit_code'] == 0
+            observed = empty['inventory']
+            assert observed['identities'] == [] and observed['payloads'] == {}
+            assert observed['report']['features'] == observed['report']['fragments'] == 0
+            assert observed['report']['featuresWithoutGeometry'] == without
+            assert sha(previous.read_bytes()) == prior_sha, 'empty reuse changed prior archive'
+        schema_edit = [point(i, [i * 100, 0, 0], {'payload': str(i) + 'x' * 1500, 'added_integer': 17}) for i in range(2)]
+        fresh_schema, _, _ = convert('schema-fresh', schema_edit, ['--maxBytes', '4096'])
+        reused_schema, _, _ = convert('schema-reuse', schema_edit, ['--maxBytes', '4096', '--reuseTileset', str(previous)])
+        assert fresh_schema['exit_code'] == reused_schema['exit_code'] == 0
+        assert reused_schema['inventory']['identities'] == fresh_schema['inventory']['identities']
+        assert reused_schema['inventory']['payloads'] == fresh_schema['inventory']['payloads']
+        assert reused_schema['inventory']['report']['reuse']['rebuiltContents'] > 0
+        assert sha(previous.read_bytes()) == prior_sha
         # Admission must preserve the source even under forced replacement.
         for alias in ('exact', 'hardlink', 'symlink'):
             source = root / ('overlap-' + alias + '.geojson')
@@ -189,6 +225,7 @@ def run(binary, evidence):
             proc = subprocess.run(command, capture_output=True, text=True)
             results['cases']['overlap-' + alias] = dict(command=command, exit_code=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
             assert proc.returncode != 0 and source.read_bytes() == before, 'source overlap was published'
+            results['cases']['overlap-' + alias]['preserved_source_sha256'] = sha(before)
         # Two jobs with independent staging and frames execute simultaneously.
         pending = []
         for index in range(2):
@@ -196,14 +233,82 @@ def run(binary, evidence):
             source.write_text(json.dumps(dict(type='FeatureCollection', features=[point(index, [index * 10000, 0, 0])])) )
             output = root / ('concurrent-' + str(index) + '.3tz')
             command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output), '--sourceCrs', 'local', '--explicit', '--reproducible']
-            pending.append((index, output, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)))
-        for index, output, proc in pending:
+            pending.append((index, output, command, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)))
+        for index, output, command, proc in pending:
             stdout, stderr = proc.communicate()
             assert proc.returncode == 0, stderr
             item = inventory(output)
             assert item['identities'] == [('concurrent-' + str(index), str(index))]
-            results['cases']['concurrent-' + str(index)] = dict(exit_code=proc.returncode, inventory=item)
+            results['cases']['concurrent-' + str(index)] = dict(command=command, exit_code=proc.returncode, inventory=item)
+    if native:
+        results['native_gpkg'] = run_gpkg(binary, evidence)
+    results['all_assertions_passed'] = True
     (evidence / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+    return results
+
+
+def run_gpkg(binary, evidence):
+    """Invent ISO WKB/GeoPackage bytes directly; do not use OGR to create fixtures."""
+    import sqlite3
+    evidence.mkdir(parents=True, exist_ok=True)
+    results = {}
+    with tempfile.TemporaryDirectory(prefix='vector-gpkg-') as temporary:
+        root = pathlib.Path(temporary)
+        source = root/'source.gpkg'
+        db = sqlite3.connect(source)
+        db.executescript("""
+            PRAGMA application_id=1196444487; PRAGMA user_version=10200;
+            CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT NOT NULL,srs_id INTEGER PRIMARY KEY,organization TEXT NOT NULL,organization_coordsys_id INTEGER NOT NULL,definition TEXT NOT NULL,description TEXT);
+            CREATE TABLE gpkg_contents(table_name TEXT PRIMARY KEY,data_type TEXT NOT NULL,identifier TEXT UNIQUE,description TEXT DEFAULT '',last_change DATETIME NOT NULL DEFAULT '2026-01-01T00:00:00.000Z',min_x DOUBLE,min_y DOUBLE,max_x DOUBLE,max_y DOUBLE,srs_id INTEGER);
+            CREATE TABLE gpkg_geometry_columns(table_name TEXT NOT NULL,column_name TEXT NOT NULL,geometry_type_name TEXT NOT NULL,srs_id INTEGER NOT NULL,z TINYINT NOT NULL,m TINYINT NOT NULL,PRIMARY KEY(table_name,column_name));
+            INSERT INTO gpkg_spatial_ref_sys VALUES('Undefined Cartesian',-1,'NONE',-1,'undefined','');
+            INSERT INTO gpkg_spatial_ref_sys VALUES('Undefined geographic',0,'NONE',0,'undefined','');
+            INSERT INTO gpkg_contents(table_name,data_type,identifier,srs_id) VALUES('features','features','features',-1);
+            INSERT INTO gpkg_geometry_columns VALUES('features','geom','GEOMETRY',-1,0,0);
+            CREATE TABLE features(fid INTEGER PRIMARY KEY,geom BLOB,payload TEXT);
+        """)
+        def gp(wkb):
+            return b'GP' + bytes([0,1]) + struct.pack('<i',-1) + wkb
+        coords = [(1000.,1000.),(1010.,1000.),(1010.,1010.),(1000.,1010.),(1000.,1000.)]
+        polygon = struct.pack('<BIII',1,3,1,len(coords)) + b''.join(struct.pack('<dd',*xy) for xy in coords)
+        point_wkb = struct.pack('<BIdd',1,1,20.,20.)
+        db.execute('INSERT INTO features VALUES(1,?,?)',(gp(polygon),'x'*5000))
+        db.execute('INSERT INTO features VALUES(2,?,NULL)',(gp(point_wkb),))
+        db.commit();db.close()
+        before = source.read_bytes()
+        (evidence/'native-source.gpkg').write_bytes(before)
+        def convert(name, flags, existing=None):
+            output = root/(name+'.3tz')
+            if existing is not None:output.write_bytes(existing)
+            command=[str(binary),'--json','vector','-i',str(source),'-o',str(output),'--sourceCrs','local','--explicit','--reproducible','--jobs','1','--lodLevels','1','--maxBytes','4096',*flags]
+            proc=subprocess.run(command,capture_output=True,text=True)
+            item=dict(command=command,exit_code=proc.returncode,stdout=proc.stdout,stderr=proc.stderr,source_sha256=sha(before))
+            assert source.read_bytes()==before, 'native source changed'
+            item['preserved_source_sha256']=sha(before)
+            if proc.returncode==0:
+                item['inventory']=inventory(output)
+                (evidence/(name+'.3tz')).write_bytes(output.read_bytes())
+            elif existing is not None:
+                assert output.read_bytes()==existing
+                item['preserved_output_sha256']=sha(existing)
+            else:assert not output.exists()
+            results[name]=item
+            (evidence/'native-gpkg-results.json').write_text(json.dumps(results,indent=2)+'\n')
+            return item,output
+        accepted, previous=convert('native-gpkg-skip',['--skipInvalid'])
+        assert accepted['exit_code']==0, accepted
+        inv=accepted['inventory']
+        assert inv['identities']==[('features','2')]
+        assert inv['report']['features']==inv['report']['fragments']==1
+        assert inv['report']['skippedFeatures']==1 and inv['report']['fragmentedPolygons']==0
+        assert len(inv['diagnostics'])==1 and inv['diagnostics'][0]['outcome']=='skipped'
+        strict,_=convert('native-gpkg-strict',['--force'],b'existing-output')
+        assert strict['exit_code']!=0
+        reused,_=convert('native-gpkg-reuse',['--skipInvalid','--reuseTileset',str(previous)])
+        assert reused['exit_code']==0
+        assert reused['inventory']['identities']==inv['identities']
+        assert reused['inventory']['payloads']==inv['payloads']
+        assert reused['inventory']['report']['reuse']['rebuiltContents']==0
     return results
 
 
@@ -211,5 +316,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', type=pathlib.Path, required=True)
     parser.add_argument('--evidence', type=pathlib.Path, required=True)
+    parser.add_argument('--native', action='store_true', help='also inspect the independent native GeoPackage consumer')
     args = parser.parse_args()
-    run(args.binary.resolve(), args.evidence.resolve())
+    run(args.binary.resolve(), args.evidence.resolve(), args.native)

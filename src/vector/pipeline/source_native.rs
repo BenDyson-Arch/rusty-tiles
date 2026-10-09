@@ -33,20 +33,15 @@ impl Reader {
         frame: Option<Frame>,
         _scratch: &Path,
     ) -> Result<Self, Error> {
-        // Native GeoJSON members are retained only for GeoJSON ingestion.
-        let geojson = input
-            .extension()
-            .is_some_and(|s| s.eq_ignore_ascii_case("geojson") || s.eq_ignore_ascii_case("json"));
-        let dataset = Dataset::open_vector(
-            input,
-            if geojson { &[c"NATIVE_DATA=YES"] } else { &[] },
-            "OGR cannot open vector input",
-        )?;
+        let dataset = Dataset::open_vector(input, &[], "OGR cannot open vector input")?;
         let raw = dataset.raw();
         let _errors = QuietErrors::new();
+        unsafe {
+            gdal_sys::CPLErrorReset();
+        }
         // SAFETY: The dataset owns its handle on this thread. Layers borrowed
         // below remain live until the Reader's dataset is closed.
-        unsafe {
+        let prepared = (|| unsafe {
             let driver = geospatial::string(gdal_sys::GDALGetDriverShortName(
                 gdal_sys::GDALGetDatasetDriver(raw),
             ));
@@ -62,6 +57,7 @@ impl Reader {
                 .iter()
                 .map(|l| geospatial::string(gdal_sys::OGR_L_GetName(*l)))
                 .collect();
+            check_native("read native source layer inventory")?;
             let requested: BTreeSet<_> = options.layers.iter().cloned().collect();
             if requested.len() != options.layers.len() {
                 return Err(data("duplicate layer selection"));
@@ -105,6 +101,7 @@ impl Reader {
                     )));
                 }
             }
+            check_native("read native source field inventory")?;
             if options
                 .fields
                 .iter()
@@ -113,7 +110,11 @@ impl Reader {
             {
                 return Err(data("unknown selected/excluded fields"));
             }
-            Ok(Self {
+            check_native("prepare native vector source")?;
+            Ok((layers, driver))
+        })();
+        match prepared {
+            Ok((layers, driver)) => Ok(Self {
                 dataset: Some(dataset),
                 layers,
                 driver,
@@ -121,9 +122,33 @@ impl Reader {
                 layer_reports: Vec::new(),
                 frame,
                 without_geometry: 0,
-            })
+            }),
+            Err(primary) => {
+                let closed = dataset
+                    .finish("close rejected vector source preparation")
+                    .map_err(|error| Error::Io(std::io::Error::other(error)));
+                match closed {
+                    Ok(()) => Err(primary),
+                    Err(close) => {
+                        let secondary = super::super::job_error(close);
+                        match primary {
+                            Error::Job(mut failure) => {
+                                failure.secondary.push(secondary);
+                                Err(Error::Job(failure))
+                            }
+                            primary => Err(Error::Job(crate::JobFailure {
+                                error: super::super::job_error(primary),
+                                secondary: vec![secondary],
+                                retained_paths: Vec::new(),
+                                recovery: None,
+                            })),
+                        }
+                    }
+                }
+            }
         }
     }
+
     pub fn read(
         &mut self,
         options: &VectorOptions,
@@ -134,14 +159,7 @@ impl Reader {
             return Err(data("vector reader has already been consumed"));
         }
         let result = self.read_features(options, &mut accept, &mut report);
-        // Layer handles are borrowed from this dataset and never used after finish.
-        self.layers.clear();
-        let closed = self
-            .dataset
-            .take()
-            .expect("native vector reader is single-use")
-            .finish("close vector input")
-            .map_err(|error| Error::Io(std::io::Error::other(error)));
+        let closed = self.finish();
         match (result, closed) {
             (Ok(()), Ok(())) => Ok(()),
             (Ok(()), Err(error)) | (Err(error), Ok(())) => Err(error),
@@ -161,6 +179,15 @@ impl Reader {
                 }
             }
         }
+    }
+    pub fn finish(&mut self) -> Result<(), Error> {
+        // Layer handles are borrowed and cannot outlive checked dataset close.
+        self.layers.clear();
+        self.dataset
+            .take()
+            .expect("native reader is closed once")
+            .finish("close vector input")
+            .map_err(|error| Error::Io(std::io::Error::other(error)))
     }
     fn read_features(
         &mut self,
@@ -231,9 +258,6 @@ impl Reader {
                 let mut declared_schemas = BTreeMap::new();
                 let mut declared_failure = None;
                 for i in 0..gdal_sys::OGR_FD_GetFieldCount(definition) {
-                    if self.driver == "GeoJSON" {
-                        continue;
-                    }
                     let field = gdal_sys::OGR_FD_GetFieldDefn(definition, i);
                     let key = geospatial::string(gdal_sys::OGR_Fld_GetNameRef(field));
                     if !source_fields::keep(options, &key) {
@@ -270,21 +294,23 @@ impl Reader {
                             }
                         }
                     };
-                    if self.driver != "GeoJSON" {
-                        match source_fields::register(&mut declared_schemas, &key, scalar) {
-                            Ok(()) => {}
-                            Err(FeatureFailure::Rejected(rejection)) => {
-                                declared_failure.get_or_insert(rejection.message);
-                            }
-                            Err(FeatureFailure::Fatal(error)) => return Err(error),
+
+                    match source_fields::register(&mut declared_schemas, &key, scalar) {
+                        Ok(()) => {}
+                        Err(FeatureFailure::Rejected(rejection)) => {
+                            declared_failure.get_or_insert(rejection.message);
                         }
+                        Err(FeatureFailure::Fatal(error)) => return Err(error),
                     }
+
                     fields.push((i, key, scalar, kind));
                 }
+                check_native("prepare native layer fields")?;
                 let mut accepted = 0;
                 let mut rejected = 0;
                 let mut without = 0;
                 gdal_sys::OGR_L_ResetReading(layer);
+                check_native("reset native layer reading")?;
                 loop {
                     gdal_sys::CPLErrorReset();
                     let raw = gdal_sys::OGR_L_GetNextFeature(layer);
@@ -298,43 +324,8 @@ impl Reader {
                     }
                     let row = Row(NonNull::new(raw).unwrap());
                     let fid = gdal_sys::OGR_F_GetFID(raw);
-                    let native = if self.driver == "GeoJSON" {
-                        let p = gdal_sys::OGR_F_GetNativeData(raw);
-                        if p.is_null() {
-                            None
-                        } else {
-                            Some(serde_json::from_str::<Value>(&geospatial::string(p))?)
-                        }
-                    } else {
-                        None
-                    };
                     check_native("read native feature metadata")?;
-                    if self.driver == "GeoJSON" && native.is_none() {
-                        return Err(Error::Io(std::io::Error::other(
-                            "OGR GeoJSON feature is missing required native data",
-                        )));
-                    }
-                    let id = source_fields::source_id(native.as_ref(), fid)?;
-                    if let Some(native) = &native {
-                        let reason = if !matches!(
-                            native.get("properties"),
-                            None | Some(Value::Null | Value::Object(_))
-                        ) {
-                            Some("GeoJSON feature properties must be an object or null")
-                        } else if native.get("geometry").is_none() {
-                            Some("GeoJSON feature needs a geometry member (null is allowed)")
-                        } else {
-                            None
-                        };
-                        if let Some(reason) = reason {
-                            rejected += 1;
-                            report(
-                                json!({"sourceLayer":name,"sourceId":id,"reason":reason}),
-                                true,
-                            )?;
-                            continue;
-                        }
-                    }
+                    let id = source_fields::source_id(None, fid)?;
                     let g = gdal_sys::OGR_F_GetGeometryRef(raw);
                     check_native("read native feature geometry")?;
                     let empty = g.is_null() || gdal_sys::OGR_G_IsEmpty(g) != 0;
@@ -355,72 +346,58 @@ impl Reader {
                         if let Some(message) = &declared_failure {
                             return Err(FeatureFailure::reject(message.clone()));
                         }
-                        if self.driver != "GeoJSON" {
-                            candidate_json_fields.extend(declared_json_fields.iter().cloned());
-                            for (key, kind) in &declared_schemas {
-                                source_fields::register(&mut candidate_schemas, key, kind)?;
-                            }
+
+                        candidate_json_fields.extend(declared_json_fields.iter().cloned());
+                        for (key, kind) in &declared_schemas {
+                            source_fields::register(&mut candidate_schemas, key, kind)?;
                         }
+
                         if gdal_sys::OGR_G_IsMeasured(g) != 0 {
                             return Err(FeatureFailure::reject(
                                 "measured geometry is unsupported; retain or explicitly remove M",
                             ));
                         }
                         let has_z = gdal_sys::OGR_GT_HasZ(gdal_sys::OGR_G_GetGeometryType(g)) != 0;
-                        if has_z
-                            && !local
-                            && !native_height
-                            && options.height_offset.is_none()
-                            && self.driver != "GeoJSON"
-                        {
+                        if has_z && !local && !native_height && options.height_offset.is_none() {
                             return Err(FeatureFailure::reject("3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres, or --sourceCrs with the correct compound CRS"));
                         }
                         let mut count = 0;
                         let mut geometry =
                             read_geometry(g, &mut count, options.max_source_vertices)?;
                         let mut properties = BTreeMap::new();
-                        if let Some(native) = &native {
-                            properties = source_fields::geojson_properties(
-                                native,
-                                options,
-                                &mut candidate_schemas,
-                                &mut candidate_json_fields,
-                            )?;
-                        } else {
-                            for (index, key, scalar, kind) in &fields {
-                                let value = if gdal_sys::OGR_F_IsFieldSetAndNotNull(raw, *index)
-                                    == 0
-                                {
-                                    Value::Null
-                                } else if candidate_json_fields.contains(key) {
-                                    let values = read_list(raw, *index, *kind)?;
-                                    json!(serde_json::to_string(&values)?)
-                                } else {
-                                    match *scalar {
-                                        "integer" => {
-                                            json!(gdal_sys::OGR_F_GetFieldAsInteger64(raw, *index))
-                                        }
-                                        "real" => {
-                                            let v = gdal_sys::OGR_F_GetFieldAsDouble(raw, *index);
-                                            if !v.is_finite() {
-                                                return Err(FeatureFailure::reject(format!(
-                                                    "nonfinite property: {key}"
-                                                )));
-                                            }
-                                            json!(v)
-                                        }
-                                        "boolean" => json!(
-                                            gdal_sys::OGR_F_GetFieldAsInteger(raw, *index) != 0
-                                        ),
-                                        _ => json!(geospatial::string(
-                                            gdal_sys::OGR_F_GetFieldAsString(raw, *index)
-                                        )),
+
+                        for (index, key, scalar, kind) in &fields {
+                            let value = if gdal_sys::OGR_F_IsFieldSetAndNotNull(raw, *index) == 0 {
+                                Value::Null
+                            } else if candidate_json_fields.contains(key) {
+                                let values = read_list(raw, *index, *kind)?;
+                                json!(serde_json::to_string(&values)?)
+                            } else {
+                                match *scalar {
+                                    "integer" => {
+                                        json!(gdal_sys::OGR_F_GetFieldAsInteger64(raw, *index))
                                     }
-                                };
-                                check_native("read native feature property")?;
-                                properties.insert(key.clone(), value);
-                            }
+                                    "real" => {
+                                        let v = gdal_sys::OGR_F_GetFieldAsDouble(raw, *index);
+                                        if !v.is_finite() {
+                                            return Err(FeatureFailure::reject(format!(
+                                                "nonfinite property: {key}"
+                                            )));
+                                        }
+                                        json!(v)
+                                    }
+                                    "boolean" => {
+                                        json!(gdal_sys::OGR_F_GetFieldAsInteger(raw, *index) != 0)
+                                    }
+                                    _ => json!(geospatial::string(
+                                        gdal_sys::OGR_F_GetFieldAsString(raw, *index)
+                                    )),
+                                }
+                            };
+                            check_native("read native feature property")?;
+                            properties.insert(key.clone(), value);
                         }
+
                         let points: Vec<_> = geometry.points().copied().collect();
                         if !points.iter().flatten().all(|p| p.is_finite()) {
                             return Err(FeatureFailure::reject("coordinates must be finite XYZ"));
@@ -500,7 +477,7 @@ impl Reader {
                 }
                 self.layer_reports.push(json!({"name":name,"features":accepted,"attributeFilter":options.where_clause,
                     "invalidFeatures":rejected,"featuresWithoutGeometry":without,"jsonFields":json_fields,"sourceCrs":source_wkt,
-                    "heightMode":if local {"local metres"}else if native_height {"declared CRS"}else if options.height_offset.is_some(){"explicit offset"}else if self.driver!="GeoJSON"{"2D ellipsoid zero"}else{"GeoJSON ellipsoidal metres"},"heightOffset":options.height_offset}));
+                    "heightMode":if local {"local metres"}else if native_height {"declared CRS"}else if options.height_offset.is_some(){"explicit offset"}else{"2D ellipsoid zero"},"heightOffset":options.height_offset}));
             }
         }
         self.schemas.insert("_source_id".into(), "string".into());
@@ -519,6 +496,74 @@ fn check_native(context: &str) -> Result<(), Error> {
     }
 }
 
+#[cfg(test)]
+mod coordinate_fault_tests {
+    use super::*;
+
+    #[test]
+    fn plausible_coordinates_with_native_failure_abort_before_acceptance_reset() {
+        let _quiet = QuietErrors::new();
+        unsafe {
+            gdal_sys::CPLError(
+                gdal_sys::CPLErr::CE_Failure,
+                1,
+                c"fixture coordinate transport failure".as_ptr(),
+            );
+        }
+        let mut accepted = false;
+        let outcome = checked_coordinates(vec![[1., 2., 3.]]).and_then(|coordinates| {
+            // Acceptance's geometry operations reset CPL diagnostics. Source
+            // failure must already have crossed the fatal boundary before this.
+            accepted = true;
+            unsafe {
+                gdal_sys::CPLErrorReset();
+            }
+            Ok(coordinates)
+        });
+        assert!(!accepted);
+        let failure = outcome.unwrap_err();
+        unsafe {
+            gdal_sys::CPLErrorReset();
+        }
+        assert!(matches!(failure, FeatureFailure::Fatal(Error::Io(_))));
+        assert!(failure
+            .to_string()
+            .contains("fixture coordinate transport failure"));
+    }
+}
+
+fn checked_coordinates(coordinates: Vec<Point>) -> FeatureResult<Vec<Point>> {
+    check_native("read native coordinates")?;
+    Ok(coordinates)
+}
+
+unsafe fn checked_child(
+    geometry: gdal_sys::OGRGeometryH,
+    index: i32,
+) -> FeatureResult<gdal_sys::OGRGeometryH> {
+    let child = gdal_sys::OGR_G_GetGeometryRef(geometry, index);
+    check_native("read native geometry child handle")?;
+    if child.is_null() {
+        return Err(Error::Io(std::io::Error::other(
+            "native geometry child handle is null",
+        ))
+        .into());
+    }
+    Ok(child)
+}
+
+unsafe fn checked_child_count(geometry: gdal_sys::OGRGeometryH) -> FeatureResult<i32> {
+    let count = gdal_sys::OGR_G_GetGeometryCount(geometry);
+    check_native("read native geometry child count")?;
+    if count < 0 {
+        return Err(Error::Io(std::io::Error::other(
+            "native geometry child count is negative",
+        ))
+        .into());
+    }
+    Ok(count)
+}
+
 // SAFETY: These helpers are called only with geometries/rows borrowed from the
 // live ingestion dataset; all native point counts are bounded before allocation.
 unsafe fn read_geometry(
@@ -533,6 +578,7 @@ unsafe fn read_geometry(
         .into());
     }
     let kind = gdal_sys::OGR_GT_Flatten(gdal_sys::OGR_G_GetGeometryType(g));
+    check_native("read native geometry type")?;
     let mut points = |raw: gdal_sys::OGRGeometryH| -> FeatureResult<Vec<Point>> {
         if raw.is_null() {
             return Err(
@@ -551,7 +597,7 @@ unsafe fn read_geometry(
         if *count > limit {
             return Err(FeatureFailure::reject("source feature exceeds maxSourceVertices; explicitly raise the limit or subdivide the source"));
         }
-        Ok((0..n)
+        let coordinates = (0..n)
             .map(|i| {
                 [
                     gdal_sys::OGR_G_GetX(raw, i as i32),
@@ -559,9 +605,10 @@ unsafe fn read_geometry(
                     gdal_sys::OGR_G_GetZ(raw, i as i32),
                 ]
             })
-            .collect())
+            .collect();
+        checked_coordinates(coordinates)
     };
-    Ok(match kind {
+    let geometry = match kind {
         1 => {
             let p = points(g)?;
             Geometry::Point(
@@ -571,13 +618,13 @@ unsafe fn read_geometry(
         }
         2 => Geometry::LineString(points(g)?),
         3 => Geometry::Polygon(
-            (0..gdal_sys::OGR_G_GetGeometryCount(g))
-                .map(|i| points(gdal_sys::OGR_G_GetGeometryRef(g, i)))
+            (0..checked_child_count(g)?)
+                .map(|i| points(checked_child(g, i)?))
                 .collect::<Result<_, _>>()?,
         ),
         4..=6 => {
-            let parts = (0..gdal_sys::OGR_G_GetGeometryCount(g))
-                .map(|i| read_geometry(gdal_sys::OGR_G_GetGeometryRef(g, i), count, limit))
+            let parts = (0..checked_child_count(g)?)
+                .map(|i| read_geometry(checked_child(g, i)?, count, limit))
                 .collect::<Result<Vec<_>, _>>()?;
             match kind {
                 4 => Geometry::MultiPoint(
@@ -619,12 +666,15 @@ unsafe fn read_geometry(
             }
         }
         _ => {
+            let name = geospatial::string(gdal_sys::OGR_G_GetGeometryName(g));
+            check_native("read native geometry name")?;
             return Err(FeatureFailure::reject(format!(
-                "unsupported geometry: {}",
-                geospatial::string(gdal_sys::OGR_G_GetGeometryName(g))
-            )))
+                "unsupported geometry: {name}"
+            )));
         }
-    })
+    };
+    check_native("read native geometry children")?;
+    Ok(geometry)
 }
 unsafe fn read_list(row: gdal_sys::OGRFeatureH, index: i32, kind: u32) -> FeatureResult<Value> {
     let mut count = 0;
@@ -685,15 +735,20 @@ unsafe fn read_list(row: gdal_sys::OGRFeatureH, index: i32, kind: u32) -> Featur
 mod foundation_tests {
     use super::*;
     fn fixture(path: &Path, features: Value) -> Vec<u8> {
-        let bytes =
-            serde_json::to_vec(&json!({"type":"FeatureCollection","features":features})).unwrap();
+        let bytes = features
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|feature| format!("\x1e{}\n", serde_json::to_string(feature).unwrap()))
+            .collect::<String>()
+            .into_bytes();
         std::fs::write(path, &bytes).unwrap();
         bytes
     }
     #[test]
     fn callback_io_failure_is_fatal_and_closes_source_without_candidate_effects() {
         let work = tempfile::tempdir().unwrap();
-        let input = work.path().join("source.geojson");
+        let input = work.path().join("source.geojsonl");
         let before = fixture(
             &input,
             json!([
@@ -707,6 +762,7 @@ mod foundation_tests {
             ..VectorOptions::default()
         };
         let mut reader = Reader::new(&input, &options, None, work.path()).unwrap();
+        assert_eq!(reader.driver, "GeoJSONSeq");
         let mut calls = 0;
         let mut reports = Vec::new();
         let failure = reader
@@ -738,51 +794,6 @@ mod foundation_tests {
         assert!(reader.schemas.is_empty());
         assert!(reader.dataset.is_none());
         assert_eq!(std::fs::read(input).unwrap(), before);
-    }
-    #[test]
-    fn malformed_geojson_properties_reject_before_null_geometry_disposition() {
-        let work = tempfile::tempdir().unwrap();
-        let input = work.path().join("source.geojson");
-        fixture(
-            &input,
-            json!([
-                {"type":"Feature","id":"bad-point","properties":7,"geometry":{"type":"Point","coordinates":[100,200,300]}},
-                {"type":"Feature","id":"bad-null","properties":"wrong","geometry":null},
-                {"type":"Feature","id":"accepted","properties":{"name":"kept"},"geometry":{"type":"Point","coordinates":[1,2,3]}}
-            ]),
-        );
-        let options = VectorOptions {
-            source_crs: Some("local".into()),
-            skip_invalid: true,
-            ..VectorOptions::default()
-        };
-        let mut reader = Reader::new(&input, &options, None, work.path()).unwrap();
-        let mut accepted = Vec::new();
-        let mut rejected = Vec::new();
-        reader
-            .read(
-                &options,
-                |feature| {
-                    accepted.push(feature.source_id().clone());
-                    Ok(())
-                },
-                |value, invalid| {
-                    rejected.push((value, invalid));
-                    Ok(())
-                },
-            )
-            .unwrap();
-        assert_eq!(accepted, vec![json!("\"accepted\"")]);
-        assert_eq!(rejected.len(), 2);
-        assert!(rejected.iter().all(|(value, invalid)| *invalid
-            && value["reason"] == "GeoJSON feature properties must be an object or null"));
-        assert_eq!(reader.without_geometry, 0);
-        assert_eq!(reader.frame.as_ref().unwrap().anchor, [1., 2., 3.]);
-        assert_eq!(
-            reader.schemas.get("name").map(String::as_str),
-            Some("string")
-        );
-        assert!(reader.dataset.is_none());
     }
     #[test]
     fn declared_list_fields_from_rejected_or_null_rows_do_not_enter_report() {

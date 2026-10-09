@@ -171,7 +171,7 @@ jobs:
         shell: bash -el {0}
         run: |
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native"
+          python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native" --native
       - name: Check native geospatial lint
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'

@@ -1,4 +1,4 @@
-//! Unchanged OGR/GEOS ownership and geometry operations.
+//! Checked OGR/GEOS ownership and geometry operations.
 use super::{outline, FeatureFailure, Point};
 use crate::geospatial::{self, QuietErrors};
 use std::{ffi::c_void, ptr::NonNull};

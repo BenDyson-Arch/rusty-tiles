@@ -356,7 +356,7 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
             &rusty_tiles::RunControl::default(),
         )
         .unwrap();
-        assert_eq!(result.output, output);
+        assert_eq!(result.output, std::fs::canonicalize(&output).unwrap());
         assert_eq!(result.report["features"], 6);
         assert_eq!(
             rusty_tiles::validate::archive(&output, None).unwrap()["ok"],

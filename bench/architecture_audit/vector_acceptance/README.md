@@ -41,3 +41,15 @@ The portable resource runner passed five cases. Peak RSS KiB for 100/1,000/10,00
 The independent oracle also passed for native binary SHA256 `326924d88448042320db335d573f1c85d5412b8342f21e9a6305452aadcb5532`. Actual GLB byte maxima, decoded position counts and content-member counts agree with the published conversion report in both candidate builds. Native resource peak RSS KiB for 100/1,000/10,000 two-vertex features was 69,028/71,172/83,096; for one 1,000/10,000-vertex feature it was 69,232/75,032. Sampled scratch bytes were 70,200/769,992/10,109,381 and 83,072/703,229. Scratch directories cleaned. Native evidence is retained at `/tmp/rt119-independent/native-candidate` and `/tmp/rt119-independent/resources-native.json`.
 
 This native build preceded the final source freeze; its observations are provisional candidate behavior and must be replayed against the final frozen source artifact before approval.
+
+## Malformed GeoJSON and independent native driver control
+
+The oracle now checks unsupported geometry type, short Point, four-coordinate Point, nonnumeric Point and missing coordinates. Each malformed feature must reject under strict mode with existing bytes preserved; skip mode must count a rejected feature (not absent geometry) and preserve accepted-only content, frame and schema. This expanded matrix requires replay after the reader migration; prior recorded oracle passes do not prove the added cases.
+
+Pass `--native` to additionally consume a GeoPackage generated directly with stdlib SQLite and hand-built GeoPackage headers/ISO WKB. No OGR fixture writer or converter code supplies expected identities. Native FID 2 is the sole accepted source identity; oversized FID 1 rejects. Skip, strict preservation, unchanged reuse, exact archive inventory and unchanged source SHA are inspected independently. The provisional native binary passed this driver control at `/tmp/rt119-independent/native-gpkg-candidate`; a frozen-source replay is still required.
+
+## Reuse deletion and derived schema controls
+
+The expanded oracle now reuses the two-point archive with an empty collection and a collection containing only null geometry. Both must publish an empty accepted identity/content inventory with zero accepted features/fragments; null geometry contributes exactly one `featuresWithoutGeometry`. Source bytes and the prior archive SHA remain unchanged. A new integer property column exercises schema changes: reused output must rebuild and match fresh accepted identities and exact content hashes.
+
+The shared-reader native candidate passed this expanded oracle including `--native` driver controls at `/tmp/rt119-independent/shared-native`. This remains prefreeze evidence. The earlier native candidate's narrower pass was invalidated as comprehensive acceptance evidence by the subsequently added malformed-type fixture, which executed strict-mode publication of malformed input. It remains evidence only for its originally executed cases. The recorded `portable-final.json` likewise identifies the earlier `1445c503` source and narrower matrix; the revised source needs fresh final replay.

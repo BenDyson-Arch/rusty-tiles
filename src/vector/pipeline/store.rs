@@ -448,13 +448,15 @@ impl Build<'_> {
                 .map(|level| encoding::encode(encoder, prefix, center, *level))
                 .collect()
         });
-        values.into_iter().collect()
+        let values = values.into_iter().collect::<Result<Vec<_>, _>>()?;
+        self.workers
+            .extend(values.iter().map(|candidate| candidate.worker));
+        Ok(values)
     }
     fn consume(
         &mut self,
         candidate: Candidate,
     ) -> Result<(Option<Value>, Option<&'static str>), Error> {
-        self.workers.insert(candidate.worker);
         if candidate.node.is_some() {
             for report in candidate.reports {
                 self.reports.write(report)?;
@@ -825,12 +827,12 @@ pub(super) fn convert(
     db.execute_batch("COMMIT;").map_err(sql)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
-    counters.features_without_geometry = reader.without_geometry;
+    counters.features_without_geometry = reader.without_geometry();
     if counters.features == 0 && !reuse.has_previous() {
-        if reader.without_geometry == 0 && options.where_clause.is_none() {
+        if reader.without_geometry() == 0 && options.where_clause.is_none() {
             return Err(data("empty selected layers"));
         }
-        reader.frame = Some(Frame::local([0.; 3]));
+        *reader.frame_mut() = Some(Frame::local([0.; 3]));
     }
     let mut reuse = reuse;
     reuse.configure(max_features, repair, ambiguous, options, &reader)?;
@@ -863,7 +865,7 @@ pub(super) fn convert(
         spool: &spool,
         output,
         options,
-        schemas: &reader.schemas,
+        schemas: reader.schemas(),
         max_features,
         repair,
         pool,
@@ -894,8 +896,7 @@ pub(super) fn convert(
         .max(0.);
     let publication_started = Instant::now();
     let frame = reader
-        .frame
-        .as_ref()
+        .frame()
         .ok_or_else(|| data("missing local vector frame"))?;
     let anchor = (0..3).fold(frame.anchor, |p, i| {
         add(p, mul(frame.axes[i], root.center[i]))
@@ -989,7 +990,7 @@ pub(super) fn convert(
             .fold(0., f64::max)
     };
     let mut report = serde_json::to_value(&build.counters)?;
-    let values = json!({"inputDriver":reader.driver,"layers":reader.layer_reports,
+    let values = json!({"inputDriver":reader.driver(),"layers":reader.layer_reports(),
         "performance":{"jobs":options.jobs,"workersUsed":build.workers.len(),"phaseSeconds":{"ingestion":ingestion_seconds,"partitioning":build.partition_seconds,"encoding":encoding_seconds,"publication":publication_started.elapsed().as_secs_f64()}},
         "budgets":{"features":max_features,"parentFeatures":options.max_parent_features,"vertices":options.max_vertices,"bytes":options.max_bytes,"tiles":options.max_tiles},
         "attributeFilter":options.where_clause,"metadata":{"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields},
