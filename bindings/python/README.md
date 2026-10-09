@@ -151,13 +151,42 @@ counts. The clean-venv runner also accepts `--report-json`.
 Both runners require fresh suite evidence matching the candidate wheel and
 replace any requested prior report; current failure reports are preserved.
 
-The manually dispatched **Wheel acceptance** workflow builds candidate wheels
-for all five release platforms and tests each artifact with CPython 3.10 and
-3.14. It also tests the Linux x86_64 wheel inside distribution Blender. It
-uploads wheels and JSON evidence without publishing packages or a release.
-The release workflow reuses these wheel checks; its default run omits the
-separate distribution Blender check.
-Only completed runs establish acceptance; Blender on other platforms and
-official bundled Blender distributions need their own runner evidence.
+The **Wheel acceptance** workflow runs on relevant pull requests into `develop`,
+can be dispatched manually once present on the default branch, and is reused by
+the release workflow. It builds wheels for all five release platforms and tests
+each artifact with CPython 3.10 and 3.14. Its mandatory official Blender matrix
+installs the same wheels inside Blender 4.5.14 LTS on Linux x86_64, Windows x64,
+Intel macOS and Apple Silicon macOS. Archives and SHA-256 checksums are pinned in
+[blender_official.json](../../scripts/blender_official.json) from
+[Blender's published checksums](https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256).
+Blender 4.5 LTS is supported until July 2027 and is the last official Intel macOS
+release series. See [Blender's compatibility notes](https://developer.blender.org/docs/release_notes/compatibility/).
+
+The downloader verifies each archive before extraction. The runner checks the
+extracted executable's hash, actual Blender version and runtime architecture,
+and records the archive identity alongside the wheel SHA-256 and API results.
+CI uploads wheels and JSON evidence without publishing packages or a release.
+The optional Linux distribution Blender check remains separate. Only completed
+runs establish platform acceptance; configuring the matrix alone is not test
+evidence. The Linux ARM64 wheel has CPython acceptance but no official Blender
+4.5 bundle to test. Official Windows ARM64 Blender is outside the project's
+current Windows x64 wheel targets.
+These checks install local candidate wheels. Publishing to PyPI and verifying
+`pip install rusty-tiles` from PyPI inside bundled Blender remain separate
+[release acceptance requirements](https://github.com/BenDyson-Arch/rusty-tiles/issues/77).
+
+To repeat an official check locally with host Python 3.12 or newer, select
+`linux-x64`, `windows-x64`, `macos-x64` or `macos-arm64` for your host:
+
+```sh
+python scripts/download_blender.py --platform linux-x64 --directory /tmp/official-blender --report-json target/blender-distribution.json
+python scripts/test_blender_wheel.py target/wheels/*.whl --blender /tmp/official-blender/blender-4.5.14-linux-x64/blender --distribution-json target/blender-distribution.json --report-json target/blender-acceptance.json
+```
+
+The downloader requires a new temporary directory and prints the executable
+path, which is also recorded in its JSON. It copies the macOS application from
+a read-only DMG mount and detaches it; it does not modify a system installation.
+Updating the Blender pin requires reviewing the official checksum file,
+updating the manifest and rerunning all four platform jobs.
 
 `convert_to_implicit(input, output, *, force=False)` rewrites an eligible rusty-tiles explicit point-cloud/vector `.3tz` as implicit tiling, returning `ConversionResult`. It preserves original GLB/b3dm bytes through implicit tileset roots that own their replacement descendants. Retained originals and coordinate-template aliases typically double payload storage. Eligibility requires distinct regular midpoint cells, with only recorded rounding/minimum-thickness padding; many older binary trees and vector LOD chains need a fresh source conversion. Meshes, foreign and already implicit archives are refused. See [command eligibility and publication semantics](../../docs/CLI.md#convert-to-implicit).

@@ -416,6 +416,7 @@ if __name__ == "__main__":
     if "bpy" in sys.modules:
         import bpy
         evidence["blender"] = bpy.app.version_string
+        evidence["blender_version"] = list(bpy.app.version)
         evidence["blender_build_hash"] = bpy.app.build_hash.decode("ascii")
     if report := os.environ.get("RUSTY_TILES_ACCEPTANCE_REPORT"):
         destination = Path(report)

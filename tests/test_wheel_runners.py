@@ -1,14 +1,19 @@
 """Acceptance runners must reject missing or stale completion evidence."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import download_blender
 
 
 class WheelRunnerEvidence(unittest.TestCase):
@@ -118,6 +123,97 @@ class WheelRunnerEvidence(unittest.TestCase):
                 self.assertIs(evidence["ok"], False)
                 self.assertEqual(evidence["tests_run"], 12)
                 self.assertEqual(evidence["runner_error"], "Acceptance subprocess exited with status 1")
+
+    @unittest.skipIf(os.name == "nt", "The test launcher uses a POSIX executable script")
+    def test_official_bundle_requires_pinned_runtime_version_and_architecture(self):
+        launcher = self.root / "blender"
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        spec = manifest["platforms"]["linux-x64"]
+        pinned_version = [int(part) for part in manifest["version"].split(".")]
+        for version, machine, expected in (
+            ([0, 0, 0], "x86_64", "different Blender version"),
+            (pinned_version, "aarch64", "different architecture"),
+            (pinned_version, "x86_64", None),
+        ):
+            with self.subTest(expected=expected):
+                launcher.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os\nfrom pathlib import Path\n"
+                    "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
+                    "json.dumps({'ok': True, 'tests_run': 12, 'blender': 'test-launcher', "
+                    f"'blender_version': {version!r}, 'machine': {machine!r}, "
+                    "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
+                )
+                launcher.chmod(0o755)
+                distribution = self.root / "distribution.json"
+                distribution.write_text(json.dumps({
+                    "distribution_platform": "linux-x64", "version": manifest["version"],
+                    "archive_url": manifest["base_url"] + spec["archive"],
+                    "archive_sha256": spec["sha256"], "executable": str(launcher),
+                    "executable_sha256": download_blender.sha256_file(launcher),
+                }))
+                result = self.run_runner("test_blender_wheel.py", "--blender", str(launcher),
+                                         "--distribution-json", str(distribution))
+                evidence = json.loads(self.report.read_text())
+                if expected is None:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIs(evidence["ok"], True)
+                    self.assertEqual(evidence["blender_distribution"], json.loads(distribution.read_text()))
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIs(evidence["ok"], False)
+                    self.assertIn(expected, evidence["runner_error"])
+
+
+class OfficialBlenderIntegrity(unittest.TestCase):
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory()
+        self.addCleanup(self.work.cleanup)
+        self.root = Path(self.work.name)
+
+    def test_download_rejects_corrupted_archive_and_removes_it(self):
+        source = self.root / "source.zip"
+        source.write_bytes(b"corrupted archive")
+        destination = self.root / "download.zip"
+        with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+            download_blender.download_verified(source.as_uri(), destination,
+                                               hashlib.sha256(b"original archive").hexdigest())
+        self.assertFalse(destination.exists())
+        # The same local transfer succeeds only with its exact digest.
+        download_blender.download_verified(source.as_uri(), destination,
+                                           download_blender.sha256_file(source))
+        self.assertEqual(destination.read_bytes(), source.read_bytes())
+
+    def test_windows_archive_cannot_write_outside_bundle(self):
+        archive = self.root / "blender.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("../escaped.exe", b"payload")
+        with self.assertRaisesRegex(ValueError, "Unsafe Blender archive path"):
+            download_blender.extract_bundle(archive, self.root / "bundle")
+        self.assertFalse((self.root / "escaped.exe").exists())
+
+    def test_macos_mount_detaches_when_application_copy_fails(self):
+        error = subprocess.CalledProcessError(1, "ditto")
+        with mock.patch.object(download_blender.subprocess, "run", side_effect=[None, error, None]) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                download_blender.extract_bundle(self.root / "blender.dmg", self.root / "bundle")
+        self.assertEqual(run.call_args_list[-1].args[0][:2], ["hdiutil", "detach"])
+
+    def test_changed_executable_cannot_reuse_verified_distribution_evidence(self):
+        manifest = json.loads(download_blender.MANIFEST.read_text())
+        spec = manifest["platforms"]["linux-x64"]
+        executable = self.root / "blender"
+        executable.write_bytes(b"original executable")
+        record = {
+            "distribution_platform": "linux-x64", "version": manifest["version"],
+            "archive_url": manifest["base_url"] + spec["archive"],
+            "archive_sha256": spec["sha256"], "executable": str(executable),
+            "executable_sha256": download_blender.sha256_file(executable),
+        }
+        download_blender.validate_distribution(record, executable)
+        executable.write_bytes(b"substituted executable")
+        with self.assertRaisesRegex(RuntimeError, "does not match the verified distribution"):
+            download_blender.validate_distribution(record, executable)
 
 
 if __name__ == "__main__":
