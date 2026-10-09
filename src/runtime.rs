@@ -109,12 +109,21 @@ impl StdError for JobError {
 }
 
 /// Failure before successful installation, including actionable cleanup state.
-/// Directory replacement/rollback remains outside the D1 CreateNew contract.
+/// Failed directory restoration reports the preserved original separately from scratch.
 #[derive(Clone, Debug)]
 pub struct JobFailure {
     pub error: JobError,
     pub secondary: Vec<JobError>,
     pub retained_paths: Vec<PathBuf>,
+    pub recovery: Option<DirectoryRecovery>,
+}
+
+/// An original final-path entry retained after exclusive restoration failed.
+/// Restore it to `output` only after resolving the entry currently at that path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirectoryRecovery {
+    pub output: PathBuf,
+    pub previous_output: PathBuf,
 }
 
 impl fmt::Display for JobFailure {
@@ -122,6 +131,9 @@ impl fmt::Display for JobFailure {
         self.error.fmt(f)?;
         for path in &self.retained_paths {
             write!(f, "; retained work at {}", path.display())?;
+        }
+        if let Some(recovery) = &self.recovery {
+            write!(f, "; previous output retained at {}; restore to {} after resolving any current output", recovery.previous_output.display(), recovery.output.display())?;
         }
         Ok(())
     }
@@ -140,7 +152,9 @@ pub struct CleanupDiagnostic {
     pub error: JobError,
 }
 
-/// Installation policy for a completed file. Neither policy promises crash durability.
+/// Installation policy for a completed artifact. Neither policy promises crash durability.
+/// Directory Replace holds the current entry before exclusive installation and may
+/// temporarily leave the output absent; failures restore or report typed recovery.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OutputPolicy {
     #[default]
@@ -246,6 +260,7 @@ impl RunControl {
                 error: invalid_state("run control has already been used"),
                 secondary: Vec::new(),
                 retained_paths: Vec::new(),
+                recovery: None,
             });
         }
         state.claimed = true;
@@ -397,6 +412,7 @@ impl Attempt {
             error: state.primary.as_ref().cloned().unwrap_or(error),
             secondary: state.secondary.clone(),
             retained_paths: Vec::new(),
+            recovery: None,
         };
         state.phase = Phase::Finished;
         state.events_closed = true;

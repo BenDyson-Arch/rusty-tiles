@@ -1,4 +1,6 @@
 //! External D1 facade tests: no access to private runtime or native handles.
+#[cfg(feature = "native-geospatial")]
+use rusty_tiles::OutputPolicy;
 use rusty_tiles::{raster_to_directory, JobErrorKind, RasterDirectoryRequest, RunControl};
 use std::{fs, path::Path};
 const SOURCE: &[u8] = include_bytes!("fixtures/d1-rgb.tif");
@@ -98,6 +100,283 @@ mod native {
         }
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 3);
     }
+    #[test]
+    fn replace_commits_complete_raster_for_present_and_absent_entries() {
+        for old_kind in ["absent", "directory", "file"] {
+            let root = fixture();
+            let output = root.path().join("output");
+            match old_kind {
+                "directory" => {
+                    fs::create_dir(&output).unwrap();
+                    fs::write(output.join("old.bin"), b"original inventory").unwrap();
+                }
+                "file" => fs::write(&output, b"original file").unwrap(),
+                _ => (),
+            }
+            let result = raster_to_directory(
+                request(root.path(), "output").with_policy(OutputPolicy::Replace),
+                &RunControl::default(),
+            )
+            .unwrap();
+            assert_eq!(result.output, output);
+            assert!(result.cleanup_diagnostics.is_empty());
+            assert!(!output.join("old.bin").exists());
+            assert_eq!(
+                image::open(output.join("tiles/3/5/2.png"))
+                    .unwrap()
+                    .to_rgb8()
+                    .get_pixel(5, 2)
+                    .0,
+                [5, 2, 25]
+            );
+            assert_eq!(
+                walkdir::WalkDir::new(&output)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|e| e.file_type().is_file())
+                    .count(),
+                3
+            );
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn replace_symlink_moves_link_without_touching_its_referent() {
+        let root = fixture();
+        let referent = root.path().join("referent");
+        fs::create_dir(&referent).unwrap();
+        fs::write(referent.join("original"), b"referent bytes").unwrap();
+        std::os::unix::fs::symlink(&referent, root.path().join("output")).unwrap();
+        let result = raster_to_directory(
+            request(root.path(), "output").with_policy(OutputPolicy::Replace),
+            &RunControl::default(),
+        )
+        .unwrap();
+        assert!(!fs::symlink_metadata(&result.output)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            fs::read(referent.join("original")).unwrap(),
+            b"referent bytes"
+        );
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 3);
+    }
+    struct CountEvents(std::sync::atomic::AtomicUsize);
+    impl Observer for CountEvents {
+        fn observe(&self, _: &RunEvent<'_>) -> Result<(), JobError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+    fn assert_overlap_refused(source: &Path, output: &Path, root: &Path) {
+        let before: Vec<_> = walkdir::WalkDir::new(root)
+            .sort_by_file_name()
+            .into_iter()
+            .map(Result::unwrap)
+            .map(|entry| {
+                (
+                    entry.path().strip_prefix(root).unwrap().to_owned(),
+                    if entry.file_type().is_file() {
+                        Some(fs::read(entry.path()).unwrap())
+                    } else {
+                        None
+                    },
+                )
+            })
+            .collect();
+        let observer = Arc::new(CountEvents(std::sync::atomic::AtomicUsize::new(0)));
+        let run = RunControl::new(Some(observer.clone()));
+        let failure = raster_to_directory(
+            RasterDirectoryRequest::web_mercator_rgb(source, output, 3, 5, 2)
+                .with_policy(OutputPolicy::Replace),
+            &run,
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidRequest);
+        assert!(failure.recovery.is_none());
+        assert!(failure.retained_paths.is_empty());
+        assert_eq!(observer.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let after: Vec<_> = walkdir::WalkDir::new(root)
+            .sort_by_file_name()
+            .into_iter()
+            .map(Result::unwrap)
+            .map(|entry| {
+                (
+                    entry.path().strip_prefix(root).unwrap().to_owned(),
+                    if entry.file_type().is_file() {
+                        Some(fs::read(entry.path()).unwrap())
+                    } else {
+                        None
+                    },
+                )
+            })
+            .collect();
+        assert_eq!(after, before);
+        assert_eq!(fs::read(source).unwrap(), SOURCE);
+    }
+    #[test]
+    fn replace_rejects_source_file_hardlink_and_containing_directory_before_work() {
+        let root = fixture();
+        let source = root.path().join("source.tif");
+        assert_overlap_refused(&source, &source, root.path());
+        let alias = root.path().join("hardlink.tif");
+        fs::hard_link(&source, &alias).unwrap();
+        assert_overlap_refused(&source, &alias, root.path());
+        let tree = root.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        fs::create_dir(tree.join("nested")).unwrap();
+        fs::write(tree.join("source.tif"), SOURCE).unwrap();
+        fs::write(tree.join("nested/other"), b"other inventory").unwrap();
+        assert_overlap_refused(&tree.join("nested/../source.tif"), &tree, root.path());
+        let nested = tree.join("nested/source.tif");
+        fs::write(&nested, SOURCE).unwrap();
+        assert_overlap_refused(&nested, &tree, root.path());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn replace_rejects_source_under_aliased_output_parent() {
+        let root = fixture();
+        let real = root.path().join("real");
+        fs::create_dir(&real).unwrap();
+        fs::create_dir(real.join("tree")).unwrap();
+        fs::write(real.join("tree/source.tif"), SOURCE).unwrap();
+        let alias = root.path().join("parent-alias");
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        assert_overlap_refused(
+            &real.join("tree/source.tif"),
+            &alias.join("tree"),
+            root.path(),
+        );
+        assert_overlap_refused(
+            &alias.join("tree/source.tif"),
+            &real.join("tree"),
+            root.path(),
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn replace_rejects_case_aliased_containing_directory() {
+        let root = fixture();
+        let tree = root.path().join("MixedCase");
+        fs::create_dir(&tree).unwrap();
+        fs::write(tree.join("source.tif"), SOURCE).unwrap();
+        let alias = root.path().join("mixedcase");
+        // Case-sensitive Windows directories do not provide this alias.
+        if alias.exists() {
+            assert_overlap_refused(&tree.join("source.tif"), &alias, root.path());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_source_referent_symlink_entry_is_allowed() {
+        for directory_referent in [false, true] {
+            let root = fixture();
+            let output = root.path().join("output");
+            std::os::unix::fs::symlink(
+                if directory_referent {
+                    root.path().to_owned()
+                } else {
+                    root.path().join("source.tif")
+                },
+                &output,
+            )
+            .unwrap();
+            let result = raster_to_directory(
+                request(root.path(), "output").with_policy(OutputPolicy::Replace),
+                &RunControl::default(),
+            )
+            .unwrap();
+            assert!(!fs::symlink_metadata(&result.output)
+                .unwrap()
+                .file_type()
+                .is_symlink());
+            assert_eq!(fs::read(root.path().join("source.tif")).unwrap(), SOURCE);
+            assert_eq!(
+                image::open(result.output.join("tiles/3/5/2.png"))
+                    .unwrap()
+                    .to_rgb8()
+                    .get_pixel(5, 2)
+                    .0,
+                [5, 2, 25]
+            );
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        }
+    }
+
+    #[test]
+    fn replace_precancel_and_observer_failures_preserve_original_tree() {
+        struct CancelFinal(std::sync::Mutex<Option<rusty_tiles::CancellationHandle>>);
+        impl Observer for CancelFinal {
+            fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+                if matches!(
+                    event,
+                    RunEvent::Progress {
+                        phase: "raster_directory",
+                        ..
+                    }
+                ) {
+                    self.0.lock().unwrap().as_ref().unwrap().cancel();
+                }
+                Ok(())
+            }
+        }
+        for phase in [
+            "precancel",
+            "raster_read",
+            "raster_directory",
+            "cancel_final",
+        ] {
+            let root = fixture();
+            let output = root.path().join("output");
+            fs::create_dir(&output).unwrap();
+            fs::create_dir(output.join("nested")).unwrap();
+            fs::write(output.join("nested/original"), b"old output").unwrap();
+            let run = if phase == "precancel" {
+                let run = RunControl::default();
+                run.cancellation_handle().cancel();
+                run
+            } else if phase == "cancel_final" {
+                let observer = Arc::new(CancelFinal(std::sync::Mutex::new(None)));
+                let run = RunControl::new(Some(observer.clone()));
+                *observer.0.lock().unwrap() = Some(run.cancellation_handle());
+                run
+            } else {
+                RunControl::new(Some(Arc::new(Refuse(phase))))
+            };
+            let failure = raster_to_directory(
+                request(root.path(), "output").with_policy(OutputPolicy::Replace),
+                &run,
+            )
+            .unwrap_err();
+            assert_eq!(
+                failure.error.kind(),
+                if phase == "precancel" || phase == "cancel_final" {
+                    JobErrorKind::Cancelled
+                } else {
+                    JobErrorKind::ObserverFailure
+                }
+            );
+            assert!(failure.recovery.is_none());
+            assert!(failure.retained_paths.is_empty());
+            assert_eq!(
+                fs::read(output.join("nested/original")).unwrap(),
+                b"old output"
+            );
+            assert_eq!(
+                walkdir::WalkDir::new(&output)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|e| e.file_type().is_file())
+                    .count(),
+                1
+            );
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn native_source_paths_preserve_non_utf8_bytes() {

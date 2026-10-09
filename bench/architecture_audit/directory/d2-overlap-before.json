@@ -1,0 +1,61 @@
+{
+  "candidate_sha256": "4856a19d5670acc83235b91bc5041faca9afb98913acccacc61696ecd0c6e075",
+  "executed_defects": [
+    {
+      "case": "same-file",
+      "exit_code": 0,
+      "response": {
+        "cleanupDiagnostics": [],
+        "conversionReport": null,
+        "counts": {
+          "tiles": 1
+        },
+        "ok": true,
+        "output": "/tmp/d2-overlap-before-pprn_8_f/same-file",
+        "rasterReport": {
+          "height": 256,
+          "profile": "d1-web-mercator-rgb",
+          "schema_version": 1,
+          "source_bytes": 196896,
+          "width": 256,
+          "x": 5,
+          "y": 2,
+          "z": 3
+        },
+        "reuse": null,
+        "settings": {},
+        "skippedFeatures": null
+      },
+      "source_preserved": false,
+      "output_inventory_preserved": false
+    },
+    {
+      "case": "input-inside-output",
+      "exit_code": 0,
+      "response": {
+        "cleanupDiagnostics": [],
+        "conversionReport": null,
+        "counts": {
+          "tiles": 1
+        },
+        "ok": true,
+        "output": "/tmp/d2-overlap-before-pprn_8_f/input-inside-output",
+        "rasterReport": {
+          "height": 256,
+          "profile": "d1-web-mercator-rgb",
+          "schema_version": 1,
+          "source_bytes": 196896,
+          "width": 256,
+          "x": 5,
+          "y": 2,
+          "z": 3
+        },
+        "reuse": null,
+        "settings": {},
+        "skippedFeatures": null
+      },
+      "source_preserved": false,
+      "output_inventory_preserved": false
+    }
+  ]
+}

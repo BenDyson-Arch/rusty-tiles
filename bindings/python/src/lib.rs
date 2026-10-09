@@ -1,7 +1,7 @@
 //! Path-based bindings for the portable default build.
 use pyo3::{
     create_exception,
-    exceptions::{PyException, PyTypeError, PyValueError},
+    exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyDict, PyList},
 };
@@ -80,7 +80,23 @@ fn job_failure_to_python(py: Python<'_>, failure: JobFailure) -> PyErr {
         .collect();
     let _ = value.setattr("secondary_diagnostics", secondary);
     let _ = value.setattr("retained_paths", failure.retained_paths);
+    let _ = set_recovery(py, value, failure.recovery.as_ref());
     error
+}
+
+fn set_recovery(
+    py: Python<'_>,
+    exception: &Bound<'_, PyBaseException>,
+    recovery: Option<&tiles_core::DirectoryRecovery>,
+) -> PyResult<()> {
+    if let Some(recovery) = recovery {
+        let paths = PyDict::new(py);
+        paths.set_item("output", &recovery.output)?;
+        paths.set_item("previous_output", &recovery.previous_output)?;
+        exception.setattr("recovery", paths)
+    } else {
+        exception.setattr("recovery", py.None())
+    }
 }
 
 /// Packaging summary, separate from selected source file contents.
@@ -293,7 +309,8 @@ impl RasterDirectoryResult {
     }
 }
 #[pyfunction]
-#[pyo3(signature = (input, output, *, zoom, x, y, callback=None))]
+#[pyo3(signature = (input, output, *, zoom, x, y, force=false, callback=None))]
+#[allow(clippy::too_many_arguments)]
 fn raster_tile_to_directory(
     py: Python<'_>,
     input: PathBuf,
@@ -301,9 +318,15 @@ fn raster_tile_to_directory(
     zoom: u8,
     x: u32,
     y: u32,
+    force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<RasterDirectoryResult> {
-    let request = tiles_core::RasterDirectoryRequest::web_mercator_rgb(input, output, zoom, x, y);
+    let request = tiles_core::RasterDirectoryRequest::web_mercator_rgb(input, output, zoom, x, y)
+        .with_policy(if force {
+            tiles_core::OutputPolicy::Replace
+        } else {
+            tiles_core::OutputPolicy::CreateNew
+        });
     let result = run_job(py, callback, |run| {
         tiles_core::raster_to_directory(request, run)
     })?;
@@ -770,4 +793,90 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(convert_to_implicit, module)?)?;
     module.add_function(wrap_pyfunction!(validate, module)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    #[test]
+    fn failed_restore_maps_primary_secondary_and_distinct_recovery_paths() {
+        Python::initialize();
+        Python::attach(|py| {
+            #[cfg(unix)]
+            let old = {
+                use std::os::unix::ffi::OsStringExt;
+                PathBuf::from(std::ffi::OsString::from_vec(b"/tmp/previous-\xff".to_vec()))
+            };
+            #[cfg(not(unix))]
+            let old = PathBuf::from("previous-output");
+            let output = PathBuf::from("destination");
+            let failure = JobFailure {
+                error: tiles_core::JobError::new(JobErrorKind::Io, "install failed"),
+                secondary: vec![tiles_core::JobError::new(
+                    JobErrorKind::Conflict,
+                    "restore occupied",
+                )],
+                retained_paths: vec![PathBuf::from("new-staging")],
+                recovery: Some(tiles_core::DirectoryRecovery {
+                    output: output.clone(),
+                    previous_output: old.clone(),
+                }),
+            };
+            let error = job_failure_to_python(py, failure);
+            assert!(error.is_instance_of::<TilesIOError>(py));
+            let value = error.value(py);
+            assert_eq!(
+                value.getattr("kind").unwrap().extract::<String>().unwrap(),
+                "io"
+            );
+            assert_eq!(
+                value
+                    .getattr("secondary_diagnostics")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                ["restore occupied"]
+            );
+            assert_eq!(
+                value
+                    .getattr("retained_paths")
+                    .unwrap()
+                    .extract::<Vec<PathBuf>>()
+                    .unwrap(),
+                [PathBuf::from("new-staging")]
+            );
+            let recovery = value.getattr("recovery").unwrap();
+            let paths = recovery.cast::<PyDict>().unwrap();
+            assert_eq!(paths.len(), 2);
+            assert_eq!(
+                paths
+                    .get_item("output")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<PathBuf>()
+                    .unwrap(),
+                output
+            );
+            assert_eq!(
+                paths
+                    .get_item("previous_output")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<PathBuf>()
+                    .unwrap(),
+                old
+            );
+        });
+    }
+    #[test]
+    fn committed_cleanup_diagnostic_remains_a_result_value() {
+        let diagnostics = cleanup_diagnostics(vec![tiles_core::CleanupDiagnostic {
+            path: PathBuf::from("previous-output"),
+            error: tiles_core::JobError::new(JobErrorKind::Io, "backup cleanup failed"),
+        }]);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].path, PathBuf::from("previous-output"));
+        assert_eq!(diagnostics[0].kind, "io");
+        assert_eq!(diagnostics[0].message, "backup cleanup failed");
+    }
 }

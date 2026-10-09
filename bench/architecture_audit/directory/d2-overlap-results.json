@@ -1,0 +1,26 @@
+{
+  "source_commit": "5c4bd6d7d012472b35cc360cc188b469cb094ad5",
+  "binary_sha256": "61831ded55b94f278ce2557e2de51f5f2b1a6a22b47709d1435e89df6d214461",
+  "checks": {
+    "native": {
+      "status": "passed",
+      "log_sha256": "f4112f8c7cbca86105681138e422e81553c5d8cea70bc685466249f4f6a04be6",
+      "passed": 405,
+      "ignored": 9
+    },
+    "clippy": {
+      "status": "passed",
+      "log_sha256": "921e94e59a91dd534a0e8048722ae0a7fc257db85930b3b7f8e60d5153848feb"
+    },
+    "oracle": {
+      "status": "passed",
+      "log_sha256": "f204f0af92b4a09d6899fefe51c2eaf94e79c0e1ed44f7519a9e6ddb0f2e2c99"
+    },
+    "raster-regression": {
+      "status": "passed",
+      "log_sha256": "8b78d7255ede669a84939b56903cc7910412af965882b7a4a16589c0072ec41b"
+    }
+  },
+  "scope": "Native consumer admission fix. Runtime publication and default wheel behavior unchanged; their prior validation is retained separately. Native Windows alias control is not executed by the current Linux native CI profile.",
+  "merge": "Held at user request pending corrected review."
+}

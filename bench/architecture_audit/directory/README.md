@@ -78,3 +78,38 @@ than admitting every installed GDAL codec. The review-fix native suite passes
 376 tests (9 existing ignored), including the new public offset regression.
 The Docker test fixture now uses the same supported-filesystem selector as the
 runtime tests; overlay filesystem admission remains unchanged.
+
+## D2 replacement evidence
+
+The [D2 contract](../../../docs/architecture/d2-directory-contract.md) declares
+current-at-hold replacement, an absent-output interval, conditional restoration,
+and native-path recovery transport. The independent review is in
+[d2-review.md](d2-review.md). `d2-oracle.json` proves six replacement leaf cases,
+six preservation checks and eight unscheduled subprocess races through the real
+CLI. Deterministic fault and cross-process schedules are separate runtime tests;
+unscheduled CLI successes do not prove a failed-restoration schedule.
+
+`d2-raster-regression.json` replays the complete 40-positive/38-refusal raster
+oracle on the D2 binary. `d2-source-manifest.json` binds that binary and production
+sources to their commit. `d2-implementation-results.json` records check hashes
+and distinguishes full suites from later focused controls. Installed wheel and
+local distribution-Blender receipts are separate. Platform CI remains required
+before D2 acceptance; no Linux result substitutes for Windows/macOS execution.
+
+Replay the real-consumer replacement oracle after a native build:
+
+```sh
+python3 -B tests/d2_directory_oracle.py target/debug/rusty-tiles \
+  --json-output bench/architecture_audit/directory/d2-oracle.json
+```
+
+### D2 overlap correction
+
+The review at `3d17e4` reproduced source deletion when the output identified the
+source or contained it. That candidate is not accepted. The raster consumer now
+compares filesystem identities before decoding, events or staging, including
+hard links and ancestor aliases, while leaving the final output symlink
+unfollowed. Corrected evidence is in `d2-overlap-oracle.json`,
+`d2-overlap-raster-regression.json`, `d2-overlap-results.json`, and
+`d2-overlap-source-manifest.json`. Earlier D2 receipts remain historical evidence
+and do not override this correction. #130 remains held for corrected review.

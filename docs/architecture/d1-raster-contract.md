@@ -1,5 +1,14 @@
 # D1 raster directory contract
 
+This freezes the D1 decoding profile. [D2](d2-directory-contract.md) adds
+explicit Replace policy to the same request and publisher without broadening
+the admitted raster profile.
+
+The consumer rejects an output that identifies its source file (including
+hard links) or any source ancestor directory before decoding or staging. The
+final output symlink is not followed for this check: D2 may replace that link
+while preserving its source referent.
+
 `RasterDirectoryRequest::web_mercator_rgb(input, output, z, x, y)` and the root
 `raster_to_directory(request, &RunControl)` produce a new directory. D1 supports
 CreateNew only; its output parent must already exist. Publication uses the D1
