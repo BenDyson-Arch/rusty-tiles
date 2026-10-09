@@ -184,7 +184,7 @@ It generates invented GeoPackages, checks byte-identical changesets, cross-appli
 
 ### Demo-data acceptance and benchmarks
 
-The native Rust `demodata-suite` example exercises the openly licensed corpus assembled on 2026-10-08, normally in the sibling `../demodata` directory. Keep the approximately 1.5 GB of assets outside this checkout. [The manifest](bench/demodata_manifest.json) pins 416 files by size and SHA-256 and retains their source URLs, licences and attribution. Use the corpus's own README and `fetch.py` to provision it separately; provisioning can require Python/GDAL tools and Blender. The suite itself downloads nothing and runs every converter with an empty executable `PATH` and `PROJ_NETWORK=OFF`. Missing or changed required files fail a run.
+The native Rust `demodata-suite` example exercises the openly licensed corpus assembled on 2026-10-08, normally in the sibling `../demodata` directory. Keep the approximately 1.5 GB of assets outside this checkout. [The manifest](bench/demodata_manifest.json) pins 416 files by size and SHA-256 and retains their source URLs, licences and attribution. This is an acceptance harness for an already provisioned corpus: the corpus's README, `fetch.py` and derived-file preparation scripts are external and are not distributed in this checkout. Provisioning can require Python/GDAL tools and Blender; the manifest alone does not reproduce every derived file. For self-contained examples, use [Try each converter](docs/DEMOS.md). The suite itself downloads nothing and runs every converter with an empty executable `PATH` and `PROJ_NETWORK=OFF`. Missing or changed required files fail a run.
 
 ```sh
 cargo build --locked --release --features native-geospatial \
@@ -354,7 +354,7 @@ These recipes use `--explicit` for the three spatial converters; the script omit
    scripts/release_acceptance.sh
    ```
 
-   This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Missing optional steps are printed. A failed required step or enabled browser probe fails the script.
+   This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Set `ACCEPTANCE_REQUIRE_BROWSER=1` for release acceptance: missing browser tools or converter capabilities fail instead of skipping. The manual CI job installs Cesium 1.146.0, Playwright 1.63.0 and its Chromium, requires all browser probes and retains the logs. Without the setting, missing optional steps are printed; these skips do not satisfy the browser release gate. A failed required step or enabled browser probe fails the script.
 2. The Docker acceptance stage passes. It runs every native test binary in a runtime image with no Python.
 
    ```sh

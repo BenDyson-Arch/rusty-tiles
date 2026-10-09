@@ -66,3 +66,5 @@ rusty-tiles doctor --command vector --command point-cloud --json
 `doctor` reports the converters and CRS tier in that binary. Readiness is not a guarantee that every file's CRS or geometry is supported; conversion validates those inputs. An unrestricted `doctor` also checks raster and terrain, so it can report missing native capabilities in an otherwise working default build.
 
 Continue with the [invented mesh quick start](../README.md#quick-start) and the [vector example](../README.md#4-preview). Both run without native geospatial libraries in the development build. Preview requires the separately installed Cesium runtime, and `.3tz` archives must be extracted before serving.
+
+[Try each converter](DEMOS.md) includes a tiny local point-cloud example and the native imagery/terrain fixtures without requiring an adjacent data repository.
