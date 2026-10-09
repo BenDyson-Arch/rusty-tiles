@@ -206,6 +206,21 @@ fn metadata(path: &Path) -> Result<Metadata> {
         .map_err(|error| JobError::io("inspect mesh source entry", path, error))
 }
 
+fn canonical_path(path: &Path, recheck: bool) -> Result<PathBuf> {
+    fs::canonicalize(path).map_err(|error| {
+        if recheck
+            && matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            )
+        {
+            changed(path)
+        } else {
+            JobError::io("resolve mesh source path", path, error)
+        }
+    })
+}
+
 fn dependency_path(base: &Path, relative: &Path, recheck: bool) -> Result<(PathBuf, Metadata)> {
     let mut path = base.to_owned();
     let count = relative.components().count();
@@ -244,8 +259,7 @@ fn dependency_path(base: &Path, relative: &Path, recheck: bool) -> Result<(PathB
             leaf = Some(entry);
         }
     }
-    let canonical = fs::canonicalize(&path)
-        .map_err(|error| JobError::io("resolve mesh resource", &path, error))?;
+    let canonical = canonical_path(&path, recheck)?;
     if !canonical.starts_with(base) {
         if recheck {
             return Err(changed(&path));
@@ -451,8 +465,7 @@ fn verify_path(path: &BoundPath, base: &Path, capture: &Captured) -> Result<()> 
         if !current.is_file() {
             return Err(changed(&path.path));
         }
-        let canonical = fs::canonicalize(&path.path)
-            .map_err(|error| JobError::io("reinspect mesh source path", &path.path, error))?;
+        let canonical = canonical_path(&path.path, true)?;
         (canonical, current)
     };
     if canonical != path.canonical || !same_metadata(&capture.metadata, &current) {
@@ -495,8 +508,7 @@ pub(super) fn load(
     if admitted.len() > MAX_FILE_BYTES {
         return Err(unsupported("mesh source exceeds 32 MiB file ceiling"));
     }
-    let input = fs::canonicalize(&original)
-        .map_err(|error| JobError::io("resolve mesh source", &original, error))?;
+    let input = canonical_path(&original, false)?;
     let base = input
         .parent()
         .expect("canonical source file has parent")
