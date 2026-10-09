@@ -1,0 +1,31 @@
+{
+  "cesium_pin": "df52c781de3491a4b76839d420f7ca90a032efb6",
+  "proxy": [
+    0.0,
+    1000000000000000.0,
+    0.0
+  ],
+  "vertex": [
+    0.999999998858649,
+    0.0,
+    4.77776343128956e-05
+  ],
+  "camera": [
+    0.9999999988586492,
+    -1.0,
+    4.777763431289561e-05
+  ],
+  "proxy_visible": false,
+  "vertex_visible": true,
+  "proxy_terms": {
+    "vh": 1.0000000000000009,
+    "vt_dot": 1000000000000002.0,
+    "ratio": 1.000000000000002
+  },
+  "vertex_terms": {
+    "vh": 1.0000000000000009,
+    "vt_dot": 1.0000000000000002,
+    "ratio": 1.0000000000000004
+  },
+  "limitation": "Boundary counterexample from decoded grid17 geometry; not a claim about rendering defect size."
+}
