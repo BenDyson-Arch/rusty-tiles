@@ -63,7 +63,10 @@ fn relative_paths_survive_observer_cwd_change() {
     )
     .unwrap();
     assert!(observer.calls.load(Ordering::SeqCst) > 0);
-    assert_eq!(result.output, original.join("output.3tz"));
+    assert_eq!(
+        result.output,
+        fs::canonicalize(original.join("output.3tz")).unwrap()
+    );
     assert!(result.output.is_file());
     assert!(!original.join("elsewhere/output.3tz").exists());
     let mut archive = zip::ZipArchive::new(fs::File::open(result.output).unwrap()).unwrap();
