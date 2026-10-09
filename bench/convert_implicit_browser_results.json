@@ -1,0 +1,1007 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-09",
+  "issue": 74,
+  "decision": "Browser gate passes corrected ownership/coordinate-alias layout.",
+  "runtime": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "153.0.8010.52",
+    "renderer": "SwiftShader (software)",
+    "platform": "Linux x86_64",
+    "backend": "native GDAL/GEOS"
+  },
+  "fixtureGenerator": "RUSTY_TILES_CONVERT_IMPLICIT_FIXTURES=OUTPUT LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial --test convert_implicit",
+  "probe": "NODE_PATH=/path/to/node_modules node tests/fixtures/convert_implicit.cjs PREVIEW_URL",
+  "expectedPointCloud": {
+    "points": 16,
+    "coarsePoints": 2,
+    "locationDegrees": [
+      153.02,
+      -27.47
+    ],
+    "rootHeightMetres": 100,
+    "note": "Two source clusters in a georeferenced ENU frame; original intensity/classification/source identity preserved."
+  },
+  "expectedVector": {
+    "points": 8,
+    "locationDegrees": [
+      12.05,
+      42.05
+    ],
+    "heightMetres": 100,
+    "note": "Routing root has no authored coarse content; its empty far view is identical in all variants. Full detail retains both source clusters."
+  },
+  "fixedRawReportSha256": "a36bc6789944d64104e4d60604f505ecc9061a00a24b995e5705daa0baac4385",
+  "sourceArchiveSha256": {
+    "vector-explicit.3tz": "2647da3b3c7ccd7795e19cd4e5aaeba78551c1bf32a67c88109017060d47ee94",
+    "vector-converted.3tz": "9b076d0eefe871d0609cf17b0dc541e6b141657c952e33f4d8f0a35ee2b0b470",
+    "vector-fresh.3tz": "e3f2012494301848bd3a15e12ba76b30762340067a8bcb80be33fa5fbf317f1b",
+    "point-explicit.3tz": "55a6eb43578d19cee45f9d55f6c89dafa05213401d895036825a37f93f31282b",
+    "point-converted.3tz": "49884012ac22214122b8c11b8b4f57ac3139a0d7a39eb504f66cbd4148637659",
+    "point-fresh.3tz": "d6225a2f0fe9e2bc55aa6436afc4e0146b240e5d809dcab04b7649111fb2cd6d",
+    "vector-fragment-explicit.3tz": "e1baf725322ebb8cdbb6c5e5ad65a3688d7a7eb64751529511bad538ab54dcc5",
+    "vector-fragment-converted.3tz": "47bb2aec2d072d33dca580bcc52cd271bad46a38dfbf402ac4e158d1b3d6bafa"
+  },
+  "previousFailedDesign": {
+    "cause": "JSON content roots carrying original parent proxies were sibling children of implicit descendants, so REPLACE retained the parent proxy.",
+    "expectedFinePoints": 16,
+    "actualFinePoints": 18,
+    "rawReportSha256": "76df329502580660fbe9902db6513d8d4b5d66ce4e9d2d4dfa29aa1a08e917a5",
+    "runs": [
+      {
+        "load": "initial",
+        "cloud": [
+          {
+            "variant": "explicit",
+            "coarsePoints": 2,
+            "finePoints": 16,
+            "pickedSourceIndices": [
+              "15",
+              "7"
+            ]
+          },
+          {
+            "variant": "converted",
+            "coarsePoints": 18,
+            "finePoints": 18,
+            "pickedSourceIndices": [
+              "7"
+            ]
+          },
+          {
+            "variant": "fresh",
+            "coarsePoints": 2,
+            "finePoints": 16,
+            "pickedSourceIndices": [
+              "15",
+              "7"
+            ]
+          }
+        ]
+      },
+      {
+        "load": "hard-refresh",
+        "cloud": [
+          {
+            "variant": "explicit",
+            "coarsePoints": 2,
+            "finePoints": 16,
+            "pickedSourceIndices": [
+              "15",
+              "7"
+            ]
+          },
+          {
+            "variant": "converted",
+            "coarsePoints": 18,
+            "finePoints": 18,
+            "pickedSourceIndices": [
+              "7"
+            ]
+          },
+          {
+            "variant": "fresh",
+            "coarsePoints": 2,
+            "finePoints": 16,
+            "pickedSourceIndices": [
+              "15",
+              "7"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "browserErrors": [],
+  "runs": [
+    {
+      "load": "initial",
+      "results": [
+        {
+          "kind": "point",
+          "variant": "explicit",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "point",
+          "variant": "converted",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "point",
+          "variant": "fresh",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "explicit",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "converted",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "fresh",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        }
+      ],
+      "comparisons": [
+        {
+          "kind": "point",
+          "compared": "converted",
+          "maximumWorldPositionDifferenceMetres": 0.0
+        },
+        {
+          "kind": "point",
+          "compared": "fresh",
+          "maximumWorldPositionDifferenceMetres": 1.1406325468715177e-09
+        },
+        {
+          "kind": "vector",
+          "compared": "converted",
+          "maximumWorldPositionDifferenceMetres": 0.0
+        },
+        {
+          "kind": "vector",
+          "compared": "fresh",
+          "maximumWorldPositionDifferenceMetres": 9.313225746154785e-10
+        }
+      ]
+    },
+    {
+      "load": "hard-refresh",
+      "results": [
+        {
+          "kind": "point",
+          "variant": "explicit",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "point",
+          "variant": "converted",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "point",
+          "variant": "fresh",
+          "coarsePoints": 2,
+          "finePoints": 16,
+          "finePickProperties": [
+            {
+              "X": "100070",
+              "Y": "100140",
+              "Z": "100210",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "15",
+              "green": "200",
+              "intensity": "115",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "15",
+              "source_x": "100.07000000000001",
+              "source_y": "100.14",
+              "source_z": "100.21000000000001",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            },
+            {
+              "X": "-99930",
+              "Y": "-99860",
+              "Z": "-99790",
+              "blue": "300",
+              "classification": "42",
+              "edge_of_flight_line": "0",
+              "gps_time": "7",
+              "green": "200",
+              "intensity": "107",
+              "key_point": "0",
+              "nir": "55",
+              "number_of_returns": "1",
+              "overlap": "0",
+              "point_source_id": "0",
+              "red": "100",
+              "return_number": "1",
+              "scan_angle": "0",
+              "scan_direction_flag": "0",
+              "scanner_channel": "0",
+              "source_index": "7",
+              "source_x": "-99.93",
+              "source_y": "-99.86",
+              "source_z": "-99.79",
+              "synthetic": "0",
+              "user_data": "0",
+              "withheld": "0"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 3.636930918277546e-09,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.45367945213710326,
+            -0.8911649424817932,
+            0,
+            0,
+            -0.41108022929380694,
+            0.20927512329090453,
+            0.8872524825861733,
+            0,
+            -0.7906883076107354,
+            0.40252822020697987,
+            -0.46128411217456017,
+            0,
+            -5046793.09708419,
+            2569250.8964256607,
+            -2924567.293797478,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "explicit",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "converted",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        },
+        {
+          "kind": "vector",
+          "variant": "fresh",
+          "coarsePoints": 0,
+          "finePoints": 8,
+          "finePickProperties": [
+            {
+              "_source_id": "0",
+              "_source_layer": "points",
+              "name": "point-0",
+              "value": "0"
+            },
+            {
+              "_source_id": "4",
+              "_source_layer": "points",
+              "name": "point-4",
+              "value": "4"
+            }
+          ],
+          "finePickColors": [
+            "rgb(0,255,255)",
+            "rgb(0,255,255)"
+          ],
+          "hiddenPicks": [],
+          "sourcePositionErrorMetres": 5.873980757304087e-08,
+          "fineSelectedTiles": 2,
+          "rootTransform": [
+            -0.20791169081775937,
+            0.9781476007338056,
+            0,
+            0,
+            -0.6545084971874737,
+            -0.13912007574598279,
+            0.7431448254773942,
+            0,
+            0.7269053280384559,
+            0.15450849718747373,
+            0.6691306063588582,
+            0,
+            4638833.180279374,
+            990245.8979119437,
+            4249797.666349468,
+            1
+          ],
+          "tileFailures": [],
+          "renderFailures": []
+        }
+      ],
+      "comparisons": [
+        {
+          "kind": "point",
+          "compared": "converted",
+          "maximumWorldPositionDifferenceMetres": 0.0
+        },
+        {
+          "kind": "point",
+          "compared": "fresh",
+          "maximumWorldPositionDifferenceMetres": 1.1406325468715177e-09
+        },
+        {
+          "kind": "vector",
+          "compared": "converted",
+          "maximumWorldPositionDifferenceMetres": 0.0
+        },
+        {
+          "kind": "vector",
+          "compared": "fresh",
+          "maximumWorldPositionDifferenceMetres": 9.313225746154785e-10
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "This gate covers the exported invented regular cloud/vector fixtures, not every eligible hierarchy or hardware graphics.",
+    "The globe is disabled. Fixed-camera sample picks prove both source clusters, while every selected GLB position is audited against the known source and controls.",
+    "Tile-level metadata and content.boundingVolume are now refused explicitly; feature GLB metadata, content extras, inline enum schema and array extras remain untouched.",
+    "Browser behavior does not establish specification conformance; the declaration/schema review and validator checks are separate gates."
+  ]
+}

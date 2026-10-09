@@ -1,0 +1,1329 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-09",
+  "issue": 75,
+  "decision": "Retain b3dm; defer plain fill output until the paired runtime acceptance passes.",
+  "producerBaseline": "5544766bb2e1bf164207db10a1e4dbeb30833832",
+  "producerChanges": "None. No converter identity, CLI/Python API or frozen oracle changes.",
+  "runtime": {
+    "cesium": "1.146.0",
+    "chromium": "153.0.8010.52",
+    "playwright": "1.63.0",
+    "renderer": "SwiftShader (software)",
+    "platform": "Linux x86_64",
+    "nativeLibraries": {
+      "gdal": "3.13.3",
+      "proj": "9.8.1",
+      "geos": "3.15.0"
+    }
+  },
+  "producerBinarySha256": {
+    "portable": "1edc38d0eb1e0306f1aa8e5c8de086a6370fc1933e9b2a98ecc62c70db714c60",
+    "native": "d35e3900536753eb70257a0b095ca72a3a41b4156e7167146d238d6591da560f"
+  },
+  "countrySource": {
+    "path": "tests/fixtures/countries-source.geojson",
+    "sha256": "d8b25927d26a5777c6a71e3f2036e3e87c2b88a6768f756754d680d069cb532a",
+    "source": "Natural Earth public-domain 1:110m Admin 0 Countries; original Sudan and Antarctica rings unchanged.",
+    "provenance": "bench/demodata_manifest.json"
+  },
+  "failure": {
+    "error": "Cannot read properties of undefined (reading 'loopIndices')",
+    "cause": "The tileset-wide 3DTILES_content_gltf_vector declaration routes plain triangle fills to VectorGltf3DTileContent. Its triangle statistics path assumes primitive.polygon exists.",
+    "decoderSource": "https://github.com/CesiumGS/cesium/blob/1.146/packages/engine/Source/Scene/Cesium3DTileContentFactory.js",
+    "triangleSource": "https://github.com/CesiumGS/cesium/blob/1.146/packages/engine/Source/Scene/Model/createVectorTileBuffersFromModelComponents.js"
+  },
+  "reproduction": {
+    "generator": "RUSTY_TILES_BIN=/absolute/path/to/rusty-tiles python3 tests/fixtures/vector_fill_glb.py OUTPUT [--compressed]",
+    "server": "rusty-tiles preview --annotations OUTPUT --cesium /path/to/cesium/Build/Cesium --port 9377",
+    "regression": "NODE_PATH=/path/to/node_modules node tests/fixtures/vector_fill_glb.cjs http://127.0.0.1:9377 --expect-current-failure",
+    "futureAcceptance": "Omit --expect-current-failure. Every wrapped and plain case must pass."
+  },
+  "limitations": [
+    "This is a failed acceptance for plain fills, not completion of the default-format migration.",
+    "The diagnostic fixture mutates extracted preview content and is not a supported producer output or reusable archive.",
+    "Antarctica can remain pickable through a coarse native polygon while fragmented descendants fail; picking alone cannot establish compatibility.",
+    "Fine-scale hole checks pass for wrapped controls; at coarse views a wide styled boundary can cover the hole screen sample.",
+    "The probe disables the globe and uses fixed sample points. It does not audit every source triangle, other runtimes, hardware graphics or terrain occlusion."
+  ],
+  "matrix": [
+    {
+      "backend": "portable Rust/SQLite",
+      "options": [],
+      "regressionPassed": true,
+      "matchedEmbeddedFillGlbs": 211,
+      "browserErrors": [],
+      "rawReportSha256": "c478c9ed6a2de8e860fd0474d0387ff4b1f03aba20ae0396a30cac7c7481d902",
+      "runs": [
+        {
+          "load": "initial",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 63,
+              "fineSelectedTiles": 1
+            }
+          }
+        },
+        {
+          "load": "hard-refresh",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 63,
+              "fineSelectedTiles": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "backend": "portable Rust/SQLite",
+      "options": [
+        "--quantize",
+        "--meshopt"
+      ],
+      "regressionPassed": true,
+      "matchedEmbeddedFillGlbs": 211,
+      "browserErrors": [],
+      "rawReportSha256": "eb7b94ffba2cf51923cdd090e17ff06be68362cdf25ff13d8ebe509427b8e544",
+      "runs": [
+        {
+          "load": "initial",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 29,
+              "fineSelectedTiles": 1
+            }
+          }
+        },
+        {
+          "load": "hard-refresh",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 29,
+              "fineSelectedTiles": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "backend": "native GDAL/GEOS",
+      "options": [],
+      "regressionPassed": true,
+      "matchedEmbeddedFillGlbs": 211,
+      "browserErrors": [],
+      "rawReportSha256": "c478c9ed6a2de8e860fd0474d0387ff4b1f03aba20ae0396a30cac7c7481d902",
+      "runs": [
+        {
+          "load": "initial",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 63,
+              "fineSelectedTiles": 1
+            }
+          }
+        },
+        {
+          "load": "hard-refresh",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 63,
+              "fineSelectedTiles": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "backend": "native GDAL/GEOS",
+      "options": [
+        "--quantize",
+        "--meshopt"
+      ],
+      "regressionPassed": true,
+      "matchedEmbeddedFillGlbs": 211,
+      "browserErrors": [],
+      "rawReportSha256": "6fe896917e2fd7fb7f11b06cd644c277629677babe717db5ff2226a7072c4b6a",
+      "runs": [
+        {
+          "load": "initial",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 246,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 63,
+              "fineSelectedTiles": 1
+            }
+          }
+        },
+        {
+          "load": "hard-refresh",
+          "wrappedPassingCases": [
+            "line",
+            "polygon",
+            "fragmented",
+            "outline",
+            "point",
+            "sudan",
+            "antarctica"
+          ],
+          "wrappedFillControls": {
+            "fragmented": {
+              "fineSourceId": "\"fragmented\"",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 90,
+              "fineTriangles": 360,
+              "fineSelectedTiles": 2,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 32,
+                  "triangles": 120,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 32,
+                  "triangles": 240,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "sudan": {
+              "fineSourceId": "15",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 238,
+              "fineTriangles": 238,
+              "fineSelectedTiles": 4,
+              "fineDecoders": [
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 8,
+                  "triangles": 78,
+                  "points": 0
+                },
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 8,
+                  "triangles": 160,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            },
+            "antarctica": {
+              "fineSourceId": "160",
+              "fineColor": "rgb(0,255,255)",
+              "hiddenRendered": false,
+              "coarseTriangles": 1730,
+              "fineTriangles": 1161,
+              "fineSelectedTiles": 20,
+              "fineDecoders": [
+                {
+                  "nativeVector": true,
+                  "format": "glb",
+                  "contents": 47,
+                  "triangles": 772,
+                  "points": 0
+                },
+                {
+                  "nativeVector": false,
+                  "format": "b3dm",
+                  "contents": 45,
+                  "triangles": 389,
+                  "points": 0
+                }
+              ],
+              "failures": []
+            }
+          },
+          "ordinaryVectorControls": {
+            "cases": [
+              "line",
+              "polygon",
+              "outline",
+              "point"
+            ],
+            "metadataPickingAndPropertyColorsPassed": true,
+            "visibilityPassed": true,
+            "lineAndPolygonLodTriangleGrowthPassed": true,
+            "batchedSourceIdsPassed": true
+          },
+          "wrappedFineHoleEmpty": true,
+          "wrappedFineOutsideBoundary": {
+            "rendered": true,
+            "sourceId": "\"fragmented\""
+          },
+          "plainPassingCases": [
+            "line",
+            "polygon",
+            "outline",
+            "point"
+          ],
+          "plainFillFailures": {
+            "fragmented": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "sudan": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": false,
+              "fineProperties": {},
+              "fineTriangles": 0,
+              "fineSelectedTiles": 0
+            },
+            "antarctica": {
+              "coarseErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineErrors": [
+                "Cannot read properties of undefined (reading 'loopIndices')"
+              ],
+              "fineRendered": true,
+              "fineProperties": {
+                "_source_id": "160",
+                "_source_layer": "antarctica",
+                "name": "Antarctica"
+              },
+              "fineTriangles": 29,
+              "fineSelectedTiles": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

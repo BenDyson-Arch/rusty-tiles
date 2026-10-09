@@ -62,6 +62,8 @@ enum Command {
     CreateTilesetJson(TilesetArgs),
     /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(IoArgs),
+    /// Rewrite an eligible rusty-tiles explicit point/vector .3tz as implicit tiling
+    ConvertToImplicit(IoArgs),
     /// GLB/glTF → .3tz (createTilesetJson + convert)
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(TilesetArgs),
@@ -87,6 +89,7 @@ impl Command {
             Self::EncodeVectorContent { .. } => "encode-vector-content",
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
+            Self::ConvertToImplicit(_) => "convert-to-implicit",
             Self::GlbTo3tz(_) => "glb-to-3tz",
             Self::MeshTo3tz(_) => "mesh-to-3tz",
             Self::Vector(_) => "vector",
@@ -790,6 +793,14 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             &a.output,
             &PackOptions { force: a.force },
         )?),
+        Command::ConvertToImplicit(a) => {
+            Outcome::Converted(rusty_tiles::convert_to_implicit_reported(
+                &a.input,
+                &a.output,
+                &rusty_tiles::ConvertToImplicitOptions { force: a.force },
+                reporter,
+            )?)
+        }
         Command::GlbTo3tz(a) => {
             let opts = tileset_opts(&a.io, &a.placement)?;
             Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
