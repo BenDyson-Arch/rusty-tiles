@@ -20,6 +20,8 @@ TANGENT is non-normalized FLOAT VEC4, with unit XYZ within the existing 1e-4 vec
 
 All vertex counts agree with POSITION. Alignment, buffer-relative overlap, targets, index range, and finite payload checks apply to every declared primitive. Validate each accessor once per semantic role instead of rescanning shared data per primitive. Expand all companions with exactly the same indexed corner selection, reflection permutation, partition membership, and regrouping as positions. Output companions are FLOAT VEC2/VEC3/VEC4; their component conversion tolerance follows the existing f32 contract.
 
+Generic accessor storage metadata is separate from an attribute's semantic encoding. A declared admitted vertex role with the wrong shape, component type, or normalization is InvalidInput, including unnormalized unsigned integer colors/UVs. Impossible generic normalization is also InvalidInput. Validate those role contradictions before applying the finite profile guard to otherwise valid unused accessor encodings. Signed, scalar-FLOAT and matrix storage remain Unsupported by the profile and never enter the payload decoder; building bounded metadata does not admit them or discover source files.
+
 ## Tangent-frame bake boundary
 
 For each selected primitive carrying TANGENT, require its accumulated world linear map to be conformal: a uniform absolute scale times an orthogonal matrix, allowing reflections. Check the accumulated Gram matrix against its scalar diagonal with relative tolerance 1e-10; inspecting individual node scales is insufficient. Nonconformal accumulated maps are Unsupported before staging. Existing position/NORMAL-only nonuniform transforms remain governed by the earlier contract.

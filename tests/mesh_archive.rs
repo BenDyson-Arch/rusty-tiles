@@ -286,7 +286,7 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
         ("unknown-extension", JobErrorKind::Unsupported, |d, _| {
             d["extensionsUsed"] = json!(["EXT_unknown"])
         }),
-        ("uv1-non-vec2", JobErrorKind::Unsupported, |d, _| {
+        ("uv1-non-vec2", JobErrorKind::InvalidInput, |d, _| {
             d["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_1"] = json!(0)
         }),
         ("blend", JobErrorKind::Unsupported, |d, _| {

@@ -226,6 +226,64 @@ impl Accessor<'_> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AccessorShape {
+    Scalar,
+    Vec2,
+    Vec3,
+    Vec4,
+    Mat2,
+    Mat3,
+    Mat4,
+}
+impl AccessorShape {
+    fn parse(value: &Value) -> Result<Self> {
+        match value.as_str() {
+            Some("SCALAR") => Ok(Self::Scalar),
+            Some("VEC2") => Ok(Self::Vec2),
+            Some("VEC3") => Ok(Self::Vec3),
+            Some("VEC4") => Ok(Self::Vec4),
+            Some("MAT2") => Ok(Self::Mat2),
+            Some("MAT3") => Ok(Self::Mat3),
+            Some("MAT4") => Ok(Self::Mat4),
+            _ => Err(invalid("missing or invalid accessor type")),
+        }
+    }
+    fn columns(self) -> Option<usize> {
+        match self {
+            Self::Mat2 => Some(2),
+            Self::Mat3 => Some(3),
+            Self::Mat4 => Some(4),
+            _ => None,
+        }
+    }
+    fn width(self) -> usize {
+        match self {
+            Self::Scalar => 1,
+            Self::Vec2 => 2,
+            Self::Vec3 => 3,
+            Self::Vec4 | Self::Mat2 => 4,
+            Self::Mat3 => 9,
+            Self::Mat4 => 16,
+        }
+    }
+    /// Matrix columns have four-byte alignment. The final column's trailing
+    /// padding may be absent while successive elements retain the full stride.
+    fn element_layout(self, component_size: usize) -> (usize, usize) {
+        if let Some(columns) = self.columns() {
+            let column_bytes = columns * component_size;
+            let column_stride = (column_bytes + 3) & !3;
+            (
+                columns * column_stride,
+                (columns - 1) * column_stride + column_bytes,
+            )
+        } else {
+            let bytes = self.width() * component_size;
+            (bytes, bytes)
+        }
+    }
+}
+
 struct AccessorLayout {
     buffer: usize,
     start: usize,
@@ -234,6 +292,7 @@ struct AccessorLayout {
     count: usize,
     component: usize,
     normalized: bool,
+    shape: AccessorShape,
     width: usize,
     min: Option<Vec<f64>>,
     max: Option<Vec<f64>>,
@@ -320,48 +379,33 @@ fn accessor_layouts(
             .unwrap_or(false);
         let component = field(value, "componentType")?;
         let size = match component {
-            5121 => 1,
-            5123 => 2,
+            5120 | 5121 => 1,
+            5122 | 5123 => 2,
             5125 | 5126 => 4,
-            5120 | 5122 => return Err(unsupported("accessor component outside F1a")),
             _ => return Err(invalid("invalid accessor component type")),
         };
-        let width = match value["type"].as_str() {
-            Some("SCALAR") => 1,
-            Some("VEC2") => 2,
-            Some("VEC3") => 3,
-            Some("VEC4") => 4,
-            Some("MAT2" | "MAT3" | "MAT4") => {
-                return Err(unsupported("accessor shape outside F1a"))
-            }
-            _ => return Err(invalid("missing or invalid accessor type")),
-        };
-        let supported = match width {
-            1 => [5121, 5123, 5125].contains(&component) && !normalized,
-            2..=4 => {
-                (component == 5126 && !normalized)
-                    || ([5121, 5123].contains(&component) && normalized)
-            }
-            _ => false,
-        };
-        if !supported {
-            return Err(unsupported(
-                "accessor component/shape/normalization outside the supported mesh profile",
+        if normalized && ![5120, 5121, 5122, 5123].contains(&component) {
+            return Err(invalid(
+                "only byte/short accessor components may be normalized",
             ));
         }
+        let shape = AccessorShape::parse(&value["type"])?;
+        let width = shape.width();
+        let (element_stride, element_length) = shape.element_layout(size);
         let view = reference(views, &value["bufferView"])?;
         let relative = offset(value, "byteOffset")?;
         let start = offset(view, "byteOffset")?
             .checked_add(relative)
             .ok_or_else(|| invalid("accessor offset overflow"))?;
-        let stride = view.get("byteStride").map_or(Ok(size * width), uint)?;
+        let stride = view.get("byteStride").map_or(Ok(element_stride), uint)?;
         let length = (count - 1)
             .checked_mul(stride)
-            .and_then(|n| n.checked_add(size * width))
+            .and_then(|n| n.checked_add(element_length))
             .ok_or_else(|| invalid("accessor range overflow"))?;
         if !relative.is_multiple_of(size)
             || !start.is_multiple_of(size)
-            || stride < size * width
+            || (shape.columns().is_some() && !start.is_multiple_of(4))
+            || stride < element_stride
             || relative
                 .checked_add(length)
                 .is_none_or(|end| end > field(view, "byteLength").unwrap_or(0))
@@ -388,12 +432,14 @@ fn accessor_layouts(
                                     }
                                     Ok(f64::from(n))
                                 } else {
-                                    let max = match component {
-                                        5121 => u8::MAX as f64,
-                                        5123 => u16::MAX as f64,
-                                        _ => u32::MAX as f64,
+                                    let (min, max) = match component {
+                                        5120 => (i8::MIN as f64, i8::MAX as f64),
+                                        5121 => (0., u8::MAX as f64),
+                                        5122 => (i16::MIN as f64, i16::MAX as f64),
+                                        5123 => (0., u16::MAX as f64),
+                                        _ => (0., u32::MAX as f64),
                                     };
-                                    if n.fract() != 0. || !(0.0..=max).contains(&n) {
+                                    if n.fract() != 0. || !(min..=max).contains(&n) {
                                         return Err(invalid(
                                             "accessor bound outside integer component range",
                                         ));
@@ -422,12 +468,40 @@ fn accessor_layouts(
             count,
             component,
             normalized,
+            shape,
             width,
             min,
             max,
         });
     }
     Ok(result)
+}
+
+/// Run after primitive roles distinguish malformed core encodings from valid
+/// generic accessors outside this producer's finite storage profile.
+fn validate_accessor_profile(
+    layouts: &[AccessorLayout],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    for layout in layouts {
+        check()?;
+        let supported = match layout.shape {
+            AccessorShape::Scalar => {
+                [5121, 5123, 5125].contains(&layout.component) && !layout.normalized
+            }
+            AccessorShape::Vec2 | AccessorShape::Vec3 | AccessorShape::Vec4 => {
+                (layout.component == 5126 && !layout.normalized)
+                    || ([5121, 5123].contains(&layout.component) && layout.normalized)
+            }
+            AccessorShape::Mat2 | AccessorShape::Mat3 | AccessorShape::Mat4 => false,
+        };
+        if !supported {
+            return Err(unsupported(
+                "accessor component/shape/normalization outside the supported mesh profile",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn decode_accessors<'a>(
@@ -646,15 +720,24 @@ enum VertexRole {
     Color,
 }
 impl VertexRole {
-    fn admits(self, accessor: &AccessorLayout) -> bool {
+    fn validate(self, accessor: &AccessorLayout) -> Result<()> {
         let float = accessor.component == 5126 && !accessor.normalized;
         let normalized = [5121, 5123].contains(&accessor.component) && accessor.normalized;
-        match self {
-            Self::Position | Self::Normal => accessor.width == 3 && float,
-            Self::Tangent => accessor.width == 4 && float,
-            Self::Texcoord(_) => accessor.width == 2 && (float || normalized),
-            Self::Color => [3, 4].contains(&accessor.width) && (float || normalized),
+        let valid = match self {
+            Self::Position | Self::Normal => accessor.shape == AccessorShape::Vec3 && float,
+            Self::Tangent => accessor.shape == AccessorShape::Vec4 && float,
+            Self::Texcoord(_) => accessor.shape == AccessorShape::Vec2 && (float || normalized),
+            Self::Color => {
+                matches!(accessor.shape, AccessorShape::Vec3 | AccessorShape::Vec4)
+                    && (float || normalized)
+            }
+        };
+        if !valid {
+            return Err(invalid(
+                "vertex accessor encoding contradicts its core semantic",
+            ));
         }
+        Ok(())
     }
 }
 struct Primitive {
@@ -770,11 +853,7 @@ fn primitives(
             let pos = get(primitive.position)?;
             for (role, i) in primitive.attributes() {
                 let a = get(i)?;
-                if !role.admits(a) {
-                    return Err(unsupported(
-                        "vertex accessor encoding outside semantic profile",
-                    ));
-                }
+                role.validate(a)?;
                 if a.count != pos.count {
                     return Err(invalid("vertex attribute/POSITION count mismatch"));
                 }
@@ -807,8 +886,11 @@ fn primitives(
             primitive.count = if let Some(i) = primitive.indices {
                 let a = get(i)?;
                 used_indices[i] = true;
-                if a.width != 1 || ![5121, 5123, 5125].contains(&a.component) || a.normalized {
-                    return Err(unsupported("indices must be unsigned SCALAR"));
+                if a.shape != AccessorShape::Scalar
+                    || ![5121, 5123, 5125].contains(&a.component)
+                    || a.normalized
+                {
+                    return Err(invalid("indices must be non-normalized unsigned SCALAR"));
                 }
                 let view = use_view(i, BufferViewUse::Indices)?;
                 if view.get("byteStride").is_some()
@@ -861,7 +943,7 @@ fn primitives(
     if data
         .iter()
         .zip(used_indices)
-        .any(|(a, used)| a.component == 5125 && !used)
+        .any(|(a, used)| a.component == 5125 && a.shape == AccessorShape::Scalar && !used)
     {
         return Err(invalid(
             "u32 accessor must be referenced by primitive indices",
@@ -1067,6 +1149,7 @@ impl Document {
         let materials = material::parse(&doc)?;
         let (images, textures, samplers) = texture::metadata(&doc, &mut resources, &mut check)?;
         let meshes = primitives(&doc, &accessors, &materials, &mut check)?;
+        validate_accessor_profile(&accessors, &mut check)?;
         let (instances, triangle_count) = scene_plan(&doc, &meshes, &mut check)?;
         check()?;
         Ok(Self {
@@ -1360,4 +1443,89 @@ pub(super) fn decode(
         textures: document.textures.clone(),
         samplers: document.samplers.clone(),
     })
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+    use serde_json::json;
+
+    // Only metadata is supplied. The dependency deliberately does not exist;
+    // Document::parse must classify declarations without resolving its URI.
+    fn declared_attribute(component: usize, shape: &str, normalized: bool, used: bool) -> Vec<u8> {
+        let mut attributes = json!({"POSITION": 0});
+        if used {
+            attributes["COLOR_0"] = json!(1);
+        }
+        serde_json::to_vec(&json!({
+            "asset": {"version": "2.0"},
+            "buffers": [{"uri": "deliberately-missing.bin", "byteLength": 228}],
+            "bufferViews": [
+                {"buffer": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 192}
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "type": "VEC3", "count": 3,
+                 "min": [0, 0, 0], "max": [1, 1, 0]},
+                {"bufferView": 1, "componentType": component, "type": shape,
+                 "normalized": normalized, "count": 3}
+            ],
+            "meshes": [{"primitives": [{"attributes": attributes}]}],
+            "nodes": [{"mesh": 0}],
+            "scenes": [{"nodes": [0]}]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn malformed_color_encodings_fail_metadata_before_dependency_capture() {
+        for (component, shape, normalized) in [
+            (5121, "VEC4", false),
+            (5123, "VEC3", false),
+            (5120, "VEC4", true),
+            (5122, "VEC3", true),
+            (5126, "MAT2", false),
+            (5126, "SCALAR", false),
+        ] {
+            let error = Document::parse(
+                &declared_attribute(component, shape, normalized, true),
+                || Ok(()),
+            )
+            .err()
+            .expect("contradictory COLOR_0 encoding must fail");
+            assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        }
+    }
+
+    #[test]
+    fn valid_unused_storage_outside_mesh_profile_stays_unsupported() {
+        for (component, shape, normalized) in [
+            (5120, "VEC3", true),
+            (5122, "VEC3", false),
+            (5126, "SCALAR", false),
+            (5126, "MAT4", false),
+            (5125, "VEC4", false),
+        ] {
+            let error = Document::parse(
+                &declared_attribute(component, shape, normalized, false),
+                || Ok(()),
+            )
+            .err()
+            .expect("unused generic encoding must remain outside profile");
+            assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        }
+    }
+
+    #[test]
+    fn normalization_invalid_for_component_is_invalid_even_when_unused() {
+        for component in [5125, 5126] {
+            let error =
+                Document::parse(&declared_attribute(component, "VEC4", true, false), || {
+                    Ok(())
+                })
+                .err()
+                .expect("FLOAT/u32 normalized flag must fail");
+            assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        }
+    }
 }
