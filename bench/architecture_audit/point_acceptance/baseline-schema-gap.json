@@ -1,0 +1,11 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+  "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+  "finding": "Raw UINT64/INT64 row values preserve exact bits. Source ExtraBytes noData/min/max declarations are absent from output schema.",
+  "controls": [
+    {
+      "control": "scalar ExtraBytes noData/min/max exact preservation",
+      "baseline_outcome": "extra_u8: required ExtraBytes noData schema differs: None != 0"
+    }
+  ]
+}

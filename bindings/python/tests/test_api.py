@@ -618,7 +618,7 @@ class WheelAPI(unittest.TestCase):
     def test_convert_to_implicit_preserves_payload_and_force_semantics(self):
         source = self.root / "source.las"
         write_las(source)
-        explicit = rusty_tiles.point_cloud_to_3tz(source, self.root / "explicit.3tz", explicit=True)
+        explicit = rusty_tiles.point_cloud_to_3tz(source, self.root / "explicit.3tz", explicit=True, source_crs="local")
         converted = rusty_tiles.convert_to_implicit(explicit.output, self.root / "implicit.3tz")
         self.assertTrue(rusty_tiles.validate(converted.output)["ok"])
         self.assertTrue(converted.report["contentBytesPreserved"])
@@ -637,17 +637,59 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "points.3tz"
         result = rusty_tiles.point_cloud_to_3tz(
             source, output, max_points=2, chunk_points=1, callback=events.append,
-        )
+         source_crs="local",)
         self.assertEqual(result.report["points"], 4)
         self.assertTrue(rusty_tiles.validate(output)["ok"])
         phases = {e["phase"] for e in events if e["event"] == "progress"}
         self.assertTrue({"ingestion", "tiling"}.issubset(phases))
         before = output.read_bytes()
         with self.assertRaises(rusty_tiles.OutputExistsError):
-            rusty_tiles.point_cloud_to_3tz(source, output)
+            rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local")
         self.assertEqual(output.read_bytes(), before)
-        rusty_tiles.point_cloud_to_3tz(source, output, force=True)
+        rusty_tiles.point_cloud_to_3tz(source, output, force=True, source_crs="local")
         self.assertTrue(rusty_tiles.validate(output)["ok"])
+
+    def test_point_coordinates_are_required_before_callbacks(self):
+        source = self.root / "coordinates.las"
+        write_las(source)
+        output = self.root / "coordinates.3tz"
+        events = []
+        with self.assertRaises(TypeError):
+            rusty_tiles.point_cloud_to_3tz(source, output, callback=events.append)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local",
+                                         height_offset=0, callback=events.append)
+        self.assertEqual(events, [])
+        self.assertFalse(output.exists())
+
+    def test_point_callback_abort_preserves_output_and_reentry_is_isolated(self):
+        source = self.root / "callback-points.las"
+        write_las(source)
+        output = self.root / "callback-points.3tz"
+        rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local")
+        original = output.read_bytes()
+        for exception in (RuntimeError("point observer failed"), KeyboardInterrupt()):
+            def fail(event):
+                raise exception
+            with self.assertRaises(type(exception)) as caught:
+                rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local",
+                                             force=True, callback=fail)
+            self.assertIs(caught.exception, exception)
+            self.assertEqual(output.read_bytes(), original)
+        nested = self.root / "nested-points.3tz"
+        nested_results = []
+        def reenter(event):
+            if not nested_results:
+                nested_results.append(None)
+                nested_results[0] = rusty_tiles.point_cloud_to_3tz(
+                    source, nested, source_crs="local", max_points=1)
+        result = rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local",
+                                               force=True, callback=reenter, max_points=2)
+        self.assertEqual(result.report["points"], 4)
+        self.assertEqual(nested_results[0].report["points"], 4)
+        self.assertTrue(rusty_tiles.validate(output)["ok"])
+        self.assertTrue(rusty_tiles.validate(nested)["ok"])
+        self.assertEqual(result.cleanup_diagnostics, [])
 
     def test_georeferenced_points_and_unsupported_datum(self):
         source = self.root / "points.las"
@@ -676,7 +718,7 @@ class WheelAPI(unittest.TestCase):
         for actual, expected in zip(tileset["root"]["transform"][12:15], expected):
             self.assertAlmostEqual(actual, expected, delta=0.001)
         rejected = self.root / "rejected.3tz"
-        with self.assertRaisesRegex(rusty_tiles.EnvironmentError, "native-geospatial"):
+        with self.assertRaisesRegex(rusty_tiles.UnsupportedError, "native-geospatial"):
             rusty_tiles.point_cloud_to_3tz(
                 source, rejected, source_crs="EPSG:26910", height_offset=0,
             )
@@ -704,7 +746,7 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "rejected.3tz"
         for height in (None, float("nan"), float("inf")):
             with self.subTest(height=height):
-                with self.assertRaisesRegex(rusty_tiles.DataError, "heightOffset"):
+                with self.assertRaisesRegex(rusty_tiles.InvalidRequestError, "heightOffset"):
                     rusty_tiles.point_cloud_to_3tz(
                         source, output, source_crs="EPSG:4326", height_offset=height,
                     )
@@ -758,7 +800,7 @@ class WheelAPI(unittest.TestCase):
         for explicit in (False, True):
             output = self.root / f"attributes-{explicit}.3tz"
             rusty_tiles.point_cloud_to_3tz(source, output, max_points=2,
-                                         metadata_attributes=True, explicit=explicit)
+                                         metadata_attributes=True, explicit=explicit, source_crs="local")
             self.assertTrue(rusty_tiles.validate(output)["ok"])
             with zipfile.ZipFile(output) as archive:
                 for entry in archive.namelist():
@@ -788,7 +830,7 @@ class WheelAPI(unittest.TestCase):
             self.assertTrue(issubclass(error, rusty_tiles.TilesError))
         output = self.root / "missing.3tz"
         with self.assertRaises(rusty_tiles.TilesIOError):
-            rusty_tiles.point_cloud_to_3tz(self.root / "missing.las", output)
+            rusty_tiles.point_cloud_to_3tz(self.root / "missing.las", output, source_crs="local")
         self.assertFalse(output.exists())
         bad = self.root / "bad.3tz"
         bad.write_bytes(b"invalid ZIP")

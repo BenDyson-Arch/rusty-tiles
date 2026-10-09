@@ -13,7 +13,7 @@ use std::{
 use tiles_core::{
     georef::{RotationDegrees, SourceOffset},
     package::{package, PackageRequest},
-    point_cloud::PointCloudOptions,
+    point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
     report::ndjson,
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
@@ -578,33 +578,88 @@ fn glb_to_3tz(
 
 /// Tile local or grid-free georeferenced LAS/LAZ point clouds.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, force=false, source_crs="local", height_offset=None, max_points=50_000, chunk_points=100_000, explicit=false, metadata_attributes=false, callback=None))]
+#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=50_000, chunk_points=100_000, explicit=false, metadata_attributes=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn point_cloud_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
-    force: bool,
     source_crs: &str,
+    force: bool,
     height_offset: Option<f64>,
     max_points: usize,
     chunk_points: usize,
     explicit: bool,
     metadata_attributes: bool,
     callback: Option<Py<PyAny>>,
-) -> PyResult<ConversionResult> {
+) -> PyResult<PointCloudResult> {
+    let coordinates = if source_crs == "local" {
+        if height_offset.is_some() {
+            return Err(job_failure_to_python(
+                py,
+                JobFailure {
+                    error: JobError::new(
+                        JobErrorKind::InvalidRequest,
+                        "heightOffset applies only to geospatial CRS; local XYZ is in metres",
+                    ),
+                    secondary: vec![],
+                    retained_paths: vec![],
+                    recovery: None,
+                },
+            ));
+        }
+        PointCloudCoordinates::LocalMetres
+    } else {
+        PointCloudCoordinates::Horizontal {
+            source: if source_crs == "header" { PointCloudCrs::Header } else { PointCloudCrs::Definition(source_crs.into()) },
+            height_offset_metres: height_offset.filter(|value| value.is_finite()).ok_or_else(|| job_failure_to_python(py, JobFailure { error: JobError::new(JobErrorKind::InvalidRequest, "geospatial input requires explicit finite heightOffset to ellipsoidal metres"), secondary: vec![], retained_paths: vec![], recovery: None }))?,
+        }
+    };
     let options = PointCloudOptions {
-        force,
-        source_crs: source_crs.into(),
-        height_offset,
         max_points,
         chunk_points,
         explicit,
         metadata_attributes,
     };
-    run_conversion(py, callback, |reporter| {
-        tiles_core::point_cloud::point_cloud_to_3tz_reported(&input, &output, &options, reporter)
+    let policy = if force {
+        OutputPolicy::Replace
+    } else {
+        OutputPolicy::CreateNew
+    };
+    let request = PointCloudRequest::new(input, output, coordinates, options).with_policy(policy);
+    let result = run_job(py, callback, |run| {
+        tiles_core::point_cloud::point_cloud_to_archive(request, run)
+    })?;
+    Ok(PointCloudResult {
+        output: result.output,
+        report: serde_json::to_value(result.report)
+            .expect("point report contains JSON-compatible values"),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
     })
+}
+
+/// Published point-cloud archive and finalized acceptance report.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct PointCloudResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+#[pymethods]
+impl PointCloudResult {
+    #[getter]
+    fn archive(&self) -> bool {
+        true
+    }
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
 }
 
 /// Published vector archive and finalized acceptance report.
@@ -787,6 +842,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<ConversionResult>()?;
     module.add_class::<VectorResult>()?;
+    module.add_class::<PointCloudResult>()?;
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;

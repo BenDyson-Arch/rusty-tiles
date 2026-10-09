@@ -541,6 +541,7 @@ enum Outcome {
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
     Terrain(terrain::TerrainResult),
+    PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
     Done,
@@ -596,6 +597,7 @@ fn main() -> ExitCode {
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
                 Outcome::Vector(result) => Some((vector_summary(&result), result.output)),
                 Outcome::Terrain(result) => Some((terrain_summary(&result), result.output)),
+                Outcome::PointCloud(result) => Some((point_cloud_summary(&result), result.output)),
                 Outcome::RasterDirectory(result) => {
                     Some((raster_directory_summary(&result), result.output))
                 }
@@ -746,6 +748,13 @@ fn terrain_summary(result: &terrain::TerrainResult) -> Value {
 
 fn vector_summary(result: &vector::VectorResult) -> Value {
     let mut summary = output_summary(&result.output, Some(&result.report), true);
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> Value {
+    let report = json!(&result.report);
+    let mut summary = output_summary(&result.output, Some(&report), true);
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
 }
@@ -975,20 +984,41 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             Outcome::Wrote(a.io.output)
         }
         Command::PointCloud(a) => {
-            Outcome::Converted(rusty_tiles::point_cloud::point_cloud_to_3tz_reported(
-                &a.io.input,
-                &a.io.output,
-                &rusty_tiles::point_cloud::PointCloudOptions {
-                    explicit: a.explicit,
-                    metadata_attributes: a.metadata_attributes,
-                    force: a.io.force,
-                    source_crs: a.source_crs,
-                    height_offset: a.height_offset,
-                    max_points: a.max_points,
-                    chunk_points: a.chunk_points,
-                },
-                reporter,
-            )?)
+            use rusty_tiles::point_cloud::{
+                PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest,
+            };
+            let coordinates = if a.source_crs == "local" {
+                if a.height_offset.is_some() {
+                    return Err(Error::msg(
+                        "heightOffset applies only to geospatial CRS; local XYZ is in metres",
+                    ));
+                }
+                PointCloudCoordinates::LocalMetres
+            } else {
+                PointCloudCoordinates::Horizontal {
+                    source: if a.source_crs == "header" { PointCloudCrs::Header } else { PointCloudCrs::Definition(a.source_crs) },
+                    height_offset_metres: a.height_offset.ok_or_else(|| Error::msg("geospatial input requires explicit --heightOffset to ellipsoidal metres"))?,
+                }
+            };
+            let options = PointCloudOptions {
+                explicit: a.explicit,
+                metadata_attributes: a.metadata_attributes,
+                max_points: a.max_points,
+                chunk_points: a.chunk_points,
+            };
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = PointCloudRequest::new(a.io.input, a.io.output, coordinates, options)
+                .with_policy(policy);
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            Outcome::PointCloud(Box::new(rusty_tiles::point_cloud::point_cloud_to_archive(
+                request, &run,
+            )?))
         }
         Command::Convert(a) => {
             let observer: Option<Arc<dyn Observer>> =

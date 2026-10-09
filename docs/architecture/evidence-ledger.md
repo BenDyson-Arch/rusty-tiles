@@ -53,8 +53,8 @@ assign every remaining subsystem and operation a proof/migration owner.
 | --- | --- | --- |
 | Opaque package/file lifecycle/3TZ codec | Implemented in #116 with independent readers, fault/concurrency/platform tests; final review found relative-output redirection, fixed in `c777180` with isolated regression. Bounded F0 acceptance only, never scene certification | #115 / [current evidence](f0-evidence.md) |
 | Mesh orchestration and source boundary | Concrete early-staging, size-dependent admission, raw URI/resource ownership and global-metric problems; one local static milestone before broader support | #117; fidelity #121; spatial #120 |
-| Directory installation/recovery | Existing controlled no-clobber violation remains; no directory guarantee inferred from F0 file primitives | #118 with minimal #124 pilot |
-| Vector acceptance | Observed SQL/counter/report disagreement and injected I/O swallowed as rejection; frame/cache ownership also needs an explicit contract | #119; geometry/identity #123 |
+| Directory installation/recovery | D1/D2 accepted through #129/#130, including source-overlap correction, exclusive install and typed recovery; bounded single RGB consumer only | #118 complete; broader #124 |
+| Vector acceptance | V1/V2 replaced the defective acceptance/report boundary and passed independent portable/native replay and final platform/wheel checks in #131; feature ownership only | #119 complete; geometry/identity #123 |
 | CRS/math and decoded fidelity oracles | Analytic/frozen references and small independent decoders are bounded retain candidates; historical shared-kernel encoders do not certify whole subsystems | #120–#124 per operation |
 | Validator and sampled LOD claims | Missing actual BIN payload accepted; content containment not checked by narrower child-bound validation; constructed sampled estimator can miss a 100 m spike. Distinguish those observations from unproved end-to-end defects | #125 and #121 |
 | Remaining operations/public surfaces | Wrapping, convertImplicit, in-place transforms, support tools and broad exported building blocks need explicit lifecycle/API disposition; codec proof alone is insufficient | #126 |
@@ -105,3 +105,39 @@ that foundation, continue independent contract/oracle reviews for:
 Each workstream produces a retain/rework/replace decision with its evidence.
 A clean module diagram is not proof. Replacing a component also needs to pass
 its evidence gate; new code receives no exemption merely because it is new.
+
+
+## Post-vector migration update
+
+#131 merged into develop as `5df15e7`; bounded vector V1/V2 acceptance is recorded
+in #119 and its contract/evidence. The historical initial ledger above preserves
+the original observations rather than claiming those defects remain in the new
+facade. #132 replaces point lifecycle orchestration next; its source and numerical
+algorithms earn only the support covered by the P1 independent ledger. #133 payload
+validation is a separate slice. The public-surface inventory records all remaining
+operation and export owners; neither pending issue is accepted by this update.
+
+## P1 point migration evidence
+
+Production candidate `12d98ab` replaces the legacy point job/report overloads
+with a typed request/result and one F0 attempt. The
+[finite contract](point-acceptance-contract.md) and
+[independent evidence](../../bench/architecture_audit/point_acceptance/README.md)
+bound support to the admitted LAS/LAZ, scalar metadata, coordinate and hierarchy
+profile. Baseline controls reproduce source replacement through identical and
+hardlink output paths, and dropped Extra Bytes schema declarations. The candidate
+refuses unsafe identities before observation and preserves admitted declarations.
+
+Independent portable/native source-to-rendered-output replay covers full-detail
+multiplicity, required fields, parent representatives, transformed bounds and
+reachable resources. Actual malformed-source and archive mutation controls
+exercise the readers. A fresh nonauthor review found an oracle branch mistake;
+the committed correction `d92acd2` exercises the intended untyped/waveform cases.
+Final candidate artifacts use that corrected reader.
+
+[Local validation](../../bench/architecture_audit/point_acceptance/validation.json)
+records full Rust suites, strict lint, CLI point tests and 33 installed-wheel API
+tests each in clean Python and system Blender. Resource probes record observed
+growth rather than a whole-job memory limit. Cross-platform release/wheel and
+official Blender acceptance remain CI/release gates. P1 does not close #122,
+#120, #125, #126 or #113; production payload validation remains separate #133.

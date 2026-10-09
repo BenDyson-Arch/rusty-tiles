@@ -4,6 +4,10 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ## 0.4.0 - Unreleased
 
+### Changed
+
+- Point-cloud conversion now uses one typed request and F0 lifecycle through Rust, CLI and Python. Rust callers migrate from the `point_cloud_to_3tz*` overloads to `point_cloud_to_archive` with explicit coordinate intent and request-owned output policy. Python `point_cloud_to_3tz` requires `source_crs` and returns `PointCloudResult` with cleanup diagnostics. Callback and cancellation failures abort before publication, and source/output aliases are refused.
+- Point-cloud admission requires positive finite LAS/Extra Bytes scales, bounds metadata allocation before decoding, and preserves Extra Bytes no-data/min/max schema declarations. Raw 64-bit scalar integers remain exact; scaled 64-bit integer Extra Bytes are explicitly unsupported rather than silently rounded through binary64.
 - Breaking terrain foundation: bounded EPSG:4326 Float32/Float64 DEMs produce 3D Tiles 1.1 GLB meshes through one typed request and directory publication attempt. Source-footprint cells replace zoom/simplification options and quantized-mesh output. The pinned Cesium preview includes mesh surface queries, clamping and imagery draping.
 
 ### Added
@@ -27,7 +31,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 - `doctor` reports whether a Cesium runtime is present at the README location or at `doctor --cesium DIR`. This check is informational only.
 - `raster --progress json` reports `cog`, `display` and `tiling` phases. `tiling` counts XYZ tiles.
 - Library: new `rusty_tiles::report` module with `Reporter`, `Event` and `ConversionResult { output, archive, report }`. `Reporter` can be silent, human stderr, NDJSON stderr or a custom `EventSink`. `report` is the published `conversion.json` value.
-- Library: new entry points return a `ConversionResult`: `point_cloud::point_cloud_to_3tz_reported`, `vector::vector_to_3tz_reported`, `terrain::dem_to_terrain_reported`, `raster::raster_reported`, `tile::mesh_to_3tz_reported`, `tileset::glb_to_3tz_reported` and `pack::convert_to_3tz_reported`. Existing entry points are unchanged wrappers using `Reporter::default()`, which writes warnings and notes on stderr and no progress.
+- Library: legacy entry points return a `ConversionResult`: `vector::vector_to_3tz_reported`, `terrain::dem_to_terrain_reported`, `raster::raster_reported`, `tile::mesh_to_3tz_reported`, `tileset::glb_to_3tz_reported` and `pack::convert_to_3tz_reported`. Remaining legacy entry points are wrappers using `Reporter::default()`, which writes warnings and notes on stderr and no progress.
 
 ### Changed
 

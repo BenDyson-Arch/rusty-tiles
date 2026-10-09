@@ -105,7 +105,17 @@ def evlr_fixture(path, extended_extra=False):
         wkt,
     ])
     if extended_extra:
-        data.evlrs.append(data.header.vlrs.extract('ExtraBytesVlr')[0])
+        extra = data.header.vlrs.extract('ExtraBytesVlr')[0]
+        # Moving this VLR to an EVLR removes it from laspy's write-time bounds
+        # update. Serialize explicit bounds for the actual float64 temperature
+        # records rather than retaining laspy's reset min/max sentinels.
+        descriptor = bytearray(extra.record_data_bytes())
+        assert len(descriptor) == 192 and descriptor[2] == 10
+        descriptor[3] |= 2 | 4
+        struct.pack_into('<d', descriptor, 64, float(np.min(data.temperature)))
+        struct.pack_into('<d', descriptor, 88, float(np.max(data.temperature)))
+        data.evlrs.append(laspy.VLR(user_id='LASF_Spec', record_id=4,
+                                  record_data=bytes(descriptor)))
     data.write(path)
     return data
 
@@ -231,7 +241,7 @@ class PointCloudTests(unittest.TestCase):
             out = pathlib.Path(tmp) / 'tiles'
             args = types.SimpleNamespace(input=str(source), output=str(out), source_crs='EPSG:32632',
                                          height_offset=None, max_points=16, chunk_points=11)
-            with self.assertRaisesRegex(ValueError, 'explicit finite'):
+            with self.assertRaisesRegex(ValueError, 'heightOffset'):
                 run(args)
             self.assertFalse(out.exists())
             out.mkdir()
@@ -347,7 +357,7 @@ class PointCloudTests(unittest.TestCase):
                 source = pathlib.Path(tmp) / 'cloud.las'
                 fixture(source, count=1, point_format=7, crs=CRS.from_user_input(definition))
                 out = pathlib.Path(tmp) / 'tiles'
-                with self.assertRaisesRegex(ValueError, '2D horizontal CRS'):
+                with self.assertRaisesRegex(ValueError, '2D horizontal CRS|COMPOUNDCRS'):
                     run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                         height_offset=0., max_points=16, chunk_points=11))
                 self.assertFalse(out.exists())
@@ -363,6 +373,14 @@ class PointCloudTests(unittest.TestCase):
                     independent = laspy.read(source)
                     self.assertEqual(len(independent.evlrs), 3 if extended_extra else 2)
                     self.assertEqual(independent.header.parse_crs(), CRS.from_epsg(32632))
+                    if extended_extra:
+                        extra = next(v for v in independent.evlrs
+                                     if v.user_id == 'LASF_Spec' and v.record_id == 4)
+                        descriptor = extra.record_data_bytes()
+                        self.assertEqual(struct.unpack_from('<d', descriptor, 64)[0],
+                                         float(np.min(data.temperature)))
+                        self.assertEqual(struct.unpack_from('<d', descriptor, 88)[0],
+                                         float(np.max(data.temperature)))
                     out = pathlib.Path(tmp) / 'tiles'
                     report = run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                         height_offset=7., max_points=16, chunk_points=2))
@@ -395,11 +413,12 @@ class PointCloudTests(unittest.TestCase):
                         capture_output=True, text=True, env=dict(os.environ, PATH=''))
                     response = json.loads(result.stdout)
                     self.assertEqual(result.returncode, 3, result.stdout)
-                    self.assertEqual(response['error']['code'], 'data')
+                    self.assertEqual(response['error']['code'], 'invalid_input')
                     if case == 'duplicate_wkt':
                         self.assertIn('multiple LAS WKT', response['error']['message'])
                     else:
-                        self.assertIn('invalid LAS/LAZ', response['error']['message'])
+                        self.assertIn('EVLR', response['error']['message'])
+                        self.assertIn('source extent', response['error']['message'])
                     self.assertEqual(output.read_bytes(), b'original')
                     self.assertEqual(set(pathlib.Path(tmp).iterdir()), before)
 
@@ -449,17 +468,19 @@ class PointCloudTests(unittest.TestCase):
                         content[227 + 54 + 3] |= 8
                         struct.pack_into('<d', content, 227 + 54 + 112, float('nan'))
                     else:
-                        # Explicit invalid CRS exercises native diagnostics.
+                        # A malformed EPSG code exercises invalid-input parsing on both builds.
                         pass
                     source.write_bytes(content)
                 out = pathlib.Path(tmp) / 'out.3tz'
-                options = ['--sourceCrs', 'invalid CRS', '--heightOffset', '0'] if case == 'crs' else ['--sourceCrs', 'local']
+                options = ['--sourceCrs', 'EPSG:not-a-code', '--heightOffset', '0'] if case == 'crs' else ['--sourceCrs', 'local']
                 before = set(pathlib.Path(tmp).iterdir())
                 result = subprocess.run([BIN, '--json', 'point-cloud', '-i', str(source), '-o', str(out), *options],
                     capture_output=True, text=True, env=dict(os.environ, PATH=''))
                 response = json.loads(result.stdout)
-                self.assertEqual(result.returncode, 3, result.stdout)
-                self.assertEqual(response['error']['code'], 'data')
+                expected_kind = 'unsupported' if case == 'tail' else 'invalid_input'
+                self.assertEqual(result.returncode, 2 if case == 'tail' else 3, result.stdout)
+                self.assertEqual(response['error']['code'], expected_kind)
+                self.assertEqual(response['error']['kind'], expected_kind)
                 self.assertEqual(set(pathlib.Path(tmp).iterdir()), before)
 
     def test_native_point_cloud_doctor_needs_no_python(self):

@@ -73,6 +73,16 @@ General CRS placement uses the shared [conservative CRS resolver](FORMATS.md#poi
 ### point-cloud
 
 Tiles LAS or LAZ points into 3D Tiles with sampled parents and full-detail leaves.
+The typed point-cloud facade validates resolvable source/coordinate requirements
+before output work and uses one run for observation, cancellation and publication.
+`--force` selects replacement policy; it cannot authorize overwriting the source or
+an alias. All required reports and producer work finish before publication.
+
+[The P1 contract](architecture/point-acceptance-contract.md) defines admitted LAS
+formats, scalar Extra Bytes, duplicate multiplicity, coordinate precision and
+remaining proof limits. Scaled 64-bit integer Extra Bytes are unsupported; unscaled
+64-bit integers remain exact. No-data/min/max declarations are preserved in schema.
+The point and chunk counts below are not whole-job memory bounds.
 
 Grid-free globe placement works in the default build. CRS selection automatically uses pure Rust for verified definitions and strict native GDAL/PROJ for other operations when enabled. Unsupported grid/datum operations name `--features native-geospatial` in the error. See the [supported CRS classes and height rules](FORMATS.md#point-clouds).
 
@@ -300,7 +310,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Vector conversion uses the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Its JSON error includes `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source features are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
+Vector and point-cloud conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
 
 ## mesh-local-to-3tz
 
@@ -379,7 +389,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `point-cloud` | `ingestion`, `tiling` |
+| `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; domain events finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
 | `terrain` | `terrain`, counting tiles |
