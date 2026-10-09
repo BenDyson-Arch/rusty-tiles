@@ -35,8 +35,10 @@ fn summary(stderr: &[u8], command: &str, output: &Path) -> Vec<String> {
 #[test]
 fn every_converter_prints_wrote_reports_and_next_lines() {
     let work = tempfile::tempdir().unwrap();
-    let inputs = work.path().join("inputs");
-    let outputs = work.path().join("outputs with spaces");
+    // Use one resolved fixture root for converters with different result-path contracts.
+    let root = std::fs::canonicalize(work.path()).unwrap();
+    let inputs = root.join("inputs");
+    let outputs = root.join("outputs with spaces");
     std::fs::create_dir_all(&outputs).unwrap();
     write_inputs(&inputs);
     let mut covered = std::collections::BTreeSet::new();
