@@ -142,3 +142,10 @@ Additional external traces reject producer work resumed after seal/permission.
 The monitor does not assume the generator enforces that boundary. A separate
 DAG check of all 22 declared cases confirms acyclicity and at most one permission
 grant on any path; the deliberately invalid producer revival occurs only once.
+
+## F0 production evidence
+
+The separate [F0 implementation evidence](../../../docs/architecture/f0-evidence.md)
+links real runtime/package/frontend tests and installed-wheel/resource results.
+`implementation-results.json` and `package-resources.json` are implementation
+measurements; `results.json` remains solely the bounded model report.

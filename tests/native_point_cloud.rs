@@ -408,7 +408,7 @@ fn force_replaces_only_successful_output() {
 /// tempfile creates 0600 files. The published archive must follow the umask.
 #[cfg(unix)]
 #[test]
-fn published_archive_mode_follows_umask() {
+fn legacy_point_cloud_follows_umask_and_f0_packaging_is_private() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
     fixture(&input, 2, false, vec![]);
@@ -444,7 +444,7 @@ fn published_archive_mode_follows_umask() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(support::mode(&rebuilt), 0o644);
+    assert_eq!(support::mode(&rebuilt), 0o600);
 }
 
 #[test]

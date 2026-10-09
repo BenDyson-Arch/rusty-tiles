@@ -39,7 +39,7 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. Packaging commands keep their existing behaviour.
+`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
 
 ## Converters
 
@@ -156,6 +156,43 @@ These commands package existing content without building spatial level of detail
 | `convert` | Tileset directory or `tileset.json` | `.3tz` archive | none |
 
 `createTilesetJson` and `convert` match the argument style of `3d-tiles-tools@0.5.4`.
+
+`convert` selects every regular file beneath its directory input, or beneath
+the parent of an exact `tileset.json` input. It requires that root member,
+rejects symlinks/special files and unsafe/duplicate names, and rejects the
+reserved generated `@3dtilesIndex1@` instead of silently omitting it. Remove that
+entry explicitly before repacking an extracted archive. Sources must stay
+stable during the call. The output must be outside the source tree and must
+not alias a selected source file. Output names must end in `.3tz` or
+`.3dtiles.zip`; member names may not contain those extensions. Each member must
+be smaller than `2**32 - 1` bytes, though the complete archive may be larger.
+
+Packaging preserves selected bytes, including an existing `conversion.json`,
+and does not interpret that source report or certify scene/resource semantics.
+Its `--json` result adds `packageReceipt` with `memberCount` (excluding the
+generated index), `sourceBytes` and `archiveBytes`, plus `cleanupDiagnostics`.
+Its `output` is the resolved absolute destination used for validation and
+installation, including when `--output` is relative.
+`conversionReport` is null for this operation: the package receipt is separate
+from source content. Cleanup diagnostics contain `path`, `kind` and `message`
+for retained temporary work beside a committed output.
+JSON path fields use lossy UTF-8 display: non-UTF8 operating-system path bytes
+appear as replacement characters and may not round-trip to the original path.
+The operation uses the original native path.
+
+Without `--force`, package installation refuses an existing or competing
+destination. `--force` permits completed-file replacement; encoding, observer
+or finalization failure before installation preserves the old destination.
+Namespace installation and temporary-name cleanup are separate guarantees;
+neither policy promises power-loss durability. On Unix, packaged output is
+created with private mode `0600` (subject to umask), including when replacing a previous file;
+change its permissions explicitly if other users need access.
+
+Package failures expose `error.kind` alongside `error.code`,
+`secondaryDiagnostics` and `retainedPaths`. The CLI maps these domain kinds to
+process statuses: `invalid_request` and `unsupported` exit 2, `invalid_input`
+exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or
+`invalid_state` exit 1.
 
 ### convert-to-implicit
 
@@ -322,6 +359,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
 | `terrain` | `terrain`, counting tiles |
+| `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
 
 Events report work units, not time remaining.
 

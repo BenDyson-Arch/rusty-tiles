@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import importlib.metadata
+import hashlib
 import json
 import math
 import os
@@ -194,9 +195,224 @@ class WheelAPI(unittest.TestCase):
         extracted = self.root / "extracted"
         with zipfile.ZipFile(result.output) as archive:
             archive.extractall(extracted)
+        # Generated index entries are not ordinary source members. Repacking
+        # explicitly selects the extracted resources rather than a stale index.
+        (extracted / "@3dtilesIndex1@").unlink()
         repacked = rusty_tiles.convert_to_3tz(extracted / "tileset.json", self.root / "repacked.3tz")
         self.assertTrue(rusty_tiles.validate(repacked.output)["ok"])
-        self.assertIsNone(repacked.report)
+        self.assertIsInstance(repacked, rusty_tiles.PackageResult)
+        self.assertTrue(repacked.archive)
+
+    def package_source(self, name="source"):
+        source = self.root / name
+        source.mkdir()
+        members = {
+            "tileset.json": b'{"asset":{"version":"1.1"},"root":{}}\n',
+            "opaque.bin": bytes(range(256)),
+            "conversion.json": b'  {"producer":"source","custom":17}\n',
+        }
+        for member, payload in members.items():
+            (source / member).write_bytes(payload)
+        return source, members
+
+    def test_package_receipt_members_and_precommit_events(self):
+        source, members = self.package_source()
+        output = self.root / "package.3tz"
+        events = []
+
+        def observe(event):
+            self.assertFalse(output.exists(), "pack callback ran after installation")
+            events.append(event)
+
+        result = rusty_tiles.convert_to_3tz(source, output, callback=observe)
+        self.assertIsInstance(result, rusty_tiles.PackageResult)
+        self.assertTrue(result.archive)
+        self.assertTrue(result.output.is_absolute())
+        self.assertTrue(result.output.samefile(output))
+        self.assertIsInstance(result.receipt, rusty_tiles.PackageReceipt)
+        self.assertEqual(result.receipt.member_count, len(members))
+        self.assertEqual(result.receipt.source_bytes, sum(map(len, members.values())))
+        self.assertEqual(result.receipt.archive_bytes, output.stat().st_size)
+        self.assertEqual(result.cleanup_diagnostics, [])
+        self.assertGreaterEqual(len(events), 2)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(set(archive.namelist()), {*members, "@3dtilesIndex1@"})
+            for member, payload in members.items():
+                self.assertEqual(archive.read(member), payload)
+        self.assert_package_index(output, members)
+
+    def assert_package_index(self, output, members):
+        """Independent stdlib reader: 24-byte MD5/uint64 records and ZIP offsets."""
+        data = output.read_bytes()
+        with zipfile.ZipFile(output) as archive:
+            infos = archive.infolist()
+            self.assertEqual(infos[0].filename, "tileset.json")
+            self.assertEqual(infos[-1].filename, "@3dtilesIndex1@")
+            self.assertTrue(all(info.compress_type == zipfile.ZIP_STORED for info in infos))
+            index = archive.read("@3dtilesIndex1@")
+            self.assertEqual(len(index), 24 * len(members))
+            expected = {hashlib.md5(info.filename.encode("utf-8")).digest(): info
+                        for info in infos[:-1]}
+            self.assertEqual(len(expected), len(members))
+            previous = None
+            for low, high, offset in struct.iter_unpack("<QQQ", index):
+                key = (low, high)
+                if previous is not None:
+                    self.assertGreater(key, previous, "index hashes are not strictly ordered")
+                previous = key
+                digest = struct.pack("<QQ", low, high)
+                self.assertIn(digest, expected, "index hash does not identify a selected member")
+                info = expected.pop(digest)
+                self.assertEqual(offset, info.header_offset, "index offset differs from ZIP directory")
+                self.assertEqual(data[offset:offset + 4], b"PK\x03\x04")
+                name_length, extra_length = struct.unpack_from("<HH", data, offset + 26)
+                name = data[offset + 30:offset + 30 + name_length]
+                self.assertEqual(name.decode("utf-8"), info.filename)
+                self.assertEqual(hashlib.md5(name).digest(), digest)
+                payload_offset = offset + 30 + name_length + extra_length
+                self.assertEqual(data[payload_offset:payload_offset + info.file_size], members[info.filename])
+            self.assertEqual(expected, {})
+
+    def test_package_independent_index_reader_detects_corrupt_hash_order_and_offset(self):
+        source, members = self.package_source()
+        output = self.root / "control-index.3tz"
+        rusty_tiles.convert_to_3tz(source, output)
+        self.assert_package_index(output, members)
+        with zipfile.ZipFile(output) as archive:
+            order = [info.filename for info in archive.infolist()[:-1]]
+        for name, expected_error in [
+            ("hash", "index hash does not identify"),
+            ("order", "index hashes are not strictly ordered"),
+            ("offset", "index offset differs"),
+        ]:
+            with self.subTest(corruption=name):
+                candidate = self.root / f"bad-index-{name}.3tz"
+                with zipfile.ZipFile(candidate, "w", compression=zipfile.ZIP_STORED) as archive:
+                    for member in order:
+                        archive.writestr(member, members[member])
+                    # Correct offsets for this independently written ZIP keep
+                    # each negative control isolated to its designated property.
+                    records = sorted((*struct.unpack("<QQ", hashlib.md5(info.filename.encode()).digest()), info.header_offset)
+                                     for info in archive.infolist())
+                    index = b"".join(struct.pack("<QQQ", *record) for record in records)
+                    if name == "hash":
+                        index = b"\0" * 16 + index[16:]
+                    elif name == "order":
+                        index = index[24:48] + index[:24] + index[48:]
+                    else:
+                        index = index[:16] + struct.pack("<Q", 1) + index[24:]
+                    archive.writestr("@3dtilesIndex1@", index)
+                with self.assertRaisesRegex(AssertionError, expected_error):
+                    self.assert_package_index(candidate, members)
+
+    def test_package_early_and_final_callback_errors_preserve_exception_and_output(self):
+        source, _ = self.package_source()
+        observed = []
+        rusty_tiles.convert_to_3tz(source, self.root / "control.3tz", callback=observed.append)
+        self.assertGreaterEqual(len(observed), 2)
+        for point in ("early", "final"):
+            for force in (False, True):
+                with self.subTest(point=point, force=force):
+                    output = self.root / f"{point}-{force}.3tz"
+                    original = b"previous destination bytes"
+                    if force:
+                        output.write_bytes(original)
+                    failure = RuntimeError(f"pack observer failed at {point}")
+                    calls = []
+
+                    def fail(event):
+                        if force:
+                            self.assertEqual(output.read_bytes(), original)
+                        else:
+                            self.assertFalse(output.exists())
+                        calls.append(event)
+                        if point == "early" or event == observed[-1]:
+                            raise failure
+
+                    before = set(self.root.iterdir())
+                    with self.assertRaises(RuntimeError) as caught:
+                        rusty_tiles.convert_to_3tz(source, output, force=force, callback=fail)
+                    self.assertIs(caught.exception, failure)
+                    self.assertEqual(set(self.root.iterdir()), before)
+                    self.assertEqual(len(calls), 1 if point == "early" else len(observed))
+                    if force:
+                        self.assertEqual(output.read_bytes(), original)
+                    else:
+                        self.assertFalse(output.exists())
+
+    def test_package_nested_repeated_and_concurrent_calls_are_independent(self):
+        source, members = self.package_source()
+        nested = []
+        outer_events = []
+        outer_output = self.root / "outer.3tz"
+
+        def observe(event):
+            self.assertFalse(outer_output.exists())
+            outer_events.append(event)
+            if not nested:
+                nested.append(rusty_tiles.convert_to_3tz(source, self.root / "nested.3tz"))
+
+        outer = rusty_tiles.convert_to_3tz(source, outer_output, callback=observe)
+        self.assertEqual(len(nested), 1)
+        self.assertTrue(outer_events)
+        failure = RuntimeError("independent failed invocation")
+
+        def fail(event):
+            raise failure
+
+        with self.assertRaises(RuntimeError) as caught:
+            rusty_tiles.convert_to_3tz(source, self.root / "failed.3tz", callback=fail)
+        self.assertIs(caught.exception, failure)
+
+        def convert(index):
+            events = []
+            output = self.root / f"parallel-package-{index}.3tz"
+
+            def callback(event):
+                self.assertFalse(output.exists())
+                events.append(event)
+
+            result = rusty_tiles.convert_to_3tz(source, output, callback=callback)
+            return result, events
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            concurrent = list(pool.map(convert, range(4)))
+        self.assertEqual(len({result.output for result, _ in concurrent}), 4)
+        for result in [outer, *nested, *(result for result, _ in concurrent)]:
+            self.assertEqual(result.receipt.member_count, len(members))
+            with zipfile.ZipFile(result.output) as archive:
+                self.assertEqual(archive.read("conversion.json"), members["conversion.json"])
+        for _, events in concurrent:
+            self.assertEqual(events, outer_events)
+
+    def test_package_invalid_requests_source_errors_and_output_conflicts(self):
+        source, _ = self.package_source()
+        output = self.root / "output.3tz"
+        with self.assertRaises(TypeError):
+            rusty_tiles.convert_to_3tz(source, output, callback=42)
+        self.assertFalse(output.exists())
+        with self.assertRaises(rusty_tiles.TilesIOError) as caught:
+            rusty_tiles.convert_to_3tz(self.root / "missing", self.root / "not-created" / "output.3tz")
+        self.assertEqual(caught.exception.kind, "io")
+        self.assertFalse((self.root / "not-created").exists())
+        (source / "@3dtilesIndex1@").write_bytes(b"stale generated index")
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.convert_to_3tz(source, self.root / "not-created" / "output.3tz")
+        self.assertEqual(caught.exception.kind, "invalid_request")
+        self.assertFalse((self.root / "not-created").exists())
+        (source / "@3dtilesIndex1@").unlink()
+        rusty_tiles.convert_to_3tz(source, output)
+        before = output.read_bytes()
+        with self.assertRaises(rusty_tiles.OutputExistsError) as caught:
+            rusty_tiles.convert_to_3tz(source, output)
+        self.assertEqual(caught.exception.kind, "output_conflict")
+        self.assertEqual(output.read_bytes(), before)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.convert_to_3tz(source, source / "overlap.3tz", force=True)
+        self.assertFalse((source / "overlap.3tz").exists())
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.convert_to_3tz(source, self.root / "bad-extension.zip")
+        self.assertFalse((self.root / "bad-extension.zip").exists())
 
     def test_convert_to_implicit_preserves_payload_and_force_semantics(self):
         source = self.root / "source.las"
@@ -377,8 +593,10 @@ class WheelAPI(unittest.TestCase):
         bad.write_bytes(b"invalid ZIP")
         with self.assertRaises(rusty_tiles.DataError):
             rusty_tiles.validate(bad)
+        empty_package = self.root / "empty-package"
+        empty_package.mkdir()
         with self.assertRaises(rusty_tiles.DataError):
-            rusty_tiles.convert_to_3tz(self.root, output)
+            rusty_tiles.convert_to_3tz(empty_package, output)
         with self.assertRaises(ValueError):
             rusty_tiles.mesh_to_3tz(EXAMPLE, output, texture_format="uastc")
         with self.assertRaises(ValueError):

@@ -109,13 +109,16 @@ fn convert_and_glb_to_3tz_zip_layout() {
 #[test]
 fn convert_refuses_without_tileset_json() {
     let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    fs::create_dir(&source).unwrap();
     let err = convert_to_3tz(
-        tmp.path(),
+        &source,
         &tmp.path().join("x.3tz"),
         &PackOptions { force: true },
     )
     .unwrap_err();
-    assert!(matches!(err, rusty_tiles::Error::MissingTilesetJson));
+    assert!(matches!(err, rusty_tiles::Error::Job(failure)
+        if failure.error.kind() == rusty_tiles::JobErrorKind::InvalidInput));
 }
 
 #[test]
@@ -337,8 +340,10 @@ fn cli_create_tileset_json_camel_case_matches_tools_argv() {
 #[test]
 fn convert_via_cli_accepts_tileset_json_path() {
     let tmp = tempfile::tempdir().unwrap();
-    let glb = write_triangle(tmp.path());
-    let json = tmp.path().join("tileset.json");
+    let source = tmp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let glb = write_triangle(&source);
+    let json = source.join("tileset.json");
     create_tileset_json(&glb, &json, &CreateTilesetOptions::default()).unwrap();
     let tz = tmp.path().join("out.3tz");
     let bin = env!("CARGO_BIN_EXE_rusty-tiles");

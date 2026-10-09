@@ -33,6 +33,10 @@ jobs:
           rustup component add rustfmt
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Check foundation lifecycle model and independent monitor
+        run: |
+          python3 bench/architecture_audit/foundation/model.py --results "${{ runner.temp }}/foundation-model.json"
+          python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Test native build

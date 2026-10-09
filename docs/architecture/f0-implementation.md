@@ -30,7 +30,9 @@ any selected member, including through hardlinks. These are core domain rules.
 
 Accepted bytes, including `conversion.json`, are copied unchanged. The caller
 must keep sources stable for the operation; this is not a filesystem snapshot.
-Resolution is read-only and precedes output-parent/scratch creation. Copying uses
+Resolution is read-only and precedes output-parent/scratch creation. The resolved
+absolute destination is retained for staging, installation and result identity;
+callbacks changing the process working directory cannot redirect publication. Copying uses
 bounded chunks and one open source at a time; inventory and index memory grow
 with member count. Archive serialization owns ordering and index construction,
 with no job or runtime dependencies.
@@ -83,3 +85,37 @@ producer failure now establishes the same pre-permission prohibition as callback
 failure and cancellation, including rejection at permission grant. The new negative
 control deliberately revives an encoder-failed candidate and must be detected.
 This model remains design evidence, not a production runtime proof.
+
+## Migration and implementation disposition
+
+Use `rusty_tiles::package::{package, PackageRequest, PackageMember}` with a
+fresh root-exported `RunControl` per operation. `PackageRequest::directory`
+and `PackageRequest::members` share validation and the same publication path;
+`.with_policy(OutputPolicy::Replace)` opts into file replacement.
+`PackageResult` carries the receipt and cleanup diagnostics. The old Rust pack
+entry points delegate to this path, wrap failures in `Error::Job`, and retain
+their legacy return signatures; callers needing receipts/cleanup details must
+use the new result. `convert_to_3tz_reported` no longer interprets or synthesizes
+a conversion report.
+
+Python `convert_to_3tz` now returns `PackageResult`, with a typed `receipt`
+instead of `ConversionResult.report`, and accepts `callback`. CLI `convert`
+returns `packageReceipt` and `cleanupDiagnostics`; selected `conversion.json`
+does not become the command's interpreted conversion report. Error kinds and
+exit mappings are documented in the adapter guides. Destination-inside-source,
+symlink, stale index, archive filename/size, and private Unix permission rules
+are intentional migrations, not cases to preserve via compatibility flags.
+
+The F0 serializer is replaced with a narrow stored-ZIP implementation following
+[PKWARE APPNOTE 6.3.9](https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.9.TXT).
+It computes CRCs while streaming, fills local headers, writes the MD5 index,
+and emits central-directory ZIP64 records when offsets/counts require them.
+No destructor retries failed encoding. The old `ZipWriter` failed retention
+because its persistent-failure destructor writes directly to stderr. Its legacy
+converter entry point remains explicitly unproven under #113; no mode flag
+selects between writers in the new package operation.
+
+The migrated dependency direction is adapters -> package -> archive codec and
+runtime. Runtime imports neither package nor codec. Legacy inventory selection
+and temporary-file policy remain with the old output adapter; archive code owns
+only encoding/reading, and the new package path never calls the legacy job.

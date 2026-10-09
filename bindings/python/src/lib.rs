@@ -12,12 +12,13 @@ use std::{
 };
 use tiles_core::{
     georef::{RotationDegrees, SourceOffset},
-    pack::PackOptions,
+    package::{package, PackageRequest},
     point_cloud::PointCloudOptions,
     report::ndjson,
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
-    Cartographic, CreateTilesetOptions, Error, Event, EventSink, MeshTo3tzOptions, Reporter,
+    Cartographic, CreateTilesetOptions, Error, Event, EventSink, JobError, JobErrorKind,
+    JobFailure, MeshTo3tzOptions, Observer, OutputPolicy, Reporter, RunControl, RunEvent,
     SourceAxes,
 };
 
@@ -27,15 +28,156 @@ create_exception!(rusty_tiles, EnvironmentError, TilesError);
 create_exception!(rusty_tiles, OutputExistsError, TilesError);
 create_exception!(rusty_tiles, TilesIOError, TilesError);
 create_exception!(rusty_tiles, UnsupportedError, TilesError);
+create_exception!(rusty_tiles, InvalidRequestError, TilesError);
+create_exception!(rusty_tiles, CancelledError, TilesError);
+create_exception!(rusty_tiles, ObserverError, TilesError);
 
 fn error_to_python(error: Error) -> PyErr {
     let message = error.to_string();
     match error {
+        Error::Job(failure) => Python::attach(|py| job_failure_to_python(py, failure)),
         Error::Environment(_) => EnvironmentError::new_err(message),
         Error::OutputExists(_) => OutputExistsError::new_err(message),
         Error::Io(_) | Error::InputNotFound(_) => TilesIOError::new_err(message),
         Error::NotImplemented { .. } => UnsupportedError::new_err(message),
         _ => DataError::new_err(message),
+    }
+}
+
+fn job_kind(kind: JobErrorKind) -> &'static str {
+    match kind {
+        JobErrorKind::InvalidRequest => "invalid_request",
+        JobErrorKind::InvalidInput => "invalid_input",
+        JobErrorKind::Unsupported => "unsupported",
+        JobErrorKind::Io => "io",
+        JobErrorKind::Conflict => "output_conflict",
+        JobErrorKind::Cancelled => "cancelled",
+        JobErrorKind::ObserverFailure => "observer_failure",
+        JobErrorKind::InvalidState => "invalid_state",
+    }
+}
+
+fn job_failure_to_python(py: Python<'_>, failure: JobFailure) -> PyErr {
+    let message = failure.to_string();
+    let error = match failure.error.kind() {
+        JobErrorKind::InvalidRequest => InvalidRequestError::new_err(message),
+        JobErrorKind::InvalidInput => DataError::new_err(message),
+        JobErrorKind::Unsupported => UnsupportedError::new_err(message),
+        JobErrorKind::Io => TilesIOError::new_err(message),
+        JobErrorKind::Conflict => OutputExistsError::new_err(message),
+        JobErrorKind::Cancelled => CancelledError::new_err(message),
+        JobErrorKind::ObserverFailure => ObserverError::new_err(message),
+        JobErrorKind::InvalidState => TilesError::new_err(message),
+    };
+    // Newly created domain exceptions carry transport metadata. Original
+    // callback/signal exceptions are returned untouched by the pack adapter.
+    let value = error.value(py);
+    let _ = value.setattr("kind", job_kind(failure.error.kind()));
+    let secondary: Vec<_> = failure
+        .secondary
+        .iter()
+        .map(|cause| cause.to_string())
+        .collect();
+    let _ = value.setattr("secondary_diagnostics", secondary);
+    let _ = value.setattr("retained_paths", failure.retained_paths);
+    error
+}
+
+/// Packaging summary, separate from selected source file contents.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct PackageReceipt {
+    #[pyo3(get)]
+    member_count: u64,
+    #[pyo3(get)]
+    source_bytes: u64,
+    #[pyo3(get)]
+    archive_bytes: u64,
+}
+
+#[pyclass(frozen, module = "rusty_tiles")]
+struct CleanupDiagnostic {
+    #[pyo3(get)]
+    path: PathBuf,
+    #[pyo3(get)]
+    kind: String,
+    #[pyo3(get)]
+    message: String,
+}
+
+/// Successfully installed package and any postcommit cleanup diagnostics.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct PackageResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    #[pyo3(get)]
+    archive: bool,
+    receipt: PackageReceipt,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl PackageResult {
+    #[getter]
+    fn receipt(&self) -> PackageReceipt {
+        PackageReceipt {
+            member_count: self.receipt.member_count,
+            source_bytes: self.receipt.source_bytes,
+            archive_bytes: self.receipt.archive_bytes,
+        }
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics
+            .iter()
+            .map(|diagnostic| CleanupDiagnostic {
+                path: diagnostic.path.clone(),
+                kind: diagnostic.kind.clone(),
+                message: diagnostic.message.clone(),
+            })
+            .collect()
+    }
+}
+
+struct PackageObserver {
+    callback: Option<Py<PyAny>>,
+    error: Mutex<Option<PyErr>>,
+}
+
+fn package_event(event: &RunEvent<'_>) -> Value {
+    match event {
+        RunEvent::Progress { phase, done, total } => {
+            serde_json::json!({"event":"progress", "phase":phase,"done":done,"total":total})
+        }
+        RunEvent::Warning { code, message } => {
+            serde_json::json!({"event":"warning", "code":code,"message":message})
+        }
+        RunEvent::Note { message } => serde_json::json!({"event":"log", "message":message}),
+    }
+}
+
+impl Observer for PackageObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        Python::attach(|py| {
+            let result = py.check_signals().and_then(|()| {
+                if let Some(callback) = &self.callback {
+                    let value = json_to_python(py, &package_event(event))?;
+                    callback.call1(py, (value,))?;
+                }
+                Ok(())
+            });
+            if let Err(error) = result {
+                let message = error.to_string();
+                {
+                    let mut stored = self.error.lock().unwrap();
+                    if stored.is_none() {
+                        *stored = Some(error);
+                    }
+                }
+                return Err(JobError::new(JobErrorKind::ObserverFailure, message));
+            }
+            Ok(())
+        })
     }
 }
 
@@ -399,16 +541,62 @@ fn vector_to_3tz(
 
 /// Pack a tileset directory or tileset.json path as a 3TZ archive.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, force=false))]
+#[pyo3(signature = (input, output, *, force=false, callback=None))]
 fn convert_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
     force: bool,
-) -> PyResult<ConversionResult> {
-    run_conversion(py, None, |_| {
-        tiles_core::pack::convert_to_3tz_reported(&input, &output, &PackOptions { force })
-    })
+    callback: Option<Py<PyAny>>,
+) -> PyResult<PackageResult> {
+    if callback
+        .as_ref()
+        .is_some_and(|callback| !callback.bind(py).is_callable())
+    {
+        return Err(PyTypeError::new_err("callback must be callable"));
+    }
+    py.check_signals()?;
+    let observer = Arc::new(PackageObserver {
+        callback,
+        error: Mutex::new(None),
+    });
+    let run = RunControl::new(Some(observer.clone()));
+    let policy = if force {
+        OutputPolicy::Replace
+    } else {
+        OutputPolicy::CreateNew
+    };
+    let request = PackageRequest::directory(input, output).with_policy(policy);
+    let result = py.detach(|| package(request, &run));
+    match result {
+        Ok(result) => Ok(PackageResult {
+            output: result.output,
+            archive: true,
+            receipt: PackageReceipt {
+                member_count: result.receipt.member_count,
+                source_bytes: result.receipt.source_bytes,
+                archive_bytes: result.receipt.archive_bytes,
+            },
+            cleanup_diagnostics: result
+                .cleanup_diagnostics
+                .into_iter()
+                .map(|diagnostic| CleanupDiagnostic {
+                    path: diagnostic.path,
+                    kind: job_kind(diagnostic.error.kind()).to_owned(),
+                    message: diagnostic.error.to_string(),
+                })
+                .collect(),
+        }),
+        Err(failure) => {
+            if failure.error.kind() == JobErrorKind::ObserverFailure {
+                let original = observer.error.lock().unwrap().take();
+                if let Some(error) = original {
+                    return Err(error);
+                }
+            }
+            Err(job_failure_to_python(py, failure))
+        }
+    }
 }
 
 /// Rewrite an eligible rusty-tiles explicit point/vector archive as implicit tiling.
@@ -444,7 +632,16 @@ fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<ConversionResult>()?;
+    module.add_class::<PackageResult>()?;
+    module.add_class::<PackageReceipt>()?;
+    module.add_class::<CleanupDiagnostic>()?;
     module.add("TilesError", module.py().get_type::<TilesError>())?;
+    module.add(
+        "InvalidRequestError",
+        module.py().get_type::<InvalidRequestError>(),
+    )?;
+    module.add("CancelledError", module.py().get_type::<CancelledError>())?;
+    module.add("ObserverError", module.py().get_type::<ObserverError>())?;
     module.add("DataError", module.py().get_type::<DataError>())?;
     module.add(
         "EnvironmentError",
