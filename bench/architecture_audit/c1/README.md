@@ -1,57 +1,35 @@
-# C1 payload inspection evidence and review method
+# C1 payload inspection evidence
 
-Final functional source commit:
-`64122fd3085347ea95c2d2458bc5c109bfd06a59`, on
-`feat/c1-payload-validation`, based on develop
+Final functional source: `0a1cc94e467f92f615215ddc6327d59d7b3a64c0`, based on develop
 `00a9d1c34c3017a9475e6099c2805d6d2366d70a`.
-Frozen native binary SHA-256
-`775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb`
-passed 77 independent CLI cases, 20 fresh-process resource probes and 147
-actual producer b3dm framing controls. Fresh corpus bytes exactly reproduce
-the checked fixtures. Installed portable release wheel passed all 77 cases with complete success-report
-and failure-class parity against the CLI under `python -I` and empty `PATH`.
-The installed extension hash matches its wheel ZIP entry.
-The source commit alone is not an execution result or release authorization.
+Frozen native binary SHA-256: `d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef`.
+[Build manifest](build-manifest.json) pins 83 compiled source hashes and fixture provenance.
 
-[Independent implementation review](independent-review.md) records nonauthor
-review of archive authority, raw ZIP admission, payload inspection and bounded
-implicit presentation. It identifies the reviewer's authored public types,
-adapters/docs so that authorship is not misrepresented as independent proof.
-Source-derived findings, separately executed counterexamples and attributed
-coordinator tests are distinguished.
+Two fresh reviewers who authored none of the production change reviewed the PR:
+[fresh payload review](fresh-payload-review.md) and
+[fresh integration review](fresh-integration-review.md). They found five payload
+correctness gaps, inconsistent local ZIP headers, and FIFO opening that could block.
+Their independently executed final controls verify the repairs. The integration
+reviewer authored added tests; the reviews identify authorship and execution separately.
+The [initial cross-review](independent-review.md) is historical and was insufficient
+for these boundaries. Initial acceptance records remain available at PR commit `d9305a7`.
 
-The independent corpus writes its own ZIP/index/GLB/accessor bytes and records
-analytic facts rather than asking the producer to establish expected validity.
-It exercises typed Rust/CLI outcomes and preservation of input bytes. Primary
-specification pins and finite capability/inspection gaps are documented in
-[VALIDATION.md](../../../docs/VALIDATION.md). Optional metadata/material semantics,
-implicit availability/addressing, decoded content containment and source/LOD
-fidelity remain unclaimed.
+Final acceptance records:
 
-Historical audit and intermediate candidate artifacts are retained:
+- `cli.json`: 125 fresh independent cases; exact checked-corpus regeneration and unchanged inputs.
+- `fresh-payload-findings.json`: 15 focused probes from the fresh reviewer.
+- `resources.json`: 20 fresh-process measurements, with unavailable descriptor samples reported explicitly.
+- `producer-alignment.json`: 147 actual producer b3dm framing controls.
+- `historical-final.json`: original missing-BIN defect rejected.
+- `official-positive.json`: 16 independently decoded Khronos positives, zero errors.
+- `wheel-parity.json`: 125 isolated installed-wheel controls with complete success-report and failure-class parity.
+- `wheel-api.json`: 33 fresh-venv API tests with empty PATH.
+- `verification.json`: full default/native Rust suites, lint, Python and packaging status.
 
-- `baseline-historical.json` and `baseline-hand-fixtures.json`: legacy defects.
-- `candidate-role-defects.json`: early mixed-role/semantic-set acceptance.
-- `candidate-work-amplification.json`: early repeated-index work timeout.
-- `audit.json`: audit results with their own provenance.
-
-These counterexamples explain redesign/fixes; they do not imply that a revised
-candidate still has those defects. Conversely a source fix is not an executed
-acceptance pass. Final evidence must name exact source/binary/fixture hashes,
-features/toolchain, actual passed checks and unverified limitations. The shared
-JSON callback, archive-wide expansion counters and actual buffer/index decoding
-are inspected ownership boundaries, not a universal RSS/time guarantee.
-
-Final native records: `cli.json`, `resources.json`,
-`producer-alignment.json`, and `historical-final.json`; `audit.json` pins their
-hashes. Resource measurements are observations, not universal RSS or time bounds.
-
-`wheel-parity.json` records installed-wheel/extension hashes and input preservation.
-The portable wheel excludes GDAL/native JPEG; these checks do not imply those features.
-
-[Verification record](verification.json) records the full default/native Rust suites, lint,
-Python checks, installed-wheel API tests and verified source packaging at
-`97313d6c078e947e66b993d7fed53c87b7e1377b`. That commit adds evidence/docs and
-two equivalent test assertion lint fixes; all 83 functional source hashes still
-match the freeze. Later packaging-record edits are metadata only. Remote CI
-remains the merge gate.
+The portable release wheel excludes native geospatial/JPEG support. Its installed
+extension hash matches the wheel ZIP entry. Baseline and intermediate-candidate
+counterexamples are retained as historical evidence, not claims about the freeze.
+Resource observations are not universal RSS or time guarantees. The finite profile
+and uninspected material/metadata, implicit addressing, decoded bounds and source/LOD
+semantics are defined in [VALIDATION.md](../../../docs/VALIDATION.md).
+Remote CI remains the merge gate; no release/publication is authorized.

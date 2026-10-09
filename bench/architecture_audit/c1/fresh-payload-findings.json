@@ -1,0 +1,677 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-c1-native-0a1cc94",
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+  "sourceCommit": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+  "cases": [
+    {
+      "case": "control",
+      "sha256": "7096fa910ae8516c47d42523c8603884f79d89a2fab5efd815ece0f491f8ecc7",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/control.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "extras_extensions_scalar",
+      "sha256": "24beaa7511d63e4c855f657083155b54aa6cd7fb8dfc03c846788c870a656b6a",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/extras_extensions_scalar.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "extras_nested_extensions",
+      "sha256": "3c0c538d44218899c06a8e4d434d293fdcdd462cec8fd358bcfdfd5d94768641",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/extras_nested_extensions.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_external_control",
+      "sha256": "8fb39ea89b5b8de222b8e5e862511303692c210183d4c24b998261c6843a6499",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_external_control.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_compressed_over_declared",
+      "sha256": "8613403fdb4efc850eb7a5a4d307071968e31800fe0269868e2e39603b096ade",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "byte range outside actual resource"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "case": "meshopt_fallback_zero",
+      "sha256": "18a098f5ecdf2b359585eb82fb6f4e5d85e638d1e26a96efabda201d35663413",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_fallback_zero.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_fallback_one_True",
+      "sha256": "2967504d47f2933486f16be16ffc9a0337480ae7a0e6c8bedf37eb0d766129e8",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_fallback_one_True.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_fallback_one_False",
+      "sha256": "6b01434b148bdc3bc64322d5cdc8df99e1f46a260ec5e0380637407c13b6deaa",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_fallback_one_False.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_glb_fallback_zero",
+      "sha256": "20045144bf2f3f972423f85bbb49cd8ef32bfb99be8084282485c653afa2b87f",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_glb_fallback_zero.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "quantized_uv_required_True",
+      "sha256": "789b4ee472d1113ccc0307c7903124b63dca7dfa19660665c9fb44633f8ffe22",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/quantized_uv_required_True.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 3,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "quantized_uv_required_False",
+      "sha256": "688eeff91bbe8a1119ecbd03cdf9ab505cc76a973f42b55daa88b6736dfbbdc5",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "quantized attribute requires KHR_mesh_quantization in extensionsRequired"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "case": "fallback_marker_uncompressed",
+      "sha256": "7439e5718f19d6efdc6760185184a073c993ba359a73d0ef45aa3452263ace7a",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "meshopt fallback buffer has non-fallback references"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "case": "fallback_marker_compressed_source",
+      "sha256": "49c47f4dea360161c13a1bc36ddcdad90cea18061ea9771d22c39c5dbcca204f",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "meshopt fallback buffer has non-fallback references"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "case": "meshopt_unused_placeholder",
+      "sha256": "1c5ab61d081290093d232e10a87ed4710c3f1133cf4f719eacb9647e55addcca",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "report": {
+        "archive": "/home/bend/.cache/c1-fresh-probes/meshopt_unused_placeholder.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "case": "meshopt_bad_fallback_marker",
+      "sha256": "c5314fed3613616d1d413863682b0a7e716209d3675c182715d848a6dbc171f5",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "message": "meshopt fallback marker must be boolean"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    }
+  ]
+}

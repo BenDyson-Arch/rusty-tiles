@@ -7,9 +7,9 @@
     "baseline-hand-fixtures.json": "ab79b8e16f6cb622ae38982bcfbd3548f563efc38e66f36a5493735425eab3ac",
     "baseline-historical.json": "d0a848a009aa797e8c7053129d58fd6e751a5e4fd8ebb8cfa1ba6b563773e16a"
   },
-  "fixtureManifestSha256": "2b7e498d306a44d2aa6841ad73ba593a1ff0a41fdafc12fec34e7091361d4cbc",
+  "fixtureManifestSha256": "0d3cfab3e1fd4bc112c8521aa4198b061c53549348e40e7616d5d204f143c9bc",
   "generatorReproduction": "Fresh corpus hashes and manifest bytes exactly match checked fixtures.",
-  "coverage": "Public Rust and CLI tests consume checked corpus without invoking Python. Standalone wheel parity opt-in. Hand geometry, stride, normalized color, quantization, MAT3 padding, external BIN, unknown chunks, missing bytes, float/index/range/count corruption and unsupported profiles.",
+  "coverage": "125 independently authored checked controls through Rust/CLI; public Rust consumes fixtures without invoking Python. Installed portable release wheel runs matching complete-report/failure-class controls under isolated Python and empty PATH.",
   "remaining": "None for recorded C1 independent native/installed-wheel acceptance; documented finite profile exclusions remain.",
   "primarySpec": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
   "meshoptOracle": {
@@ -31,9 +31,9 @@
   "matrixPaddingAuthority": "Published registry Data Alignment explicitly permits omitted final matrix padding; the independently authored 11-byte MAT3 U8 control passes the official validator.",
   "officialPositiveControl": {
     "evidence": "official-positive.json",
-    "sha256": "3b4db33bc8e8a84f81a09f34f1b150e464ce5a340b374c1649f61e161c6c22f6",
+    "sha256": "6b66fa78935a25bc6faae50de8591ff4cb7f50b7c49f3b5b53c07db1079f23d9",
     "validatorVersion": "2.0.0-dev.3.10",
-    "controls": 13,
+    "controls": 16,
     "errors": 0,
     "limitations": [
       "Official validator independently checks these core/quantization positive controls.",
@@ -48,27 +48,56 @@
   "polygonControls": "Optional three unsigned scalar table accessor references; out-of-range and FLOAT VEC3 reference corruption; full polygon topology uninspected.",
   "bufferDataUriControls": "Two analytic 42-byte base64 buffer positives and malformed/empty/declared-length negatives; other encoding Unsupported.",
   "finalNativeExecuted": {
-    "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
-    "sourceHead": "64122fd3085347ea95c2d2458bc5c109bfd06a59",
-    "cliCases": 77,
+    "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+    "sourceHead": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+    "cliCases": 125,
     "resourceRuns": 20,
     "actualProducerB3dmControls": 147,
     "checkedCorpusExactlyReproduced": true,
     "evidenceSha256": {
-      "cli.json": "fe38d666e01b3405915572acf5ce692a744d4f7875d2b4fc96d5e9865defb2aa",
-      "resources.json": "de008bf18cf43f7b4c4c911b4866595fcc2c767b3fb9253df3b0cd7d5bf8422a",
-      "producer-alignment.json": "30b71986b57c90f62526c5e27231a0440afcd523082eaefae298398663070e4f",
-      "historical-final.json": "5c16bd3a3bd441e4e164875f2d6f06a74c15b58849ba54ccc35ddd548229ae92"
+      "cli.json": "3c88346fbe531dedad941bb2332b6fc2a939b1fb7145c6ab60634f0652495791",
+      "resources.json": "9afffd63a096c04ed5f47ee0b2b13ccb6956635c54e4c52d933da9ed3b05fbd7",
+      "producer-alignment.json": "5e2f0d2f3b9b5d5d5a41bb6226f5ba845aef4e2119f9f9dac08fe8b567fe2000",
+      "historical-final.json": "ea120b40a3136433528561eb6cc4c4bd9092265e0029784665206c6000ba6952"
     }
   },
   "finalWheelExecuted": {
-    "cases": 77,
+    "cases": 125,
     "fullSuccessReportParity": true,
     "failureClassParity": true,
     "readOnly": true,
-    "wheelSha256": "babce1ca2e533b50287137806a6e39902cea87f2e6401ba0b4e7b1607513a17a",
-    "extensionSha256": "2f5af46358fc6b9854fe015576ffa7fa7b7ef94e476fa0af70e433b40f725b37",
+    "wheelSha256": "dc040a8632813a2e1134307bfcf3087eab165a4b51799ea19785f191a929df47",
+    "extensionSha256": "09f52ec82f3d46c2603e88eb757c6a70c05d5fe5b80a729147880378a015315a",
     "extensionMatchesWheelZipEntry": true,
-    "evidenceSha256": "8770456d62dcb0b2276147f8bb3704e33daea15b0d9327257918e8439bc1066c"
+    "evidenceSha256": "3c65052eab1181714c97c7c1af5a96beb4dc9badb82dc144b59af0d3125004a8"
+  },
+  "initialAcceptance": {
+    "head": "d9305a7ac2c4c2aa0ba73aa46423672981e330e9",
+    "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
+    "cases": 77,
+    "status": "Superseded by fresh nonauthor review and expanded controls. Historical initial evidence available at d9305a7."
+  },
+  "freshNonauthorReview": {
+    "head": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+    "productionAuthorship": "Neither fresh reviewer authored production changes. Integration reviewer authored additional independent tests.",
+    "findings": "Five payload findings and ZIP local header inconsistency resolved; FIFO admission hang resolved.",
+    "reviews": {
+      "fresh-payload-review.md": "2ce7033fc4a258df857208612dd1881270ab510c89dcaa5840672fd333053996",
+      "fresh-integration-review.md": "ece06eccdb6f0055c19ded7de805359097910bb4892599154dfd4c926ea99eaa"
+    },
+    "payloadFocusedProbes": 15,
+    "integrationCorpusCases": 125
+  },
+  "meshoptSpecification": "https://github.com/KhronosGroup/glTF/blob/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+  "quantizationSpecification": "https://github.com/KhronosGroup/glTF/blob/70b5e4101725950fb8f3f94dd72c37e758ce5daf/extensions/2.0/Khronos/KHR_mesh_quantization/README.md",
+  "zipSpecification": {
+    "url": "https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT",
+    "version": "6.3.10",
+    "sections": [
+      "4.3.9",
+      "4.4.4",
+      "4.4.7-9",
+      "4.5.3"
+    ]
   }
 }

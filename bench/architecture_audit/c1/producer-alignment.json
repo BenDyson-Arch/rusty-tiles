@@ -1,14 +1,14 @@
 {
-  "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
   "sourceSha256": "d8b25927d26a5777c6a71e3f2036e3e87c2b88a6768f756754d680d069cb532a",
   "archiveSha256": "f20a785de75e5ec20ab98ddc4ed54264de04a0fa9f988167373da0ccbcb05559",
   "command": [
-    "/home/bend/.cache/rusty-tiles-c1-native-64122fd",
+    "/home/bend/.cache/rusty-tiles-c1-native-0a1cc94",
     "vector",
     "-i",
     "/home/bend/.cache/rusty-tiles-c1-foundation/tests/fixtures/countries-source.geojson",
     "-o",
-    "/home/bend/.cache/rusty-tiles-c1-final-alignment-64122fd/countries.3tz",
+    "/home/bend/.cache/rusty-tiles-c1-reviewed-producer/countries.3tz",
     "--explicit",
     "--reproducible",
     "--maxVertices",

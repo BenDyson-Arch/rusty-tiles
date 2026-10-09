@@ -7,7 +7,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.481Z",
+        "validatedAt": "2026-10-09T13:00:46.911Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -60,7 +60,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.484Z",
+        "validatedAt": "2026-10-09T13:00:46.912Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -114,7 +114,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.485Z",
+        "validatedAt": "2026-10-09T13:00:46.913Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -167,7 +167,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.486Z",
+        "validatedAt": "2026-10-09T13:00:46.914Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -220,7 +220,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.487Z",
+        "validatedAt": "2026-10-09T13:00:46.915Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -273,7 +273,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.488Z",
+        "validatedAt": "2026-10-09T13:00:46.916Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -327,7 +327,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.489Z",
+        "validatedAt": "2026-10-09T13:00:46.917Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -380,7 +380,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.490Z",
+        "validatedAt": "2026-10-09T13:00:46.917Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -439,7 +439,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.490Z",
+        "validatedAt": "2026-10-09T13:00:46.918Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -498,7 +498,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.491Z",
+        "validatedAt": "2026-10-09T13:00:46.919Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 1,
@@ -557,7 +557,7 @@
         "uri": "tile.glb",
         "mimeType": "model/gltf-binary",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.492Z",
+        "validatedAt": "2026-10-09T13:00:46.920Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -616,7 +616,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.493Z",
+        "validatedAt": "2026-10-09T13:00:46.921Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -669,7 +669,7 @@
         "uri": "tile.gltf",
         "mimeType": "model/gltf+json",
         "validatorVersion": "2.0.0-dev.3.10",
-        "validatedAt": "2026-10-09T12:29:26.494Z",
+        "validatedAt": "2026-10-09T13:00:46.921Z",
         "issues": {
           "numErrors": 0,
           "numWarnings": 0,
@@ -715,6 +715,183 @@
           "maxAttributes": 1
         }
       }
+    },
+    {
+      "name": "extras_nested_extensions",
+      "report": {
+        "uri": "tile.glb",
+        "mimeType": "model/gltf-binary",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "validatedAt": "2026-10-09T13:00:46.922Z",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 2,
+          "messages": [
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/attributes/POSITION"
+            },
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/indices"
+            }
+          ],
+          "truncated": false
+        },
+        "info": {
+          "version": "2.0",
+          "resources": [
+            {
+              "pointer": "/buffers/0",
+              "mimeType": "application/gltf-buffer",
+              "storage": "glb",
+              "byteLength": 44
+            }
+          ],
+          "animationCount": 0,
+          "materialCount": 0,
+          "hasMorphTargets": false,
+          "hasSkins": false,
+          "hasTextures": false,
+          "hasDefaultScene": true,
+          "drawCallCount": 1,
+          "totalVertexCount": 3,
+          "totalTriangleCount": 1,
+          "maxUVs": 0,
+          "maxInfluences": 0,
+          "maxAttributes": 1
+        }
+      }
+    },
+    {
+      "name": "extras_extensions_scalar",
+      "report": {
+        "uri": "tile.glb",
+        "mimeType": "model/gltf-binary",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "validatedAt": "2026-10-09T13:00:46.922Z",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 2,
+          "messages": [
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/attributes/POSITION"
+            },
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/indices"
+            }
+          ],
+          "truncated": false
+        },
+        "info": {
+          "version": "2.0",
+          "resources": [
+            {
+              "pointer": "/buffers/0",
+              "mimeType": "application/gltf-buffer",
+              "storage": "glb",
+              "byteLength": 44
+            }
+          ],
+          "animationCount": 0,
+          "materialCount": 0,
+          "hasMorphTargets": false,
+          "hasSkins": false,
+          "hasTextures": false,
+          "hasDefaultScene": true,
+          "drawCallCount": 1,
+          "totalVertexCount": 3,
+          "totalTriangleCount": 1,
+          "maxUVs": 0,
+          "maxInfluences": 0,
+          "maxAttributes": 1
+        }
+      }
+    },
+    {
+      "name": "quantized_uv_required_True",
+      "report": {
+        "uri": "tile.glb",
+        "mimeType": "model/gltf-binary",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "validatedAt": "2026-10-09T13:00:46.923Z",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 1,
+          "numHints": 3,
+          "messages": [
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/attributes/POSITION"
+            },
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/attributes/TEXCOORD_0"
+            },
+            {
+              "code": "BUFFER_VIEW_TARGET_MISSING",
+              "message": "bufferView.target should be set for vertex or index data.",
+              "severity": 3,
+              "pointer": "/meshes/0/primitives/0/indices"
+            },
+            {
+              "code": "UNUSED_OBJECT",
+              "message": "This object may be unused.",
+              "severity": 2,
+              "pointer": "/meshes/0/primitives/0/attributes/TEXCOORD_0"
+            }
+          ],
+          "truncated": false
+        },
+        "info": {
+          "version": "2.0",
+          "extensionsUsed": [
+            "KHR_mesh_quantization"
+          ],
+          "extensionsRequired": [
+            "KHR_mesh_quantization"
+          ],
+          "resources": [
+            {
+              "pointer": "/buffers/0",
+              "mimeType": "application/gltf-buffer",
+              "storage": "glb",
+              "byteLength": 56
+            }
+          ],
+          "animationCount": 0,
+          "materialCount": 0,
+          "hasMorphTargets": false,
+          "hasSkins": false,
+          "hasTextures": false,
+          "hasDefaultScene": true,
+          "drawCallCount": 1,
+          "totalVertexCount": 3,
+          "totalTriangleCount": 1,
+          "maxUVs": 1,
+          "maxInfluences": 0,
+          "maxAttributes": 2
+        }
+      }
     }
   ],
   "schemaVersion": 1,
@@ -731,7 +908,10 @@
     "unknown_chunk": "c34892de0fb885247bf2b6bf81dd4045508964085acc74b0ed02f591b5a165c8",
     "quantized_positions": "d4782a453750e27a4d20f450031aee6504cdbd2a6eca516143e10a3e8f68c770",
     "buffer_base64_octet-stream": "e9a5bd7355354248d40cc355007c0e45736472528a7d088305d32925b4e44fea",
-    "buffer_base64_gltf-buffer": "2c179404ba8fe9b562c88be1a0beccf4cb9e055d92aaf1e98ab47dd045edaeae"
+    "buffer_base64_gltf-buffer": "2c179404ba8fe9b562c88be1a0beccf4cb9e055d92aaf1e98ab47dd045edaeae",
+    "extras_nested_extensions": "3c0c538d44218899c06a8e4d434d293fdcdd462cec8fd358bcfdfd5d94768641",
+    "extras_extensions_scalar": "24beaa7511d63e4c855f657083155b54aa6cd7fb8dfc03c846788c870a656b6a",
+    "quantized_uv_required_True": "789b4ee472d1113ccc0307c7903124b63dca7dfa19660665c9fb44633f8ffe22"
   },
   "tool": {
     "package": "gltf-validator",

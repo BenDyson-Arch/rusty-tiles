@@ -1,7 +1,7 @@
 {
-  "head": "64122fd3085347ea95c2d2458bc5c109bfd06a59",
-  "binary": "/home/bend/.cache/rusty-tiles-c1-native-64122fd",
-  "binarySha256": "775267c80696e0df575437ee5e1ef5c634d579ea2aa2b637d50746d8cc4d5beb",
+  "head": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+  "binary": "/home/bend/.cache/rusty-tiles-c1-native-0a1cc94",
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
   "features": [
     "native-geospatial"
   ],
@@ -65,11 +65,11 @@
     "src/tileset/resources.rs": "8bd254212a61d8b0c8c1ff2a9212bb448bfab7b8d79f403169c8960b6bc30607",
     "src/tileset.rs": "f208012cf248259984ab67f5edb226dc09dac6ee72ecc268ba7ae78a29e5cb6f",
     "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
-    "src/validate/admission.rs": "01eedc761f2b1c2ec59974786e5f650d5e7553ce0a4684975e73f84c918c25d7",
+    "src/validate/admission.rs": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
     "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
-    "src/validate/payload.rs": "13394363207d7a941868132c0948dce606a13bc45334418f657a4e62b45978b4",
+    "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
     "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
-    "src/validate.rs": "59469b5880f0a6cf0c0682ac5e0969b4475d3890736680b5976028f5677404aa",
+    "src/validate.rs": "54c033dadb572fd34d7a667d407bc224d3f062b6aa312eaa356b8d94d5536a35",
     "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
     "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
     "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
@@ -91,7 +91,7 @@
     "bindings/python/src/lib.rs": "9969cc75f7a59be8a9f1011cbaf642569ab7345bd2aa76a95d29fc0bd9cff8e9",
     "bindings/python/Cargo.toml": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77"
   },
-  "fixtureManifestSha256": "2b7e498d306a44d2aa6841ad73ba593a1ff0a41fdafc12fec34e7091361d4cbc",
+  "fixtureManifestSha256": "0d3cfab3e1fd4bc112c8521aa4198b061c53549348e40e7616d5d204f143c9bc",
   "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
   "gdal": "3.13.3"
 }

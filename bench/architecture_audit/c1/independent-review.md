@@ -1,6 +1,10 @@
+> Historical initial cross-review. Superseded by the fresh nonauthor reviews at
+> `0a1cc94`: [payload](fresh-payload-review.md), [integration](fresh-integration-review.md).
+> Initial acceptance missed concrete boundary cases; consult verification.json for final checks.
+
 # C1 independent archive and payload implementation review
 
-Status: functional source review at latest functional commit
+Status: initial source review at functional commit
 `64122fd3085347ea95c2d2458bc5c109bfd06a59`; frozen native binary identified,
 final corpus/resource evidence recorded; installed-wheel evidence recorded; source-package verification recorded; CI pending.
 Review baseline branch is `feat/c1-payload-validation`, based on merged develop
