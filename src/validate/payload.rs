@@ -490,8 +490,8 @@ pub(super) fn inspect(
             } else {
                 Cow::Owned(resolve(uri)?)
             }
-        } else if i == 0 && bin.is_some() {
-            Cow::Borrowed(bin.unwrap())
+        } else if let (0, Some(bin)) = (i, bin) {
+            Cow::Borrowed(bin)
         } else if placeholder_covered[i] && placeholder_referenced[i] && meshopt_required {
             buffers.push(Cow::Borrowed(&[][..]));
             continue;
