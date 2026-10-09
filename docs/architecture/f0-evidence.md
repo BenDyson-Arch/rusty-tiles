@@ -18,6 +18,7 @@ record source/toolchain identity, test totals, log hashes and wheel identity.
 | `cargo clippy --locked --workspace --all-targets -- -D warnings` | Passed |
 | Native-feature all-target clippy with warnings denied | Passed |
 | `cargo fmt --all --check`, `git diff --check` | Passed |
+| Source packaging (`cargo package --locked --no-verify`) | Passed; generated Python bytecode excluded |
 | Installed abi3 wheel, isolated Python 3.14 environment, empty `PATH` | 22 passed; no skips |
 | Foundation lifecycle model | 14 contract cases pass; 8 designated negative controls detected |
 | Independent monitor traces | 3 tests pass; pre-permission fatal causes, late producer work, post-permission publisher failure |
