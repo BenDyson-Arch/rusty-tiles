@@ -145,15 +145,17 @@ Writes a source-preserving COG and a PNG XYZ display pyramid.
 
 ### terrain
 
-Writes a quantized-mesh terrain directory with height sidecars. See the [terrain guide](TERRAIN.md).
+Writes a bounded 3D Tiles 1.1 GLB mesh directory. See the [terrain guide](TERRAIN.md).
 
-| Option | Alias | Default | Meaning |
-| --- | --- | --- | --- |
-| `--maxZoom` | `--max-zoom` | required | Finest zoom level, from 0 to 24 |
-| `--heightOffset` | `--height-offset` | required | Metres added to DEM heights to give ellipsoidal height. Never inferred. |
-| `--fillHeight` | `--fill-height` | required | Ellipsoidal height used for NoData and outside coverage |
-| `--grid` | | `65` | Samples per tile edge: 17, 33, 65 or 129 |
-| `--maxError` | `--max-error` | `1` | Maximum added simplification error in metres. 0 keeps the full grid. |
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--cells-per-leaf` | `64` | Source-pixel cells per patch edge: 16, 32, 64 or 128 |
+| `--height-offset` | required | Metres added to raw DEM samples to obtain ellipsoidal height |
+| `--fill-height` | required | Ellipsoidal height for missing lattice samples inside the footprint |
+
+There is no zoom or simplification option. Source, height and precision limits
+are checked before private staging. Queries, clamping and live imagery draping
+are included in the pinned Cesium preview.
 
 ## Packaging commands
 
@@ -278,7 +280,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | `--point-cloud` | none | Extracted point-cloud directory with `tileset.json` |
 | `--annotations` | none | Extracted vector directory with `tileset.json` |
 | `--imagery` | none | Raster output directory with `tilejson.json` |
-| `--terrain` | none | Terrain output directory with `layer.json` |
+| `--terrain` | none | Terrain mesh directory with `tileset.json` |
 
 Select at least one layer.
 
@@ -401,7 +403,7 @@ Events report work units, not time remaining.
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` still works when this is unset. |
-| `RAYON_NUM_THREADS` | mesh, terrain | Limit worker threads. `1` makes terrain encoding serial. |
+| `RAYON_NUM_THREADS` | mesh | Limit worker threads. Terrain encoding is sequential. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
 | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 

@@ -219,34 +219,15 @@ struct PreviewArgs {
 struct TerrainArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Finest zoom level (0..24)
-    #[arg(long = "maxZoom", visible_alias = "max-zoom")]
-    max_zoom: u8,
-    /// Samples per tile edge: 17, 33, 65 or 129
-    #[arg(long, default_value_t = 65)]
-    grid: u16,
-    /// Add to DEM metre heights to obtain ellipsoidal heights; never inferred
-    #[arg(
-        long = "heightOffset",
-        visible_alias = "height-offset",
-        allow_hyphen_values = true
-    )]
+    /// Source-pixel cells per GLB leaf edge: 16, 32, 64 or 128
+    #[arg(long, default_value_t = 64)]
+    cells_per_leaf: u16,
+    /// Add to raw DEM metre heights to obtain ellipsoidal heights; never inferred
+    #[arg(long, allow_hyphen_values = true)]
     height_offset: f64,
-    /// Ellipsoidal height used outside coverage and for NoData
-    #[arg(
-        long = "fillHeight",
-        visible_alias = "fill-height",
-        allow_hyphen_values = true
-    )]
+    /// Ellipsoidal height used for missing samples inside the source footprint
+    #[arg(long, allow_hyphen_values = true)]
     fill_height: f64,
-    /// Maximum added terrain simplification error in metres; 0 keeps the full grid
-    #[arg(
-        long = "maxError",
-        visible_alias = "max-error",
-        default_value_t = 1.,
-        allow_hyphen_values = true
-    )]
-    max_error: f64,
 }
 
 #[derive(Args)]
@@ -559,6 +540,7 @@ enum Outcome {
     Mesh(MeshResult),
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
+    Terrain(Box<terrain::TerrainResult>),
     PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
@@ -614,6 +596,7 @@ fn main() -> ExitCode {
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
                 Outcome::Vector(result) => Some((vector_summary(&result), result.output)),
+                Outcome::Terrain(result) => Some((terrain_summary(&result), result.output)),
                 Outcome::PointCloud(result) => Some((point_cloud_summary(&result), result.output)),
                 Outcome::RasterDirectory(result) => {
                     Some((raster_directory_summary(&result), result.output))
@@ -755,6 +738,14 @@ fn raster_directory_summary(result: &RasterDirectoryResult) -> Value {
     summary
 }
 
+fn terrain_summary(result: &terrain::TerrainResult) -> Value {
+    let report = json!(&result.report);
+    let mut summary = output_summary(&result.output, Some(&report), false);
+    summary["terrainReport"] = report;
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
 fn vector_summary(result: &vector::VectorResult) -> Value {
     let mut summary = output_summary(&result.output, Some(&result.report), true);
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
@@ -797,6 +788,7 @@ const COUNT_KEYS: &[&str] = &[
     // point-cloud, terrain and vector
     "points",
     "tiles",
+    "vertices",
     // vector
     "features",
     "fragments",
@@ -1132,19 +1124,27 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 vector::VectorRequest::new(a.io.input, a.io.output, options).with_policy(policy);
             Outcome::Vector(vector::vector_to_archive(request, &run)?)
         }
-        Command::Terrain(a) => Outcome::Converted(terrain::dem_to_terrain_reported(
-            &a.io.input,
-            &a.io.output,
-            &terrain::TerrainOptions {
-                force: a.io.force,
-                max_zoom: a.max_zoom,
-                grid: a.grid,
-                height_offset: a.height_offset,
-                fill_height: a.fill_height,
-                max_error: a.max_error,
-            },
-            reporter,
-        )?),
+        Command::Terrain(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let request = terrain::TerrainRequest::new(
+                a.io.input,
+                a.io.output,
+                terrain::TerrainHeights::RawMetres {
+                    height_offset_metres: a.height_offset,
+                    fill_height_metres: a.fill_height,
+                },
+                terrain::TerrainOptions::new(a.cells_per_leaf),
+            )
+            .with_policy(policy);
+            Outcome::Terrain(Box::new(terrain::terrain_to_directory(request, &run)?))
+        }
         Command::Raster(a) => Outcome::Converted(rusty_tiles::raster::raster_reported(
             &a.io.input,
             &a.io.output,
@@ -1495,7 +1495,7 @@ mod tests {
     #[test]
     fn summary_separates_counts_from_settings() {
         let root = tempfile::tempdir().unwrap();
-        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
+        let report = json!({"tiles":5,"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                "lodLevels":3,"lodToleranceMetres":0.1,"skippedFeatures":2,"features":9,"sourceCrs":"x"});
         let summary = output_summary(root.path(), Some(&report), false);
         assert_eq!(
@@ -1508,7 +1508,7 @@ mod tests {
         );
         assert_eq!(
             summary["settings"],
-            json!({"heightOffset":2.5,"fillHeight":0,"grid":65,"heightQuantizationStep":0.1,
+            json!({"heightOffset":2.5,"fillHeight":0,"cellsPerLeaf":64,"positionErrorMetres":0.01,
                 "lodLevels":3,"lodToleranceMetres":0.1})
         );
         assert_eq!(summary["skippedFeatures"], 2);

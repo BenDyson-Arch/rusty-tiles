@@ -13,7 +13,7 @@ const MANIFESTS: [(&str, &str); 5] = [
     ("mesh", "tileset.json"),
     ("annotations", "tileset.json"),
     ("imagery", "tilejson.json"),
-    ("terrain", "layer.json"),
+    ("terrain", "tileset.json"),
 ];
 
 struct Server {
@@ -151,7 +151,7 @@ fn embedded_preview_runs_without_python_and_serves_only_selected_files() {
         ("/mesh/tileset.json", 200, "fixture"),
         ("/mesh/", 404, ""),
         ("/mesh/%2e%2e/private.txt", 404, ""),
-        ("/terrain/layer.json", 404, ""),
+        ("/terrain/tileset.json", 404, ""),
     ] {
         let response = get(address, path);
         let body = String::from_utf8_lossy(&response.body);
@@ -167,7 +167,7 @@ fn all_five_routes_serve_mime_types_head_and_no_cache() {
     let root = tempfile::tempdir().unwrap();
     let (cesium, layers) = fixture(root.path());
     std::fs::write(layer(&layers, "mesh").join("tile.glb"), b"glTF").unwrap();
-    std::fs::write(layer(&layers, "terrain").join("0.terrain"), b"terrain").unwrap();
+    std::fs::write(layer(&layers, "terrain").join("0.glb"), b"terrain").unwrap();
     let selected: Vec<_> = layers
         .iter()
         .map(|(name, path)| (*name, path.as_path()))
@@ -191,7 +191,7 @@ fn all_five_routes_serve_mime_types_head_and_no_cache() {
         ("/cesium/Cesium.js", "text/javascript"),
         ("/cesium/worker.wasm", "application/wasm"),
         ("/mesh/tile.glb", "model/gltf-binary"),
-        ("/terrain/0.terrain", "application/vnd.quantized-mesh"),
+        ("/terrain/0.glb", "model/gltf-binary"),
     ] {
         let response = get(address, path);
         assert_eq!(response.status, 200, "{path}");
@@ -244,7 +244,7 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
     for path in [
         "/mesh/",
         "/cesium/",
-        "/terrain/layer.json",
+        "/terrain/tileset.json",
         "/data/private.txt",
         "/private.txt",
         "/mesh/../private.txt",
@@ -354,6 +354,6 @@ fn json_startup_line_reports_url_and_layers() {
     );
     assert_eq!(
         server.ready["layers"],
-        json!({"imagery":"/imagery/tilejson.json","terrain":"/terrain/layer.json"})
+        json!({"imagery":"/imagery/tilejson.json","terrain":"/terrain/tileset.json"})
     );
 }

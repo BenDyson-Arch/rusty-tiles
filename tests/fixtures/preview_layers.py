@@ -35,8 +35,8 @@ source=root/'dem.tif';ds=gdal.GetDriverByName('GTiff').Create(str(source),32,32,
 ds.SetProjection(srs.ExportToWkt());ds.SetGeoTransform([12,.01,0,42,0,-.01])
 values=np.full((32,32),123.5,dtype='f4');values[12:20,12:20]=-32768
 band=ds.GetRasterBand(1);band.WriteArray(values);band.SetNoDataValue(-32768);band=None;ds=None
-call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--maxZoom','9','--grid','65',
-      '--heightOffset','10.25','--fillHeight','-999.125'])
+call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--cells-per-leaf','16',
+      '--height-offset','10.25','--fill-height','-999.125'])
 source=root/'cloud.las';fixture(source,crs=CRS.from_epsg(32632))
 run(types.SimpleNamespace(input=str(source),output=str(root/'cloud'),source_crs='header',
     max_points=32,chunk_points=31,height_offset=10,explicit=False))

@@ -59,7 +59,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
   --terrain output/native-demo/terrain
 ```
 
-The imagery recipe uses `raster --maxZoom 10`; its entrypoint is `imagery/tilejson.json`. The terrain recipe uses `terrain --maxZoom 9 --grid 65 --heightOffset 10.25 --fillHeight -999.125`; its entrypoint is `terrain/layer.json`. The elevations and offsets are invented test values. `validate` currently accepts `.3tz` archives, not imagery or terrain directories; the browser checks their decoded output. See [terrain height semantics](TERRAIN.md) before choosing settings for real elevations.
+The imagery recipe uses `raster --maxZoom 10`; its entrypoint is `imagery/tilejson.json`. The terrain recipe uses `terrain --cells-per-leaf 16 --height-offset 10.25 --fill-height -999.125`; its entrypoint is `terrain/tileset.json`. The elevations and offsets are invented test values. `validate` currently accepts `.3tz` archives, not imagery or terrain directories; the browser checks their decoded output. See [terrain height semantics](TERRAIN.md) before choosing settings for real elevations.
 
 ## Release and public-data checks
 

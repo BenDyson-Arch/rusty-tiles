@@ -1,7 +1,7 @@
 //! rusty-tiles: transform geospatial sources into 3D Tiles packages.
 //!
 //! v0 matches a subset of Cesium `3d-tiles-tools` (createTilesetJson + convert).
-//! Raster, quantized-mesh terrain and draft glTF vector paths are GDAL-backed lab tools.
+//! Raster and elevation source decoding require the native-geospatial build.
 
 mod archive3tz;
 pub mod bbox;

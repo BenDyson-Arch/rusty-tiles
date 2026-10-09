@@ -146,17 +146,13 @@ pub fn recipes() -> Vec<Recipe> {
             "terrain",
             &[&[
                 "-i",
-                "{in}/dem.asc",
-                "--maxZoom",
-                "11",
-                "--grid",
-                "17",
-                "--heightOffset",
+                "{in}/dem.tif",
+                "--cells-per-leaf",
+                "16",
+                "--height-offset",
                 "10.25",
-                "--fillHeight",
+                "--fill-height",
                 "0",
-                "--maxError",
-                "1",
             ]],
             true,
         ),
@@ -240,6 +236,11 @@ pub fn write_inputs(dir: &Path) {
     .unwrap();
     write_las(&dir.join("cloud.las"), 3000);
     write_dem(&dir.join("dem.asc"), 48);
+    fs::write(
+        dir.join("dem.tif"),
+        include_bytes!("../fixtures/t1-plane.tif"),
+    )
+    .unwrap();
     #[cfg(feature = "native-geospatial")]
     write_rgb_geotiff(&dir.join("image.tif"), 96);
 }

@@ -1,0 +1,55 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-135-native-reviewed",
+  "binary_sha256": "3bd3d8b2986b8b84ea110d500a6d058329159203f9bfabcf26a69d9ba02c8bc2",
+  "source_head": "1c87f0c704728c0c0f602eb17fb59196859ec45e",
+  "oracle_sha256": "4b95757a7de15fa5fa5c30e1ca967c91ca80317c9d4450cd5de767407b0d0dbb",
+  "cases": [
+    {
+      "fixture": "t1-plane",
+      "fixture_sha256": "85f4a30b02552cd93cf0bcd11ce8922bb0924d180e634c978b64ea9ff47654a6",
+      "directory": {
+        "leaf_tiles": 1,
+        "triangles": 32
+      },
+      "analytic_source": {
+        "nodes": 25,
+        "triangles": 32
+      },
+      "controls": {
+        "rejected_corruptions": [
+          "position",
+          "winding",
+          "bounds",
+          "frame",
+          "row",
+          "missing-triangle",
+          "report-inventory"
+        ]
+      }
+    },
+    {
+      "fixture": "t1-multipatch-plane",
+      "fixture_sha256": "77a132b786f4f451bd7e3329926ad733e2facd7523ed8649c9c5c74aba27d4d1",
+      "directory": {
+        "leaf_tiles": 6,
+        "triangles": 1122
+      },
+      "analytic_source": {
+        "nodes": 612,
+        "triangles": 1122
+      },
+      "controls": {
+        "rejected_corruptions": [
+          "position",
+          "winding",
+          "bounds",
+          "frame",
+          "row",
+          "missing-triangle",
+          "report-inventory",
+          "seam"
+        ]
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 - Point-cloud conversion now uses one typed request and F0 lifecycle through Rust, CLI and Python. Rust callers migrate from the `point_cloud_to_3tz*` overloads to `point_cloud_to_archive` with explicit coordinate intent and request-owned output policy. Python `point_cloud_to_3tz` requires `source_crs` and returns `PointCloudResult` with cleanup diagnostics. Callback and cancellation failures abort before publication, and source/output aliases are refused.
 - Point-cloud admission requires positive finite LAS/Extra Bytes scales, bounds metadata allocation before decoding, and preserves Extra Bytes no-data/min/max schema declarations. Raw 64-bit scalar integers remain exact; scaled 64-bit integer Extra Bytes are explicitly unsupported rather than silently rounded through binary64.
+- Breaking terrain foundation: bounded EPSG:4326 Float32/Float64 DEMs produce 3D Tiles 1.1 GLB meshes through one typed request and directory publication attempt. Source-footprint cells replace zoom/simplification options and quantized-mesh output. The pinned Cesium preview includes mesh surface queries, clamping and imagery draping.
 
 ### Added
 

@@ -509,122 +509,81 @@ fn raster(output: &Path) -> Result<Value> {
     }
     Ok(json!({"decodedPngTiles":count,"tileDimensions":[256,256],"scheme":"xyz"}))
 }
-fn u32_at(bytes: &[u8], at: usize) -> Result<u32> {
-    Ok(u32::from_le_bytes(
-        bytes
-            .get(at..at + 4)
-            .ok_or("truncated terrain")?
-            .try_into()?,
-    ))
-}
 fn terrain(output: &Path) -> Result<Value> {
-    let manifest: Value = serde_json::from_reader(File::open(output.join("layer.json"))?)?;
+    let manifest: Value = serde_json::from_reader(File::open(output.join("tileset.json"))?)?;
     let report: Value = serde_json::from_reader(File::open(output.join("conversion.json"))?)?;
-    if manifest["scheme"] != "tms" || manifest["heightOverlay"]["rowOrder"] != "south-to-north" {
-        return Err("bad terrain orientation".into());
+    if manifest["asset"]["version"] != "1.1" || manifest["root"].get("content").is_some() {
+        return Err("bad terrain mesh routing profile".into());
     }
-    let mut count = 0;
-    let mut triangles = 0u64;
+    let leaves = manifest["root"]["children"]
+        .as_array()
+        .ok_or("missing terrain leaves")?;
     let mut vertices = 0u64;
-    for entry in walkdir::WalkDir::new(output) {
-        let entry = entry?;
-        if !entry.file_type().is_file() || entry.path().extension().is_none_or(|e| e != "terrain") {
-            continue;
-        }
-        let bytes = std::fs::read(entry.path())?;
-        let low = f32::from_bits(u32_at(&bytes, 24)?);
-        let high = f32::from_bits(u32_at(&bytes, 28)?);
-        if !low.is_finite() || !high.is_finite() || low > high {
-            return Err("invalid terrain height range".into());
-        }
-        let n = u32_at(&bytes, 88)? as usize;
-        if n == 0 || n > 65536 {
-            return Err("unsupported terrain vertex count".into());
-        }
-        let attributes = bytes
-            .get(92..92 + n * 6)
-            .ok_or("truncated terrain vertices")?;
-        for values in attributes.chunks_exact(n * 2) {
-            let mut previous = 0i32;
-            for word in values.as_chunks::<2>().0 {
-                let v = u16::from_le_bytes(*word);
-                previous += i32::from(v >> 1) ^ -i32::from(v & 1);
-                if !(0..=32767).contains(&previous) {
-                    return Err("invalid quantized terrain coordinate".into());
-                }
-            }
-        }
-        let nt = u32_at(&bytes, 92 + n * 6)? as usize;
-        if nt == 0 {
-            return Err("empty terrain mesh".into());
-        }
-        let mut at = 96 + n * 6;
-        let indices = bytes
-            .get(at..at + nt * 6)
-            .ok_or("truncated terrain triangles")?;
-        let mut high_water = 0usize;
-        for word in indices.as_chunks::<2>().0 {
-            let code = u16::from_le_bytes(*word) as usize;
-            let index = high_water
-                .checked_sub(code)
-                .ok_or("bad terrain high water index")?;
-            if index >= n {
-                return Err("terrain index out of bounds".into());
-            }
-            if code == 0 {
-                high_water += 1;
-            }
-        }
-        at += nt * 6;
-        for _ in 0..4 {
-            let edge_count = u32_at(&bytes, at)? as usize;
-            at += 4;
-            if edge_count == 0 {
-                return Err("empty terrain edge".into());
-            }
-            let edge = bytes
-                .get(at..at + edge_count * 2)
-                .ok_or("truncated terrain edge")?;
-            if edge
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .any(|v| u16::from_le_bytes(*v) as usize >= n)
-            {
-                return Err("terrain edge out of bounds".into());
-            }
-            at += edge_count * 2;
-        }
-        if at != bytes.len() {
-            return Err("unexpected terrain payload tail".into());
-        }
-        let overlay: Value =
-            serde_json::from_reader(File::open(entry.path().with_extension("heights.json"))?)?;
-        let grid = manifest["heightOverlay"]["grid"]
-            .as_u64()
-            .ok_or("missing height overlay grid")?;
-        let heights = overlay["heights"]
-            .as_array()
-            .ok_or("missing height overlay")?;
-        if overlay["width"] != grid
-            || overlay["height"] != grid
-            || heights.len() as u64 != grid * grid
-            || heights
-                .iter()
-                .any(|v| !v.is_null() && v.as_f64().is_none_or(|h| !h.is_finite()))
+    let mut triangles = 0u64;
+    let mut members = BTreeSet::from(["tileset.json".to_owned(), "conversion.json".to_owned()]);
+    for leaf in leaves {
+        let name = leaf["content"]["uri"]
+            .as_str()
+            .ok_or("missing terrain content URI")?;
+        if name.contains("..") || Path::new(name).is_absolute() || !members.insert(name.to_owned())
         {
-            return Err("invalid terrain height overlay".into());
+            return Err("invalid terrain member inventory".into());
         }
-        count += 1;
-        vertices += n as u64;
-        triangles += nt as u64;
+        let bytes = std::fs::read(output.join(name))?;
+        let glb = gltf::Glb::from_slice(&bytes)?;
+        let binary = glb.bin.as_ref().ok_or("missing embedded terrain binary")?;
+        let document = gltf::Gltf::from_slice(&bytes)?.document;
+        for primitive in document.meshes().flat_map(|mesh| mesh.primitives()) {
+            if primitive.mode() != gltf::mesh::Mode::Triangles {
+                return Err("terrain content is not triangles".into());
+            }
+            let reader =
+                primitive.reader(|buffer| (buffer.index() == 0).then_some(binary.as_ref()));
+            let positions: Vec<_> = reader
+                .read_positions()
+                .ok_or("missing terrain positions")?
+                .collect();
+            let indices: Vec<_> = reader
+                .read_indices()
+                .ok_or("missing terrain indices")?
+                .into_u32()
+                .collect();
+            if indices.len() % 3 != 0
+                || positions.iter().flatten().any(|v| !v.is_finite())
+                || indices.iter().any(|&i| i as usize >= positions.len())
+            {
+                return Err("invalid terrain triangle payload".into());
+            }
+            vertices += positions.len() as u64;
+            triangles += (indices.len() / 3) as u64;
+        }
     }
-    if count == 0 || report["tiles"].as_u64() != Some(count) {
-        return Err("terrain tile count differs from report".into());
+    let actual: BTreeSet<_> = walkdir::WalkDir::new(output)
+        .into_iter()
+        .map(|entry| {
+            let entry = entry?;
+            Ok(entry.file_type().is_file().then(|| {
+                entry
+                    .path()
+                    .strip_prefix(output)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    if members != actual
+        || report["tiles"].as_u64() != Some(leaves.len() as u64)
+        || report["vertices"].as_u64() != Some(vertices)
+    {
+        return Err("terrain report/member inventory mismatch".into());
     }
     Ok(
-        json!({"decodedTerrainTiles":count,"vertices":vertices,"triangles":triangles,"heightOverlays":count,"scheme":"tms",
-        "fidelity":"Independent binary attribute, triangle/edge index and finite height-overlay checks; these do not claim vertical datum conversion or source resampling equivalence."}),
+        json!({"decodedTerrainTiles":leaves.len(),"vertices":vertices,"triangles":triangles,
+        "fidelity":"Standard GLB payload and inventory accounting only; analytic source placement, mesh intersections and bounds are covered by the independent T1 fixtures."}),
     )
 }
 pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {

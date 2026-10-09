@@ -57,7 +57,7 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
         match recipe.command {
             "point-cloud" => assert!(first.ends_with(" (3000 points, 15 tiles)"), "{first}"),
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
-            "terrain" => assert!(first.ends_with(" (16 tiles)"), "{first}"),
+            "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
             // Directories without counts name only the path.
             "raster" => assert_eq!(first, &format!("raster: wrote {}", output.display())),
             // Single files without counts report their size.

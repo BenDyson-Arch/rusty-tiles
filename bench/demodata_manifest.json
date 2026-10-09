@@ -2480,16 +2480,16 @@
       "input": "terrain/Copernicus_DSM_COG_10_S28_00_E152_00_DEM.tif",
       "command": "terrain",
       "args": [
-        "--maxZoom",
-        "8",
-        "--heightOffset",
+        "--cells-per-leaf",
+        "64",
+        "--height-offset",
         "0",
-        "--fillHeight",
+        "--fill-height",
         "0"
       ],
       "audit": "terrain",
-      "expect": "success",
-      "notes": "Source EGM2008 orthometric elevations retained as numeric test heights; no vertical datum conversion."
+      "expect": "unsupported",
+      "notes": "T1 intentionally refuses this legacy corpus source (overviews, projected CRS or source resource domain). Synthetic admitted source-to-GLB, query/clamp/drape and resource evidence lives in architecture_audit/terrain_acceptance; no new public-corpus fidelity claim."
     },
     {
       "id": "splats-unsupported",
@@ -2520,7 +2520,12 @@
       "profile": "core",
       "input": "mesh/flight-helmet/FlightHelmet.gltf",
       "command": "glb-to-3tz",
-      "args": ["--cartographic-position-degrees", "153.02", "-27.47", "10"],
+      "args": [
+        "--cartographic-position-degrees",
+        "153.02",
+        "-27.47",
+        "10"
+      ],
       "audit": "archive",
       "expect": "success",
       "notes": "Wrap the original glTF, buffer and fifteen PNGs without rewriting them; validate all archive references and compare every model/resource member with its source bytes."
@@ -2704,16 +2709,16 @@
       "input": "terrain/copernicus-brisbane-2x2.tif",
       "command": "terrain",
       "args": [
-        "--maxZoom",
-        "11",
-        "--heightOffset",
+        "--cells-per-leaf",
+        "64",
+        "--height-offset",
         "0",
-        "--fillHeight",
+        "--fill-height",
         "0"
       ],
       "audit": "terrain",
-      "expect": "success",
-      "notes": "Source orthometric heights retained for numeric encoding benchmarks."
+      "expect": "unsupported",
+      "notes": "T1 intentionally refuses this legacy corpus source (overviews, projected CRS or source resource domain). Synthetic admitted source-to-GLB, query/clamp/drape and resource evidence lives in architecture_audit/terrain_acceptance; no new public-corpus fidelity claim."
     },
     {
       "id": "terrain-projected",
@@ -2722,16 +2727,16 @@
       "input": "terrain/copernicus-s28e152-utm56s.tif",
       "command": "terrain",
       "args": [
-        "--maxZoom",
-        "10",
-        "--heightOffset",
+        "--cells-per-leaf",
+        "64",
+        "--height-offset",
         "0",
-        "--fillHeight",
+        "--fill-height",
         "0"
       ],
       "audit": "terrain",
-      "expect": "success",
-      "notes": "Prepared UTM 56S raster; source orthometric heights retained."
+      "expect": "unsupported",
+      "notes": "T1 intentionally refuses this legacy corpus source (overviews, projected CRS or source resource domain). Synthetic admitted source-to-GLB, query/clamp/drape and resource evidence lives in architecture_audit/terrain_acceptance; no new public-corpus fidelity claim."
     },
     {
       "id": "places-dense",

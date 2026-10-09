@@ -11,7 +11,7 @@ pub const MANIFESTS: [(&str, &str); 5] = [
     ("mesh", "tileset.json"),
     ("annotations", "tileset.json"),
     ("imagery", "tilejson.json"),
-    ("terrain", "layer.json"),
+    ("terrain", "tileset.json"),
 ];
 
 pub struct Preview {
@@ -181,7 +181,6 @@ fn mime(path: &Path) -> &'static str {
         "svg" => "image/svg+xml",
         "wasm" => "application/wasm",
         "glb" => "model/gltf-binary",
-        "terrain" => "application/vnd.quantized-mesh",
         "woff" => "font/woff",
         "woff2" => "font/woff2",
         _ => "application/octet-stream",

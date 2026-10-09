@@ -235,11 +235,33 @@ jobs:
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install pinned terrain consumer
+        run: |
+          npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
+          target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prove terrain rendering, queries, clamping and imagery draping
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/t1_terrain_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/terrain-browser.json"
       - name: Independently verify native LAZ delivery
         shell: bash -el {0}
         run: |
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-native.json"
+      - name: Upload terrain consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terrain-browser-evidence
+          path: ${{ runner.temp }}/terrain-browser.json
+          if-no-files-found: error
       - name: Test portable vectors against independent fixtures and Python oracle
         shell: bash -el {0}
         run: |

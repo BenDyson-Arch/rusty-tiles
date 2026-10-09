@@ -15,42 +15,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def module(name):
-    path = ROOT/'tests/fixtures/terrain_oracle.py' if name == 'terrain' else ROOT/'scripts'/f'{name}.py'
+    path = ROOT/'scripts'/f'{name}.py'
     spec = importlib.util.spec_from_file_location(name, path)
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
 
 
-terrain = module('terrain')
 from vector_test_support import vector, to_source
-
-
-def decode_terrain(data):
-    header = struct.unpack_from('<3d2f7d', data)
-    n, = struct.unpack_from('<I', data, 88)
-    cursor = 92
-    attributes = []
-    for _ in range(3):
-        values = np.frombuffer(data, '<u2', n, cursor).astype(np.int64)
-        attributes.append(np.cumsum((values >> 1) ^ -(values & 1)))
-        cursor += n*2
-    count, = struct.unpack_from('<I', data, cursor)
-    cursor += 4
-    codes = np.frombuffer(data, '<u2', count*3, cursor)
-    cursor += count*6
-    highest, indices = 0, []
-    for code in codes:
-        indices.append(highest-int(code))
-        if code == 0:
-            highest += 1
-    edges = []
-    for _ in range(4):
-        count, = struct.unpack_from('<I', data, cursor)
-        cursor += 4
-        edges.append(np.frombuffer(data, '<u2', count, cursor))
-        cursor += count*2
-    return header, np.array(attributes).T, np.asarray(indices).reshape(-1, 3), edges
 
 
 class VectorTests(unittest.TestCase):

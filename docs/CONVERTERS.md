@@ -13,7 +13,7 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | GeoJSON or GeoPackage points, lines and polygons | `vector` | Standard; native build required for other supported CRS operations |
 | PostGIS, GeoParquet or other OGR vector inputs | `vector` | Native-geospatial |
 | GeoTIFF or other GDAL imagery | `raster` | Native-geospatial; outputs COG and PNG XYZ tiles with TileJSON |
-| Elevation raster | `terrain` | Native-geospatial; prototype quantized-mesh output with height sidecars |
+| Elevation raster | `terrain` | Native-geospatial; bounded 3D Tiles terrain meshes |
 
 The three spatial tilers write 3D Tiles 1.1 implicit hierarchies by default. Their `.3tz` archives contain the tileset and content. Vector output uses pinned experimental glTF extensions; consult [viewer compatibility](VECTOR.md#compatibility) before delivery.
 
