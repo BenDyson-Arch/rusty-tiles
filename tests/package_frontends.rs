@@ -133,7 +133,8 @@ fn cli_no_clobber_conflict_preserves_existing_bytes() {
     assert_eq!(fs::read(output).unwrap(), b"competing destination bytes");
 }
 
-#[cfg(unix)]
+// APFS rejects this invalid UTF-8 filename before the operation can run.
+#[cfg(target_os = "linux")]
 #[test]
 fn cli_package_non_utf8_output_ancestor_returns_success_json_after_installation() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};

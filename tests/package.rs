@@ -366,11 +366,8 @@ fn sparse_oversized_member_rejected_before_output_parent_creation() {
 
 #[cfg(unix)]
 #[test]
-fn symlink_roots_members_traversal_and_non_utf8_names_are_rejected() {
-    use std::{
-        ffi::OsString,
-        os::unix::{ffi::OsStringExt, fs::symlink},
-    };
+fn symlink_roots_members_traversal_and_nonregular_entries_are_rejected() {
+    use std::os::unix::fs::symlink;
     let work = tempfile::tempdir().unwrap();
     let root = source(work.path());
     let link = work.path().join("link");
@@ -440,6 +437,18 @@ fn symlink_roots_members_traversal_and_non_utf8_names_are_rejected() {
     );
     drop(socket);
     fs::remove_file(root.join("nonregular.sock")).unwrap();
+    assert!(!out.parent().unwrap().exists());
+}
+
+// APFS rejects this raw-byte filename during creation. Keep the fixture on Linux;
+// production UTF-8 validation still applies wherever such filenames can exist.
+#[cfg(target_os = "linux")]
+#[test]
+fn non_utf8_names_are_rejected_before_output_parent_creation() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+    let work = tempfile::tempdir().unwrap();
+    let root = source(work.path());
+    let out = work.path().join("never/out.3tz");
     fs::write(root.join(OsString::from_vec(vec![0xff])), b"bytes").unwrap();
     assert_eq!(
         package(
@@ -493,7 +502,8 @@ fn late_observer_failure_and_source_change_preserve_previous_output() {
     let flag = changed.clone();
     let run = control(move |_| {
         if !flag.swap(true, Ordering::SeqCst) {
-            fs::write(&manifest, b"deliberately changed after read-only resolve").unwrap();
+            // Detect a size change without relying on filesystem timestamp precision.
+            fs::write(&manifest, vec![0xa5; 4096]).unwrap();
         }
         Ok(())
     });
@@ -516,7 +526,7 @@ fn source_read_failure_retains_the_source_path_and_previous_destination() {
     let work = tempfile::tempdir().unwrap();
     let root = source(work.path());
     let manifest = root.join("tileset.json");
-    let expected_path = manifest.clone();
+    let expected_path = fs::canonicalize(&manifest).unwrap();
     let output = work.path().join("out.3tz");
     fs::write(&output, b"previous").unwrap();
     let removed = AtomicBool::new(false);
