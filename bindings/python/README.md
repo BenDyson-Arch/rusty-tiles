@@ -140,7 +140,8 @@ existing output. Namespace installation and temporary-name cleanup are
 separate; neither policy promises power-loss durability. On Unix, packaged output is
 created with private mode `0600` (subject to umask), including when replacing a previous file;
 change its permissions explicitly if other users need access.
-Point-cloud input defaults to local XYZ metres with Z up. For globe placement,
+Point-cloud calls require coordinate intent: pass `source_crs="local"` for
+local XYZ metres with Z up. For globe placement,
 pass `source_crs="header"` or an explicit CRS such as `"EPSG:32656"`, and
 `height_offset=0` only when source Z is already ellipsoidal metres:
 

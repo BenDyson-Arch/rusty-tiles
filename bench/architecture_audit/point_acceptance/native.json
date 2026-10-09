@@ -1,6 +1,6 @@
 {
-  "binary": "/home/bend/.cache/rusty-tiles-119-12ce-portable",
-  "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+  "binary": "/home/bend/.cache/rusty-tiles-132-12d98ab-native",
+  "binary_sha256": "b38d6726bb4271b725b3a08292b8b45fb9be977ac6368f70e465814d5146b334",
   "cases": [
     {
       "source_points": 257,
@@ -277,7 +277,7 @@
   "profile_controls": [
     {
       "case": "ExtraBytes schema metadata",
-      "baseline_gap": "extra_u8: required ExtraBytes noData schema differs: None != 0",
+      "result": "passed",
       "raw_64_bit_payload": "exact"
     },
     {
@@ -362,64 +362,62 @@
     },
     {
       "case": "scaled_u64",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "aea28ec5e483c94e93562bb54bf07e8066601a75d18270741f2849ffd76b3dae",
-      "output_after_sha256": "c7151f19c950f4db4af04251e91d5fb060fabcb001c8fcdce4465acc1bdffd25",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "scaled INT64/UINT64 Extra Bytes are unsupported without lossless scaling semantics: extra_u64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "scaled_i64",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "57c970200728958a0ef4a47b4da4113d1f433564fbd98150d69fc372651b9c1c",
-      "output_after_sha256": "c52da5ad723ec6729cb17fb8fd3c31c148c4189e664f2ddbd3f1dfa31065222e",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "scaled INT64/UINT64 Extra Bytes are unsupported without lossless scaling semantics: extra_i64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "vector_extra",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "unsupported LAS dimension: array or untyped Extra Bytes"
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "unsupported LAS dimension: array or untyped Extra Bytes",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "nonfinite_extra",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "nonfinite dimension: extra_f64"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite dimension: extra_f64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "truncated_source",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "invalid LAS/LAZ: failed to fill whole buffer"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "invalid LAS/LAZ: failed to fill whole buffer",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
@@ -435,225 +433,199 @@
       "result": "rejected",
       "error": {
         "code": "data",
-        "message": "geospatial input requires explicit finite --heightOffset to ellipsoidal metres (0 if established)"
+        "message": "geospatial input requires explicit --heightOffset to ellipsoidal metres"
       }
     },
     {
       "case": "source_alias",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "df98f902dfc1739570a261df127924799247fd8145efa08e1e34eb840ad0c195",
-      "output_after_sha256": "9d0440cb81e1e7da9c9b6e2640e3db3d90346f856a90e50d99c6b2e789230064",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "point-cloud output aliases source",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "hardlink_alias",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "df98f902dfc1739570a261df127924799247fd8145efa08e1e34eb840ad0c195",
-      "output_after_sha256": "9d0440cb81e1e7da9c9b6e2640e3db3d90346f856a90e50d99c6b2e789230064",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "point-cloud output aliases source",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "zero_scale",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "ecb13698e57be94792aef2f7f10eff67cc72988f2edd91848d635e8306aaadf3",
-      "output_after_sha256": "d8e82bf0e519115868e55a85e8634423e8e4be7a0bb4ceac0f4d495d238203f2",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite Extra Bytes scale/offset: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "negative_scale",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "c870c0636828bfa98ff1d88ac6f291e667d9c407c9853f6d49907adae9138d74",
-      "output_after_sha256": "942804b2b58996a5c0e0176fcb4430cb35ce39b7ffd42c7b8c0401c092d500d6",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite Extra Bytes scale/offset: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "scaled_overflow",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "nonfinite dimension: scaled_i16"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite dimension: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "header_size_zero",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "5c5de906b750853d064518e533a1a6ebfdd902b3169d52c0e4632e353293a48b",
-      "output_after_sha256": "d75bd16d73c383c447f034f546db775d1d3111a174eec6234d1dccae28493d50",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "point_offset_zero",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "invalid LAS/LAZ: offset to the point data is too small: 0"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "point_offset_u32max",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "invalid LAS/LAZ: failed to fill whole buffer"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "point_offset_beyond_file",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "invalid LAS/LAZ: failed to fill whole buffer"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "evlr_offset_u64max",
       "result": "rejected",
       "error": {
-        "code": "io",
-        "message": "Invalid argument (os error 22)"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "EVLR declaration exceeds source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "evlr_offset_beyond_file",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "invalid LAS/LAZ: failed to fill whole buffer"
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "EVLR declaration exceeds source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "f32_unrepresentable_nodata",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "c3bef38165b03df74f8f304fc5b8c19515fceddf1df5a8bc9e7074ce86420125",
-      "output_after_sha256": "9d0440cb81e1e7da9c9b6e2640e3db3d90346f856a90e50d99c6b2e789230064",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 1.8045225725442838e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "FLOAT32 Extra Bytes declaration must equal a widened FLOAT32 value",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "duplicate_projected_geokey",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "9e3b76b7a69c8ccb278e69ffaf659a02599773fcaeb77a3aa0ce11e1251bcf8f",
-      "output_after_sha256": "9e1c1a85fbfe18c77f546ffaed0d6d89ff7486da4515f48d3d9d86c61b067d71",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "heightOffset": 0.0,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 2.0169077976934403e-07
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "duplicate LAS CRS GeoKey 3072 is ambiguous",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "duplicate_geographic_geokey",
-      "baseline_gap": "accepted unsupported/unsafe profile",
-      "output_replaced": true,
-      "original_source_sha256": "95189470e6ac69cb791cd3f82e9de78eb500e0ff7cd2cabb09cb1cc124d1e467",
-      "output_after_sha256": "4aa7a5c08dba3c5e1447483e32ae2678aa6bd2f371e7c8e7267782cfd7a009f6",
-      "response": {
-        "ok": true,
-        "counts": {
-          "points": 23,
-          "tiles": 1
-        },
-        "settings": {
-          "chunkPoints": 100000,
-          "heightOffset": 0.0,
-          "maxPoints": 50000,
-          "maxPositionRoundingMetres": 0.05107833542300387
-        }
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "duplicate LAS CRS GeoKey 2048 is ambiguous",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "untyped_extra",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "unsupported LAS dimension: array or untyped Extra Bytes"
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "unsupported LAS dimension: array or untyped Extra Bytes",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     },
     {
       "case": "waveform_format",
       "result": "rejected",
       "error": {
-        "code": "data",
-        "message": "waveform LAS point formats are unsupported"
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "waveform LAS point formats are unsupported",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
       }
     }
   ],
@@ -675,8 +647,8 @@
   },
   "oracle_sha256": "01e66c0c65c112df248586ca3b831fc296fdfaf6f9aeed8b4a4caf66c345ae4b",
   "laz_acceptance": {
-    "binary": "/home/bend/.cache/rusty-tiles-119-12ce-portable",
-    "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+    "binary": "/home/bend/.cache/rusty-tiles-132-12d98ab-native",
+    "binary_sha256": "b38d6726bb4271b725b3a08292b8b45fb9be977ac6368f70e465814d5146b334",
     "delivery_encoder": {
       "laspy": "2.7.0",
       "lazrs": "0.8.2"
@@ -1117,8 +1089,6 @@
       "withheld"
     ]
   },
-  "production_source_commit": "12ce4c6b93625f309877a249a5406aae5a1d4e7c",
-  "oracle_source_commit": "d92acd2",
-  "issue_baseline": "5df15e7d21f502fc931e33e89b84ee2a20a16ee1",
-  "point_source_equivalence": "git diff is empty for src/point_cloud.rs, src/point_cloud/, src/point_sampling.rs and src/implicit{.rs,/} between12ce4c6 and5df15e7"
+  "production_source_commit": "12d98ab",
+  "oracle_source_commit": "d92acd2"
 }

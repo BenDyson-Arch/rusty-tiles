@@ -235,12 +235,18 @@ jobs:
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python -c "from osgeo import gdal; print(gdal.VersionInfo('--version'))"
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_*.py'
+      - name: Independently verify native LAZ delivery
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-native.json"
       - name: Test portable vectors against independent fixtures and Python oracle
         shell: bash -el {0}
         run: |
           cargo build --locked
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_vector_*.py'
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_native_vector.py'
+          python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-portable.json"
 
   python-free-runtime:
     name: Python-free runtime

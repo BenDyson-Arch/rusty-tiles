@@ -192,11 +192,15 @@ and official-Blender checks; independent Sol 6.1 review replayed 27 portable and
 30 native acceptance cases. This is lifecycle/feature acceptance, not full
 vector geometry/CRS/LOD certification.
 
-The next implementation is [#132 P1](https://github.com/BenDyson-Arch/rusty-tiles/issues/132):
+The current implementation candidate is [#132 P1](https://github.com/BenDyson-Arch/rusty-tiles/issues/132):
 a real LAS/LAZ archive consumer under one F0 run, with explicit coordinate/source
 preparation, independent record/attribute/POSITION multiplicity, accepted member
 receipts and required reports, then deletion of the replaced point-cloud paths.
 The [P1 contract](point-acceptance-contract.md) defines the finite profile.
+Production `12d98ab` has completed local portable/native, independent decoded
+LAS/LAZ, lifecycle, installed-wheel and resource checks; the
+[evidence ledger](../../bench/architecture_audit/point_acceptance/README.md)
+records exact identities and remaining CI/release gates.
 
 [#133 C1](https://github.com/BenDyson-Arch/rusty-tiles/issues/133) can proceed in
 parallel: actual GLB payload/accessor/index ranges and truthful validator claims.

@@ -116,3 +116,28 @@ facade. #132 replaces point lifecycle orchestration next; its source and numeric
 algorithms earn only the support covered by the P1 independent ledger. #133 payload
 validation is a separate slice. The public-surface inventory records all remaining
 operation and export owners; neither pending issue is accepted by this update.
+
+## P1 point migration evidence
+
+Production candidate `12d98ab` replaces the legacy point job/report overloads
+with a typed request/result and one F0 attempt. The
+[finite contract](point-acceptance-contract.md) and
+[independent evidence](../../bench/architecture_audit/point_acceptance/README.md)
+bound support to the admitted LAS/LAZ, scalar metadata, coordinate and hierarchy
+profile. Baseline controls reproduce source replacement through identical and
+hardlink output paths, and dropped Extra Bytes schema declarations. The candidate
+refuses unsafe identities before observation and preserves admitted declarations.
+
+Independent portable/native source-to-rendered-output replay covers full-detail
+multiplicity, required fields, parent representatives, transformed bounds and
+reachable resources. Actual malformed-source and archive mutation controls
+exercise the readers. A fresh nonauthor review found an oracle branch mistake;
+the committed correction `d92acd2` exercises the intended untyped/waveform cases.
+Final candidate artifacts use that corrected reader.
+
+[Local validation](../../bench/architecture_audit/point_acceptance/validation.json)
+records full Rust suites, strict lint, CLI point tests and 33 installed-wheel API
+tests each in clean Python and system Blender. Resource probes record observed
+growth rather than a whole-job memory limit. Cross-platform release/wheel and
+official Blender acceptance remain CI/release gates. P1 does not close #122,
+#120, #125, #126 or #113; production payload validation remains separate #133.

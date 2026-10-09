@@ -308,7 +308,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Vector conversion uses the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Its JSON error includes `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source features are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
+Vector and point-cloud conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
 
 ## mesh-local-to-3tz
 
@@ -387,7 +387,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 
 | Command | Phases |
 | --- | --- |
-| `point-cloud` | `ingestion`, `tiling` |
+| `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; domain events finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
 | `terrain` | `terrain`, counting tiles |
