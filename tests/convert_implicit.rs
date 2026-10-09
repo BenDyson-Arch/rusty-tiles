@@ -279,7 +279,8 @@ fn point_conversion_keeps_bytes_metadata_extras_and_world_positions() {
     repackage(&source, &edited);
     let result = convert(&edited, &converted, false).unwrap();
     assert_eq!(result.report.unwrap()["contentBytesPreserved"], true);
-    rusty_tiles::validate::archive(&converted, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&converted))
+        .unwrap();
     let target = members(&converted);
     assert_eq!(
         document(&target, "tileset.json")["schema"]["enums"],
@@ -368,7 +369,7 @@ fn vector_conversion_preserves_immutable_content_and_decoded_leaf_buffers() {
     export(&explicit, "vector-explicit");
     export(&output, "vector-converted");
     export(&fresh, "vector-fresh");
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let source = members(&explicit);
     let target = members(&output);
     for (name, bytes) in source.iter().filter(|(n, _)| n.starts_with("t/")) {
@@ -555,7 +556,7 @@ fn padded_vector_cells_use_bounded_external_subtree_roots() {
     let target = members(&output);
     assert!(target.keys().any(|n| n.starts_with("implicit-owned-")));
     assert_eq!(audit(&source).0, audit(&target).0);
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
 }
 
 #[test]
@@ -682,7 +683,7 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
             .unwrap()
             .contains(&json!("EXT_meshopt_compression")));
     }
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     export(&explicit, "vector-fragment-explicit");
     export(&output, "vector-fragment-converted");
     // Deliberately reproduce the older explicit encoder's legal GLB framing
@@ -723,7 +724,7 @@ fn fragmented_quantized_compressed_vector_content_arrays_keep_glb_and_b3dm_bytes
     assert!(convert(&malformed, &output, true)
         .unwrap_err()
         .to_string()
-        .contains("unaligned b3dm payload"));
+        .contains("b3dm length/alignment invalid"));
     assert_eq!(fs::read(&output).unwrap(), original_output);
 }
 
@@ -893,5 +894,5 @@ fn nested_payload_aliases_preserve_relative_metadata_schema_resources() {
     {
         assert_eq!(&target[name], bytes);
     }
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
 }

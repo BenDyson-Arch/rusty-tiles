@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 mod tileset;
 pub use tileset::expand_tileset;
+pub(crate) use tileset::{expand_tileset_bounded, ExpansionBudget};
 pub(crate) use tileset::{write_tileset, write_tileset_recorded};
 
 type Bits = BitVec<u8, Lsb0>;

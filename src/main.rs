@@ -46,13 +46,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Check a self-contained, explicit 3TZ archive before publishing
+    /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
         input: PathBuf,
-        /// Run a locally installed official 3d-tiles-validator executable
-        #[arg(long)]
-        external_validator: Option<PathBuf>,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -83,7 +80,7 @@ enum Command {
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
     PointCloud(PointCloudArgs),
-    /// DEM → native quantized-mesh directory (requires native-geospatial)
+    /// DEM → bounded 3D Tiles 1.1 mesh directory (requires native-geospatial)
     Terrain(TerrainArgs),
     /// GeoTIFF imagery → lossless COG and PNG XYZ pyramid (requires GDAL)
     Raster(RasterArgs),
@@ -926,20 +923,22 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
-        Command::Validate {
-            input,
-            external_validator,
-        } => {
-            let report = rusty_tiles::validate::archive(&input, external_validator.as_deref())?;
+        Command::Validate { input } => {
+            let report = rusty_tiles::validate::inspect(
+                rusty_tiles::validate::ValidationRequest::new(&input),
+            )?;
             if !json {
                 println!(
-                    "Validated {}: {} tiles, {} content references",
+                    "Inspected {}: {} tiles, {} content references",
                     input.display(),
-                    report["tiles"],
-                    report["contentReferences"]
+                    report.tiles,
+                    report.content_references
                 );
+                if !report.not_inspected.is_empty() {
+                    println!("Not inspected: {}", report.not_inspected.join(", "));
+                }
             }
-            Outcome::Report(report)
+            Outcome::Report(serde_json::to_value(report)?)
         }
         Command::Doctor(a) => {
             let report = doctor::report(&a.commands, a.cesium.as_deref())?;

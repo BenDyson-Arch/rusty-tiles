@@ -154,7 +154,7 @@ fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
 }
 
 #[test]
-fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
+fn validate_rejects_directories_non_archives_and_missing_paths_with_typed_outcomes() {
     let work = tempfile::tempdir().unwrap();
     let directory = work.path().join("tiles");
     std::fs::create_dir(&directory).unwrap();
@@ -162,10 +162,12 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
     std::fs::write(&not_zip, b"not a zip archive").unwrap();
     let missing = work.path().join("missing.3tz");
     let unsupported = "validate currently checks .3tz archives only; raster and terrain output directories are not validated yet";
-    for (path, message) in [
+    for (path, message, exit_code, category) in [
         (
             &directory,
             format!("{} is a directory: {unsupported}", directory.display()),
+            3,
+            "invalid_input",
         ),
         (
             &not_zip,
@@ -173,15 +175,22 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
                 "{} is not a ZIP/.3tz archive: {unsupported}",
                 not_zip.display()
             ),
+            3,
+            "invalid_input",
         ),
-        (&missing, format!("input not found: {}", missing.display())),
+        (
+            &missing,
+            format!("input not found: {}", missing.display()),
+            1,
+            "io",
+        ),
     ] {
         let human = Command::new(bin())
             .arg("validate")
             .arg(path)
             .output()
             .unwrap();
-        assert_eq!(human.status.code(), Some(3), "{}", path.display());
+        assert_eq!(human.status.code(), Some(exit_code), "{}", path.display());
         assert!(human.stdout.is_empty());
         let stderr = String::from_utf8_lossy(&human.stderr);
         assert!(stderr.starts_with(&message), "{stderr}");
@@ -191,11 +200,11 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
             .arg(path)
             .output()
             .unwrap();
-        assert_eq!(json.status.code(), Some(3), "{}", path.display());
+        assert_eq!(json.status.code(), Some(exit_code), "{}", path.display());
         let error: Value = serde_json::from_slice(&json.stdout).unwrap();
         assert_eq!(error["ok"], false);
-        assert_eq!(error["exitCode"], 3);
-        assert_eq!(error["error"]["code"], "data");
+        assert_eq!(error["exitCode"], exit_code);
+        assert_eq!(error["error"]["code"], category);
         assert!(
             error["error"]["message"]
                 .as_str()

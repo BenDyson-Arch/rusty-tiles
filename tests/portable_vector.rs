@@ -56,7 +56,9 @@ fn convert(input: &Path, output: &Path, arguments: &[&str]) -> Value {
     );
     assert_eq!(report["ok"], true);
     assert_eq!(
-        rusty_tiles::validate::archive(output, None).unwrap()["ok"],
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(output))
+            .unwrap()
+            .ok,
         true
     );
     archive_json(output, "conversion.json")
@@ -359,7 +361,9 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
         assert_eq!(result.output, std::fs::canonicalize(&output).unwrap());
         assert_eq!(result.report["features"], 6);
         assert_eq!(
-            rusty_tiles::validate::archive(&output, None).unwrap()["ok"],
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap()
+                .ok,
             true
         );
         let manifest = archive_json(&output, "tileset.json");

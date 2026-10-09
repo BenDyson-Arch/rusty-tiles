@@ -14,6 +14,41 @@ const HEADER_LEN: usize = 12;
 const CHUNK_HEADER_LEN: usize = 8;
 const MESHOPT: &str = "EXT_meshopt_compression";
 
+/// Align an owned GLB to eight bytes by adding JSON whitespace, preserving BIN.
+pub(crate) fn align_glb_eight(bytes: &mut Vec<u8>) -> Result<(), Error> {
+    if bytes.len() < 20
+        || &bytes[..4] != b"glTF"
+        || &bytes[16..20] != b"JSON"
+        || bytes.len() % 4 != 0
+    {
+        return Err(Error::Data("invalid GLB alignment input".into()));
+    }
+    let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    let json = u32::from_le_bytes(bytes[12..16].try_into().unwrap());
+    let end = 20usize
+        .checked_add(json as usize)
+        .filter(|end| *end <= bytes.len())
+        .ok_or_else(|| Error::Data("invalid GLB JSON length".into()))?;
+    if declared != bytes.len() || json % 4 != 0 {
+        return Err(Error::Data("invalid GLB length".into()));
+    }
+    if bytes.len() % 8 == 0 {
+        return Ok(());
+    }
+    let length = bytes
+        .len()
+        .checked_add(4)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| Error::Data("GLB exceeds format limit".into()))?;
+    let json = json
+        .checked_add(4)
+        .ok_or_else(|| Error::Data("GLB JSON exceeds format limit".into()))?;
+    bytes.splice(end..end, [b' '; 4]);
+    bytes[12..16].copy_from_slice(&json.to_le_bytes());
+    bytes[8..12].copy_from_slice(&length.to_le_bytes());
+    Ok(())
+}
+
 /// Zero-pad `buf` to a multiple of `align` bytes.
 pub(crate) fn pad_to(buf: &mut Vec<u8>, align: usize) {
     buf.resize(buf.len().next_multiple_of(align), 0);
@@ -370,6 +405,24 @@ impl MetadataGlb {
 mod tests {
     use super::*;
     use std::borrow::Cow;
+
+    #[test]
+    fn eight_byte_alignment_preserves_document_and_bin() {
+        for length in 0..16 {
+            let doc = json!({"asset":{"version":"2.0"},"extras":"x".repeat(length)});
+            let mut bytes = encode_glb(&doc, &[1, 2, 3, 4, 5]).unwrap();
+            let before = gltf::Glb::from_slice(&bytes).unwrap();
+            let bin = before.bin.unwrap().into_owned();
+            align_glb_eight(&mut bytes).unwrap();
+            assert_eq!(bytes.len() % 8, 0);
+            let after = gltf::Glb::from_slice(&bytes).unwrap();
+            assert_eq!(serde_json::from_slice::<Value>(&after.json).unwrap(), doc);
+            assert_eq!(after.bin.unwrap().as_ref(), bin);
+            let aligned = bytes.clone();
+            align_glb_eight(&mut bytes).unwrap();
+            assert_eq!(bytes, aligned);
+        }
+    }
 
     fn reference(json: &[u8], bin: &[u8]) -> Vec<u8> {
         gltf::Glb {

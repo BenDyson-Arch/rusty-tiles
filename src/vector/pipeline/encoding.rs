@@ -347,6 +347,7 @@ pub(super) fn fits_feature(
         vertices += encoded.vertices;
         bytes += encoded.bytes.len();
         if fill {
+            bytes += encoded.bytes.len().next_multiple_of(8) - encoded.bytes.len();
             bytes += 28 + (28 + b"{\"BATCH_LENGTH\":0}".len()).next_multiple_of(8) - 28;
         }
         contents += 1;
@@ -549,6 +550,7 @@ pub(super) fn encode(
         let mut bytes = encoded.bytes;
         let suffix = if fill { "b3dm" } else { "glb" };
         if fill {
+            crate::glb::align_glb_eight(&mut bytes)?;
             let mut table = b"{\"BATCH_LENGTH\":0}".to_vec();
             table.resize((28 + table.len()).next_multiple_of(8) - 28, b' ');
             before_bytes += 28 + table.len();

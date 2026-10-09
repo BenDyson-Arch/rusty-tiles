@@ -116,7 +116,9 @@ fn countries_emit_filled_ids_without_skip_invalid_even_when_fragmented() {
             BTreeSet::from(["15".into(), "160".into()])
         );
         assert_eq!(
-            rusty_tiles::validate::archive(&archive, None).unwrap()["ok"],
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&archive))
+                .unwrap()
+                .ok,
             true
         );
     }

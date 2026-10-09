@@ -39,6 +39,13 @@ def main():
         runner_error = "Acceptance did not complete"
         try:
             subprocess.run(
+                [str(python), "-I", str(root / "tests/test_c1_validation.py")],
+                env=env,
+                cwd=work,
+                check=True,
+                timeout=60,
+            )
+            subprocess.run(
                 [str(python), "-I", str(root / "bindings/python/tests/test_api.py"), str(root)],
                 env=env,
                 cwd=work,

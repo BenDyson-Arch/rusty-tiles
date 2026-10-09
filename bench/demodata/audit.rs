@@ -588,7 +588,8 @@ fn terrain(output: &Path) -> Result<Value> {
 }
 pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {
     if matches!(kind, "archive" | "mesh" | "points") {
-        let validation = rusty_tiles::validate::archive(output, None)?;
+        let validation =
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(output))?;
         let mut result = match kind {
             "mesh" => mesh(input, output)?,
             "points" => points(input, output)?,

@@ -39,8 +39,10 @@ fn deep_implicit_mesh_validates_and_corrupt_subtrees_and_boundary_links_are_reje
         document(&output, "tileset.json")["root"]["implicitTiling"]["subdivisionScheme"],
         "OCTREE"
     );
-    let report = rusty_tiles::validate::archive(&output, None).unwrap();
-    assert!(report["tiles"].as_u64().unwrap() > 100);
+    let report =
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .unwrap();
+    assert!(report.tiles > 100);
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
     assert!(zip
         .file_names()
@@ -107,7 +109,8 @@ fn deep_implicit_mesh_validates_and_corrupt_subtrees_and_boundary_links_are_reje
         let damaged = work.path().join(format!("{case}.3tz"));
         rusty_tiles::convert_to_3tz(&directory, &damaged, &Default::default()).unwrap();
         assert!(
-            rusty_tiles::validate::archive(&damaged, None).is_err(),
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&damaged))
+                .is_err(),
             "{case}"
         );
     }
@@ -166,8 +169,10 @@ fn implicit_vector_reuse_survives_spatial_edits_and_deletion_and_rejects_explici
     let (fresh, result) = run("fresh.3tz", None, false);
     success(result);
     for path in [&updated, &fresh] {
-        let report = rusty_tiles::validate::archive(path, None).unwrap();
-        assert!(report["ok"].as_bool().unwrap());
+        let report =
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(path))
+                .unwrap();
+        assert!(report.ok);
         let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
         let manifest = document(path, "tileset.json");
         let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |name| {
@@ -239,7 +244,7 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
             .output()
             .unwrap(),
     );
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let manifest = document(&output, "tileset.json");
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
     let names: Vec<_> = zip.file_names().map(str::to_owned).collect();
@@ -335,7 +340,8 @@ fn implicit_mesh_accepts_case_insensitive_extensions() {
                 .output()
                 .unwrap(),
         );
-        rusty_tiles::validate::archive(&output, None).unwrap();
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .unwrap();
         let manifest = document(&output, "tileset.json");
         let suffix = extension.to_ascii_lowercase();
         assert!(manifest["root"]["content"]["uri"]

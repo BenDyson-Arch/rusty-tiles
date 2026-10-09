@@ -876,7 +876,10 @@ fn native_crs_guards_preserve_placement_or_refuse_without_publishing() {
                     distance < 0.001,
                     "{definition}: ECEF difference {distance} m"
                 );
-                rusty_tiles::validate::archive(&output, None).unwrap();
+                rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(
+                    &output,
+                ))
+                .unwrap();
             }
             #[cfg(not(feature = "native-geospatial"))]
             {
@@ -1031,7 +1034,8 @@ fn wkt_method_parameters_and_albers_preserve_native_or_refuse() {
                 distance < 0.001,
                 "{definition}: ECEF difference {distance} m"
             );
-            rusty_tiles::validate::archive(&output, None).unwrap();
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
         }
     }
     assert!(!std::fs::read_dir(work.path()).unwrap().any(|entry| entry
@@ -1121,7 +1125,8 @@ fn stereographic_points_and_hemispheres_use_native_or_refuse_without_publishing(
                 .sum::<f64>()
                 .sqrt();
             assert!(distance < 0.001, "ECEF difference {distance} m");
-            rusty_tiles::validate::archive(&output, None).unwrap();
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
         }
         #[cfg(not(feature = "native-geospatial"))]
         {
@@ -1264,7 +1269,8 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
                     }
                 }
             }
-            rusty_tiles::validate::archive(&output, None).unwrap();
+            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+                .unwrap();
             if suffix == "las" {
                 if let Some(dir) = std::env::var_os("RUSTY_TILES_METADATA_ACCEPTANCE_DIR") {
                     let dir = std::path::PathBuf::from(dir).join(format!("point-{explicit}"));

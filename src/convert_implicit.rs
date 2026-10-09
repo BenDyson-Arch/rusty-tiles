@@ -135,7 +135,7 @@ pub fn convert_to_implicit_reported(
         0,
         &mut count,
     )?;
-    crate::validate::archive(input, None)?;
+    crate::validate::inspect(crate::validate::ValidationRequest::new(input))?;
     for index in 0..zip.len() {
         let member = zip.by_index(index)?;
         if member.name().ends_with(".b3dm") && !member.size().is_multiple_of(8) {
@@ -196,7 +196,7 @@ pub fn convert_to_implicit_reported(
     let candidate = job.path().join("candidate.3tz");
     let files = crate::pack::tree_members(&staging, &candidate)?;
     crate::pack::pack_named_files(&files, &candidate, &crate::pack::PackOptions::default())?;
-    crate::validate::archive(&candidate, None)?;
+    crate::validate::inspect(crate::validate::ValidationRequest::new(&candidate))?;
     job.publish_tree_3tz(&staging, Some(report))
 }
 

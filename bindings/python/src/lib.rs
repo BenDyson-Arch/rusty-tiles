@@ -24,6 +24,7 @@ use tiles_core::{
 
 create_exception!(rusty_tiles, TilesError, PyException);
 create_exception!(rusty_tiles, DataError, TilesError);
+create_exception!(rusty_tiles, ResourceLimitError, TilesError);
 create_exception!(rusty_tiles, EnvironmentError, TilesError);
 create_exception!(rusty_tiles, OutputExistsError, TilesError);
 create_exception!(rusty_tiles, TilesIOError, TilesError);
@@ -35,6 +36,16 @@ create_exception!(rusty_tiles, ObserverError, TilesError);
 fn error_to_python(error: Error) -> PyErr {
     let message = error.to_string();
     match error {
+        Error::Validation(failure) => match failure {
+            tiles_core::validate::ValidationFailure::InvalidInput(_) => DataError::new_err(message),
+            tiles_core::validate::ValidationFailure::Unsupported(_) => {
+                UnsupportedError::new_err(message)
+            }
+            tiles_core::validate::ValidationFailure::ResourceLimit(_) => {
+                ResourceLimitError::new_err(message)
+            }
+            tiles_core::validate::ValidationFailure::Io(_) => TilesIOError::new_err(message),
+        },
         Error::Job(failure) => Python::attach(|py| job_failure_to_python(py, failure)),
         Error::Environment(_) => EnvironmentError::new_err(message),
         Error::OutputExists(_) => OutputExistsError::new_err(message),
@@ -827,13 +838,16 @@ fn convert_to_implicit(
     })
 }
 
-/// Check an archive's index, schema, bounds, references, hashes and budgets.
+/// Inspect the bounded C1 archive/payload profile; see checks and notInspected.
 #[pyfunction]
 fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
     let result = py
-        .detach(|| tiles_core::validate::archive(&input, None))
-        .map_err(error_to_python)?;
+        .detach(|| {
+            tiles_core::validate::inspect(tiles_core::validate::ValidationRequest::new(input))
+        })
+        .map_err(|failure| error_to_python(Error::Validation(failure)))?;
     py.check_signals()?;
+    let result = serde_json::to_value(result).map_err(|e| DataError::new_err(e.to_string()))?;
     json_to_python(py, &result)
 }
 
@@ -856,6 +870,10 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("CancelledError", module.py().get_type::<CancelledError>())?;
     module.add("ObserverError", module.py().get_type::<ObserverError>())?;
     module.add("DataError", module.py().get_type::<DataError>())?;
+    module.add(
+        "ResourceLimitError",
+        module.py().get_type::<ResourceLimitError>(),
+    )?;
     module.add(
         "EnvironmentError",
         module.py().get_type::<EnvironmentError>(),
