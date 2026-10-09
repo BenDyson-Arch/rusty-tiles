@@ -58,3 +58,46 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
         assert_eq!(fs::read(path).unwrap(), before, "validation altered {name}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn fifo_input_is_rejected_without_waiting_for_a_writer() {
+    use std::{
+        os::unix::ffi::OsStrExt,
+        process::Stdio,
+        time::{Duration, Instant},
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("input.3tz");
+    let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+    // No writer is ever opened: a blocking File::open would wait forever.
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .arg("validate")
+        .arg(&path)
+        .arg("--json")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("FIFO admission blocked before rejecting a nonregular file");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["error"]["code"], "unsupported");
+    // The bounded child above prevents a regressed implementation hanging this
+    // test before exercising the same admission directly through the Rust API.
+    let failure = inspect(ValidationRequest::new(&path)).unwrap_err();
+    assert_eq!(failure.category().0, "unsupported");
+}

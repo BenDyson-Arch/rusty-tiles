@@ -8,7 +8,7 @@ from c1_validation_oracle import archive, generate, glb, snapshot
 
 def worker(config_path):
     config=json.loads(pathlib.Path(config_path).read_text()); root=pathlib.Path(config_path).parent
-    started=time.monotonic(); peak=0; samples=0
+    started=time.monotonic(); peak=0; samples=0; permission_denials=0
     with (root/'stdout').open('w') as out, (root/'stderr').open('w') as err:
         child=subprocess.Popen(config['command'],stdout=out,stderr=err)
         while True:
@@ -18,9 +18,11 @@ def worker(config_path):
                 os.kill(child.pid,signal.SIGKILL);os.wait4(child.pid,0);raise RuntimeError('validation exceeded 30 seconds')
             try: peak=max(peak,len(list(pathlib.Path(f'/proc/{child.pid}/fd').iterdir())));samples+=1
             except FileNotFoundError: pass
+            except PermissionError: permission_denials+=1
             time.sleep(.002)
     print(json.dumps(dict(exitCode=child.returncode,maximumRssKiB=usage.ru_maxrss,userSeconds=usage.ru_utime,
-       systemSeconds=usage.ru_stime,wallSeconds=time.monotonic()-started,peakDescriptors=peak,descriptorSamples=samples,
+       systemSeconds=usage.ru_stime,wallSeconds=time.monotonic()-started,
+       peakDescriptors=peak if samples else None,descriptorSamples=samples,descriptorPermissionDenials=permission_denials,
        stdout=(root/'stdout').read_text(),stderr=(root/'stderr').read_text())))
 
 

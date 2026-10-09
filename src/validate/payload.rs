@@ -441,11 +441,32 @@ pub(super) fn inspect(
                         }
                     }
                 }
-                nodes.extend(o.values());
+                nodes.extend(
+                    o.iter()
+                        .filter(|(key, _)| key.as_str() != "extras" && key.as_str() != "extensions")
+                        .map(|(_, value)| value),
+                );
             }
             _ => {}
         }
     }
+    let buffer_docs = list(&doc, "buffers")?;
+    let mut placeholder_covered = vec![true; buffer_docs.len()];
+    let mut placeholder_referenced = vec![false; buffer_docs.len()];
+    for view in list(&doc, "bufferViews")? {
+        let buffer = at(buffer_docs, &view["buffer"])?;
+        placeholder_referenced[buffer] = true;
+        if view["extensions"].get("EXT_meshopt_compression").is_none() {
+            placeholder_covered[buffer] = false;
+        }
+        if let Some(compressed) = view["extensions"].get("EXT_meshopt_compression") {
+            let source = at(buffer_docs, &compressed["buffer"])?;
+            placeholder_covered[source] = false;
+        }
+    }
+    let meshopt_required = list(&doc, "extensionsRequired")?
+        .iter()
+        .any(|value| value == "EXT_meshopt_compression");
     let mut buffers = Vec::new();
     let mut buffer_budget = 0usize;
     let mut resource_bytes = 0usize;
@@ -460,9 +481,7 @@ pub(super) fn inspect(
         if buffer_budget > caps().member_bytes as usize {
             return Err(limit("buffer lengths exceed 64 MiB"));
         }
-        let fallback =
-            b["extensions"]["EXT_meshopt_compression"]["fallback"].as_bool() == Some(true);
-        let data = if let Some(uri) = b.get("uri") {
+        let mut data = if let Some(uri) = b.get("uri") {
             let uri = uri
                 .as_str()
                 .ok_or_else(|| invalid("buffer URI must be string"))?;
@@ -471,9 +490,9 @@ pub(super) fn inspect(
             } else {
                 Cow::Owned(resolve(uri)?)
             }
-        } else if i == 0 {
-            Cow::Borrowed(bin.ok_or_else(|| invalid("missing embedded BIN buffer"))?)
-        } else if fallback && used.contains("EXT_meshopt_compression") {
+        } else if i == 0 && bin.is_some() {
+            Cow::Borrowed(bin.unwrap())
+        } else if placeholder_covered[i] && placeholder_referenced[i] && meshopt_required {
             buffers.push(Cow::Borrowed(&[][..]));
             continue;
         } else {
@@ -490,6 +509,11 @@ pub(super) fn inspect(
             || (b.get("uri").is_none() && (data.len() - n > 3 || data[n..].iter().any(|&v| v != 0)))
         {
             return Err(invalid("buffer byteLength does not match actual resource"));
+        }
+        // Every consumer, including extension decoders, receives only declared bytes.
+        match &mut data {
+            Cow::Owned(bytes) => bytes.truncate(n),
+            Cow::Borrowed(bytes) => *bytes = &bytes[..n],
         }
         buffers.push(data);
     }
@@ -881,7 +905,9 @@ pub(super) fn inspect(
                     return Err(invalid(format!("invalid {semantic} accessor type")));
                 }
                 if a.component != 5126
-                    && ["POSITION", "NORMAL", "TANGENT"].contains(&semantic.as_str())
+                    && (["POSITION", "NORMAL", "TANGENT"].contains(&semantic.as_str())
+                        || (semantic.starts_with("TEXCOORD_")
+                            && !([5121, 5123].contains(&a.component) && a.normalized)))
                     && quant
                     && !list(&doc, "extensionsRequired")?
                         .iter()
@@ -1287,6 +1313,127 @@ mod tests {
                 minimum_version(&json!({"minVersion":version})),
                 Err(ValidationFailure::InvalidInput(_))
             ));
+        }
+    }
+    #[test]
+    fn extras_are_opaque_and_external_buffers_are_declared_length_bounded() {
+        let mut doc = triangle();
+        doc["extras"] = json!({"extensions":42,"nested":{"extensions":{"unknown":true}}});
+        assert!(inspect("a.glb", &frame(&doc, &[0; 36]), 4_000_000, |_| panic!()).is_ok());
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let facts = inspect(
+            "a.gltf",
+            &serde_json::to_vec(&doc).unwrap(),
+            4_000_000,
+            |_| Ok(vec![0; 40]),
+        )
+        .unwrap();
+        assert_eq!(facts.vertices, 3);
+    }
+    #[test]
+    fn independent_meshopt_placeholder_and_declared_range_controls() {
+        use std::io::{Cursor, Read};
+        let mut archive = zip::ZipArchive::new(Cursor::new(include_bytes!(
+            "../../tests/fixtures/c1/meshopt_none_golden.3tz"
+        )))
+        .unwrap();
+        let name = (0..archive.len())
+            .map(|i| archive.by_index(i).unwrap().name().to_owned())
+            .find(|name| name.ends_with(".glb"))
+            .unwrap();
+        let mut original = Vec::new();
+        archive
+            .by_name(&name)
+            .unwrap()
+            .read_to_end(&mut original)
+            .unwrap();
+        let (json, bin) = envelope(&original).unwrap();
+        let mut doc = super::super::json::parse(json).unwrap();
+        let compressed = bin.unwrap().to_vec();
+        doc["buffers"] = json!([{"byteLength":48},{"byteLength":85,"uri":"a.bin"}]);
+        doc["bufferViews"][0]["buffer"] = json!(0);
+        doc["bufferViews"][0]["extensions"]["EXT_meshopt_compression"]["buffer"] = json!(1);
+        assert!(inspect(
+            "a.gltf",
+            &serde_json::to_vec(&doc).unwrap(),
+            4_000_000,
+            |_| Ok(compressed.clone())
+        )
+        .is_ok());
+        let mut json_only_glb = frame(&doc, &[]);
+        json_only_glb.truncate(json_only_glb.len() - 8);
+        let length = json_only_glb.len() as u32;
+        json_only_glb[8..12].copy_from_slice(&length.to_le_bytes());
+        assert!(inspect("a.glb", &json_only_glb, 4_000_000, |_| Ok(
+            compressed.clone()
+        ))
+        .is_ok());
+        let mut missing_required = doc.clone();
+        missing_required
+            .as_object_mut()
+            .unwrap()
+            .remove("extensionsRequired");
+        assert!(matches!(
+            inspect(
+                "a.gltf",
+                &serde_json::to_vec(&missing_required).unwrap(),
+                4_000_000,
+                |_| Ok(compressed.clone())
+            ),
+            Err(ValidationFailure::InvalidInput(_))
+        ));
+        let mut uncovered = doc.clone();
+        uncovered["bufferViews"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"buffer":0,"byteLength":4}));
+        assert!(matches!(
+            inspect(
+                "a.gltf",
+                &serde_json::to_vec(&uncovered).unwrap(),
+                4_000_000,
+                |_| Ok(compressed.clone())
+            ),
+            Err(ValidationFailure::InvalidInput(_))
+        ));
+        doc["buffers"][1]["byteLength"] = json!(84);
+        assert!(matches!(
+            inspect(
+                "a.gltf",
+                &serde_json::to_vec(&doc).unwrap(),
+                4_000_000,
+                |_| Ok(compressed.clone())
+            ),
+            Err(ValidationFailure::InvalidInput(_))
+        ));
+    }
+    #[test]
+    fn quantized_uv_required_only_when_core_type_is_insufficient() {
+        let mut doc = triangle();
+        doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+        doc["buffers"][0]["byteLength"] = json!(60);
+        doc["bufferViews"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"buffer":0,"byteOffset":36,"byteLength":24,"byteStride":8}));
+        doc["accessors"].as_array_mut().unwrap().push(
+            json!({"bufferView":1,"componentType":5123,"type":"VEC2","count":3,"normalized":true}),
+        );
+        doc["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_0"] = json!(1);
+        for component in [5121, 5123] {
+            doc["accessors"][1]["componentType"] = json!(component);
+            assert!(inspect("a.glb", &frame(&doc, &[0; 60]), 4_000_000, |_| panic!()).is_ok());
+        }
+        for (component, normalized) in [(5122, true), (5123, false)] {
+            doc["accessors"][1]["componentType"] = json!(component);
+            doc["accessors"][1]["normalized"] = json!(normalized);
+            assert!(matches!(
+                inspect("a.glb", &frame(&doc, &[0; 60]), 4_000_000, |_| panic!()),
+                Err(ValidationFailure::InvalidInput(_))
+            ));
+            doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+            assert!(inspect("a.glb", &frame(&doc, &[0; 60]), 4_000_000, |_| panic!()).is_ok());
+            doc.as_object_mut().unwrap().remove("extensionsRequired");
         }
     }
     #[test]

@@ -299,6 +299,102 @@
       "sha256": "0bf98053c8d0662acfd04f5be98e8cf94b03977506ad1d20347ad3bd72c120cb"
     },
     {
+      "name": "extras_nested_extensions",
+      "path": "extras_nested_extensions.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Application-defined extras keys called extensions have no glTF extension semantics.",
+      "sha256": "3c0c538d44218899c06a8e4d434d293fdcdd462cec8fd358bcfdfd5d94768641"
+    },
+    {
+      "name": "extras_extensions_scalar",
+      "path": "extras_extensions_scalar.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Application-defined extras keys called extensions have no glTF extension semantics.",
+      "sha256": "24beaa7511d63e4c855f657083155b54aa6cd7fb8dfc03c846788c870a656b6a"
+    },
+    {
+      "name": "quantized_uv_required_True",
+      "path": "quantized_uv_required_True.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signed SHORT VEC2 texture coordinates need KHR_mesh_quantization required even alongside ordinary FLOAT POSITION.",
+      "sha256": "789b4ee472d1113ccc0307c7903124b63dca7dfa19660665c9fb44633f8ffe22"
+    },
+    {
+      "name": "quantized_uv_required_False",
+      "path": "quantized_uv_required_False.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Signed SHORT VEC2 texture coordinates need KHR_mesh_quantization required even alongside ordinary FLOAT POSITION.",
+      "sha256": "688eeff91bbe8a1119ecbd03cdf9ab505cc76a973f42b55daa88b6736dfbbdc5"
+    },
+    {
+      "name": "meshopt_external_control",
+      "path": "meshopt_external_control.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Pinned compressed golden bytes supplied as an archive-local resource with exact declared size.",
+      "sha256": "8fb39ea89b5b8de222b8e5e862511303692c210183d4c24b998261c6843a6499"
+    },
+    {
+      "name": "meshopt_compressed_over_declared",
+      "path": "meshopt_compressed_over_declared.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "85 compressed bytes exist physically but range exceeds declared buffer byteLength48.",
+      "sha256": "8613403fdb4efc850eb7a5a4d307071968e31800fe0269868e2e39603b096ade"
+    },
+    {
+      "name": "meshopt_fallback_one_True",
+      "path": "meshopt_fallback_one_True.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "URI-less placeholder buffer1 is covered by a required compressed view; fallback tag is optional.",
+      "sha256": "2967504d47f2933486f16be16ffc9a0337480ae7a0e6c8bedf37eb0d766129e8"
+    },
+    {
+      "name": "meshopt_fallback_one_False",
+      "path": "meshopt_fallback_one_False.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "URI-less placeholder buffer1 is covered by a required compressed view; fallback tag is optional.",
+      "sha256": "6b01434b148bdc3bc64322d5cdc8df99e1f46a260ec5e0380637407c13b6deaa"
+    },
+    {
+      "name": "meshopt_fallback_zero",
+      "path": "meshopt_fallback_zero.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Local glTF placeholder buffer0 is allowed; compressed stream resides in archive-local buffer1.",
+      "sha256": "18a098f5ecdf2b359585eb82fb6f4e5d85e638d1e26a96efabda201d35663413"
+    },
+    {
+      "name": "meshopt_glb_fallback_zero",
+      "path": "meshopt_glb_fallback_zero.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "GLB has JSON-only framing and placeholder buffer0; required compressed stream is external buffer1.",
+      "sha256": "20045144bf2f3f972423f85bbb49cd8ef32bfb99be8084282485c653afa2b87f"
+    },
+    {
+      "name": "meshopt_placeholder_uncovered",
+      "path": "meshopt_placeholder_uncovered.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.",
+      "sha256": "889e590c459c054c67e0c86cb0a4b3294c22eabb35fb39ef192e52f503a37cb9"
+    },
+    {
+      "name": "meshopt_placeholder_not_required",
+      "path": "meshopt_placeholder_not_required.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.",
+      "sha256": "15b2bde39ab0875adfdc56ea7977504b0eab86a6e326d9a733a2c2234c779870"
+    },
+    {
       "name": "empty_bin",
       "path": "empty_bin.3tz",
       "expectedKind": "invalid_input",
@@ -617,6 +713,182 @@
       "exitCode": 3,
       "analyticFact": "ZIP64 claims u64MAX entries; admission must reject before directory allocation.",
       "sha256": "0b57512aacf322db120635818d986e5d06eb6de9f8e25fc71ca6b25c1001cf84"
+    },
+    {
+      "name": "zip_local_crc_mismatch",
+      "path": "zip_local_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local crc differs from central directory while member bytes and index remain correct.",
+      "sha256": "f2e18344ff926c8978cfe7ad918ca30d5a179d84746abec738c73bafcb1420a8"
+    },
+    {
+      "name": "zip_local_compressed_size_mismatch",
+      "path": "zip_local_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local compressed_size differs from central directory while member bytes and index remain correct.",
+      "sha256": "a74baa7fd073b0c57e787093095119a54406caf7ec8689fc84e2c7ee8efdd861"
+    },
+    {
+      "name": "zip_local_uncompressed_size_mismatch",
+      "path": "zip_local_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local uncompressed_size differs from central directory while member bytes and index remain correct.",
+      "sha256": "3d678e72a006361f5a61ccf5896c6f6761887e3f3db3c5ad08087127602e743b"
+    },
+    {
+      "name": "zip_local_zip64",
+      "path": "zip_local_zip64.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Small stored member elects ZIP64 local and central size fields; local 0x0001 original/compressed sizes match actual bytes.",
+      "sha256": "836556219ca68a1fe05e7c26d5bad00dcbf791066300b6fd2e21b8b36028adcc"
+    },
+    {
+      "name": "zip_local_zip64_compressed_size_mismatch",
+      "path": "zip_local_zip64_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Local ZIP64 compressed_size differs from central size; no descriptor or actual payload corruption.",
+      "sha256": "b5f121dbb4e83657418959ce0e1d14a0d98defc21f9b60e5bd7b11e81546b8db"
+    },
+    {
+      "name": "zip_local_zip64_uncompressed_size_mismatch",
+      "path": "zip_local_zip64_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Local ZIP64 uncompressed_size differs from central size; no descriptor or actual payload corruption.",
+      "sha256": "cde462531e1f114cf42c893c811bcb155909163f3519094d0dc49c0c138b07ee"
+    },
+    {
+      "name": "zip_descriptor_32_signed",
+      "path": "zip_descriptor_32_signed.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate 32-bit data descriptor with optional signature; central/index unchanged in meaning.",
+      "sha256": "e0962a54a3b03b7e57bc8780a4cb27519b31f4a69dfe5e0de8efb9fdebaf9b3b"
+    },
+    {
+      "name": "zip_descriptor_32_signed_crc_mismatch",
+      "path": "zip_descriptor_32_signed_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "df2bcbc6a9c970c527bc6dc792afa63ff4d9a4840354fcae75e103df847a4b9c"
+    },
+    {
+      "name": "zip_descriptor_32_signed_compressed_size_mismatch",
+      "path": "zip_descriptor_32_signed_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "7db412294868d058ae4f908c4bbe4af274de4ff631ff507eda3483081e0dd652"
+    },
+    {
+      "name": "zip_descriptor_32_signed_uncompressed_size_mismatch",
+      "path": "zip_descriptor_32_signed_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "02332261dbb07929a0d17f43053b89ea0d56da32e1a5cde5389ff09eb1695cdd"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned",
+      "path": "zip_descriptor_32_unsigned.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate 32-bit data descriptor without optional signature; central/index unchanged in meaning.",
+      "sha256": "05f48193996c4654df2a7336572d9652a142323fd6e1c54ff5e6490a89ba571e"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_crc_mismatch",
+      "path": "zip_descriptor_32_unsigned_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "55f6ed1a3a0baa992e2478411861553da62f5905c871da84740ef09b2ac13ddd"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_compressed_size_mismatch",
+      "path": "zip_descriptor_32_unsigned_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "8355e67af8ba089e25f6863fd82f4a0936ea1ba446583294f7b501431ef1bc65"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_uncompressed_size_mismatch",
+      "path": "zip_descriptor_32_unsigned_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "08198a86c375e0150522b5809386140b687337d3e267d83c989d855448c0b735"
+    },
+    {
+      "name": "zip_descriptor_64_signed",
+      "path": "zip_descriptor_64_signed.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate ZIP64 data descriptor with optional signature; central/index unchanged in meaning.",
+      "sha256": "53347b1a20a33fd505e2faf83fa67e575fd1d919e531e93d6f6ceb8bf15f186c"
+    },
+    {
+      "name": "zip_descriptor_64_signed_crc_mismatch",
+      "path": "zip_descriptor_64_signed_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "1b4652e058423243d5cba211c5d020cd9028811fad6630e74a7770d5dca2d6fb"
+    },
+    {
+      "name": "zip_descriptor_64_signed_compressed_size_mismatch",
+      "path": "zip_descriptor_64_signed_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "5b7dd5a2be9e7836d71025557361c9aa303387c31d0ba4dbaa3e61a30970632d"
+    },
+    {
+      "name": "zip_descriptor_64_signed_uncompressed_size_mismatch",
+      "path": "zip_descriptor_64_signed_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "797969b68dd311acc78d7151c514e2ff4c59d8a96ea84dfc856b109705320453"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned",
+      "path": "zip_descriptor_64_unsigned.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate ZIP64 data descriptor without optional signature; central/index unchanged in meaning.",
+      "sha256": "61df55f908c3aecc01b7514f588502d53c53a1c0f82eeec95ddef55225749de4"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_crc_mismatch",
+      "path": "zip_descriptor_64_unsigned_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "81938e01b55e636b5c6827528d3fbc1bd2ac463afba1471bb71b109211b7394f"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_compressed_size_mismatch",
+      "path": "zip_descriptor_64_unsigned_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "85dc9d67db8e3a00d2217fbcec189abdbdeb0e4310d30c4aad8b839f372e79c5"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_uncompressed_size_mismatch",
+      "path": "zip_descriptor_64_unsigned_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "aa6af4d01072028b64953b4927e75a7744e4da841ebdf21f0e49f8f595d12d32"
     }
   ]
 }

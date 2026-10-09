@@ -669,7 +669,15 @@ fn open_archive(path: &Path) -> Result<File, Error> {
             path.display()
         )));
     }
-    let mut file = File::open(path).map_err(|error| {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // Inspect the selected handle's type without waiting for a FIFO writer.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             Error::Io(std::io::Error::new(
                 error.kind(),

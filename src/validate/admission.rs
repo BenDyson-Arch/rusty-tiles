@@ -28,8 +28,7 @@ fn u64_at(b: &[u8], n: usize) -> u64 {
     u64::from_le_bytes(b[n..n + 8].try_into().unwrap())
 }
 
-fn central_sizes(h: &[u8], extra: &[u8]) -> Result<(u64, u64, u64), Failure> {
-    let mut values = [u32_at(h, 24), u32_at(h, 20), u32_at(h, 42)];
+fn zip64_sizes<const N: usize>(mut values: [u64; N], extra: &[u8]) -> Result<[u64; N], Failure> {
     if values.contains(&u64::from(u32::MAX)) {
         let mut cursor = 0;
         let mut record = None;
@@ -41,7 +40,7 @@ fn central_sizes(h: &[u8], extra: &[u8]) -> Result<(u64, u64, u64), Failure> {
             let end = cursor
                 .checked_add(4 + length)
                 .filter(|&n| n <= extra.len())
-                .ok_or_else(|| malformed("ZIP extra field exceeds central entry"))?;
+                .ok_or_else(|| malformed("ZIP extra field exceeds entry"))?;
             if u16_at(extra, cursor) == 1 {
                 if record.is_some() {
                     return Err(malformed("duplicate ZIP64 extra field"));
@@ -50,19 +49,57 @@ fn central_sizes(h: &[u8], extra: &[u8]) -> Result<(u64, u64, u64), Failure> {
             }
             cursor = end;
         }
-        let record = record.ok_or_else(|| malformed("missing ZIP64 central sizes/offset"))?;
+        let record = record.ok_or_else(|| malformed("missing ZIP64 sizes/offset"))?;
         let mut cursor = 0;
         for value in &mut values {
             if *value == u64::from(u32::MAX) {
                 if record.len() - cursor < 8 {
-                    return Err(malformed("truncated ZIP64 central sizes/offset"));
+                    return Err(malformed("truncated ZIP64 sizes/offset"));
                 }
                 *value = u64_at(record, cursor);
                 cursor += 8;
             }
         }
     }
-    Ok((values[0], values[1], values[2]))
+    Ok(values)
+}
+
+fn descriptor(
+    file: &mut File,
+    offset: u64,
+    boundary: u64,
+    crc: u64,
+    size: u64,
+    zip64: bool,
+) -> Result<(), Failure> {
+    // A signature is optional. Trying both layouts also handles a CRC whose
+    // value equals the signature without assigning it the wrong interpretation.
+    let mut bytes = [0; 24];
+    let length = (boundary - offset).min(bytes.len() as u64) as usize;
+    read(file, offset, &mut bytes[..length])?;
+    let width = if zip64 { 8 } else { 4 };
+    let matches = [0, 4].into_iter().any(|start| {
+        if start + 4 + width * 2 > length
+            || (start == 4 && u32_at(&bytes, 0) != 0x08074b50)
+            || u32_at(&bytes, start) != crc
+        {
+            return false;
+        }
+        let value = |at| {
+            if zip64 {
+                u64_at(&bytes, at)
+            } else {
+                u32_at(&bytes, at)
+            }
+        };
+        value(start + 4) == size && value(start + 4 + width) == size
+    });
+    if !matches {
+        return Err(malformed(
+            "ZIP data descriptor differs from central directory",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn admit(file: &mut File, limits: &ValidationLimits) -> Result<(), Failure> {
@@ -194,7 +231,8 @@ pub(super) fn admit(file: &mut File, limits: &ValidationLimits) -> Result<(), Fa
         read(file, cursor + 46, &mut name)?;
         let mut extra = vec![0; extra_size];
         read(file, cursor + 46 + name_size as u64, &mut extra)?;
-        let (member, compressed, local_offset) = central_sizes(&h, &extra)?;
+        let [member, compressed, local_offset] =
+            zip64_sizes([u32_at(&h, 24), u32_at(&h, 20), u32_at(&h, 42)], &extra)?;
         if member > limits.member_bytes {
             return Err(Failure::limit("archive member exceeds 64 MiB"));
         }
@@ -233,6 +271,32 @@ pub(super) fn admit(file: &mut File, limits: &ValidationLimits) -> Result<(), Fa
         read(file, local_offset + 30, &mut actual_name)?;
         if actual_name != name {
             return Err(malformed("local ZIP name differs from central directory"));
+        }
+        let mut local_extra = vec![0; usize::from(u16_at(&local, 28))];
+        read(
+            file,
+            local_offset + 30 + local_name as u64,
+            &mut local_extra,
+        )?;
+        let [local_member, local_compressed] =
+            zip64_sizes([u32_at(&local, 22), u32_at(&local, 18)], &local_extra)?;
+        let crc = u32_at(&h, 16);
+        if u16_at(&local, 6) & 8 != 0 {
+            let zip64 = [
+                u32_at(&local, 18),
+                u32_at(&local, 22),
+                u32_at(&h, 20),
+                u32_at(&h, 24),
+            ]
+            .contains(&u64::from(u32::MAX));
+            descriptor(file, data_start + member, offset, crc, member, zip64)?;
+        } else if u32_at(&local, 14) != crc
+            || local_member != member
+            || local_compressed != compressed
+        {
+            return Err(malformed(
+                "local ZIP CRC/sizes differ from central directory",
+            ));
         }
         total = total
             .checked_add(member)

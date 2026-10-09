@@ -13,6 +13,7 @@ import pathlib
 import struct
 import subprocess
 import zipfile
+import zlib
 
 CODES = {'invalid_input': 3, 'unsupported': 2, 'resource_limit': 3, 'io': 1}
 
@@ -39,6 +40,56 @@ def archive(path, files, index_offset=None):
     raw = path.read_bytes()
     for _, offset in records:
         assert raw[offset:offset + 4] == b'PK\x03\x04'
+
+
+
+def framed_archive(files, zip64=False, descriptor=None, corrupt=None):
+    """Literal stored ZIP layout; first member varies local/descriptor framing.
+
+    PKWARE APPNOTE 6.3.10 §§4.3.7,4.3.9,4.4.7–9,4.5.3. Descriptor
+    selector is None, 'signed' or 'unsigned'; ZIP64 uses sentinel size fields
+    plus 0x0001 extra fields, with zero local extra sizes for streamed data.
+    No project writer or reader establishes these expectations.
+    """
+    body = bytearray(); entries = []; records = []
+
+    def member(name, data, first=False):
+        offset = len(body); encoded = name.encode(); size = len(data)
+        crc = zlib.crc32(data); wide = first and zip64
+        streamed = first and descriptor is not None; flags = 8 if streamed else 0
+        local_crc = 0 if streamed else crc
+        local_sizes = [0, 0] if streamed else [size, size]
+        if first and corrupt == 'local_crc': local_crc ^= 1
+        if first and corrupt == 'local_compressed_size': local_sizes[1] += 1
+        if first and corrupt == 'local_uncompressed_size': local_sizes[0] += 1
+        local_extra = struct.pack('<HHQQ', 1, 16, *local_sizes) if wide else b''
+        local_csize, local_usize = (0xffffffff, 0xffffffff) if wide else local_sizes[::-1]
+        body.extend(struct.pack('<4s5H3I2H', b'PK\x03\x04', 45 if wide else 20,
+                    flags, 0, 0, 33, local_crc, local_csize, local_usize, len(encoded), len(local_extra)))
+        body.extend(encoded + local_extra + data)
+        if streamed:
+            values = [crc, size, size]
+            if corrupt == 'descriptor_crc': values[0] ^= 1
+            if corrupt == 'descriptor_compressed_size': values[1] += 1
+            if corrupt == 'descriptor_uncompressed_size': values[2] += 1
+            if descriptor == 'signed': body.extend(b'PK\x07\x08')
+            body.extend(struct.pack('<IQQ' if wide else '<III', *values))
+        central_extra = struct.pack('<HHQQ', 1, 16, size, size) if wide else b''
+        declared_size = 0xffffffff if wide else size
+        central = struct.pack('<4s6H3I5H2I', b'PK\x01\x02', 45 if wide else 20,
+                    45 if wide else 20, flags, 0, 0, 33, crc, declared_size, declared_size,
+                    len(encoded), len(central_extra), 0, 0, 0, 0o100644 << 16, offset)
+        entries.append(central + encoded + central_extra)
+        return offset
+
+    for index, (name, data) in enumerate(files.items()):
+        offset = member(name, data, index == 0)
+        records.append((hashlib.md5(name.encode()).digest(), offset))
+    records.sort(key=lambda pair: struct.unpack('<QQ', pair[0]))
+    member('@3dtilesIndex1@', b''.join(h + struct.pack('<Q', off) for h, off in records))
+    start = len(body); central = b''.join(entries); body.extend(central)
+    body.extend(struct.pack('<4s4H2IH', b'PK\x05\x06', 0, 0, len(entries), len(entries), len(central), start, 0))
+    return bytes(body)
 
 
 def generate(directory):
@@ -194,6 +245,51 @@ def generate(directory):
       'meshes':[{'primitives':[{'attributes':{'POSITION':0},'mode':0}]}]}
     emit('meshopt_none_golden', glb(meshopt,encoded), None,
          'Upstream pinned meshoptimizer golden ATTRIBUTES/NONE stream decodes to independently published 48 bytes (four finite FLOAT VEC3 points).')
+    for name, extras in [('extras_nested_extensions', {'extensions': {'my_application_key': 'anything'}}),
+                         ('extras_extensions_scalar', {'extensions': 42})]:
+        doc = copy.deepcopy(document); doc['extras'] = extras
+        emit(name, glb(doc, payload), None, 'Application-defined extras keys called extensions have no glTF extension semantics.')
+    uv = copy.deepcopy(document); uv['extensionsUsed'] = ['KHR_mesh_quantization']
+    uv['buffers'][0]['byteLength'] = 56
+    uv['bufferViews'].append({'buffer': 0, 'byteOffset': 44, 'byteLength': 12})
+    uv['accessors'].append({'bufferView': 2, 'componentType': 5122, 'type': 'VEC2', 'count': 3})
+    uv['meshes'][0]['primitives'][0]['attributes']['TEXCOORD_0'] = 2
+    for required in [True, False]:
+        doc = copy.deepcopy(uv)
+        if required: doc['extensionsRequired'] = ['KHR_mesh_quantization']
+        emit('quantized_uv_required_' + str(required), glb(doc, payload + b'\0\0' + bytes(12)),
+             None if required else 'invalid_input',
+             'Signed SHORT VEC2 texture coordinates need KHR_mesh_quantization required even alongside ordinary FLOAT POSITION.')
+    external_meshopt = copy.deepcopy(meshopt); external_meshopt['buffers'][0]['uri'] = 'data.bin'
+    external_manifest = copy.deepcopy(tileset); external_manifest['root']['content']['uri'] = 'tile.gltf'
+    def meshopt_case(name, doc, kind, fact):
+        emit(name, json.dumps(doc).encode(), kind, fact, extras={'data.bin': encoded}, manifest=external_manifest)
+    meshopt_case('meshopt_external_control', external_meshopt, None,
+                 'Pinned compressed golden bytes supplied as an archive-local resource with exact declared size.')
+    doc = copy.deepcopy(external_meshopt); doc['buffers'][0]['byteLength'] = 48
+    meshopt_case('meshopt_compressed_over_declared', doc, 'invalid_input',
+                 '85 compressed bytes exist physically but range exceeds declared buffer byteLength48.')
+    for tagged in [True, False]:
+        doc = copy.deepcopy(external_meshopt); placeholder = {'byteLength': 48}
+        if tagged: placeholder['extensions'] = {'EXT_meshopt_compression': {'fallback': True}}
+        doc['buffers'].append(placeholder); doc['bufferViews'][0]['buffer'] = 1
+        meshopt_case('meshopt_fallback_one_' + str(tagged), doc, None,
+                     'URI-less placeholder buffer1 is covered by a required compressed view; fallback tag is optional.')
+    doc = copy.deepcopy(external_meshopt)
+    doc['buffers'].insert(0, {'byteLength': 48, 'extensions': {'EXT_meshopt_compression': {'fallback': True}}})
+    doc['bufferViews'][0]['extensions']['EXT_meshopt_compression']['buffer'] = 1
+    meshopt_case('meshopt_fallback_zero', doc, None,
+                 'Local glTF placeholder buffer0 is allowed; compressed stream resides in archive-local buffer1.')
+    text = json.dumps(doc, separators=(',', ':')).encode(); text += b' ' * (-len(text) % 4)
+    envelope = struct.pack('<4sII', b'glTF', 2, 20 + len(text)) + struct.pack('<I4s', len(text), b'JSON') + text
+    emit('meshopt_glb_fallback_zero', envelope, None,
+         'GLB has JSON-only framing and placeholder buffer0; required compressed stream is external buffer1.', extras={'data.bin': encoded})
+    for name in ['uncovered', 'not_required']:
+        broken = copy.deepcopy(doc)
+        if name == 'uncovered': broken['bufferViews'].append({'buffer': 0, 'byteOffset': 0, 'byteLength': 4})
+        else: broken.pop('extensionsRequired')
+        meshopt_case('meshopt_placeholder_' + name, broken, 'invalid_input',
+                     'Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.')
     changes = [
         ('empty_bin', 'invalid_input', 'Declared 42-byte buffer and required POSITION payload absent.'),
         ('stride_one', 'invalid_input', 'POSITION stride 1 cannot hold a 12-byte element.'),
@@ -282,7 +378,7 @@ def generate(directory):
     emit('polygon_accessor_wrong_scalar',glb(broken,polygon_data),'invalid_input','Polygon offset reference targets FLOAT VEC3 POSITION rather than unsigned SCALAR.')
     def container_case(name, data, kind, fact):
         path=directory/(name+'.3tz');path.write_bytes(data)
-        cases.append(dict(name=name,path=path.name,expectedKind=kind,exitCode=CODES[kind],analyticFact=fact,
+        cases.append(dict(name=name,path=path.name,expectedKind=kind,exitCode=CODES.get(kind,0),analyticFact=fact,
                           sha256=hashlib.sha256(data).hexdigest()))
     path=directory/'index_offset_max.3tz'
     archive(path,{'tileset.json':json.dumps(tileset).encode(),'tile.glb':good},index_offset=2**64-1)
@@ -297,6 +393,27 @@ def generate(directory):
     ending=struct.pack('<4s4H2IH',b'PK\x05\x06',0,0,65535,65535,0xffffffff,0xffffffff,0)
     container_case('zip64_count_max',raw[:end]+record+locator+ending,'resource_limit',
                    'ZIP64 claims u64MAX entries; admission must reject before directory allocation.')
+    zip_files = {'tileset.json': json.dumps(tileset).encode(), 'tile.glb': good}
+    for field in ['crc', 'compressed_size', 'uncompressed_size']:
+        container_case('zip_local_' + field + '_mismatch',
+                       framed_archive(zip_files, corrupt='local_' + field), 'invalid_input',
+                       'No descriptor: local ' + field + ' differs from central directory while member bytes and index remain correct.')
+    container_case('zip_local_zip64', framed_archive(zip_files, zip64=True), None,
+                   'Small stored member elects ZIP64 local and central size fields; local 0x0001 original/compressed sizes match actual bytes.')
+    for field in ['compressed_size', 'uncompressed_size']:
+        container_case('zip_local_zip64_' + field + '_mismatch',
+                       framed_archive(zip_files, zip64=True, corrupt='local_' + field), 'invalid_input',
+                       'Local ZIP64 ' + field + ' differs from central size; no descriptor or actual payload corruption.')
+    for wide in [False, True]:
+        for signature in ['signed', 'unsigned']:
+            name = 'zip_descriptor_' + ('64_' if wide else '32_') + signature
+            container_case(name, framed_archive(zip_files, zip64=wide, descriptor=signature), None,
+                           'Stored bit3 member: zero local CRC/sizes, correct immediate ' + ('ZIP64' if wide else '32-bit') +
+                           ' data descriptor ' + ('with' if signature == 'signed' else 'without') + ' optional signature; central/index unchanged in meaning.')
+            for field in ['crc', 'compressed_size', 'uncompressed_size']:
+                container_case(name + '_' + field + '_mismatch',
+                               framed_archive(zip_files, zip64=wide, descriptor=signature, corrupt='descriptor_' + field),
+                               'invalid_input', 'Immediate descriptor ' + field + ' contradicts actual data and central directory.')
     manifest = {'schemaVersion': 1, 'generator': 'Independent standard-library glTF/GLB/ZIP/3TZ byte fixtures', 'cases': cases}
     (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest

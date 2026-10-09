@@ -33,7 +33,8 @@ def main():
     modules=args.node_modules.resolve(strict=True); package=modules/'gltf-validator/package.json'
     package_json=json.loads(package.read_text());assert package_json['version']=='2.0.0-dev.3.10'
     chosen=['triangle','min_version_2_0','points','lines','terrain','external_bin','interleaved_normalized',
-            'matrix_padding','matrix_final_padding_omitted','unknown_chunk','quantized_positions','buffer_base64_octet-stream','buffer_base64_gltf-buffer']
+            'matrix_padding','matrix_final_padding_omitted','unknown_chunk','quantized_positions','buffer_base64_octet-stream','buffer_base64_gltf-buffer',
+            'extras_nested_extensions','extras_extensions_scalar','quantized_uv_required_True']
     manifest=json.loads((args.corpus/'manifest.json').read_text()); by_name={c['name']:c for c in manifest['cases']}
     hashes={}; jobs=[]
     with tempfile.TemporaryDirectory(prefix='c1-khronos-') as temporary:
