@@ -3,18 +3,18 @@
   "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
   "gdal": "3.13.3",
   "portable": {
-    "passed": 307,
+    "passed": 308,
     "failed": 0,
     "ignored": 8,
     "test_binaries": 32,
-    "log_sha256": "12e22c462b7a24c3b2b66ca252bd038557120037d461d59ed30e71e32857ed7e"
+    "log_sha256": "12f190c54e1319d51fb42ceca96398dc879b266ac535f100cf26d60f63a426d5"
   },
   "native_geospatial_and_jpeg": {
-    "passed": 332,
+    "passed": 333,
     "failed": 0,
     "ignored": 9,
     "test_binaries": 32,
-    "log_sha256": "72d79313a0b66731c09634839ccd5cdaadda63feb4e3060c74acd38dd4931405"
+    "log_sha256": "280bbab82a56a4f7be3873bb6abfa56062c10cef827152c2084cffb2cc9b4156"
   },
   "installed_wheel": {
     "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
@@ -32,5 +32,5 @@
   },
   "build_profile": "dev, debug=0, incremental=false, jobs=2",
   "platform_limit": "Local Linux only. macOS/Windows and other Python versions require CI; no crash or power-loss durability proof.",
-  "verification_commit": "ae37e808601a7daf66cc66d52d4d8867c30b3f11"
+  "verification_commit": "44040c015908c6c55849c1704e8c8a11350c8afb"
 }

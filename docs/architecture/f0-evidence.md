@@ -1,7 +1,7 @@
 # F0 implementation evidence (#115)
 
 Implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
-Final namespace tests and verification: `ae37e808601a7daf66cc66d52d4d8867c30b3f11`.
+Namespace tests and portable fixture verification: `44040c015908c6c55849c1704e8c8a11350c8afb`.
 The [implementation contract](f0-implementation.md) defines the supported scope
 and deliberate migrations. This evidence does not close #113 or release 0.4.0.
 
@@ -14,8 +14,8 @@ record source/toolchain identity, test totals, log hashes and wheel identity.
 
 | Check | Result |
 | --- | --- |
-| `cargo test --locked --no-fail-fast` | 307 passed; 8 existing ignored tests |
-| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 332 passed; 9 existing ignored tests |
+| `cargo test --locked --no-fail-fast` | 308 passed; 8 existing ignored tests |
+| `cargo test --locked --features native-geospatial,native-jpeg --no-fail-fast` | 333 passed; 9 existing ignored tests |
 | `cargo clippy --locked --workspace --all-targets -- -D warnings` | Passed |
 | Native-feature all-target clippy with warnings denied | Passed |
 | `cargo fmt --all --check`, `git diff --check` | Passed |
@@ -39,7 +39,7 @@ postcommit reoccupied temporary names and Unix permissions. Faults and schedules
 are deterministic test injection, not observed disk-full or natural race events.
 Artifact ownership ties each candidate to its creating attempt by lifetime.
 
-Ten package integration tests and four CLI tests cover pure validation, read-only
+Eleven Linux package integration tests and four CLI tests cover pure validation, read-only
 resolution, exact byte/receipt inventory, safe names, root/member/directory
 symlinks, nonregular sources, non-UTF8 member rejection, long/oversized members,
 source/output aliases, changed/deleted sources, observer failure, competing
@@ -47,6 +47,11 @@ outputs, replacement and CLI path display. Three codec tests cover persistent
 payload/finalization/flush faults, the 65,535-entry ZIP64 sentinel, and an actual
 sparse file with an offset at `u32::MAX`. A package producer-fault test drives
 those codec failures through abort and cleanup while preserving previous output.
+
+Raw-byte non-UTF8 filename fixtures run on Linux because APFS rejects their
+creation. Unix symlink/socket coverage remains enabled on macOS. Source mutation
+fixtures change size, avoiding timestamp-resolution assumptions; deleted-source
+errors are checked against canonical resolved paths.
 
 Container oracles include a separate ZIP reader and direct local-header, CRC,
 size, name, index and offset parsing. Installed Python tests use `zipfile`,
