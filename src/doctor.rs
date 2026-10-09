@@ -13,6 +13,7 @@ pub const COMMANDS: &[(&str, &[&str])] = &[
     ("terrain", &[]),
     ("point-cloud", &[]),
     ("mesh-to-3tz", &["meshTo3tz"]),
+    ("mesh-local-to-3tz", &[]),
     ("glb-to-3tz", &["glbTo3tz"]),
     ("createTilesetJson", &["create-tileset-json"]),
     ("convert", &[]),
@@ -41,6 +42,7 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
         json!({"commands":{},"nativeGeospatial":geospatial,"proj":proj_inventory(&geospatial)});
     for name in [
         "mesh-to-3tz",
+        "mesh-local-to-3tz",
         "glb-to-3tz",
         "createTilesetJson",
         "convert",
