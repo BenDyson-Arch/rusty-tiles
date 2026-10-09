@@ -272,9 +272,12 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 export NODE_PATH="$PWD/target/browser-probe/node_modules"
 node tests/fixtures/preview_layers.cjs http://127.0.0.1:9279
 node tests/fixtures/point_cloud.cjs http://127.0.0.1:9279
+node tests/fixtures/point_cloud.cjs http://127.0.0.1:9279 --slow-refinement
 node tests/fixtures/terrain.cjs http://127.0.0.1:9279
 node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --require-aggregates
 ```
+
+The point-cloud stress option delays the first rendered frame after moving to fine detail, slows browser execution and delays GLB requests. It exercises the stale `tilesLoaded` race while retaining the same 257-point, metadata, picking and hard-refresh assertions. Settlement requires a loaded, stable selection across completed frames; a tile error fails immediately and a 30-second deadline reports unresolved selection/request state.
 
 For `convert-to-implicit`, export the native Rust fixtures and prepare separate preview copies. The helper requires a new destination directory; it preserves the exported manifests. Install CesiumJS 1.146.0 and Playwright 1.63.0 for the recorded gate:
 
