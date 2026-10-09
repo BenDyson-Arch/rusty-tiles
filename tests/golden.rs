@@ -149,7 +149,14 @@ fn derivative_missing_inputs_do_not_publish_output() {
         &rusty_tiles::RunControl::default(),
     )
     .unwrap_err();
-    assert_eq!(err.error.kind(), rusty_tiles::JobErrorKind::Io);
+    assert_eq!(
+        err.error.kind(),
+        if cfg!(feature = "native-geospatial") {
+            rusty_tiles::JobErrorKind::Io
+        } else {
+            rusty_tiles::JobErrorKind::Unsupported
+        }
+    );
     assert!(!output.exists());
 }
 
