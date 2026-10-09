@@ -403,6 +403,7 @@ These files record measured runs. Read them for numbers. They describe one machi
 
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |
+| [`release_04_blockers_results.json`](bench/release_04_blockers_results.json) | 0.4 candidate Rust/Python/browser checks, five-platform wheels and official Blender bundle provenance; publication remains separate | Release acceptance and wheel acceptance workflows |
 | [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
 | [`vector_benchmark_results.json`](bench/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
 | [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Native raster against the Python baseline at `9a95862`, with every PNG byte compared | `bench/benchmark_raster.py` |
