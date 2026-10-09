@@ -580,7 +580,7 @@ def profile_controls(binary,directory,baseline=False):
             struct.pack_into('<QI',data,235,18446744073709551615 if kind=='evlr_offset_u64max' else len(data)+1,1)
         elif kind=='f32_unrepresentable_nodata':
             d=227+54+8*192;data[d+3]=1;struct.pack_into('<d',data,d+40,.125123456789)
-        elif kind in ('duplicate_projected_geokey','duplicate_geographic_geokey','untyped_extra','waveform_format'):
+        elif kind in ('duplicate_projected_geokey','duplicate_geographic_geokey'):
             key=3072 if kind=='duplicate_projected_geokey' else 2048
             values=(32632,32633) if key==3072 else (4326,4326)
             payload=struct.pack('<'+'H'*12,1,1,0,2,key,0,1,values[0],key,0,1,values[1])
@@ -604,11 +604,11 @@ def profile_controls(binary,directory,baseline=False):
         elif kind=='hardlink_alias':__import__('os').link(source,target)
         else:target.write_bytes(b'existing output sentinel')
         original=target.read_bytes();completed,response=invoke(binary,source,target,options)
-        if completed.returncode==0 and baseline and kind in ('scaled_u64','scaled_i64','source_alias','hardlink_alias','zero_scale','negative_scale','header_size_zero','f32_unrepresentable_nodata','duplicate_projected_geokey','duplicate_geographic_geokey','untyped_extra','waveform_format'):
+        if completed.returncode==0 and baseline and kind in ('scaled_u64','scaled_i64','source_alias','hardlink_alias','zero_scale','negative_scale','header_size_zero','f32_unrepresentable_nodata','duplicate_projected_geokey','duplicate_geographic_geokey'):
             results.append({'case':kind,'baseline_gap':'accepted unsupported/unsafe profile','output_replaced':target.read_bytes()!=original,'original_source_sha256':hashlib.sha256(data).hexdigest(),'output_after_sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'response':response});continue
         require(completed.returncode!=0 and response.get('ok') is False,'negative profile accepted: '+kind)
         require(target.read_bytes()==original,'refusal replaced old output: '+kind)
-        if kind in ('f32_unrepresentable_nodata','untyped_extra','waveform_format') and not baseline:require(response['error']['code']=='unsupported','unrepresentable FLOAT32 declaration unsupported profile')
+        if kind in ('f32_unrepresentable_nodata','untyped_extra','waveform_format') and not baseline:require(response['error']['code']=='unsupported',kind+': expected unsupported source profile')
         require(not any(p.name.startswith(('.tiles-work-','.rusty-tiles-')) for p in directory.iterdir()),'refusal workspace leak')
         if kind.startswith(('header_size','point_offset','evlr_offset')) and not baseline:require(response['error']['code']=='invalid_input','malformed header error kind')
         results.append({'case':kind,'result':'rejected','error':response.get('error')})
