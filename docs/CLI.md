@@ -397,7 +397,7 @@ Events report work units, not time remaining.
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
 
-### One RGB raster tile into a new directory
+### One RGB raster tile into a directory
 
 With a `native-geospatial` build, `raster-tile-to-directory` accepts the bounded
 [D1 RGB profile](architecture/d1-raster-contract.md): one 256×256 RGB GeoTIFF
@@ -408,9 +408,26 @@ rusty-tiles raster-tile-to-directory -i aligned.tif -o ./new-tile --zoom 3 --x 5
 ```
 
 The parent directory must exist on a supported local filesystem. Existing
-outputs always conflict; this command has no `--force` mode. It publishes the
+outputs conflict by default. `--force` (or `-f`) replaces the final-path entry
+present when publication holds the old output, including a file or symlink itself.
+Replacement has an interval when the output path is absent; it does not promise
+snapshot isolation, protection from unrelated writers, or crash durability.
+It publishes the
 PNG tile, `tilejson.json` and `report.json` together. `--json` returns the exact
-`rasterReport` and cleanup diagnostics. Default builds return `unsupported`.
-See the [directory contract](architecture/d1-directory-contract.md) for platform
+`rasterReport` and cleanup diagnostics. Failed restoration returns
+`error.recovery: {"output": ..., "previousOutput": ...}`; the previous output is
+retained at that backup path. Resolve any current destination entry before
+restoring it. Other failures have `error.recovery: null`. Readable path strings use the CLI
+UTF-8 display convention; exact recovery filename units are also included. Backup cleanup failure after installation
+remains success with actionable `cleanupDiagnostics`. Default builds return
+`unsupported`.
+See the [CreateNew contract](architecture/d1-directory-contract.md) and
+[Replace contract](architecture/d2-directory-contract.md) for platform
 support and guarantees. Broader imagery conversion remains the separate
 `raster` command.
+
+For failed directory restoration, `error.recovery.nativePaths` preserves exact
+filename units alongside the readable recovery paths: `encoding` is
+`unix-bytes` or `windows-utf16`, with `output` and `previousOutput` arrays.
+Use these native values when a filename is not representable as a Unicode
+string. Postcommit cleanup diagnostics do not change a successful exit status.

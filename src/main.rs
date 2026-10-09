@@ -132,9 +132,12 @@ struct IoArgs {
 struct RasterTileArgs {
     #[arg(short = 'i', long)]
     input: PathBuf,
-    /// New directory in an existing supported local parent
+    /// Directory in an existing supported local parent
     #[arg(short = 'o', long)]
     output: PathBuf,
+    /// Replace the current output entry after conversion finishes
+    #[arg(short = 'f', long)]
+    force: bool,
     #[arg(long)]
     zoom: u8,
     #[arg(long)]
@@ -631,20 +634,7 @@ fn main() -> ExitCode {
                 _ => error.category(),
             };
             if json {
-                let mut failure = json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code});
-                if let Error::Job(job) = &error {
-                    failure["error"]["kind"] = json!(category);
-                    failure["error"]["secondaryDiagnostics"] = json!(job
-                        .secondary
-                        .iter()
-                        .map(|cause| cause.to_string())
-                        .collect::<Vec<_>>());
-                    failure["error"]["retainedPaths"] = json!(job
-                        .retained_paths
-                        .iter()
-                        .map(|path| path.to_string_lossy())
-                        .collect::<Vec<_>>());
-                }
+                let failure = error_summary(&error, category, code);
                 println!("{failure}");
             } else {
                 eprintln!("{error}");
@@ -690,6 +680,45 @@ impl Observer for CliRunObserver {
         writeln!(io::stderr().lock(), "{value}")
             .map_err(|error| JobError::new(JobErrorKind::ObserverFailure, error.to_string()))
     }
+}
+
+// Display paths remain convenient, while recovery also preserves exact native
+// filename units for tools operating on names that are not Unicode strings.
+#[cfg(unix)]
+fn native_recovery_paths(recovery: &rusty_tiles::DirectoryRecovery) -> Value {
+    use std::os::unix::ffi::OsStrExt;
+    json!({"encoding":"unix-bytes", "output":recovery.output.as_os_str().as_bytes(),
+        "previousOutput":recovery.previous_output.as_os_str().as_bytes()})
+}
+#[cfg(windows)]
+fn native_recovery_paths(recovery: &rusty_tiles::DirectoryRecovery) -> Value {
+    use std::os::windows::ffi::OsStrExt;
+    json!({"encoding":"windows-utf16", "output":recovery.output.as_os_str().encode_wide().collect::<Vec<_>>(),
+        "previousOutput":recovery.previous_output.as_os_str().encode_wide().collect::<Vec<_>>()})
+}
+#[cfg(not(any(unix, windows)))]
+fn native_recovery_paths(_: &rusty_tiles::DirectoryRecovery) -> Value {
+    Value::Null // Directory publication is unsupported on these platforms.
+}
+
+fn error_summary(error: &Error, category: &str, code: u8) -> Value {
+    let mut failure =
+        json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code});
+    if let Error::Job(job) = error {
+        failure["error"]["kind"] = json!(category);
+        failure["error"]["recovery"] = job.recovery.as_ref().map_or(Value::Null, |recovery| json!({"output":recovery.output.to_string_lossy(),"previousOutput":recovery.previous_output.to_string_lossy(),"nativePaths":native_recovery_paths(recovery)}));
+        failure["error"]["secondaryDiagnostics"] = json!(job
+            .secondary
+            .iter()
+            .map(|cause| cause.to_string())
+            .collect::<Vec<_>>());
+        failure["error"]["retainedPaths"] = json!(job
+            .retained_paths
+            .iter()
+            .map(|path| path.to_string_lossy())
+            .collect::<Vec<_>>());
+    }
+    failure
 }
 
 fn cleanup_diagnostics_summary(diagnostics: &[rusty_tiles::CleanupDiagnostic]) -> Value {
@@ -975,7 +1004,12 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             let run = RunControl::new(observer);
             let request =
-                RasterDirectoryRequest::web_mercator_rgb(a.input, a.output, a.zoom, a.x, a.y);
+                RasterDirectoryRequest::web_mercator_rgb(a.input, a.output, a.zoom, a.x, a.y)
+                    .with_policy(if a.force {
+                        OutputPolicy::Replace
+                    } else {
+                        OutputPolicy::CreateNew
+                    });
             Outcome::RasterDirectory(rusty_tiles::raster_to_directory(request, &run)?)
         }
         Command::MeshLocalTo3tz(a) => {
@@ -1151,6 +1185,79 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_json_distinguishes_previous_output_from_scratch() {
+        let failure = rusty_tiles::JobFailure {
+            error: rusty_tiles::JobError::new(
+                rusty_tiles::JobErrorKind::Conflict,
+                "install blocked",
+            ),
+            secondary: vec![rusty_tiles::JobError::new(
+                rusty_tiles::JobErrorKind::Io,
+                "restore blocked",
+            )],
+            retained_paths: vec![PathBuf::from("/work/candidate")],
+            recovery: Some(rusty_tiles::DirectoryRecovery {
+                output: PathBuf::from("/work/output"),
+                previous_output: PathBuf::from("/work/holder/previous"),
+            }),
+        };
+        let value = error_summary(&Error::Job(failure), "output_conflict", 5);
+        assert_eq!(value["error"]["kind"], "output_conflict");
+        assert_eq!(
+            json!({"output":value["error"]["recovery"]["output"], "previousOutput":value["error"]["recovery"]["previousOutput"]}),
+            json!({
+                "output": "/work/output", "previousOutput": "/work/holder/previous"
+            })
+        );
+        assert_eq!(value["error"]["retainedPaths"], json!(["/work/candidate"]));
+        assert_eq!(
+            value["error"]["secondaryDiagnostics"],
+            json!(["restore blocked"])
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_json_preserves_non_utf8_filename_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+        let output = PathBuf::from(std::ffi::OsString::from_vec(b"/work/output-\xff".to_vec()));
+        let previous_output = output.join("previous");
+        let failure = rusty_tiles::JobFailure {
+            error: rusty_tiles::JobError::new(rusty_tiles::JobErrorKind::Io, "install failed"),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: Some(rusty_tiles::DirectoryRecovery {
+                output,
+                previous_output,
+            }),
+        };
+        let value = error_summary(&Error::Job(failure), "io", 1);
+        let native = &value["error"]["recovery"]["nativePaths"];
+        assert_eq!(native["encoding"], "unix-bytes");
+        assert_eq!(native["output"], json!(b"/work/output-\xff".as_slice()));
+        assert_eq!(
+            native["previousOutput"],
+            json!(b"/work/output-\xff/previous".as_slice())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_json_preserves_native_utf16_units() {
+        use std::os::windows::ffi::OsStringExt;
+        let units = [b'C' as u16, b':' as u16, b'/' as u16, 0xd800];
+        let path = PathBuf::from(std::ffi::OsString::from_wide(&units));
+        let native = native_recovery_paths(&rusty_tiles::DirectoryRecovery {
+            output: path.clone(),
+            previous_output: path,
+        });
+        assert_eq!(native["encoding"], "windows-utf16");
+        assert_eq!(native["output"], json!(units));
+        assert_eq!(native["previousOutput"], json!(units));
+    }
+
     use clap::CommandFactory;
 
     fn kebab(name: &str) -> String {
@@ -1207,7 +1314,7 @@ mod tests {
     }
 
     #[test]
-    fn d1_requires_explicit_tile_address_and_has_no_replace_mode() {
+    fn raster_directory_requires_address_and_supports_explicit_replace() {
         let args = [
             "rusty-tiles",
             "raster-tile-to-directory",
@@ -1224,7 +1331,11 @@ mod tests {
         ];
         assert!(Cli::try_parse_from(args).is_ok());
         assert!(Cli::try_parse_from(&args[..6]).is_err());
-        assert!(Cli::try_parse_from(args.into_iter().chain(["--force"])).is_err());
+        let parsed = Cli::try_parse_from(args.into_iter().chain(["--force"])).unwrap();
+        let Command::RasterTileToDirectory(parsed) = parsed.command else {
+            panic!("wrong command");
+        };
+        assert!(parsed.force);
     }
 
     #[test]

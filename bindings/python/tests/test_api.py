@@ -79,8 +79,22 @@ class WheelAPI(unittest.TestCase):
             )
         self.assertEqual(caught.exception.kind, "unsupported")
         self.assertIn("native-geospatial", str(caught.exception))
+        self.assertIsNone(caught.exception.recovery)
         self.assertFalse(output.exists())
         self.assertEqual(events, [])
+
+    def test_directory_replace_default_wheel_preserves_old_entry(self):
+        output = self.root / "existing-raster"
+        output.mkdir()
+        (output / "old").write_bytes(b"original")
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.raster_tile_to_directory(
+                ROOT / "tests/fixtures/d1-rgb.tif", output,
+                zoom=3, x=5, y=2, force=True,
+            )
+        self.assertIsNone(caught.exception.recovery)
+        self.assertEqual((output / "old").read_bytes(), b"original")
+        self.assertEqual(list(output.iterdir()), [output / "old"])
 
     def test_d1_invalid_request_precedes_capability(self):
         with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:

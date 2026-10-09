@@ -4,7 +4,7 @@ use crate::{
     runtime::{directory::DirectoryTarget, Attempt},
     RunEvent,
 };
-use crate::{CleanupDiagnostic, JobError, JobErrorKind, JobFailure, RunControl};
+use crate::{CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl};
 use serde::Serialize;
 #[cfg(feature = "native-geospatial")]
 use serde_json::json;
@@ -28,6 +28,7 @@ pub struct RasterDirectoryRequest {
     z: u8,
     x: u32,
     y: u32,
+    policy: OutputPolicy,
 }
 impl RasterDirectoryRequest {
     pub fn web_mercator_rgb(
@@ -43,7 +44,12 @@ impl RasterDirectoryRequest {
             z,
             x,
             y,
+            policy: OutputPolicy::CreateNew,
         }
+    }
+    pub fn with_policy(mut self, policy: OutputPolicy) -> Self {
+        self.policy = policy;
+        self
     }
 }
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -347,7 +353,7 @@ pub fn raster_to_directory(
             let before = inspect(&request.input)?;
             let source = fs::canonicalize(&request.input)
                 .map_err(|e| JobError::io("resolve raster source", &request.input, e))?;
-            let target = DirectoryTarget::prepare(&request.output)?;
+            let target = DirectoryTarget::prepare(&request.output, request.policy)?;
             for suffix in [".aux.xml", ".msk", ".ovr"] {
                 let mut companion = source.as_os_str().to_os_string();
                 companion.push(suffix);
@@ -519,7 +525,7 @@ mod tests {
             };
             let control = RunControl::default();
             let attempt = control.begin().unwrap();
-            let staging = DirectoryTarget::prepare(&output)
+            let staging = DirectoryTarget::prepare(&output, OutputPolicy::CreateNew)
                 .unwrap()
                 .stage(&attempt)
                 .unwrap();

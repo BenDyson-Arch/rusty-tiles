@@ -80,6 +80,8 @@ jobs:
           key: python-wheel-${{ matrix.python }}
       - name: Check Python bindings
         run: cargo clippy --locked -p rusty-tiles-python -- -D warnings
+      - name: Test Python error and recovery mappings
+        run: cargo test --locked -p rusty-tiles-python
       - name: Build wheel
         run: |
           python -m pip install 'maturin==1.15.0'
@@ -216,6 +218,7 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           python3 -B tests/d1_raster_oracle.py target/debug/rusty-tiles
+          python3 -B tests/d2_directory_oracle.py target/debug/rusty-tiles
       - name: Test derivative encoding and preview isolation
         shell: bash -el {0}
         run: |

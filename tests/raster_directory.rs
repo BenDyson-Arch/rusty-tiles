@@ -1,4 +1,6 @@
 //! External D1 facade tests: no access to private runtime or native handles.
+#[cfg(feature = "native-geospatial")]
+use rusty_tiles::OutputPolicy;
 use rusty_tiles::{raster_to_directory, JobErrorKind, RasterDirectoryRequest, RunControl};
 use std::{fs, path::Path};
 const SOURCE: &[u8] = include_bytes!("fixtures/d1-rgb.tif");
@@ -98,6 +100,140 @@ mod native {
         }
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 3);
     }
+    #[test]
+    fn replace_commits_complete_raster_for_present_and_absent_entries() {
+        for old_kind in ["absent", "directory", "file"] {
+            let root = fixture();
+            let output = root.path().join("output");
+            match old_kind {
+                "directory" => {
+                    fs::create_dir(&output).unwrap();
+                    fs::write(output.join("old.bin"), b"original inventory").unwrap();
+                }
+                "file" => fs::write(&output, b"original file").unwrap(),
+                _ => (),
+            }
+            let result = raster_to_directory(
+                request(root.path(), "output").with_policy(OutputPolicy::Replace),
+                &RunControl::default(),
+            )
+            .unwrap();
+            assert_eq!(result.output, output);
+            assert!(result.cleanup_diagnostics.is_empty());
+            assert!(!output.join("old.bin").exists());
+            assert_eq!(
+                image::open(output.join("tiles/3/5/2.png"))
+                    .unwrap()
+                    .to_rgb8()
+                    .get_pixel(5, 2)
+                    .0,
+                [5, 2, 25]
+            );
+            assert_eq!(
+                walkdir::WalkDir::new(&output)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|e| e.file_type().is_file())
+                    .count(),
+                3
+            );
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn replace_symlink_moves_link_without_touching_its_referent() {
+        let root = fixture();
+        let referent = root.path().join("referent");
+        fs::create_dir(&referent).unwrap();
+        fs::write(referent.join("original"), b"referent bytes").unwrap();
+        std::os::unix::fs::symlink(&referent, root.path().join("output")).unwrap();
+        let result = raster_to_directory(
+            request(root.path(), "output").with_policy(OutputPolicy::Replace),
+            &RunControl::default(),
+        )
+        .unwrap();
+        assert!(!fs::symlink_metadata(&result.output)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            fs::read(referent.join("original")).unwrap(),
+            b"referent bytes"
+        );
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 3);
+    }
+    #[test]
+    fn replace_precancel_and_observer_failures_preserve_original_tree() {
+        struct CancelFinal(std::sync::Mutex<Option<rusty_tiles::CancellationHandle>>);
+        impl Observer for CancelFinal {
+            fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+                if matches!(
+                    event,
+                    RunEvent::Progress {
+                        phase: "raster_directory",
+                        ..
+                    }
+                ) {
+                    self.0.lock().unwrap().as_ref().unwrap().cancel();
+                }
+                Ok(())
+            }
+        }
+        for phase in [
+            "precancel",
+            "raster_read",
+            "raster_directory",
+            "cancel_final",
+        ] {
+            let root = fixture();
+            let output = root.path().join("output");
+            fs::create_dir(&output).unwrap();
+            fs::create_dir(output.join("nested")).unwrap();
+            fs::write(output.join("nested/original"), b"old output").unwrap();
+            let run = if phase == "precancel" {
+                let run = RunControl::default();
+                run.cancellation_handle().cancel();
+                run
+            } else if phase == "cancel_final" {
+                let observer = Arc::new(CancelFinal(std::sync::Mutex::new(None)));
+                let run = RunControl::new(Some(observer.clone()));
+                *observer.0.lock().unwrap() = Some(run.cancellation_handle());
+                run
+            } else {
+                RunControl::new(Some(Arc::new(Refuse(phase))))
+            };
+            let failure = raster_to_directory(
+                request(root.path(), "output").with_policy(OutputPolicy::Replace),
+                &run,
+            )
+            .unwrap_err();
+            assert_eq!(
+                failure.error.kind(),
+                if phase == "precancel" || phase == "cancel_final" {
+                    JobErrorKind::Cancelled
+                } else {
+                    JobErrorKind::ObserverFailure
+                }
+            );
+            assert!(failure.recovery.is_none());
+            assert!(failure.retained_paths.is_empty());
+            assert_eq!(
+                fs::read(output.join("nested/original")).unwrap(),
+                b"old output"
+            );
+            assert_eq!(
+                walkdir::WalkDir::new(&output)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|e| e.file_type().is_file())
+                    .count(),
+                1
+            );
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn native_source_paths_preserve_non_utf8_bytes() {

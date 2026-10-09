@@ -61,8 +61,9 @@ samples, placement, inventory and report facts, with malformed/unsupported
 source, observer, write/finalizer and callback-CWD controls. Platform tests must
 execute on admitted filesystems; unavailable support is not a passing proof.
 
-D1 completes once those obligations pass for this profile. D2 replacement,
-hold-old/install/restore states and typed recovery remain open in #118. The
+D1 is accepted in #129 after those obligations passed for this profile.
+[D2 replacement](d2-directory-contract.md), hold-old/install/restore states and
+typed recovery follow under #118. The
 broader legacy raster/terrain routes remain unaccepted under #124; this slice
 does not silently migrate or remove their additional behavior. #82 feasibility
 informs the reader boundary, but no GDAL replacement is part of D1.

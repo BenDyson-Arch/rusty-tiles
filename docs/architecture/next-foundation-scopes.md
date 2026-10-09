@@ -137,8 +137,12 @@ Replacement has distinct hold-old/install/restore states; choose the supported
 platform/mode guarantees and visibility interval before implementation. Failed
 restoration returns a typed previous-output recovery location. Backup cleanup
 cannot erase the only surviving original or rewrite a committed outcome.
-Unrelated competitors remain protected; no process mutex implies universal
-writer serialization. D1/D2 require an actual consumer and OS evidence.
+Competitors inserted after hold remain protected; Replace explicitly authorizes
+retiring the entry present at hold, not a preparation-time snapshot. No process
+mutex implies universal writer serialization. D1/D2 require an actual consumer
+and OS evidence. D1 is accepted in #129; the
+[D2 contract](d2-directory-contract.md) specifies current-at-hold replacement,
+conditional restoration and machine-readable recovery.
 
 Vector acceptance owns all effects of a feature: SQL/fragments, counters,
 success diagnostics and any mutable frame/cache/identity contribution. Readers

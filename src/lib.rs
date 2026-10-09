@@ -55,8 +55,8 @@ pub use raster_directory::{
 };
 pub use report::{ConversionResult, Event, EventSink, Reporter};
 pub use runtime::{
-    CancellationHandle, CleanupDiagnostic, JobError, JobErrorKind, JobFailure, Observer,
-    OutputPolicy, RunControl, RunEvent,
+    CancellationHandle, CleanupDiagnostic, DirectoryRecovery, JobError, JobErrorKind, JobFailure,
+    Observer, OutputPolicy, RunControl, RunEvent,
 };
 pub use tile::{
     mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TEXEL_DENSITY,

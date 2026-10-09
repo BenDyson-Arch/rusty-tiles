@@ -1,5 +1,9 @@
 # D1 raster directory contract
 
+This freezes the D1 decoding profile. [D2](d2-directory-contract.md) adds
+explicit Replace policy to the same request and publisher without broadening
+the admitted raster profile.
+
 `RasterDirectoryRequest::web_mercator_rgb(input, output, z, x, y)` and the root
 `raster_to_directory(request, &RunControl)` produce a new directory. D1 supports
 CreateNew only; its output parent must already exist. Publication uses the D1
