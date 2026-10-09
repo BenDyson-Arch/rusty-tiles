@@ -228,7 +228,7 @@ class WheelAPI(unittest.TestCase):
         self.assertIsInstance(result, rusty_tiles.PackageResult)
         self.assertTrue(result.archive)
         self.assertTrue(result.output.is_absolute())
-        self.assertEqual(result.output.resolve(), output.resolve())
+        self.assertTrue(result.output.samefile(output))
         self.assertIsInstance(result.receipt, rusty_tiles.PackageReceipt)
         self.assertEqual(result.receipt.member_count, len(members))
         self.assertEqual(result.receipt.source_bytes, sum(map(len, members.values())))
