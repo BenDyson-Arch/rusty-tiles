@@ -1,4 +1,4 @@
-# Proposed public API contract for the first mesh slice
+# Proposed public API contract for the subsequent mesh slice
 
 Status: design proposal for [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), based on develop `8dfd74b`; no production changes implement this document yet. Breaking API changes are acceptable before 0.4.0. Names below are illustrative, while ownership, validation order, and publication guarantees are intended acceptance requirements. See the [architecture plan](README.md) for dependency boundaries and sequencing.
 
@@ -133,8 +133,8 @@ Python stores the original callback exception in the binding-owned sink, request
 The commit boundary is explicit:
 
 1. Complete work, report serialization, and all fallible user callbacks.
-2. Join event-producing workers; check observer failure and cancellation.
-3. Acquire the context's commit gate. Cancellation/observer abort recorded before the gate prevents commit. Once commit begins, a later cooperative cancellation request cannot replace a successfully published core result with a pre-commit failure.
+2. Join event-producing workers, drain observer calls and close event admission; check observer failure and cancellation.
+3. Atomically request publication permission from the run-control gate, arbitrating against accepted abort causes. Release the gate lock before filesystem work. Permission is not installation: the publisher can still fail. A late cooperative cancellation request cannot revoke granted permission or replace a committed core result with a pre-commit failure.
 4. Publish using the verified publisher; return its committed core result. No user callback runs after step 2, including a completion callback. Completion is represented by the returned result. CLI may render its own completion message after success.
 
 The gate coordinates only commit versus abort state; never hold it while invoking callbacks. Filesystem publication can still fail and return an I/O/conflict or recovery error. The publisher must prove no-clobber semantics and replacement behavior per artifact/platform; current helpers are not trusted to provide them. Failed preparation creates no output parents/staging. Failed execution preserves the destination before publication and attempts private-work cleanup; filesystem failures require actionable retained-path information, and recovery backups must not be deleted. Directory replacement may have a documented visibility/recovery window and is not promised crash-atomic; a failed restore retains the previous output backup and reports its location. A private-work cleanup failure after commit is a committed diagnostic, not a pre-commit conversion error.
@@ -155,9 +155,9 @@ Independent evidence includes hand-derived axis/transform cases, independently g
 
 Existing tests, digests, and captured outputs are useful test inputs and differential observations. Classify each expectation as a product requirement, independent correctness check, or historical behavior. Only the first two can justify retention. Content-byte equality is required only where the product contract demands it; a rewrite may change hierarchy/layout/bytes while proving equivalent or improved declared semantics. Publish that comparison rather than blindly copying or regenerating golden outputs.
 
-## First vertical slice acceptance
+## Subsequent mesh slice acceptance
 
-The first implementation slice delivers mesh request validation, preparation, execution/publication, context/error/result boundaries, and CLI/Python adapters against the desired contract. It may rewrite geometry, tiling, source interpretation, encoding, or job code when current implementations fail evidence. There is no algorithm-change prohibition. Keep replacements reviewable and compare correctness/resource effects using independent evidence rather than requiring historical artifacts.
+The foundation-first plan puts the bounded package/job slice F0 before this work; see [foundation-contracts.md](foundation-contracts.md). The subsequent mesh slice delivers request validation, preparation, execution/publication, context/error/result boundaries, and CLI/Python adapters against the desired contract. It may rewrite geometry, tiling, source interpretation, encoding, or job code when current implementations fail evidence. There is no algorithm-change prohibition. Keep replacements reviewable and compare correctness/resource effects using independent evidence rather than requiring historical artifacts.
 
 - Pure request tests cover missing explicit coordinate interpretation, NaN/infinity, bounds, rotation without origin, positive targets/dimension constraints justified by the chosen encoders, empty CRS, missing axes/height, contradictory local/CRS options, offset units, checked arithmetic, and builder-order independence. Invalid configuration wins before source/output errors and creates no output parent/work directory.
 - Rust/CLI/Python parity tests compare equivalent supported requests, reviewed defaults/effective settings, acceptance/rejection, and domain machine codes. Omitting coordinates fails; explicitly local coordinates resembling geographic/projected values stay local. Optional compatibility translation is isolated and independently tested, not part of default parity.

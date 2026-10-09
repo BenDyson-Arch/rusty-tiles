@@ -6,6 +6,10 @@ presumption of correctness. Retention requires the evidence in the component
 ledger, not merely a passing existing test suite. See [architecture scope](README.md) and the
 [API proposal](api-contract.md).
 
+The [F0 foundation contract](foundation-contracts.md) controls the first
+implementation scope. This broader document includes later directory, vector and
+resource-validation obligations; they are not hidden requirements of F0.
+
 ## Job phases and side effects
 
 | Phase | May read input/backend state? | May write? | Failure meaning |
@@ -22,9 +26,10 @@ execution stages. Format readers that require a disk spool do that within an
 execution job, after pure request validation and available read-only preflight.
 Actual decoding/geometry errors can still occur during execution.
 
-File paths are not immutable snapshots. The proposed source contract requires that sources remain unchanged during
-conversion; this assumption must be documented and justified for each reader; hashes in audit
-results establish the tested inputs, not a general concurrent-source guarantee.
+File paths are not immutable snapshots. The proposed contract requires sources
+to remain unchanged during conversion; document and justify this assumption for
+each reader. Audit hashes establish the tested inputs, not a general guarantee
+against concurrent source changes.
 
 ## Publication semantics
 
@@ -97,7 +102,7 @@ writer's narrow model; do not discard or rewrite them incidentally.
   missing native driver must not be a hidden prerequisite for that operation.
   Retain compile-time feature boundaries and intentional supported-format limits.
 - Record backend and capability decisions in the report where they affect output
-  interpretation. CRS fallback retains whole-batch failure/accuracy rules; do
+  interpretation. Any justified CRS fallback must prove whole-batch failure/accuracy rules; do
   not silently mix differently resolved coordinate operations within a batch.
 - Explicit worker limits bound aggregate per-worker caches. Measure payload,
   hierarchy, source mesh, scratch and file-descriptor growth separately. Tile

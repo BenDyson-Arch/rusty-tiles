@@ -16,6 +16,7 @@ collected evidence, not that the release gate passes.
 | --- | --- | --- |
 | [API probes](api/README.md) / [results](api/results.json) | Build unmodified portable CLI/core/Python binding, generate invented GLBs, compare decoded archive members and inspect output after exceptions | Geographic offsets, rotation-only requests, omitted texture choice, callback failure/publication |
 | [Runtime probes](runtime/README.md) / [results](runtime/evidence/publication-vector.json) | Natural vector conversions plus clearly identified isolated source fault injection | Feature rollback/reporting, source callback I/O failure, directory publication race, orphan-content control |
+| [Foundation design model](foundation/README.md) / [results](foundation/results.json) | Exhaustive finite state/history exploration with seven negative controls | Proposed gate, seal/drain, primary failure, publication and recovery contracts; no production execution |
 
 The individual READMEs contain replay commands and prerequisites. Build targets
 and generated inputs/outputs live outside tracked source. Results record the
@@ -59,3 +60,13 @@ The original issue audit comment has been corrected. Memory scaling, global
 metric contamination, platform publication behavior beyond the exercised case,
 and full native/frontend acceptance remain separate work; the architecture
 proposal must not present them as measured results.
+
+## Foundation-first follow-up
+
+[Issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) scopes the
+first implementation to one real packaging consumer and completed-file
+publication through Rust/CLI/Python. The bounded model passes 14 contract cases
+and detects seven designated broken variants (2,354 state/history pairs; 4,258
+edges). Its assumptions and limits are explicit: a logical safety result is not
+proof of OS primitives, actual synchronization, FFI or crash durability. The
+coordinator reran it after integration and reproduced the same counts.

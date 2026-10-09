@@ -27,9 +27,30 @@ source fidelity and valid format/resource semantics are requirements to justify
 independently; old public exports and historical output bytes are not automatic
 compatibility obligations.
 
+## Foundation-first scope
+
+The next implementation scope is **F0: the shared job/publication plumbing used
+by a real package-conversion path through Rust, CLI and Python**, tracked in
+[implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115). The full mesh
+rewrite is downstream work. This narrows the earlier mesh-first plan: F0 must
+prove its own contracts without inheriting geometry, CRS or LOD complexity.
+
+See [foundation contracts](foundation-contracts.md), the
+[boundary audit](boundary-audit.md), and [publication primitive evidence](platform-evidence.md).
+These are the current sequencing authority; the larger API and runtime proposals
+remain the target direction, not a checklist to squeeze into F0.
+
+Clean means each decision has one owner, invalid states are not propagated,
+and failure outcomes carry their meaning. It does not mean banning every `if`
+or replacing branch statements with opaque policy tables. Real platform and
+geometry alternatives remain explicit in their owning module.
+
 ## Audit documents
 
-- [Public API and mesh vertical slice](api-contract.md)
+- [Foundation contracts and first implementation slice](foundation-contracts.md)
+- [Boundary/conditional-complexity audit](boundary-audit.md)
+- [Publication primitive evidence](platform-evidence.md)
+- [Public API and subsequent mesh slice](api-contract.md)
 - [Runtime contracts and acceptance matrix](runtime-contract.md)
 - [Component evidence and disposition ledger](evidence-ledger.md)
 - [Executable audit evidence](../../bench/architecture_audit/README.md)
@@ -50,7 +71,7 @@ call graph. Paths and line numbers refer to the baseline above.
 | `mesh.rs`, `glb_write.rs` | Scene loading/model; encoder-owned `TilePrimitive` used by geometry/LOD | Domain-owned scene/primitive data; separate glTF source and serialization boundaries |
 | `texture.rs`, `hlod.rs` | Texture calls tile helpers; texture and HLOD share global timing state | Texture algorithms independent of orchestration; per-job metrics |
 | `mesh_crs.rs` | Coordinate bake depends on full `MeshTo3tzOptions` | Dedicated validated placement input, independent of output/codec settings |
-| `bbox.rs`, `georef.rs`, `crs.rs` | glTF ingestion mixed with bounds/math; coordinate definitions, transforms, strict eligibility and regression fixtures | Spatial primitives separated from format ingestion; existing CRS algorithms and strict policies retained |
+| `bbox.rs`, `georef.rs`, `crs.rs` | glTF ingestion mixed with bounds/math; coordinate definitions, transforms, strict eligibility and regression fixtures | Spatial primitives separated from format ingestion; CRS algorithms and eligibility policies independently audited before retention |
 | `pack.rs`, `output.rs` | `pack` invokes `Job`; `Job` invokes archive internals | Archive/index codec below publisher; package conversion above publisher |
 | `tileset_node.rs`, `implicit/tileset.rs` | Generated hierarchy represented and repeatedly decoded as JSON | Typed generated nodes, bounds, transforms and errors; serialization at output boundary |
 | `vector/pipeline/store.rs` | SQL spool, feature acceptance, side effects, hierarchy construction and reports | Feature transaction, spool, hierarchy and report responsibilities explicit |
@@ -163,28 +184,45 @@ Do not weaken accuracy requirements to make an existing implementation pass.
 
 ## Migration sequence
 
-1. Define the desired contracts independently of current behavior and maintain
-   the component evidence ledger. Add deterministic reproductions and assess
-   oracle independence. Convert proven violations into desired-behavior
-   regressions; never turn observations of defects into compatibility promises.
-2. Implement the mesh request slice through Rust, CLI and Python, including
-   placement, defaults, capability checks, reporting and pre-publication failure.
-   Retain or replace algorithms only after their evidence gate; isolate contract
-   and algorithm changes where useful for reviewing cause and effect.
-3. Extract mesh models/helpers and archive serialization, make metrics job-local,
-   and narrow public exports. Keep mechanical moves separate from behavior fixes.
-4. Implement vector feature/candidate transactions and common publication/error
-   contracts. Apply the request/result conventions to points, vector, raster,
-   terrain and packaging without forcing identical processing stages.
-5. Introduce typed generated hierarchy and finish module reorganization. Reuse
-   independent validated oracles as checks, rather than sharing assumptions
-   between writer and validator or trusting a test solely because it exists. Resolve CLI packaging only with tested install
-   and release migration.
-6. Run the acceptance matrix, update user-facing migration/default guidance and
-   attach final-candidate evidence to #113. Merge design or probe work without
-   closing the issue; required implementation and final acceptance close it.
+1. Define foundation contracts and evidence before implementation. Resolve the
+   limited F0 requirements, classify failures and publication states, and run
+   the executable state model with negative controls. This is design evidence,
+   not proof of current production or a real filesystem implementation.
+2. Implement F0 using a real package-conversion path through Rust, CLI and Python:
+   validated request, owned staging/sealed artifact, job-local observer/abort
+   handling, completed-file publication and typed outcome/error mapping. The
+   runtime knows no converter identities; the format encoder knows no jobs.
+   Keep this scope small enough to review and prove independently.
+3. Extend the foundation only with the next real consumer. Directory publication
+   needs its own platform/recovery evidence. Vector feature transactions need
+   their own accepted/rejected/fatal model. Do not add unused generic machinery
+   to anticipate either during F0.
+4. Implement the mesh request/algorithm slice against its independent coordinate,
+   fidelity and resource contracts. Continue proof/disposition audits across
+   every subsystem; untouched code does not earn retention by omission.
+5. Introduce justified typed format/domain models and complete module ownership
+   migrations. Resolve separate CLI packaging only with tested install/release
+   consequences. Keep mechanical moves separate from semantic rewrites where
+   that helps review.
+6. Run final candidate acceptance, publish migration/default guidance and attach
+   evidence to #113. Merging these audit documents or only F0 does not close the
+   release gate. No implementation schedule or speedup is asserted by this audit.
 
-The first implementation slice is specified in [the API proposal](api-contract.md).
-The runtime contract records commit points and error guarantees that slice must
-honor. No implementation schedule or performance improvement is asserted by
-this audit.
+## Discipline for the first implementation PR
+
+- Fix ownership or representation when a branch is compensating for ambiguous
+  state. Do not add another compatibility flag to a loosely related options bag.
+- Normalize syntax once in adapters, validate domain choices once in the core,
+  resolve execution capabilities once per operation, and preserve checks whose
+  answer depends on actual streamed data. These are different boundaries.
+- Use finite enums/owned values for real alternatives. Avoid a universal
+  converter trait, plugin registry, policy dictionary or ever-growing context.
+- Keep only the smallest interfaces required by the first real consumer and
+  test seams. Add a shared abstraction when a concrete invariant or second
+  consumer requires it, not merely because two functions look similar.
+- No converter-name switches in runtime, no job imports in archive codecs,
+  no CLI/Python types in domain validation, and no message-string classification
+  of infrastructure failures. Enforce visibility/dependency rules in the F0 PR.
+- Require independent failure/interleaving tests and end-to-end evidence. Lines
+  moved, fewer `if` tokens, or agreement with historical outputs are not success
+  criteria. Stop F0 when its declared slice is proven; broaden by a new scope.

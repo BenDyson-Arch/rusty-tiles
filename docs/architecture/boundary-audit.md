@@ -110,9 +110,8 @@ switches solely to preserve old numeric spelling, report omissions, or byte form
 An independently justified interoperability requirement needs its own evidence.
 
 Foundation work precedes the full mesh slice and full numerical/algorithm audit.
-The existing README migration step that starts with a mesh vertical slice should
-be narrowed to a small foundation consumer first, not interpreted as authorization
-to rebuild mesh before its plumbing is stable. Mesh-specific settings/sign/order
+The revised README sequence starts with a small package-conversion consumer,
+not a full mesh rewrite before its plumbing is stable. Mesh-specific settings/sign/order
 contracts remain proposals requiring the later independent domain audit.
 
 ## First implementation acceptance and dependency enforcement
@@ -136,14 +135,15 @@ Then migrate converter slices and audit their algorithms independently.
   control flow. Reports/counters reflect committed state or explicitly named attempts.
 - Domain-neutral runtime tests cover create/replace conflicts, abort around commit,
   cleanup/recovery, and repeated jobs, without fake converter names triggering paths.
-- Default-private modules and deliberate re-exports restrict external consumers.
-  Add a small AST import/path-reference check with an explicit allowed layer graph;
-  cover `crate::`, `super::`, aliases, re-exports, and feature-gated modules. Treat it
-  as a dependency guard, not a complete call graph or semantic proof. Validate it
-  using deliberate forbidden edges. A grep-only import count is insufficient.
-- Compile portable/native configurations and external facade examples. Use a
-  targeted internal crate only if module/privacy/import checks cannot enforce a
-  concrete required boundary; avoid a workspace explosion as a substitute for design.
+- Default-private modules, deliberately scoped visibility and re-exports restrict
+  external consumers. Review the declared dependency graph and compile minimal
+  external facade examples. Do not build a custom Rust semantic analyser to
+  resolve aliases, `super`, re-exports and feature gates in F0. A source scanner
+  may supplement review but must state its limits; import counts are not proof.
+- Compile applicable feature configurations. Where stronger dependency isolation
+  is needed, prefer a compiler-checked isolated module harness or a small private
+  crate justified by that concrete boundary. Do not create many crates or a new
+  dependency-checking framework in place of solving the ownership problem.
 
 Acceptance concerns where decisions live and what they guarantee, not a ban on
 `if` or a statement-count target. New special cases need a named owning boundary,

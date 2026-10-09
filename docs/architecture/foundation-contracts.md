@@ -1,6 +1,6 @@
 # F0: small, explicit runtime foundations
 
-Status: proposed scope for [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), reviewed against `7f6abf0`; no production implementation. This document narrows the first implementation slice. The [mesh API proposal](api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
+Status: scoped as [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) under [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), reviewed against `7f6abf0`; no production implementation. This document narrows the first implementation slice. The [mesh API proposal](api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
 
 Current code is an untrusted candidate. Build the smallest correct plumbing around a real operation; retain code only when independently tested against the requirements below. F0 does not promise perfect software or every filesystem guarantee. It gives failures and ownership explicit places, so converters do not accumulate policy branches.
 
@@ -104,7 +104,7 @@ Successful installation remains `Published` in core even if cleanup or a later a
 
 The producer chooses its input domain and inventory; format codecs encode that inventory into private candidate storage. The publisher installs an already sealed candidate. Publication dispatches on artifact kind and requested policy once, through a small platform module. Unsupported mode/platform combinations are resolved before staging; unexpected runtime OS failures still return structured failures. Converters never reproduce platform rename or rollback logic.
 
-Separate **no-clobber**, **destination visibility**, **temporary-name cleanup**, and **durability**. `CreateNew` needs a proved no-replace destination install. It does not automatically promise one-step temporary-name removal or durable storage. `Replace` needs declared behavior for its supported artifact/platform; directory replacement is a separate follow-on slice. Do not describe an unspecified publisher as “atomic.” Exact primitives, filesystem assumptions, and tests belong in the platform evidence, not scattered converter branches.
+Separate **no-clobber**, **destination visibility**, **temporary-name cleanup**, and **durability**. `CreateNew` needs a proved no-replace destination install. It does not automatically promise one-step temporary-name removal or durable storage. `Replace` needs declared behavior for its supported artifact/platform; directory replacement is a separate follow-on slice. Do not describe an unspecified publisher as “atomic.” Exact primitives, filesystem assumptions, and tests belong in [platform evidence](platform-evidence.md), not scattered converter branches.
 
 Dependency direction: adapter -> consumer orchestration -> runtime publisher and format codec. Codec -> ordinary writer/format types; publisher -> platform filesystem operation. Codec never calls `Job`; publisher never calls a converter or archive encoder. Runtime error/event/control types contain no clap, Python, GDAL, vector repair policy, or process-global metrics. Compatibility translation, if justified, lives entirely outside this new core.
 
@@ -112,20 +112,27 @@ Dependency direction: adapter -> consumer orchestration -> runtime publisher and
 
 Implement the contracts with the existing package-conversion use case through Rust, CLI, and Python. The independently chosen operation is: package an explicitly resolved set of local tileset/resources into a complete 3TZ file without rewriting selected source bytes. This byte requirement follows from choosing packaging rather than content conversion, not from treating current wrapper output as correct.
 
-The consumer owns validated paths/policy, safe member inventory, source-stability assumptions, and its typed receipt. It rejects missing/duplicate/unsafe/reserved members and source/destination overlap rather than silently skipping problematic files. Reserved names refer to the archive codec's generated entries, not runtime-chosen report names. Define its accepted input domain before migrating callers; unknown resource semantics are refused or retained under an explicit tested packaging policy. Encode through the format layer into staging, seal, and call the completed-file publisher. Expose the same fallible observer path to Rust/CLI/Python so F0 exercises callback cancellation with an actual operation. Library default is silent.
+The consumer owns validated paths/policy, safe member inventory, source-stability assumptions, and its typed receipt. F0 is opaque named-member/container packing: require `tileset.json`, normalize safe exact archive names once, reject missing/duplicate/unsafe/reserved members and source/destination overlap, and independently verify the generated 3TZ index. Do not silently discard selected inputs. Reserved names refer to the codec's generated entries, not runtime-chosen report names. The directory adapter resolves its declared regular-file input domain into that inventory; symlink/resource-discovery rules must be explicit before migrating callers. F0 does not resolve/rewrite glTF URIs or certify the input tileset's semantic correctness or external resource closure. Those belong to subsequent source/format validation contracts, not generic runtime. Encode the accepted inventory through the format layer into staging, seal, and call the completed-file publisher. Expose the same fallible observer path to Rust/CLI/Python so F0 exercises callback cancellation with an actual operation. Library default is silent.
 
 Keep prepared result metadata separate from artifact bytes. F0's returned package summary may be memory-only; runtime does not insert or rewrite `conversion.json`. If the accepted source inventory contains that file, it is ordinary selected source content and its bytes are preserved. Later mesh production owns its report before sealing. The generic publisher therefore has no report-name exception and no JSON knowledge.
 
-F0 supports completed **file** installation for the explicitly tested `CreateNew`/`Replace` platform modes. A platform without the chosen guarantee returns unsupported before staging. Directory publication, vector transactions, and full mesh processing are separate bounded slices. The state model may explore their future contracts; that does not make them F0 production work.
+F0 supports completed **file** installation for the explicitly tested `CreateNew`/`Replace` platform modes. A known unsupported platform mode returns unsupported before staging. A runtime filesystem refusal must fail without silently switching to a weaker mechanism. Directory publication, vector transactions, and full mesh processing are separate bounded slices. The state model may explore their future contracts; that does not make them F0 production work.
 
 Do not add a second converter just to justify abstraction. A single real producer and three adapters are sufficient to test this boundary. Add only the shared types used by it; the feature algebra above is a downstream constraint, not an invitation to ship unused generic machinery.
 
 ## Evidence, tests, and stop conditions
 
+The [bounded lifecycle model](../../bench/architecture_audit/foundation/README.md)
+passes 14 contract scenarios and detects seven broken variants over 2,354
+state/history pairs and 4,258 edges. It supports the logical design within its
+stated bounds and assumed primitives. It does not prove actual locking,
+filesystem, FFI, multiple-publication prevention or cleanup behavior.
+
+
 F0 acceptance must include:
 
 1. Table-driven validation/error mapping through all adapters; invalid choices create no output parent/work tree. Read-only resolution failure leaves the destination untouched.
-2. An independent archive reader checks the accepted inventory, unchanged member bytes, declared manifest/resource semantics, and required 3TZ index structure. Current codec/validator agreement is not the sole oracle.
+2. An independent archive reader checks the accepted inventory, unchanged member bytes, required root member, and 3TZ index structure. It does not certify the input scene/resource semantics. Current codec/validator agreement is not the sole oracle.
 3. Finalization/report/write failure injection proves no installation; early/final-event callback failures preserve the selected Python exception and destination. Event drainage and callback reentry are tested without locks across callbacks.
 4. Abort-before/after-gate interleavings and an attempted second publish; negative controls detect split-check races and callback-after-publication result rewriting. Model proofs state their assumed filesystem primitives and are accompanied by actual platform tests.
 5. Competing destination creation for `CreateNew`, supported replacement failures, cleanup failure with retained paths, and committed-result preservation. Prove no-clobber, visibility, and durability claims separately; mark untested environments unverified.

@@ -67,11 +67,13 @@ still outstanding; this pass does not claim to have independently verified them.
 | Validation and release harnesses | Reject relevant corruptions and require actual platform/viewer behavior; no false passing skips | Existing harnesses identified; not rerun as final-candidate acceptance | Unproven for redesigned candidate. Audit validator independence and gate failure handling |
 | Packaging/install/preview/doctor | Installed supported operations work; capabilities/readiness honest; bounded local serving behavior | Direct Linux binding probes only; no wheel/install/browser run in this pass | Unproven. Revalidate against new API and packaging, not historical candidate evidence |
 
-## First proof and rewrite slices
+## Foundation-first proof and rewrite slices
 
 The executable API/runtime probes expose immediate required rewrites, but they
 must not cause the rest of the library to be treated as correct by omission.
-After the API/job slice, fan out independent contract/oracle reviews for:
+The bounded [F0 package/job slice](foundation-contracts.md) is first; full mesh,
+directory publication and vector transactions are later scoped work. Alongside
+that foundation, continue independent contract/oracle reviews for:
 
 - CRS, placement, bounds and numerical domains.
 - Mesh geometry, partitioning, LOD error and texture fidelity.
