@@ -1,0 +1,66 @@
+{
+  "source_commit": "a299e6c540ab853fd6e72247c5da17809809e48c",
+  "checks": {
+    "portable": {
+      "status": "passed",
+      "log_sha256": "7445702d4297bb898fccf78bd9d0353ffd53b3f2c366d4c35d3ae4f641fbf66b",
+      "passed": 340,
+      "ignored": 8
+    },
+    "native": {
+      "status": "passed",
+      "log_sha256": "01b0553239bfa225555a3fe36ec0ac5c52aa1c3461004e3cbc1b2fa9382c68cf",
+      "passed": 375,
+      "ignored": 9
+    },
+    "portable_clippy": {
+      "status": "passed",
+      "log_sha256": "308920128ad5919cbe6bd4cc298d0f77c55f83c6018e01ec3583c7c472ccacc3"
+    },
+    "native_clippy": {
+      "status": "passed",
+      "log_sha256": "d2f84717012ee8bf44e5c59bcc4ca43318978654dfe79ff170ac5f57c0778fbf"
+    },
+    "source_package": {
+      "status": "passed",
+      "log_sha256": "6ce5ed75a6c28c95d7aeb3c4bc13895db102725af9ed0fb18d90ffe34df33504"
+    }
+  },
+  "test_counting": "Unfiltered harness totals, excluding nested subprocess test totals.",
+  "installed_wheel": {
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "package_version": "0.4.0",
+    "package_file": "/tmp/rusty-tiles-wheel-4r4i88ib/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+    "wheel_sha256": "2e76b7c67a62b1407aec1c152516cf01c11c9c224af573b6713e26f8d9c5a694",
+    "empty_path": true,
+    "tests_run": 29,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "ok": true
+  },
+  "distribution_blender": {
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "package_version": "0.4.0",
+    "package_file": "/tmp/rusty-tiles-blender-do7izh9c/packages/rusty_tiles/__init__.py",
+    "wheel_sha256": "2e76b7c67a62b1407aec1c152516cf01c11c9c224af573b6713e26f8d9c5a694",
+    "empty_path": true,
+    "tests_run": 29,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "ok": true,
+    "blender": "5.2.2 LTS",
+    "blender_version": [
+      5,
+      2,
+      2
+    ],
+    "blender_build_hash": "d13f752e3b9c"
+  },
+  "ci": "Final PR platform qualification pending; local native pilot tested on Linux only."
+}

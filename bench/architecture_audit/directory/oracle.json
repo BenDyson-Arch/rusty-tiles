@@ -1,0 +1,252 @@
+{
+  "binary_sha256": "09690fb73f9b7a1643c6494e3363c0a4731500e6aa4cc66eed7373a4c5cf3e37",
+  "positive_cases": [
+    {
+      "name": "analytic",
+      "source_sha256": "cf99cb9236f5ee97cdec885fae09db655b3679c8de629fc0b81407f5a4aad508",
+      "source_bytes": 196896,
+      "child_peak_rss_kib": 66064,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 196896,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "zoom0",
+      "source_sha256": "bdde8f59a3498eabaf83a4b8e699084c88c7826d332422eefab269aea1646f10",
+      "source_bytes": 196896,
+      "child_peak_rss_kib": 66116,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 196896,
+        "width": 256,
+        "height": 256,
+        "z": 0,
+        "x": 0,
+        "y": 0
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "zoom24",
+      "source_sha256": "13d3132251cf209fff82d9655ef471bd676a79d0b6fd46e9261a7dd669a88e71",
+      "source_bytes": 196896,
+      "child_peak_rss_kib": 65932,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 196896,
+        "width": 256,
+        "height": 256,
+        "z": 24,
+        "x": 12345678,
+        "y": 8765432
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "input-ceiling",
+      "source_sha256": "1460b1d26f73f77d81d2f9ac102237912e1a4ece5f201df83d7a87ce723af3e7",
+      "source_bytes": 33554432,
+      "child_peak_rss_kib": 66176,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 33554432,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "large-metadata",
+      "source_sha256": "6d55034a7cb7f2784f402050e6166cdbf0cac956c6f7a4cdc3e94e50e69d0f47",
+      "source_bytes": 31654188,
+      "child_peak_rss_kib": 152720,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 31654188,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "classic-big-endian",
+      "source_sha256": "175686823dfe9e74a7adf420570c494d60889d267e54b571d345bc4ed822f10e",
+      "source_bytes": 196896,
+      "child_peak_rss_kib": 66336,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 196896,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "bigtiff-little-endian",
+      "source_sha256": "1db5ddf361e9eecde4a6da6359e66eef5b8ac865fc08e0ac996f021c55403eeb",
+      "source_bytes": 197012,
+      "child_peak_rss_kib": 65872,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 197012,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    },
+    {
+      "name": "bigtiff-big-endian",
+      "source_sha256": "238064d58e6cf486076d3307ae17f110e65e71eaf80ef9bc7f91259c5d47682e",
+      "source_bytes": 197012,
+      "child_peak_rss_kib": 66660,
+      "report": {
+        "schema_version": 1,
+        "profile": "d1-web-mercator-rgb",
+        "source_bytes": 197012,
+        "width": 256,
+        "height": 256,
+        "z": 3,
+        "x": 5,
+        "y": 2
+      },
+      "checked_pixels": 65536,
+      "report_fact_checks": 8
+    }
+  ],
+  "refusal_cases": [
+    {
+      "name": "missing-crs",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 60716
+    },
+    {
+      "name": "shifted",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 63340
+    },
+    {
+      "name": "nodata",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 63608
+    },
+    {
+      "name": "alpha",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 54696
+    },
+    {
+      "name": "mask",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 43132
+    },
+    {
+      "name": "above-input-ceiling",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 41652
+    },
+    {
+      "name": "pixel-is-point-compensated",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 54368
+    },
+    {
+      "name": "embedded-color-profile",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 43340
+    },
+    {
+      "name": "transfer-profile",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 43368
+    },
+    {
+      "name": "oversized-storage-block",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 63704
+    },
+    {
+      "name": "bottom-up-orientation",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 43976
+    },
+    {
+      "name": "truncated-header",
+      "error_kind": "invalid_input",
+      "exit_code": 3,
+      "child_peak_rss_kib": 43100
+    },
+    {
+      "name": "bad-table-offset",
+      "error_kind": "invalid_input",
+      "exit_code": 3,
+      "child_peak_rss_kib": 43800
+    },
+    {
+      "name": "oversized-entry-count",
+      "error_kind": "unsupported",
+      "exit_code": 2,
+      "child_peak_rss_kib": 43032
+    },
+    {
+      "name": "existing-output-preserved",
+      "error_kind": "output_conflict",
+      "exit_code": 5,
+      "child_peak_rss_kib": 42196
+    }
+  ],
+  "sensitivity_controls": [
+    "corrupt-decoded-pixel-detected",
+    "wrong-bounds-detected",
+    "missing-member-detected"
+  ],
+  "resource_method": "small C exec/fork/wait4 launcher (child max RSS KiB on Linux)",
+  "resource_limits": "Observed child RSS only; no bound inferred for all TIFF metadata/codecs",
+  "measurement_helper_sha256": "21f606df11aa7cdad03924e422a21623d22f032314a2b4292c16f904144a5f53",
+  "num_positive_cases": 8,
+  "num_refusal_cases": 15,
+  "num_sensitivity_controls": 3
+}
