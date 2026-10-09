@@ -159,6 +159,30 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(any(event["event"] == "log" for event in events))
         self.assertTrue(rusty_tiles.validate(result.output)["ok"])
 
+    def test_general_mesh_crs_requires_axes_and_height_and_places_output(self):
+        output = self.root / "projected-mesh.3tz"
+        result = rusty_tiles.mesh_to_3tz(
+            EXAMPLE, output, source_crs="EPSG:32632", source_axes="xyz",
+            height_offset=0, source_offset=(500000.123456789, 0, 100),
+            tile_size=64, max_triangles=2,
+        )
+        self.assertTrue(rusty_tiles.validate(result.output)["ok"])
+        with zipfile.ZipFile(output) as archive:
+            root = json.loads(archive.read("tileset.json"))["root"]
+            self.assertEqual(len(root["transform"]), 16)
+            self.assertGreater(abs(root["transform"][12]), 6000000)
+        for kwargs in [{"height_offset": 0}, {"source_axes": "xyz"}]:
+            with self.assertRaises(rusty_tiles.DataError):
+                rusty_tiles.mesh_to_3tz(
+                    EXAMPLE, output, force=True, source_crs="EPSG:32632", **kwargs,
+                )
+            self.assertTrue(rusty_tiles.validate(output)["ok"])
+        with self.assertRaises(ValueError):
+            rusty_tiles.mesh_to_3tz(
+                EXAMPLE, self.root / "bad-axes.3tz", source_crs="EPSG:32632",
+                source_axes="guess", height_offset=0,
+            )
+
     def test_pack_and_convert(self):
         result = rusty_tiles.glb_to_3tz(
             str(EXAMPLE), self.root / "wrapped.3tz", cartographic=(153.02, -27.47, 0),

@@ -37,7 +37,7 @@ staging and atomic archive replacement.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `callback=None` |
+| `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage |
@@ -47,8 +47,16 @@ staging and atomic archive replacement.
 
 `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
 `rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh
-`source_crs` accepts `auto`, `geographic` or `epsg:3857`;
-`source_offset` is `(easting, northing, height)` in metres. Mesh textures use
+`source_crs` retains `auto`, `geographic` and `epsg:3857` adapters. General
+horizontal CRS definitions require `source_axes="xyz"` (easting/northing/height)
+or `"y-up"` (easting/height/negative northing), after glTF node transforms, and
+an explicit `height_offset` in metres to ellipsoidal height. `source_offset`
+is `(easting, northing, height)`: E/N in horizontal CRS units and height in
+metres; the height offset is added after that source shift. The wheel shares
+the [verified grid-free CRS tier](../../docs/FORMATS.md#point-clouds); other
+operations require the native CLI/library. General placement refuses
+compound/vertical/geocentric input and manual cartographic placement/rotation.
+Omitting axes/height preserves legacy adapter behaviour. Mesh textures use
 lossless PNG by default; `jpeg` and `webp` use bundled Rust encoders. UASTC
 is outside this wheel's API because it requires an external encoder.
 `explicit=True` selects the legacy hierarchy instead of implicit tiling.

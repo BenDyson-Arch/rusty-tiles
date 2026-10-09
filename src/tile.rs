@@ -4,7 +4,7 @@
 use crate::{
     bbox::aabb_to_box,
     error::Error,
-    georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset},
+    georef::{root_transform, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset},
     glb_write::TilePrimitive,
     mesh::{self, Scene},
     output::Job,
@@ -47,6 +47,14 @@ pub struct MeshTo3tzOptions {
     pub max_texel_density: f64,
     pub source_crs: SourceCrs,
     pub source_offset: Option<SourceOffset>,
+    /// General 2D horizontal CRS; uses the shared conservative CRS resolver.
+    /// None retains the original auto/geographic/Web Mercator adapters.
+    pub source_crs_definition: Option<String>,
+    /// Required for a general CRS; no automatic axis inference.
+    pub source_axes: Option<SourceAxes>,
+    /// Metres added after the source height/offset to obtain ellipsoidal Z.
+    /// Required for a general CRS, including an explicit zero.
+    pub height_offset: Option<f64>,
     /// Lossless EXT_meshopt_compression; float32 attributes in either mode.
     pub meshopt: bool,
 }
@@ -67,8 +75,38 @@ impl Default for MeshTo3tzOptions {
             max_texel_density: DEFAULT_MAX_TEXEL_DENSITY,
             source_crs: SourceCrs::Auto,
             source_offset: None,
+            source_crs_definition: None,
+            source_axes: None,
+            height_offset: None,
             meshopt: true,
         }
+    }
+}
+
+impl MeshTo3tzOptions {
+    /// Select legacy adapters unless general axes/height are explicitly supplied.
+    /// Other definitions use the shared resolver and require both decisions.
+    pub fn set_source_crs(&mut self, definition: &str) -> Result<(), Error> {
+        match SourceCrs::parse_cli(definition) {
+            Ok(crs) if self.source_axes.is_none() && self.height_offset.is_none() => {
+                self.source_crs = crs;
+                self.source_crs_definition = None;
+            }
+            Ok(SourceCrs::Auto) => {
+                return Err(Error::Data(
+                    "general mesh coordinates require an explicit source CRS, not auto".into(),
+                ))
+            }
+            legacy => {
+                self.source_crs_definition = Some(match legacy {
+                    Ok(SourceCrs::Geographic) => "EPSG:4326".into(),
+                    Ok(SourceCrs::WebMercator) => "EPSG:3857".into(),
+                    _ => definition.to_owned(),
+                });
+                self.source_crs = SourceCrs::Auto;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -158,14 +196,33 @@ pub fn mesh_to_3tz_reported(
     } else {
         mesh::load(input)?
     };
-    let baked = mesh::bake_to_enu(
-        &mut scene,
-        &mesh::BakeToEnu {
-            prefer: opts.cartographic,
-            crs: opts.source_crs,
-            offset: opts.source_offset,
-        },
-    );
+    let baked = if let Some(definition) = &opts.source_crs_definition {
+        Some(crate::mesh_crs::bake(&mut scene, definition, opts)?)
+    } else {
+        if opts.source_axes.is_some() || opts.height_offset.is_some() {
+            return Err(Error::Data(
+                "source axes/height offset require a general source CRS definition".into(),
+            ));
+        }
+        if opts.source_offset.is_some_and(|offset| {
+            ![offset.easting, offset.northing, offset.height]
+                .iter()
+                .all(|value| value.is_finite())
+        }) {
+            return Err(Error::Data(
+                "source offset must contain finite values".into(),
+            ));
+        }
+        mesh::bake_to_enu(
+            &mut scene,
+            &mesh::BakeToEnu {
+                prefer: opts.cartographic,
+                crs: opts.source_crs,
+                offset: opts.source_offset,
+            },
+        )
+        .map(|bake| bake.origin)
+    };
     if !opts.node_features
         && baked.is_none()
         && scene.under_budget(opts.max_triangles, opts.max_bytes)
@@ -478,7 +535,7 @@ pub fn mesh_to_3tz_reported(
             2.
         ));
     }
-    if let Some(origin) = baked.map(|b| b.origin).or(opts.cartographic) {
+    if let Some(origin) = baked.or(opts.cartographic) {
         ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
     }
     if !opts.explicit {
@@ -994,7 +1051,10 @@ fn materials(scene: &Scene) -> Result<(Vec<Value>, Vec<usize>), Error> {
         if let Some(obj) = m.as_object_mut() {
             obj.remove("name");
         }
-        if let Some(pbr) = m["pbrMetallicRoughness"].as_object_mut() {
+        if let Some(pbr) = m
+            .get_mut("pbrMetallicRoughness")
+            .and_then(Value::as_object_mut)
+        {
             pbr.remove("baseColorTexture");
         }
         let id = templates.iter().position(|v| v == &m).unwrap_or_else(|| {

@@ -55,7 +55,7 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 | `glb.rs`, `glb_write.rs` | Shared GLB framing and meshopt view rewriting, and single-mesh GLB authoring |
 | `lossless.rs` | Tile serialization with meshopt as a byte codec |
 | `bbox.rs` | Bounding boxes from glTF positions |
-| `georef.rs` | Mesh placement and source CRS adapters |
+| `georef.rs`, `mesh_crs.rs` | Mesh placement, legacy adapters and general axes/CRS/height baking |
 | `vec3.rs` | Small `[f64; 3]` helpers |
 | `point_cloud.rs`, `point_cloud/` | LAS/LAZ reading and disk-backed tiling |
 | `point_sampling.rs` | Voxel grid shared by point clouds and vector aggregation |
@@ -105,6 +105,8 @@ RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 
 The default suite runs real local LAS/LAZ conversions. The native suite adds CLI acceptance for doctor, preview, point cloud, raster, terrain and vector. Native CRS tests use independent references and synthetic local grids, with no Python or downloads. `cargo clippy --locked --all-targets --features native-geospatial -- -D warnings` is a CI gate in the native GDAL matrix.
+
+`tests/mesh_crs.rs` decodes full-detail leaf positions, indices and normals after complete world transforms, against frozen independent PROJ references. It checks metre/foot horizontal units, f64 shifts, both explicit and implicit geometry, both source axes and refusal publication. Unit tests in `mesh_crs.rs` compare authored normals with analytic Mercator derivatives and native azimuthal origins, preserving coincident hard-edge normals and source metadata. Existing mesh and digest tests retain the legacy adapter/default byte contracts.
 
 CI and release builds cache Cargo dependencies by job, Rust toolchain and lockfile, with separate platform and GDAL keys. The Python-free job exports all Docker build layers to the GitHub Actions `python-free-acceptance` cache, including the pinned PROJ/GDAL SDK and Rust build outputs. Its acceptance stage always runs the full installed suite through `no-cache-filters: acceptance`; only the packaged runtime image is loaded into Docker. Runtime builds read that export without overwriting it; the release workflow uses the same cache scope. The Dockerfile's Cargo cache mounts remain local to a builder and are not exported by the GitHub cache backend, so source changes can still require Rust dependency compilation on a fresh runner. A cold SDK build remains slow; measure later runs after the cache has been populated.
 
