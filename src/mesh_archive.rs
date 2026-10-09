@@ -1,4 +1,4 @@
-//! One bounded local static GLB mesh producer under the F0 file lifecycle.
+//! One bounded local GLB mesh producer under the F0 file lifecycle.
 //! Broader legacy mesh conversion is a separate, unreviewed operation.
 use crate::{
     archive3tz::{self, CodecError, WriteFailure},
@@ -51,6 +51,9 @@ pub struct MeshReport {
     pub triangles: u64,
     pub leaf_tiles: u64,
     pub leaf_triangles: u64,
+    pub images: u64,
+    pub image_bytes: u64,
+    pub image_pixels: u64,
     pub routing_geometric_error_metres: f64,
 }
 #[derive(Debug)]
@@ -64,6 +67,7 @@ struct PreparedMesh {
     geometry: source::Geometry,
     leaves: Vec<partition::Leaf>,
     bounds: partition::Bounds,
+    images: Vec<usize>,
 }
 struct Workspace(tempfile::TempDir);
 impl Workspace {
@@ -107,6 +111,7 @@ struct CompletedMesh {
 enum ProducerStage {
     Decode,
     EncodeLeaf,
+    WriteImage,
     WriteLeaf,
     WriteReport,
     Archive,
@@ -258,11 +263,18 @@ fn prepare(
         source::MAX_LEAVES,
         || attempt.check(),
     )?;
+    let images = encode::used_images(&geometry).map_err(|e| {
+        invalid(
+            JobErrorKind::InvalidState,
+            format!("prepare mesh image closure: {e}"),
+        )
+    })?;
     Ok(PreparedMesh {
         request,
         geometry,
         leaves,
         bounds,
+        images,
     })
 }
 fn write_member(
@@ -300,7 +312,24 @@ fn produce(
     let leaf_path = workspace.path().join("t");
     fs::create_dir(&leaf_path)
         .map_err(|e| JobError::io("create mesh content directory", &leaf_path, e))?;
-    let mut members = Vec::with_capacity(prepared.leaves.len() + 2);
+    let mut members = Vec::with_capacity(prepared.leaves.len() + prepared.images.len() + 2);
+    if !prepared.images.is_empty() {
+        let directory = workspace.path().join("textures");
+        fs::create_dir(&directory)
+            .map_err(|e| JobError::io("create mesh texture directory", &directory, e))?;
+        for &id in &prepared.images {
+            attempt.check()?;
+            let image = &prepared.geometry.images[id];
+            operations.stage(ProducerStage::WriteImage)?;
+            members.push(write_member(
+                workspace,
+                &encode::image_name(id, image),
+                &image.bytes,
+                attempt,
+                operations,
+            )?);
+        }
+    }
     let mut children = Vec::with_capacity(prepared.leaves.len());
     for (id, leaf) in prepared.leaves.iter().enumerate() {
         attempt.check()?;
@@ -341,13 +370,27 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 1,
-        profile: "f1a-local-static-glb-v1",
+        schema_version: 2,
+        profile: "f1b-local-textured-glb-v1",
         coordinates: "local-gltf",
         source_bytes: prepared.geometry.source_bytes,
         triangles: prepared.geometry.triangles.len() as u64,
         leaf_tiles: prepared.leaves.len() as u64,
         leaf_triangles: prepared.request.leaf_triangles as u64,
+        images: prepared.images.len() as u64,
+        image_bytes: prepared
+            .images
+            .iter()
+            .map(|&id| prepared.geometry.images[id].bytes.len() as u64)
+            .sum(),
+        image_pixels: prepared
+            .images
+            .iter()
+            .map(|&id| {
+                let image = &prepared.geometry.images[id];
+                u64::from(image.width) * u64::from(image.height)
+            })
+            .sum(),
         routing_geometric_error_metres: routing_error,
     };
     let bytes = serde_json::to_vec(&report).map_err(|e| {
@@ -502,13 +545,41 @@ mod tests {
                 bin.extend(value.to_le_bytes());
             }
         }
+        let position_bytes = bin.len();
+        for _ in 0..2 {
+            for uv in [[0_f32, 0.], [1., 0.], [0., 1.]] {
+                for value in uv {
+                    bin.extend(value.to_le_bytes());
+                }
+            }
+        }
+        let image_offset = bin.len();
+        // This fixture exercises writer/lifecycle faults, not image fidelity.
+        // The independently authored PNG/texel oracle owns that evidence.
+        let mut png = Vec::new();
+        image::ImageEncoder::write_image(
+            image::codecs::png::PngEncoder::new(&mut png),
+            &[255, 0, 0, 255],
+            1,
+            1,
+            image::ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+        bin.extend(&png);
         let document = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
-            "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"buffers":[{"byteLength":bin.len()}],
-            "bufferViews":[{"buffer":0,"byteLength":bin.len()}],"accessors":[{"bufferView":0,"componentType":5126,
-                "count":6,"type":"VEC3","min":[0,0,0],"max":[3,1,0]}]});
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],"buffers":[{"byteLength":bin.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":position_bytes},{"buffer":0,"byteOffset":position_bytes,"byteLength":image_offset-position_bytes},
+                {"buffer":0,"byteOffset":image_offset,"byteLength":png.len()}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[3,1,0]},
+                {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"bufferView":2,"mimeType":"image/png"}],"textures":[{"source":0}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
         let mut json = serde_json::to_vec(&document).unwrap();
         while !json.len().is_multiple_of(4) {
             json.push(b' ');
+        }
+        while !bin.len().is_multiple_of(4) {
+            bin.push(0);
         }
         let mut bytes = b"glTF".to_vec();
         for value in [
@@ -555,6 +626,7 @@ mod tests {
         for target in [
             ProducerStage::Decode,
             ProducerStage::EncodeLeaf,
+            ProducerStage::WriteImage,
             ProducerStage::WriteLeaf,
             ProducerStage::WriteReport,
             ProducerStage::Archive,
@@ -609,7 +681,11 @@ mod tests {
     }
     #[test]
     fn actual_partial_leaf_and_report_write_faults_remove_partial_inventory_and_preserve_output() {
-        for target in [ProducerStage::WriteLeaf, ProducerStage::WriteReport] {
+        for target in [
+            ProducerStage::WriteImage,
+            ProducerStage::WriteLeaf,
+            ProducerStage::WriteReport,
+        ] {
             let (work, input, output) = setup();
             let control = RunControl::default();
             let mut operations = PartialWrite {

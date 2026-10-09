@@ -278,7 +278,7 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
             d["nodes"][0]["scale"] = json!([1, 1, 1]);
         }),
         ("texture", JobErrorKind::Unsupported, |d, _| {
-            d["textures"] = json!([{}])
+            d["materials"] = json!([{"normalTexture":{"index":0}}])
         }),
         ("extras", JobErrorKind::Unsupported, |d, _| {
             d["nodes"][0]["extras"] = json!({"identity":42})
@@ -287,7 +287,7 @@ fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limi
             d["extensionsUsed"] = json!(["EXT_unknown"])
         }),
         ("uv", JobErrorKind::Unsupported, |d, _| {
-            d["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_0"] = json!(0)
+            d["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_1"] = json!(0)
         }),
         ("blend", JobErrorKind::Unsupported, |d, _| {
             d["materials"] = json!([{"alphaMode":"BLEND"}])

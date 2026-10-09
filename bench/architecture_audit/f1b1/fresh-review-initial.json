@@ -1,0 +1,110 @@
+{
+  "binarySha256": "3161c1648e53e87f0066f84e88e2bd0af95815d32a870519a8f5a3e4ca77a31f",
+  "rows": [
+    {
+      "name": "rgba8",
+      "exit": 0,
+      "seconds": 0.00692063600581605,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/rgba8-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":812,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/rgba8-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":812},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "rgba16",
+      "exit": 0,
+      "seconds": 0.0052882430027239025,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/rgba16-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":74,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":816,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/rgba16-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":74,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":816},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_missing_iend",
+      "exit": 3,
+      "seconds": 0.002484527009073645,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid embedded image: unexpected end of file\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_bad_iend_crc",
+      "exit": 0,
+      "seconds": 0.0046342240093508735,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/png_bad_iend_crc-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":812,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/png_bad_iend_crc-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":812},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_ancillary_crc_control",
+      "exit": 0,
+      "seconds": 0.005285919003654271,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/png_ancillary_crc_control-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":106,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":848,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/png_ancillary_crc_control-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":106,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":848},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_bad_ancillary_crc",
+      "exit": 0,
+      "seconds": 0.005609845000435598,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/png_bad_ancillary_crc-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":106,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":848,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/png_bad_ancillary_crc-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":106,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":848},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_one_frame_apng",
+      "exit": 0,
+      "seconds": 0.005841428006533533,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/png_one_frame_apng-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":128,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":868,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/png_one_frame_apng-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":128,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":868},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_after_iend",
+      "exit": 0,
+      "seconds": 0.004968007997376844,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/png_after_iend-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":97,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":840,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/png_after_iend-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":97,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":840},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "png_truncated_pixels",
+      "exit": 3,
+      "seconds": 0.0025131570000667125,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid embedded image: unexpected end of file\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_control",
+      "exit": 0,
+      "seconds": 0.0064772300102049485,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/jpeg_control-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":635,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":1376,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/jpeg_control-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":635,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":1376},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_missing_eoi",
+      "exit": 0,
+      "seconds": 0.005082549003418535,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/jpeg_missing_eoi-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":633,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":1376,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/jpeg_missing_eoi-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":633,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.4142135623730954,\"schema_version\":2,\"source_bytes\":1376},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_truncated_pixels",
+      "exit": 3,
+      "seconds": 0.0025360779982293025,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"invalid embedded image: Format error decoding Jpeg: I/O errors Not enough bytes, expected 162 but found 69\\n\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_1",
+      "exit": 0,
+      "seconds": 0.02353477200085763,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_1-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":1},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1200628,\"triangles\":1},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_1-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1200628},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_64",
+      "exit": 0,
+      "seconds": 0.26178633399831597,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_64-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":64},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1204220,\"triangles\":64},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_64-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1204220},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_512",
+      "exit": 0,
+      "seconds": 1.9653206910006702,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_512-initial.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":1,\"triangles\":512},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":1,\"leaf_triangles\":100000,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1229756,\"triangles\":512},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/uv_reuse_512-initial.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":100000,\"routing_geometric_error_metres\":1.0,\"schema_version\":2,\"source_bytes\":1229756},\"skippedFeatures\":null}\n",
+      "stderr": ""
+    }
+  ]
+}

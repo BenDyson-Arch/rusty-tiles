@@ -1,0 +1,599 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-f1b-reviewed-candidate",
+  "binarySha256": "534f58cace0864496aaea98099c88d13b41e5a18fe07f2676dee31de3c31a9d6",
+  "sourceBaseline": "fdc5d186faedf80c3d2b4b86556f20e77a970d1f",
+  "rows": [
+    {
+      "name": "rgba8",
+      "inputSha256": "767756ff9d41b884c7b260579c7b1a2c076f2ce9b04f6de48dd947bc209f0842",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.007246598994242959,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/rgba8-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 812,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/rgba8-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 812
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "rgba16",
+      "inputSha256": "50351b7ebfc2d971c677a837a5c654c26abb3e78157bdfc51c28c0b8da619a17",
+      "expectedExit": 2,
+      "exit": 2,
+      "seconds": 0.0024325550039066,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "only images with 8-bit decoded channels are supported",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_missing_iend",
+      "inputSha256": "e38091438aaa4c9aa3dc4716f59322c79776a6da316f520b6816ae0551a457e9",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.0034456160065019503,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "PNG missing terminal IEND",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_bad_iend_crc",
+      "inputSha256": "eea38dd5dfe5409191df12ec86fd16c88569646aeac808ebea387dcb5c0c9eaf",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.003182057000230998,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "PNG chunk CRC mismatch",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_ancillary_crc_control",
+      "inputSha256": "2d83f78f1fe8bb02c708115b19755029d4d9c4dcf00c04880b27c27f89b8c99c",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.006608861003769562,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/png_ancillary_crc_control-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 106,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 848,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/png_ancillary_crc_control-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 106,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 848
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_bad_ancillary_crc",
+      "inputSha256": "3e0e0ed5d71c03dc6cec1c2abd8e355c53501bc14b7c759b50ba0355f2a43a49",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.002515086001949385,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "PNG chunk CRC mismatch",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_one_frame_apng",
+      "inputSha256": "d061086729bef9dae51182635a4890c93da41cec91d2b4f66d300822a9e8e1ff",
+      "expectedExit": 2,
+      "exit": 2,
+      "seconds": 0.0028899659955641255,
+      "report": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "animated PNG outside static image profile",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_after_iend",
+      "inputSha256": "25b913103858a93b2a979b7a010c1b961b205731440013a49cbdfd5b7a7eff1b",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.0021535889973165467,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "PNG requires final zero-length IEND after IDAT",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "png_truncated_pixels",
+      "inputSha256": "8da92661bd4909cfd9c05b6724fea62d0c68277a0ddc67acae4b8ce0409ae3df",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.0031882809998933226,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "truncated PNG chunk header",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_control",
+      "inputSha256": "6924f7cbd96c48834eb45b73113893bbb00a96bc760cc045e81d8db14b3de0d1",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.008096811987343244,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/jpeg_control-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 635,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 1376,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/jpeg_control-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 635,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 2,
+          "source_bytes": 1376
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_missing_eoi",
+      "inputSha256": "fb1a621a33c72b15ec7c0b577e0776ae6b4b42735979a25f9c000f35cad7bea7",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.002650841008289717,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "JPEG requires terminal EOI marker",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "jpeg_truncated_pixels",
+      "inputSha256": "670350b255e5b8b49aa6d0f8e86f19884e1b218ec84ed6cadc73099bb79b3710",
+      "expectedExit": 3,
+      "exit": 3,
+      "seconds": 0.0023283089976757765,
+      "report": {
+        "error": {
+          "code": "invalid_input",
+          "kind": "invalid_input",
+          "message": "JPEG requires terminal EOI marker",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_1",
+      "inputSha256": "7416dd635b85650d2db2b8a7d201f436d7ded011456ec06c46603e7ff1c37377",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.025139464996755123,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_1-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1200628,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_1-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1200628
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_64",
+      "inputSha256": "d9d46bbcfcef291446abe7bcde205528e9aeb064e5b6face2631ae9385cda408",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.025551675003953278,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_64-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 64
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1204220,
+          "triangles": 64
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_64-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1204220
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "uv_reuse_512",
+      "inputSha256": "9dddf6127513ef06ce8d78f1f3c6db5433f7d6608988131ed81c261a63c0bad8",
+      "expectedExit": 0,
+      "exit": 0,
+      "seconds": 0.0312329730077181,
+      "report": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_512-final.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 512
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-local-textured-glb-v1",
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1229756,
+          "triangles": 512
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/f1b-fresh-probes/uv_reuse_512-final.3tz",
+        "reuse": null,
+        "settings": {
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.0,
+          "schema_version": 2,
+          "source_bytes": 1229756
+        },
+        "skippedFeatures": null
+      },
+      "stderr": ""
+    },
+    {
+      "name": "selected_closure_reflection",
+      "exit": 0,
+      "exactInventory": [
+        "@3dtilesIndex1@",
+        "conversion.json",
+        "t/0.glb",
+        "t/1.glb",
+        "textures/2.png",
+        "tileset.json"
+      ],
+      "uniqueImageBytes": 70,
+      "corners": [
+        [
+          [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              3.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              4.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              3.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ]
+        ]
+      ],
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/f1b-fresh-probes/selected_closure_reflection-final.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":2,\"triangles\":2},\"meshReport\":{\"coordinates\":\"local-gltf\",\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_tiles\":2,\"leaf_triangles\":1,\"profile\":\"f1b-local-textured-glb-v1\",\"routing_geometric_error_metres\":5.099019513592786,\"schema_version\":2,\"source_bytes\":1416,\"triangles\":2},\"ok\":true,\"output\":\"/home/bend/.cache/f1b-fresh-probes/selected_closure_reflection-final.3tz\",\"reuse\":null,\"settings\":{\"image_bytes\":70,\"image_pixels\":1,\"images\":1,\"leaf_triangles\":1,\"routing_geometric_error_metres\":5.099019513592786,\"schema_version\":2,\"source_bytes\":1416},\"skippedFeatures\":null}\n"
+    }
+  ],
+  "exactImageForwarding": [
+    {
+      "case": "rgba8",
+      "imageSha256": "4ff6ab670a58c14270e034e2090d9a432caa263a14e0a25785386b0c12f880b5",
+      "imageBytes": 70,
+      "conversionReportEqualsCli": true
+    },
+    {
+      "case": "png_ancillary_crc_control",
+      "imageSha256": "1efe74c693d0c328262a9b64fa50d2276d0974ac761f9d7c706d0826397f3980",
+      "imageBytes": 106,
+      "conversionReportEqualsCli": true
+    },
+    {
+      "case": "jpeg_control",
+      "imageSha256": "f7ec5d0587a8c3f8fc82fa37bc1e34e4459882bf50d2c2956299e7e45c3a52df",
+      "imageBytes": 635,
+      "conversionReportEqualsCli": true
+    }
+  ],
+  "sourceHashes": {
+    "src/mesh_archive.rs": "3b652e7c3b0cf4fdb1f1f32c7970d9426025aac25a871136cece05db962ce06b",
+    "src/mesh_archive/source.rs": "27ab98c502fa100e5574fb0d6f6e5a454ecf8a555e3303e5fab55fc9ba95ca31",
+    "src/mesh_archive/source/texture.rs": "9a470c07f36cb4192230941da9aef66d27d57a5848b5797d02367a5551d948e4",
+    "src/mesh_archive/encode.rs": "aaf62001c3ab5ff287936d80c09112bb28ec758f59e983b706de687a62bcf3f1"
+  },
+  "probeScriptHashes": {
+    "generate.py": "ca9a13e279671fff6a46427655f72b797d62b0de231d4ce73800ffdfacf669dc",
+    "image_boundaries.py": "fd05a6869d675e8df63c5d176220fc28001bd5eefed611fee2d7ee49937a35fa",
+    "closure_probe.py": "4e54040599219a9bc3b41302c794747f6f551b7839367a391163c3c7dec532d4",
+    "run_final.py": "6bb1a7e0bf5249c0a3257d9be7ca6ab07171bf77aea97a20a2f94d21ab43b15e"
+  },
+  "jpegProvenance": {
+    "encoderAndIndependentDecoder": "Pillow",
+    "version": "12.3.0",
+    "sourcePixels": [
+      [
+        255,
+        0,
+        0
+      ]
+    ],
+    "dimensions": [
+      1,
+      1
+    ],
+    "encoding": "JPEG quality93"
+  },
+  "persistedReplay": {
+    "script": "bench/architecture_audit/f1b1/review_probes/replay.py",
+    "scriptSha256": "656a7ca7a2fda08d1c6a47dd7b19a8d43fb8bc8b7ad5261c90835a91949b6667",
+    "receipt": "bench/architecture_audit/f1b1/fresh-review-replay.json",
+    "receiptSha256": "a1662ea02fa9411eccbe3c52eaf7f27456fa904b7cb963195972801d328f0521",
+    "originalInputHashesMatch": true,
+    "checks": 16
+  }
+}

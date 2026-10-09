@@ -308,15 +308,18 @@ Vector and point-cloud conversion use the foundation error categories: `invalid_
 ## mesh-local-to-3tz
 
 `mesh-local-to-3tz -i local.glb -o local.3tz --leaf-triangles 1000` converts the
-F1a static embedded untextured GLB profile, explicitly interpreted as local
+bounded static GLB profile, explicitly interpreted as local
 metres with Y up. `--leaf-triangles` is required and positive; it limits each
 leaf's triangle count, not archive bytes, memory or geometric error. `--force`
 uses completed-file replacement. This operation emits an explicit hierarchy
-with exact leaf geometry and no coarse LOD, texture processing or guessed CRS.
+with full-detail leaf geometry and source-faithful embedded PNG/JPEG base-color
+textures. Each used image is delivered once in the archive; UVs, material factors,
+alpha masking and sampler settings are preserved. There is no coarse LOD or guessed CRS.
 
-Unsupported source semantics, including textures, animation, extensions and
+Unsupported source semantics, including external resources, additional PBR texture
+channels, alpha blending, animation, extensions and
 extras, fail consistently before output staging. See the [finite source,
-numerical and admission contract](architecture/f1a-contract.md). This command
+numerical and admission contract](architecture/f1b-contract.md). This command
 is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 

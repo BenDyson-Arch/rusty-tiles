@@ -54,6 +54,16 @@ jobs:
           if-no-files-found: error
       - name: Independently decode local mesh candidates and corruption controls
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
+      - name: Independently verify mesh texture fidelity and image closure
+        run: |
+          python3 -B tests/f1b_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-textures.json"
+          python3 -B bench/architecture_audit/f1b1/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-resources.json"
+      - name: Retain mesh texture evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1b-texture-evidence
+          path: ${{ runner.temp }}/f1b-*.json
+          if-no-files-found: error
       - name: Independently verify vector acceptance and archive inventory
         run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
       - name: Independently verify point records, rendered placement and hierarchy
@@ -264,6 +274,25 @@ jobs:
             --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
             --node-modules target/terrain-browser/node_modules \
             --json-output "${{ runner.temp }}/terrain-browser.json"
+      - name: Prove local mesh texture appearance and routing
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/f1a_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/f1b-routing.json"
+          python3 -B tests/f1b_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/f1b-appearance.json"
+      - name: Retain mesh consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1b-browser-evidence
+          path: ${{ runner.temp }}/f1b-*.json
+          if-no-files-found: error
       - name: Independently verify native LAZ delivery
         shell: bash -el {0}
         run: |

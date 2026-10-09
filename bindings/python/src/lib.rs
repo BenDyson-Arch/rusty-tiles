@@ -251,7 +251,7 @@ fn cleanup_diagnostics(diagnostics: Vec<tiles_core::CleanupDiagnostic>) -> Vec<C
         .collect()
 }
 
-/// Published F1a local mesh with its finalized report and cleanup diagnostics.
+/// Published local mesh with its finalized report and cleanup diagnostics.
 #[pyclass(frozen, module = "rusty_tiles")]
 struct MeshResult {
     #[pyo3(get)]
@@ -273,7 +273,7 @@ impl MeshResult {
     }
 }
 
-/// Convert the F1a embedded static untextured GLB profile in local metre/Y-up coordinates.
+/// Convert the bounded local GLB profile with embedded base-color textures in local metre/Y-up coordinates.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, leaf_triangles, force=false, callback=None))]
 fn mesh_local_to_3tz(

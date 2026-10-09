@@ -1,5 +1,10 @@
 # F1a local static mesh contract
 
+Historical first mesh milestone. The [F1b1 contract](f1b-contract.md) now extends
+the same operation with embedded base-color textures and replaces its report
+profile. F1b1 explicitly lists the additions; the geometry/lifecycle rules here
+remain its starting contract.
+
 Implementation contract for [#117](https://github.com/BenDyson-Arch/rusty-tiles/issues/117), agreed before coding against accepted F0 `519e8c1`. This is the bounded first mesh milestone, not completion of all mesh functionality or permission to release 0.4.0. Existing and new algorithms must pass independent evidence gates. Broader scope remains in #113 and the [post-F0 plan](https://github.com/BenDyson-Arch/rusty-tiles/blob/docs/113-next-foundation-scopes/docs/architecture/next-foundation-scopes.md).
 
 ## Facade and adapters

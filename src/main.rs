@@ -73,7 +73,7 @@ enum Command {
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// Static embedded untextured GLB in local metre/Y-up coordinates → explicit .3tz
+    /// Static GLB with embedded base-color images in local metre/Y-up coordinates → explicit .3tz
     #[command(name = "mesh-local-to-3tz")]
     MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
@@ -533,7 +533,7 @@ enum Outcome {
     Converted(ConversionResult),
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
-    /// Published F1a local mesh with its finalized report.
+    /// Published local mesh with its finalized report.
     Mesh(MeshResult),
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
