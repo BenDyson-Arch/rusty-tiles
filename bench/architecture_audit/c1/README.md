@@ -34,8 +34,8 @@ and uninspected material/metadata, implicit addressing, decoded bounds and sourc
 semantics are defined in [VALIDATION.md](../../../docs/VALIDATION.md).
 Remote CI remains the merge gate; no release/publication is authorized.
 
-Clean source archive at `ca2356a97a2cb8d230b5b6d621341fde0e9baf2c` was unpacked and compiled by
-`cargo package --locked` (531 files). Its archive/log hashes are recorded in
+Clean source archive at `d901ffda45996482c18667b0b70c71d5ab7f0565` was unpacked and compiled by
+`cargo package --locked` (535 files). Its archive/log hashes are recorded in
 `verification.json`; later packaging-record edits change evidence only.
 
 The Rust CI profile uses `native-jpeg` without `native-geospatial`. Its producer

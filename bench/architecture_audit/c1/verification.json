@@ -179,12 +179,12 @@
     "sourceArchive": {
       "status": "passed",
       "command": "cargo package --locked",
-      "commit": "ca2356a97a2cb8d230b5b6d621341fde0e9baf2c",
-      "archiveSha256": "1a62b66e929ac408cfbe0d0ffec8dcad3a7eea3cd6b89620444600667d6eaf09",
-      "files": 531,
-      "log": "/home/bend/.cache/rusty-tiles-c1-review-package.log",
-      "logSha256": "9f9870f2e87225664caa692b3be60c485e12b9694e63a6157ecfb7620c3db709",
-      "verification": "Cargo unpacked and compiled the clean archive using default features; no --no-verify or --allow-dirty and no publication."
+      "commit": "d901ffda45996482c18667b0b70c71d5ab7f0565",
+      "archiveSha256": "95cdadfa0d9a2ecf192938a4361bc0b3db73c85b5fc576405d7fe4d5b1c2db20",
+      "files": 535,
+      "log": "/home/bend/.cache/rusty-tiles-c1-framing-package.log",
+      "logSha256": "e420553721bbcd1811e35acd2e5a55bd999ec4fdfc0343972ffcfc2401e16592",
+      "verification": "Clean archive including portable framing fixture unpacked and compiled by Cargo with default features; no --no-verify or --allow-dirty, no publication."
     },
     "ciRustOracleProfile": {
       "status": "passed",
@@ -205,7 +205,6 @@
     }
   },
   "pending": [
-    "updated source archive verification",
     "remote CI"
   ]
 }
