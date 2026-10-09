@@ -11,7 +11,6 @@ import platform
 import shutil
 import sqlite3
 import struct
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -157,24 +156,25 @@ class WheelAPI(unittest.TestCase):
         redirected = self.root / "redirected"
         initial.mkdir()
         redirected.mkdir()
-        script = """
-import os, sys
-from pathlib import Path
-import rusty_tiles
-source, initial, redirected = map(Path, sys.argv[1:])
-os.chdir(initial)
-def observe(event):
-    os.chdir(redirected)
-result = rusty_tiles.mesh_local_to_3tz(source, "bound.3tz", leaf_triangles=1, callback=observe)
-assert result.output.is_absolute()
-assert result.output.samefile(initial / "bound.3tz")
-assert (initial / "bound.3tz").exists()
-assert not (redirected / "bound.3tz").exists()
-"""
-        completed = subprocess.run([sys.executable, "-c", script, str(source.resolve()),
-                                    str(initial.resolve()), str(redirected.resolve())],
-                                   capture_output=True, text=True)
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        source, initial, redirected = source.resolve(), initial.resolve(), redirected.resolve()
+        original_cwd = Path.cwd()
+
+        def observe(event):
+            os.chdir(redirected)
+
+        # The unittest harness runs cases sequentially. Restore process-global
+        # CWD even when conversion/assertions fail, without launching a second
+        # interpreter that would lose the installed-wheel import environment.
+        try:
+            os.chdir(initial)
+            result = rusty_tiles.mesh_local_to_3tz(source, "bound.3tz", leaf_triangles=1,
+                                                  callback=observe)
+            self.assertTrue(result.output.is_absolute())
+            self.assertTrue(result.output.samefile(initial / "bound.3tz"))
+            self.assertTrue((initial / "bound.3tz").exists())
+            self.assertFalse((redirected / "bound.3tz").exists())
+        finally:
+            os.chdir(original_cwd)
 
     def test_local_mesh_nested_and_concurrent_jobs_have_independent_results(self):
         source = self.root / "independent.glb"
