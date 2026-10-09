@@ -69,6 +69,77 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_local_resource_mesh_independent_profile_oracle(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1b2_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        for variant in oracle.VARIANTS:
+            directory = self.root / variant
+            directory.mkdir()
+            source = oracle.write_fixture(directory, variant)
+            for limit in (1, 1000):
+                with self.subTest(variant=variant, leaf_triangles=limit):
+                    output = directory / (str(limit) + ".3tz")
+                    result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+                    self.assertEqual(result.report, oracle.inspect(source, output, limit)["report"])
+        errors = {"invalid_input": rusty_tiles.DataError, "unsupported": rusty_tiles.UnsupportedError,
+                  "io": rusty_tiles.TilesIOError, "invalid_request": rusty_tiles.InvalidRequestError}
+        for name, bundle, kind in oracle.refusal_bundles():
+            directory = self.root / ("refusal-" + name)
+            directory.mkdir()
+            source = oracle.write_bundle(directory, bundle)
+            output = directory / "absent" / "out.3tz"
+            with self.subTest(refusal=name):
+                with self.assertRaises(errors[kind]) as caught:
+                    rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1)
+                self.assertEqual(caught.exception.kind, kind)
+                self.assertFalse(output.parent.exists())
+
+    def test_local_external_mesh_snapshot_and_typed_overlap(self):
+        embedded = self.root / "embedded.glb"
+        write_local_mesh(embedded)
+        raw = embedded.read_bytes()
+        json_length = struct.unpack_from("<I", raw, 12)[0]
+        document = json.loads(raw[20:20 + json_length])
+        resource = self.root / "geometry.bin"
+        resource.write_bytes(raw[28 + json_length:])
+        document["buffers"][0]["uri"] = "geometry.bin"
+        source = self.root / "external.gltf"
+        original = json.dumps(document).encode() + b"\n\t"
+        source.write_bytes(original)
+        alias = self.root / "alias.3tz"
+        os.link(resource, alias)
+        events = []
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.mesh_local_to_3tz(source, alias, leaf_triangles=1,
+                                         force=True, callback=events.append)
+        self.assertEqual(caught.exception.kind, "invalid_request")
+        self.assertEqual(events, [])
+        self.assertEqual(alias.read_bytes(), resource.read_bytes())
+
+        def observe(event):
+            if not events:
+                source.unlink()
+                resource.unlink()
+            events.append(event)
+
+        output = self.root / "external.3tz"
+        result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
+                                              callback=observe)
+        self.assertEqual(result.report["schema_version"], 3)
+        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
+        self.assertEqual(result.report["source_bytes"], len(original))
+        self.assertEqual(result.report["external_files"], 1)
+        self.assertEqual(result.report["external_bytes"], 108)
+        self.assertEqual(result.report["triangles"], 3)
+        self.assertEqual(result.report["leaf_tiles"], 3)
+        self.assertFalse(source.exists())
+        self.assertFalse(resource.exists())
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(json.loads(archive.read("conversion.json")), result.report)
+
     def test_local_textured_mesh_independent_profile_oracle(self):
         # Loading an independently authored fixture/reader is allowed here;
         # rusty_tiles itself has already been imported from the installed wheel.
@@ -116,8 +187,8 @@ class WheelAPI(unittest.TestCase):
                 source.write_bytes(b"changed after preparation")
 
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
-        self.assertEqual(result.report["schema_version"], 2)
-        self.assertEqual(result.report["profile"], "f1b-local-textured-glb-v1")
+        self.assertEqual(result.report["schema_version"], 3)
+        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["triangles"], 8)
         self.assertEqual(result.report["leaf_tiles"], 8)
@@ -190,7 +261,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1b-local-textured-glb-v1")
+        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))

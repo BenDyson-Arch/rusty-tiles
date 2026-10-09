@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--node-modules', type=Path)
     parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/chromium'))
     parser.add_argument('--json-output', type=Path)
+    parser.add_argument('--external-resources', action='store_true')
     args = parser.parse_args()
     binary = args.binary.resolve()
     runtime = args.cesium_dir.resolve()
@@ -37,10 +38,28 @@ def main():
         root = Path(temporary)
         source = root / 'source.glb'
         source.write_bytes(oracle.viewer_fixture())
+        if args.external_resources:
+            # Independent fixture authoring: preserve the analytic appearance
+            # scene, moving its bytes into encoded relative local resources.
+            doc, binary_data = oracle.geometry.decode_glb(source.read_bytes())
+            (root / 'geometry data.bin').write_bytes(binary_data)
+            doc['buffers'][0]['uri'] = 'geometry%20data.bin'
+            for index, image in enumerate(doc['images']):
+                view = doc['bufferViews'][image.pop('bufferView')]
+                start = view.get('byteOffset', 0)
+                name = f'image {index}.png'
+                (root / name).write_bytes(binary_data[start:start + view['byteLength']])
+                image['uri'] = name.replace(' ', '%20')
+            source = root / 'source.gltf'
+            source.write_text(json.dumps(doc))
         archive = root / 'candidate.3tz'
         result = subprocess.run([str(binary), '--json', 'mesh-local-to-3tz', '-i', str(source), '-o', str(archive), '--leaf-triangles', '2'], text=True, capture_output=True, timeout=60)
         oracle.require(result.returncode == 0, 'appearance conversion: ' + result.stdout + result.stderr)
-        inspected = oracle.inspect(source, archive, 2)
+        if args.external_resources:
+            import f1b2_oracle
+            inspected = f1b2_oracle.inspect(source, archive, 2)
+        else:
+            inspected = oracle.inspect(source, archive, 2)
         oracle.require(inspected['leaves'] == 2, 'appearance fixture must produce two full-detail leaves')
         with zipfile.ZipFile(archive) as z:
             members = {name: z.read(name) for name in z.namelist() if name != '@3dtilesIndex1@'}

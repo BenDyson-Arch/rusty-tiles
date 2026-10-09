@@ -1,0 +1,39 @@
+# Independent F1b2 final review
+
+No remaining defect found within the reviewed F1b2 source and independently executed boundaries on production commit `ce8a89c58e2781d72c2ac5dff686de2f8d340850`. This is bounded acceptance evidence, not a general glTF conformance certification.
+
+The final frozen binary is `/home/bend/.cache/rusty-tiles-f1b2-portable-ce8a89c`, SHA-256 `522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc`. Every probe script verifies its exact hash before execution. The reviewer authored neither production code nor the repository oracle, edited only this review-probe directory, and ran no Cargo build or shared target operation. Previous pin receipts, including `receipt-1078240.json`, remain historical evidence and are not relabeled as the final pin.
+
+## Executed findings and disposition
+
+The first reviewed binary, commit `42b895f0513f8a3aaa3f58879bcef2118adcfd77` and SHA-256 `0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b`, exposed the following defects:
+
+| Severity | Reproduction | Cause | Final disposition |
+| --- | --- | --- | --- |
+| P2 | Output `source.gltf/out.3tz` or `positions.bin/out.3tz` returned Io | Output metadata/resolution encountered ENOTDIR before output/source exclusion | Both now return InvalidRequest; parent classification reviewed at `binding.rs:291` and verified independently |
+| P2 | POSITION or unused VEC2 accessor with min greater than max, plus a missing external buffer, returned Io | Metadata parser omitted the detectable min/max contradiction | Both now return InvalidInput before dependency I/O; pair comparison at `source.rs:396` verified independently |
+| P2 | POSITION extrema `[0,0,0]`/`[100,100,100]` enclosing actual `[11,21,31]`/`[13,24,31]` were admitted and published | Payload sweep checked enclosure rather than actual extrema equality | Now InvalidInput; observed extrema comparison at `source.rs:440` reviewed and independently verified |
+
+The wider-extrema behavior existed before F1b2 but contradicted retained whole-document validation. The official Khronos validator `2.0.0-dev.3.10` independently emitted six `ACCESSOR_MIN_MISMATCH`/`ACCESSOR_MAX_MISMATCH` errors for the manual reproduction. Its script and receipt are retained. The pinned [Khronos specification, Accessors Bounds](https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc) requires declared bounds to match binary extrema.
+
+Raw reserved URI characters and terminal decoded dot components were concurrently identified by another source audit. This reviewer independently reproduced their prior admission and verified the final rejections. A raw `<` typing discrepancy was resolved by clarifying syntax admission: raw characters outside unreserved ASCII are InvalidInput; a decoded portable-forbidden filename character is Unsupported. These are not outstanding findings.
+
+After the initial review, the root identified a further P2 reader defect: a source growing after admission past the JSON/file cap returned Unsupported and could be read up to that cap. The root executed two deterministic descriptor-triggered tests against the old implementation; both failed with actual Unsupported rather than expected InvalidInput. This reviewer inspected that execution log (`/home/bend/.cache/rusty-tiles-f1b2-growth-reproduction.log`) and the test source, but did not execute those mutation tests. The final fix (`binding.rs:412`, `binding.rs:423`) guards a root prefix exceeding its admitted length and bounds subsequent reads by `before.len()+1`; observed growth returns InvalidInput before extra bytes are allocated/appended. Source review confirms the arithmetic is safe for admitted roots of length 0–3 and admission remains capped before reading. Root-owned mutation retest receipts remain separate from this reviewer's stable-source CLI evidence.
+
+## Independent final execution
+
+`receipt-ce8a89c.json` records 57 manual cases, all matching expectations. These rerun the full independent suite after the reader growth fix, including exact-cap successes and statically one-over-cap Unsupported cases. Fixtures use stdlib-authored glTF, buffers and PNG framing, plus independently generated Pillow JPEG. No repository fixture or oracle helper supplies truth. A separate archive reader extracts leaf accessors, compares all emitted triangle positions and UVs with authored values, resolves texture archive references, compares exact PNG/JPEG bytes, and checks schema/profile/root-byte/physical-identity dependency counters.
+
+Coverage includes JSON and no-BIN GLB external buffers; embedded buffer zero plus external geometry; image view offsets equal to accessor offsets in different logical buffers; external trailing bytes and declared prefixes; unused dependency/image admission; hardlink deduplication; root/dependency output hardlink rejection; percent-once, encoded hash, raw Unicode and contained-parent interpretation; forbidden URI precedence over missing dependencies; excluded-extension precedence; MIME mismatch; invalid escapes/UTF-8; encoded separators; symlink leaves/directories; FIFO leaves; root aliases; output descendants; contradictory and inexact extrema; f32 component rounding; u8/u16 normalized UV bounds in raw integer units; and incorrect normalized bounds.
+
+Boundary probes cover exact/one-over JSON and dependency byte ceilings, aggregate captured bytes exceeding 64 MiB, declared buffer sums exceeding 32 MiB before missing-file I/O, 32/33 images, exact/over 32 MiB copied image bytes with physical aliases, and 128/129 URI components. Negative cases assert preserved source/output contents, unchanged directory inventory and no mesh-leaf progress.
+
+`checker-controls-ce8a89c.json` records two successful conversions from deliberately wrong but valid alternative source plans: alternate geometry selection, and an extra URI decoding pass selecting a different valid PNG. The independent output checker rejects both. These are checker-sensitivity controls, not production implementation mutations.
+
+## Architecture observations and proof limits
+
+Source inspection confirms consumer-owned dependency resolution/capture, distinct logical resource identities, borrowed byte slices passed to the pure decoder, immutable shared capture allocations for aliases, and owned prepared geometry/images before the mesh consumer observer callback (`mesh_archive.rs:176`, `mesh_archive.rs:390`). Every declared alias is rechecked; retained capture handles are closed after the final sweep (`binding.rs:461`, `binding.rs:644`). The final canonicalization helper (`binding.rs:209`) classifies disappearance during a recheck as InvalidInput while preserving initial missing-file and real permission failures as Io.
+
+Stable source files during preparation are an explicit precondition. This review does not establish an atomic multi-file snapshot, hostile directory-replacement confinement, or detection of adversarial metadata restoration. Source-change classification and callback deletion/cwd independence were inspected in production code and deterministic Rust test source; this reviewer did not independently execute Rust observer/mutation tests. The CLI harness supplies no user callback capable of exercising those seams. The frontend's initial `conversion` progress wrapper precedes the mesh operation and must not be confused with the mesh consumer observer boundary.
+
+The finite admission values are engineering bounds. This reviewer exercised the noted exact/over limits but did not measure descriptor maxima or RSS, and makes no hard memory-bound claim. Direct Rust API, wheel/Python, native-enabled build, F1a/F1b viewer regressions, and the repository's broader oracle evidence require the root's separate verification. New reviewer evidence does not replace those checks.

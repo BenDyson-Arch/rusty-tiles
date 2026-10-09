@@ -1,0 +1,364 @@
+{
+  "audit_baseline": "641e1b4",
+  "production_candidate_initial": "42b895f0513f8a3aaa3f58879bcef2118adcfd77",
+  "binary_initial_sha256": "0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b",
+  "initial_receipt_scope": "Before glTF reserved-data percent-encoding and terminal-dot URI refinement; raw-plus initial positive is superseded by percent-encoded-plus final fixture.",
+  "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "Pillow": "12.3.0",
+  "zlib_runtime": "1.3.1.zlib-ng",
+  "files": {
+    "tests/f1b2_oracle.py": "9b0ac4410ae39a78ec5643520893b27b36214d65484dc26ac6e7c0c65e029810",
+    "tests/f1b2_oracle.md": "a52e98c544884254d27733c8cbddcaf4f3006fd4b453f296318ebfde5c511905",
+    "tests/f1b_oracle.py": "00808e0c0b2de9ec4851278e6fcf559642c74efefc0d83c342d6b1cf51844b89",
+    "tests/f1a_oracle.py": "5389f9ada22b380be4e4ca8aab4bc979601df56803d2d1901f28c14ffed9746e",
+    "tests/fixtures/f1b2/distinct-basename/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/distinct-basename/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/distinct-basename/left/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/distinct-basename/right/color.png": "02a505a377f2ce0fb8245a7c5cfb154016a71fd656568c08470abd41bf9f2509",
+    "tests/fixtures/f1b2/distinct-basename/source.gltf": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d",
+    "tests/fixtures/f1b2/encoded-hash/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/encoded-hash/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/encoded-hash/images/color#alpha.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/encoded-hash/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/encoded-hash/source.gltf": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52",
+    "tests/fixtures/f1b2/encoded-unicode/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/encoded-unicode/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/encoded-unicode/images/sph\u00e8re.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/encoded-unicode/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/encoded-unicode/source.gltf": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d",
+    "tests/fixtures/f1b2/external-view-image/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/external-view-image/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/external-view-image/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/external-view-image/images/view.bin": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/external-view-image/source.gltf": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe",
+    "tests/fixtures/f1b2/glb-json-only/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/glb-json-only/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/glb-json-only/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/glb-json-only/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/glb-json-only/source.glb": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76",
+    "tests/fixtures/f1b2/glb-mixed/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/glb-mixed/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/glb-mixed/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/glb-mixed/source.glb": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed",
+    "tests/fixtures/f1b2/manifest.json": "be9cdaa029dac38947e68ee2a5eb0be577e1a7919e0c2010671f15ce2069e807",
+    "tests/fixtures/f1b2/mime-inferred/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/mime-inferred/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/mime-inferred/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/mime-inferred/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/mime-inferred/source.gltf": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd",
+    "tests/fixtures/f1b2/multibuffer/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/multibuffer/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/multibuffer/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/multibuffer/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/multibuffer/source.gltf": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+    "tests/fixtures/f1b2/once-percent/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/once-percent/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/once-percent/images/%2e%2e.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/once-percent/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/once-percent/source.gltf": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5",
+    "tests/fixtures/f1b2/plus/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/plus/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/plus/images/a+b.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/plus/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/plus/source.gltf": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd",
+    "tests/fixtures/f1b2/space-percent/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+    "tests/fixtures/f1b2/space-percent/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/space-percent/images/a 25%.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/space-percent/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/space-percent/source.gltf": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d",
+    "tests/fixtures/f1b2/uv-u16-bounds/geom/a.bin": "b77380c0fee1074be45f46cb77bda54e2848954611d11e8deede936989be017a",
+    "tests/fixtures/f1b2/uv-u16-bounds/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/uv-u16-bounds/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/uv-u16-bounds/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/uv-u16-bounds/source.gltf": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52",
+    "tests/fixtures/f1b2/uv-u8-bounds/geom/a.bin": "db016a9d332bb5f625fb7d8aa0fee0ca51c29921e9902b64035ad3ba0d142997",
+    "tests/fixtures/f1b2/uv-u8-bounds/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+    "tests/fixtures/f1b2/uv-u8-bounds/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+    "tests/fixtures/f1b2/uv-u8-bounds/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+    "tests/fixtures/f1b2/uv-u8-bounds/source.gltf": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e"
+  },
+  "jpeg_receipt": {
+    "sha256": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+    "size": [
+      3,
+      2
+    ],
+    "rgba": [
+      [
+        254,
+        0,
+        0,
+        255
+      ],
+      [
+        1,
+        255,
+        2,
+        255
+      ],
+      [
+        0,
+        0,
+        254,
+        255
+      ],
+      [
+        255,
+        255,
+        0,
+        255
+      ],
+      [
+        255,
+        0,
+        254,
+        255
+      ],
+      [
+        0,
+        255,
+        255,
+        255
+      ]
+    ],
+    "author": "Pillow 12.3.0 JPEG quality=100, subsampling=0; RGB analytic six-color input"
+  },
+  "stdlib_without_site_self_test": {
+    "self_test": {
+      "URI_analytic_reference": "passed",
+      "fixture_variants": {
+        "multibuffer": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "glb-mixed": {
+          "external_files": 3,
+          "external_bytes": 531
+        },
+        "glb-json-only": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "external-view-image": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "mime-inferred": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "jpeg": {
+          "external_files": 4,
+          "external_bytes": 1821
+        },
+        "trailing-buffer": {
+          "external_files": 4,
+          "external_bytes": 1055
+        },
+        "unicode": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "encoded-unicode": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "space-percent": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "encoded-hash": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "once-percent": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "plus": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "contained-dots": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "percent-alias": {
+          "external_files": 3,
+          "external_bytes": 886
+        },
+        "repeated-uri": {
+          "external_files": 3,
+          "external_bytes": 886
+        },
+        "hardlink-alias": {
+          "external_files": 3,
+          "external_bytes": 886
+        },
+        "buffer-alias": {
+          "external_files": 3,
+          "external_bytes": 1225
+        },
+        "distinct-basename": {
+          "external_files": 4,
+          "external_bytes": 973
+        },
+        "unused-buffer": {
+          "external_files": 5,
+          "external_bytes": 1015
+        },
+        "json-whitespace": {
+          "external_files": 4,
+          "external_bytes": 1011
+        },
+        "uv-u8-bounds": {
+          "external_files": 4,
+          "external_bytes": 915
+        },
+        "uv-u16-bounds": {
+          "external_files": 4,
+          "external_bytes": 915
+        }
+      },
+      "sensitive_binding_controls": {
+        "uri-empty": "rejected",
+        "uri-percent-short": "rejected",
+        "uri-percent-nonhex": "rejected",
+        "uri-raw-space": "rejected",
+        "uri-raw-backslash": "rejected",
+        "uri-raw-control": "rejected",
+        "uri-raw-C1-control": "rejected",
+        "uri-encoded-C1-control": "rejected",
+        "uri-raw-plus": "rejected",
+        "uri-raw-ampersand": "rejected",
+        "uri-raw-semicolon": "rejected",
+        "uri-raw-at": "rejected",
+        "uri-terminal-decoded-dot": "rejected",
+        "uri-terminal-decoded-dotdot": "rejected",
+        "uri-decoded-nul": "rejected",
+        "uri-decoded-invalid-utf8": "rejected",
+        "uri-trailing-slash": "rejected",
+        "uri-query": "rejected",
+        "uri-fragment": "rejected",
+        "uri-absolute": "rejected",
+        "uri-authority": "rejected",
+        "uri-network": "rejected",
+        "uri-file-scheme": "rejected",
+        "uri-data": "rejected",
+        "uri-escape": "rejected",
+        "uri-encoded-escape": "rejected",
+        "uri-encoded-slash": "rejected",
+        "uri-encoded-backslash": "rejected",
+        "uri-encoded-query-character": "rejected",
+        "uri-encoded-colon": "rejected",
+        "uri-trailing-dot": "rejected",
+        "uri-trailing-space": "rejected",
+        "uri-uri-byte-limit": "rejected",
+        "uri-uri-component-limit": "rejected",
+        "wrong-uri-base-pixels": "rejected",
+        "wrong-logical-buffer-binding": "rejected",
+        "same-sized-buffer-payload-change": "rejected"
+      },
+      "f1b_texture_self_test": {
+        "png_analytic_filters": {
+          "0": "passed",
+          "1": "passed",
+          "2": "passed",
+          "3": "passed",
+          "4": "passed"
+        },
+        "jpeg_manifest_sha256": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+        "analytic_transform_normal_UV_winding": "passed",
+        "fixture_variants": {
+          "standard": "passed",
+          "nested": "passed",
+          "instanced": "passed",
+          "scenes": "passed",
+          "coincident": "passed",
+          "degenerate": "passed",
+          "normal-absent": "passed",
+          "nonindexed": "passed",
+          "uv-u8": "passed",
+          "uv-u16": "passed",
+          "empty-sampler": "passed",
+          "wrap": "passed",
+          "mixed": "passed",
+          "jpeg": "passed",
+          "spike": "passed",
+          "reordered-spike": "passed",
+          "thin": "passed",
+          "disconnected": "passed",
+          "interleaved": "passed",
+          "uv-on-untextured": "passed",
+          "two-images": "passed",
+          "selected-image-one": "passed",
+          "sampler-9728": "passed",
+          "sampler-9729": "passed",
+          "sampler-9984": "passed",
+          "sampler-9985": "passed",
+          "sampler-9986": "passed",
+          "sampler-9987": "passed"
+        },
+        "sensitive_corruption_controls": {
+          "missing-triangle": "rejected",
+          "wrong-winding": "rejected",
+          "wrong-uv": "rejected",
+          "uv-corner-order": "rejected",
+          "missing-normal": "rejected",
+          "wrong-factor": "rejected",
+          "alpha-cutoff": "rejected",
+          "double-sided": "rejected",
+          "sampler-omission": "rejected",
+          "alpha-only": "rejected",
+          "explicit-default-alpha-omission": "rejected",
+          "explicit-default-sampler-omission": "rejected",
+          "orphan-image": "rejected",
+          "missing-image": "rejected",
+          "wrong-image-rows": "rejected",
+          "encoded-byte-change-same-pixels": "rejected",
+          "image-alpha": "rejected",
+          "leaf-wrong-texture-index": "rejected",
+          "leaf-unused-image": "rejected",
+          "leaf-wrong-image-uri": "rejected",
+          "leaf-uv-association": "rejected"
+        },
+        "scope": "full-detail textured leaf fidelity; no coarse approximation/error-bound acceptance"
+      },
+      "scope": "independent URI/base/physical-file/buffer interpretation and full-detail resource fidelity; no atomic snapshot claim"
+    }
+  },
+  "limitations": "Independent fixtures and binding math; source preparation requires stable files and no atomic multi-file snapshot promise. Final replay is pinned to the explicit final binary/source commit. Separate runtime/wheel/resource/viewer evidence supplies complementary obligations.",
+  "production_source_final": "ce8a89c58e2781d72c2ac5dff686de2f8d340850",
+  "binary_final_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc",
+  "external_final": {
+    "receipt": "portable-oracle-final.json",
+    "sha256": "b99a0dc8e00455f8be446fc113038b853bdc67e0287b2fa439993e93364147d9",
+    "positive_cases": 69,
+    "refusal_cases": 136,
+    "binary_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc"
+  },
+  "embedded_final": {
+    "receipt": "portable-embedded-final.json",
+    "sha256": "290480c5698f0cc08cf4430fc6386768416fbaac97d93da92b6c809f023c8990",
+    "positive_cases": 84,
+    "refusal_cases": 90,
+    "binary_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc"
+  },
+  "static_final": {
+    "receipt": "static-fixture-final.json",
+    "sha256": "175c37136c7934297445840d4a23f10f00bfbdd5ca42b5cb09ab2a6223bde86c",
+    "static_cases": 13,
+    "binary_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc"
+  },
+  "intermediate_1078240": {
+    "production_source_commit": "1078240532e2845d14a9671f855afa254ce0280f",
+    "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+    "receipts": {
+      "portable-oracle-intermediate-1078240.json": "143d8fe63bb4b282cc5eb54f64899b14e021f2e153692cb4b0f7f8f166b9d284",
+      "portable-embedded-intermediate-1078240.json": "f5914a423a52439d166193c9ec11d5e547f72ff20de0d2fb67ddfd3186ae70e6",
+      "static-fixture-intermediate-1078240.json": "6cd157df2e71e88f31b154faaf955bcbd1cb4f7ce64863d2058d89dd081acd4f"
+    },
+    "scope": "Before bounded reader growth-detection change; stable fixture acceptance unchanged."
+  }
+}

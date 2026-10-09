@@ -1,0 +1,195 @@
+{
+  "scope": "Historical initial/intermediate receipts are archived verbatim; final receipts remain plain JSON. Decompress with Python gzip or gzip -dc and verify uncompressed_sha256 before use.",
+  "receipts": {
+    "appearance-embedded-intermediate-1078240.json": {
+      "archive": "history/appearance-embedded-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "3be9828fa5f02a6c597a21223e38f8ac7cfe2e866f11b71d9b0d40e85b346d26",
+      "compressed_sha256": "03a2c0f8254cd0e73562a5c8dd72b2e50c36bf39bd90643a94f7f2f5cb305ebd",
+      "uncompressed_bytes": 13565,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "appearance-external-intermediate-1078240.json": {
+      "archive": "history/appearance-external-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "1b4da23c2742e21cdbe688b114e64b165e20dcabfb9e39ae7276781895472a7f",
+      "compressed_sha256": "4c1dcbd7c4cae9b8cefa6d5afc3a08f72c889a6fc477bc5d808881fe39cfd5ed",
+      "uncompressed_bytes": 13915,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "appearance-external.json": {
+      "archive": "history/appearance-external.json.gz",
+      "uncompressed_sha256": "7efd90d804c03d275f199fee8b2176c16681db5a385bef3ed8c43191fa703973",
+      "compressed_sha256": "f23c5e086b779f5b97539e2bd16c4d896ef53ac2502a079a90fb19717279117c",
+      "uncompressed_bytes": 13915,
+      "binary_sha256": "dc89e3d263eed3c5d8dfef2a8512d350b416658503f2982dd6030171837d1d8c",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "build-manifest-intermediate-1078240.json": {
+      "archive": "history/build-manifest-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "a443aa53335a057fff775ae6268aa5ea92fcc10bf317f0fedfcff18450b48db6",
+      "compressed_sha256": "53de2c1b1fdb8764ebe58e0fb0651579932d681d09c0a27875a08266374343bc",
+      "uncompressed_bytes": 10680,
+      "binary_sha256": null,
+      "source_commit": "1078240532e2845d14a9671f855afa254ce0280f",
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "embedded-resource-intermediate-1078240.json": {
+      "archive": "history/embedded-resource-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "a54821e7ea62ad5018ee7e914d51772941f070c73970cb4a01063cae2806e183",
+      "compressed_sha256": "9aa7249dd259314ccd1131931654b42cdb8f473a547055c2e19dd86e5110432c",
+      "uncompressed_bytes": 77124,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "native-embedded-intermediate-1078240.json": {
+      "archive": "history/native-embedded-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "ea538c5037e49e36bd63488efe3d13714563bd7713d896db3999078ce5b4cf31",
+      "compressed_sha256": "64463bd20894041a645ae9a0db4aec6712d7d31b0c4c4e11f4a0729e7c676dfc",
+      "uncompressed_bytes": 121096,
+      "binary_sha256": "2045390b6f576edf861f2dc54f4c11b8d10363de25ba37a61f735d70751e11e0",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "native-oracle-intermediate-1078240.json": {
+      "archive": "history/native-oracle-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "1b1319b2558d3b2d311c05ad1aaf908612184588e2f05528f12ee94b6070009a",
+      "compressed_sha256": "734d7c98107af207a3857a39c759c76b20efa63e312fd897179b416a01658bd3",
+      "uncompressed_bytes": 163117,
+      "binary_sha256": "2045390b6f576edf861f2dc54f4c11b8d10363de25ba37a61f735d70751e11e0",
+      "source_commit": null,
+      "positive_cases": 69,
+      "refusal_cases": 136
+    },
+    "portable-embedded-intermediate-1078240.json": {
+      "archive": "history/portable-embedded-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "f5914a423a52439d166193c9ec11d5e547f72ff20de0d2fb67ddfd3186ae70e6",
+      "compressed_sha256": "6060583f6fcfa6cc7fad79b1df63138542d4b1339257c7961224257dd031ea22",
+      "uncompressed_bytes": 121098,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "portable-embedded-regression.json": {
+      "archive": "history/portable-embedded-regression.json.gz",
+      "uncompressed_sha256": "6d6b4df50ceff8a9ae8601d2c46b71f0547207627af8ce8b930b5ffcd19c11b1",
+      "compressed_sha256": "ce891e5a865cd320ee876b160400ae1a3536d019706a3eb1ba47e76b3bb1b287",
+      "uncompressed_bytes": 121098,
+      "binary_sha256": "0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "portable-geometry-intermediate-1078240.json": {
+      "archive": "history/portable-geometry-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "3a9be5773f122d1c815d72db127d178beb4bd454234f9e21491a9947b67473c8",
+      "compressed_sha256": "829a3ba8218d9bafc77d7de9f9e0a064d685f419f5bbd71f9a1788729473ed7d",
+      "uncompressed_bytes": 23457,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "portable-oracle-initial.json": {
+      "archive": "history/portable-oracle-initial.json.gz",
+      "uncompressed_sha256": "9e272347d0dc226a2e8ff7b85ca6461d7dae00c9290f8538d4688d5de9c06a50",
+      "compressed_sha256": "5e2ce8d90a2410d8f7f1671c3957660501f62ff47c7878b25d950c6f4afee5a0",
+      "uncompressed_bytes": 145728,
+      "binary_sha256": "0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b",
+      "source_commit": null,
+      "positive_cases": 63,
+      "refusal_cases": 112
+    },
+    "portable-oracle-intermediate-1078240.json": {
+      "archive": "history/portable-oracle-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "143d8fe63bb4b282cc5eb54f64899b14e021f2e153692cb4b0f7f8f166b9d284",
+      "compressed_sha256": "85415fab1e37f0b852a9628c51a69109d5ee5135675751c9cdd88a903ec8880c",
+      "uncompressed_bytes": 163119,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": 69,
+      "refusal_cases": 136
+    },
+    "resource-25361ed.json": {
+      "archive": "history/resource-25361ed.json.gz",
+      "uncompressed_sha256": "0b888f21a7e8421c5f904d9563d4ce651e969fb4f5508fb5112577dc9c313953",
+      "compressed_sha256": "bb8b762b28e2e084c62494efae6a17fe8bf7ab06c1de72db352fcdbca5ec3c47",
+      "uncompressed_bytes": 16166,
+      "binary_sha256": "dc89e3d263eed3c5d8dfef2a8512d350b416658503f2982dd6030171837d1d8c",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "resource-initial.json": {
+      "archive": "history/resource-initial.json.gz",
+      "uncompressed_sha256": "e2e03bfebf7b08f1bb1b04977f573a83a9ffe38077781545df96a3d69c2da643",
+      "compressed_sha256": "94d1d379c2ef39c15e081c314b7ac340fbff498f7d4a5e51c7075ee876cfaaac",
+      "uncompressed_bytes": 16165,
+      "binary_sha256": "0992615de230a84ac435a7aa97fea4c0324e547f1f2c6b8fb413e529d16d383b",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "resource-intermediate-1078240.json": {
+      "archive": "history/resource-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "7e22bc9049d16cd226b630b5bb03074c234c81ab7440d3d0e82fce6d2a3d0c0d",
+      "compressed_sha256": "aba8010b9c18e07cb15c6611d427a7a635515433ba643d6d91f81f47dc80bb92",
+      "uncompressed_bytes": 16156,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "routing-intermediate-1078240.json": {
+      "archive": "history/routing-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "7527102779139e425ea798dd1735168fb9fd3805a2ceaff375044342be633439",
+      "compressed_sha256": "4f448d0fa4105c4e4d68913b162c0e146811d69f388b4188c813b0715983a985",
+      "uncompressed_bytes": 2426,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "static-fixture-intermediate-1078240.json": {
+      "archive": "history/static-fixture-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "6cd157df2e71e88f31b154faaf955bcbd1cb4f7ce64863d2058d89dd081acd4f",
+      "compressed_sha256": "9a1d7a34870d8ce3dd6f641f436342cc9b6388774d0a0edffb8901fcb4127217",
+      "uncompressed_bytes": 8069,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": null,
+      "refusal_cases": null
+    },
+    "wheel-embedded-intermediate-1078240.json": {
+      "archive": "history/wheel-embedded-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "dcf6cdf638e38ae40e626142b52f03094747db2553c28a1a81c1bbaeeeb8fc77",
+      "compressed_sha256": "3ba494efb6fe89620e4a782cb9b2b88d3f73993d7be9cdbb37266943f970b78f",
+      "uncompressed_bytes": 53697,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": 84,
+      "refusal_cases": 90
+    },
+    "wheel-parity-intermediate-1078240.json": {
+      "archive": "history/wheel-parity-intermediate-1078240.json.gz",
+      "uncompressed_sha256": "cfd109b3cf33df01e23db448c1540a9be82b8bc3d4fbe4192a907968fe37763a",
+      "compressed_sha256": "f11296f0da0177d426e8e1786db279dc838448e502925275e25e3200c90b0337",
+      "uncompressed_bytes": 49611,
+      "binary_sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+      "source_commit": null,
+      "positive_cases": 69,
+      "refusal_cases": 120
+    }
+  }
+}

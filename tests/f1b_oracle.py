@@ -22,7 +22,7 @@ import f1a_oracle as geometry
 
 OracleError = geometry.OracleError
 require = geometry.require
-PROFILE = 'f1b-local-textured-glb-v1'
+PROFILE = 'f1b-local-gltf-v1'
 PIXELS = ((255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 0),
           (255, 255, 0, 64), (255, 0, 255, 255), (0, 255, 255, 192))
 # A prebuilt JPEG and its independently decoded Pillow RGB manifest are appended
@@ -505,9 +505,18 @@ def shared_uv_fixture(primitives=4096, vertices=300000):
     doc['buffers'][0]['byteLength'] = len(binary)
     return encode_glb(doc, bytes(binary))
 
-def inspect(source, archive, leaf_limit):
+def inspect(source, archive, leaf_limit, *, source_model=None):
     source_data = Path(source).read_bytes()
-    expected, source_used, source_images, source_raw = scene_triangles(source_data)
+    if source_model is None:
+        expected, source_used, source_images, source_raw = scene_triangles(source_data)
+        external_files, external_bytes = 0, 0
+    else:
+        expected = source_model['triangles']
+        source_used = source_model['used_images']
+        source_images = source_model['images']
+        source_raw = source_model['raw_images']
+        external_files = source_model['external_files']
+        external_bytes = source_model['external_bytes']
     expected_members = {'textures/' + str(i) + ('.png' if source_images[i]['mime'] == 'image/png' else '.jpg') for i in source_used}
     with zipfile.ZipFile(archive) as z:
         require(z.testzip() is None, 'ZIP CRC')
@@ -562,13 +571,13 @@ def inspect(source, archive, leaf_limit):
             actual.extend(triangles)
         require(used_names == expected_members, 'exact selected source image closure')
         require(set(names) == {'tileset.json', 'conversion.json', '@3dtilesIndex1@', *leaf_uris, *expected_members}, 'exact archive dependency closure')
-        expected_report = {'schema_version': 2, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': len(source_data),
+        expected_report = {'schema_version': 3, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': len(source_data), 'external_files': external_files, 'external_bytes': external_bytes,
                            'triangles': len(expected), 'leaf_tiles': len(leaf_uris), 'leaf_triangles': leaf_limit,
                            'routing_geometric_error_metres': error, 'images': len(source_used),
                            'image_bytes': sum(len(source_raw[i]) for i in source_used),
                            'image_pixels': sum(source_images[i]['width'] * source_images[i]['height'] for i in source_used)}
         report = json.loads(z.read('conversion.json'))
-        for field in ('schema_version', 'source_bytes', 'triangles', 'leaf_tiles', 'leaf_triangles', 'images', 'image_bytes', 'image_pixels'):
+        for field in ('schema_version', 'source_bytes', 'triangles', 'leaf_tiles', 'leaf_triangles', 'images', 'image_bytes', 'image_pixels', 'external_files', 'external_bytes'):
             require(type(report.get(field)) is int and report[field] >= 0, 'typed nonnegative integer report field ' + field)
         require(geometry.close_value(report, expected_report, 1e-10 * max(1, error)), 'typed report facts/fields')
         geometry.check_index(z, Path(archive).read_bytes())
@@ -619,12 +628,12 @@ def rejection_fixtures():
     data = fixture(8)
     result = []
     unsupported = (
-        ('image-uri-percent', lambda d, b: d['images'].__setitem__(0, {'uri': 'textures/a%20b.png'})),
+        ('image-uri-encoded-separator', lambda d, b: d['images'].__setitem__(0, {'uri': 'textures/a%2fb.png'})),
         ('image-uri-parent', lambda d, b: d['images'].__setitem__(0, {'uri': '../outside.png'})),
         ('image-uri-network', lambda d, b: d['images'].__setitem__(0, {'uri': 'https://example.invalid/source.png'})),
         ('image-uri-absolute', lambda d, b: d['images'].__setitem__(0, {'uri': '/tmp/outside.png'})),
         ('image-uri-data', lambda d, b: d['images'].__setitem__(0, {'uri': 'data:image/png;base64,AAAA'})),
-        ('buffer-uri', lambda d, b: d['buffers'][0].__setitem__('uri', 'data.bin')),
+        ('buffer-uri-scheme', lambda d, b: d['buffers'].append({'byteLength': 1, 'uri': 'https://example.invalid/data.bin'})),
         ('blend', lambda d, b: d['materials'][0].__setitem__('alphaMode', 'BLEND')),
         ('normal-texture', lambda d, b: d['materials'][0].__setitem__('normalTexture', {'index': 0})),
         ('metallic-roughness-texture', lambda d, b: d['materials'][0]['pbrMetallicRoughness'].__setitem__('metallicRoughnessTexture', {'index': 0})),
@@ -636,7 +645,7 @@ def rejection_fixtures():
         ('extensions-required', lambda d, b: d.__setitem__('extensionsRequired', ['KHR_texture_transform'])),
         ('extensions-used', lambda d, b: d.__setitem__('extensionsUsed', ['KHR_texture_transform'])),
         ('unused-image-extras', lambda d, b: d['images'][1].__setitem__('extras', {'ignored': True})),
-        ('unused-image-uri', lambda d, b: d['images'].__setitem__(1, {'uri': 'unused.png'})),
+        ('unused-image-uri', lambda d, b: d['images'].__setitem__(1, {'uri': 'https://example.invalid/unused.png'})),
         ('material-extras', lambda d, b: d['materials'][0].__setitem__('extras', {})),
         ('image-count', lambda d, b: d.__setitem__('images', [copy.deepcopy(d['images'][0]) for _ in range(33)])),
     )
@@ -705,7 +714,7 @@ def synthetic_archive(root):
     box = [(low[i] + high[i]) / 2 for i in range(3)] + [(high[0] - low[0]) / 2, 0, 0, 0, (high[1] - low[1]) / 2, 0, 0, 0, (high[2] - low[2]) / 2]
     error = max(1.0, math.dist(low, high))
     manifest = {'asset': {'version': '1.1'}, 'geometricError': error, 'root': {'boundingVolume': {'box': box}, 'geometricError': error, 'refine': 'REPLACE', 'children': [{'boundingVolume': {'box': box}, 'geometricError': 0, 'content': {'uri': 't/0.glb'}}]}}
-    report = {'schema_version': 2, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': source.stat().st_size, 'triangles': 2, 'leaf_tiles': 1, 'leaf_triangles': 2, 'routing_geometric_error_metres': error, 'images': 1, 'image_bytes': len(raw[0]), 'image_pixels': 6}
+    report = {'schema_version': 3, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': source.stat().st_size, 'external_files': 0, 'external_bytes': 0, 'triangles': 2, 'leaf_tiles': 1, 'leaf_triangles': 2, 'routing_geometric_error_metres': error, 'images': 1, 'image_bytes': len(raw[0]), 'image_pixels': 6}
     members = {'tileset.json': json.dumps(manifest).encode(), 'conversion.json': json.dumps(report).encode(), 't/0.glb': leaf, 'textures/0.png': raw[0]}
     output = root / 'synthetic.3tz'
     geometry.write_control_archive(output, members)

@@ -1,0 +1,101 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-f1b2-portable-1078240",
+  "sha256": "d2f84710f4196511c54fcdb25f71b56f245c38247ae81569370aa2f097301ac3",
+  "method": "valid alternative source plans, not implementation mutation",
+  "cases": [
+    {
+      "control": "wrong_buffer_selection",
+      "conversion_exit": 0,
+      "plausible_output": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/independent-checker-controls-2g4niwv4/wrong_buffer_selection/out.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 132,
+          "external_files": 3,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-local-gltf-v1",
+          "routing_geometric_error_metres": 3.60555127546399,
+          "schema_version": 3,
+          "source_bytes": 705,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/independent-checker-controls-2g4niwv4/wrong_buffer_selection/out.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 132,
+          "external_files": 3,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "images": 1,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 3.60555127546399,
+          "schema_version": 3,
+          "source_bytes": 705
+        },
+        "skippedFeatures": null
+      },
+      "checker_detected": true,
+      "assertion_detail": "[(12.0, 21.0, 31.0), (14.0, 21.0, 31.0), (12.0, 24.0, 31.0)]"
+    },
+    {
+      "control": "double_decoded_uri_selection",
+      "conversion_exit": 0,
+      "plausible_output": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/independent-checker-controls-2g4niwv4/double_decoded_uri_selection/out.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 1
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 132,
+          "external_files": 3,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1,
+          "profile": "f1b-local-gltf-v1",
+          "routing_geometric_error_metres": 3.60555127546399,
+          "schema_version": 3,
+          "source_bytes": 705,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/independent-checker-controls-2g4niwv4/double_decoded_uri_selection/out.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 132,
+          "external_files": 3,
+          "image_bytes": 72,
+          "image_pixels": 2,
+          "images": 1,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 3.60555127546399,
+          "schema_version": 3,
+          "source_bytes": 705
+        },
+        "skippedFeatures": null
+      },
+      "checker_detected": true,
+      "assertion_detail": ""
+    }
+  ]
+}

@@ -340,6 +340,159 @@ impl Observer for Fail {
         Err(JobError::new(JobErrorKind::ObserverFailure, "stop"))
     }
 }
+
+fn external_source(root: &Path) -> (std::path::PathBuf, std::path::PathBuf, usize) {
+    let (mut document, bytes) = source();
+    let resource = root.join("geometry.bin");
+    fs::write(&resource, &bytes).unwrap();
+    document["buffers"][0]["uri"] = json!("geometry.bin");
+    let input = root.join("source.gltf");
+    fs::write(&input, serde_json::to_vec(&document).unwrap()).unwrap();
+    (input, resource, bytes.len())
+}
+
+#[test]
+fn external_source_is_owned_before_callbacks_and_reentrant_attempts() {
+    struct DeleteAndReenter {
+        source: std::path::PathBuf,
+        dependency: std::path::PathBuf,
+        nested_source: std::path::PathBuf,
+        nested_output: std::path::PathBuf,
+        entered: std::sync::atomic::AtomicBool,
+    }
+    impl Observer for DeleteAndReenter {
+        fn observe(&self, _: &RunEvent<'_>) -> Result<(), JobError> {
+            if !self.entered.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                fs::remove_file(&self.source).unwrap();
+                fs::remove_file(&self.dependency).unwrap();
+                let nested = mesh_to_archive(
+                    MeshRequest::local_gltf(&self.nested_source, &self.nested_output, 2),
+                    &RunControl::default(),
+                )
+                .unwrap();
+                assert_eq!(nested.report.external_files, 1);
+                assert_eq!(nested.report.leaf_tiles, 1);
+            }
+            Ok(())
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let first = work.path().join("first");
+    let second = work.path().join("second");
+    fs::create_dir(&first).unwrap();
+    fs::create_dir(&second).unwrap();
+    let (input, dependency, bytes) = external_source(&first);
+    let root_bytes = fs::metadata(&input).unwrap().len();
+    let (nested_source, _, _) = external_source(&second);
+    let nested_output = second.join("nested.3tz");
+    let output = first.join("out.3tz");
+    let run = RunControl::new(Some(Arc::new(DeleteAndReenter {
+        source: input.clone(),
+        dependency: dependency.clone(),
+        nested_source,
+        nested_output: nested_output.clone(),
+        entered: std::sync::atomic::AtomicBool::new(false),
+    })));
+    let result = mesh_to_archive(MeshRequest::local_gltf(&input, &output, 1), &run).unwrap();
+    assert_eq!(result.report.source_bytes, root_bytes);
+    assert_eq!(result.report.external_files, 1);
+    assert_eq!(result.report.external_bytes, bytes as u64);
+    assert_eq!(result.report.triangles, 2);
+    assert_eq!(result.report.leaf_tiles, 2);
+    assert!(!input.exists());
+    assert!(!dependency.exists());
+    assert!(nested_output.exists());
+    assert!(output.exists());
+    assert_eq!(fs::read_dir(first).unwrap().count(), 1);
+}
+
+#[test]
+fn unused_external_dependency_output_alias_is_rejected_before_observation() {
+    struct Unexpected;
+    impl Observer for Unexpected {
+        fn observe(&self, _: &RunEvent<'_>) -> Result<(), JobError> {
+            panic!("source overlap reached observer")
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let (input, _, _) = external_source(work.path());
+    let mut document: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+    document["buffers"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"uri":"unused.3tz","byteLength":4}));
+    fs::write(&input, serde_json::to_vec(&document).unwrap()).unwrap();
+    let unused = work.path().join("unused.3tz");
+    fs::write(&unused, b"keep").unwrap();
+    let alias = work.path().join("alias.3tz");
+    fs::hard_link(&unused, &alias).unwrap();
+    for output in [&unused, &alias] {
+        let failure = mesh_to_archive(
+            MeshRequest::local_gltf(&input, output, 1).with_policy(OutputPolicy::Replace),
+            &RunControl::new(Some(Arc::new(Unexpected))),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidRequest);
+        assert!(failure.retained_paths.is_empty());
+        assert_eq!(fs::read(output).unwrap(), b"keep");
+    }
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 4);
+}
+
+#[test]
+fn contradictory_accessor_bounds_are_rejected_before_missing_dependency_io() {
+    let work = tempfile::tempdir().unwrap();
+    for unused in [false, true] {
+        let (input, dependency, _) = external_source(work.path());
+        fs::remove_file(dependency).unwrap();
+        let mut doc: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        if unused {
+            doc["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView":0, "componentType":5126, "count":1, "type":"VEC2",
+                "min":[2,0], "max":[1,1]
+            }));
+        } else {
+            doc["accessors"][0]["min"] = json!([4, 0, 0]);
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("absent/out.3tz");
+        let failure = mesh_to_archive(
+            MeshRequest::local_gltf(&input, &output, 1),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidInput);
+        assert!(!output.parent().unwrap().exists());
+        assert!(failure.retained_paths.is_empty());
+    }
+}
+
+#[test]
+fn enclosing_accessor_bounds_must_equal_actual_extrema_even_when_unused() {
+    let work = tempfile::tempdir().unwrap();
+    for unused in [false, true] {
+        let (input, _, _) = external_source(work.path());
+        let mut doc: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        if unused {
+            doc["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView":0, "componentType":5126, "count":1, "type":"VEC2",
+                "min":[-1,-1], "max":[1,1]
+            }));
+        } else {
+            doc["accessors"][0]["max"] = json!([4, 1, 0]);
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("absent/out.3tz");
+        let failure = mesh_to_archive(
+            MeshRequest::local_gltf(&input, &output, 1),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), JobErrorKind::InvalidInput);
+        assert!(!output.parent().unwrap().exists());
+        assert!(failure.retained_paths.is_empty());
+    }
+}
 #[test]
 fn observer_cancel_conflict_and_alias_preserve_source_and_destination() {
     let work = tempfile::tempdir().unwrap();

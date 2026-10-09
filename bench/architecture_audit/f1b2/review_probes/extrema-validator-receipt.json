@@ -1,0 +1,149 @@
+{
+  "validator_version": "2.0.0-dev.3.10",
+  "document": {
+    "asset": {
+      "version": "2.0"
+    },
+    "buffers": [
+      {
+        "uri": "manual.bin",
+        "byteLength": 36
+      }
+    ],
+    "bufferViews": [
+      {
+        "buffer": 0,
+        "byteLength": 36,
+        "target": 34962
+      }
+    ],
+    "accessors": [
+      {
+        "bufferView": 0,
+        "componentType": 5126,
+        "type": "VEC3",
+        "count": 3,
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          100,
+          100,
+          100
+        ]
+      }
+    ],
+    "meshes": [
+      {
+        "primitives": [
+          {
+            "attributes": {
+              "POSITION": 0
+            }
+          }
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "mesh": 0
+      }
+    ],
+    "scenes": [
+      {
+        "nodes": [
+          0
+        ]
+      }
+    ],
+    "scene": 0
+  },
+  "positions": [
+    11,
+    21,
+    31,
+    13,
+    21,
+    31,
+    11,
+    24,
+    31
+  ],
+  "report": {
+    "uri": "manual.gltf",
+    "mimeType": "model/gltf+json",
+    "validatorVersion": "2.0.0-dev.3.10",
+    "validatedAt": "2026-10-09T18:33:52.408Z",
+    "issues": {
+      "numErrors": 6,
+      "numWarnings": 0,
+      "numInfos": 0,
+      "numHints": 0,
+      "messages": [
+        {
+          "code": "ACCESSOR_MIN_MISMATCH",
+          "message": "Declared minimum value for this component (0) does not match actual minimum (11).",
+          "severity": 0,
+          "pointer": "/accessors/0/min/0"
+        },
+        {
+          "code": "ACCESSOR_MIN_MISMATCH",
+          "message": "Declared minimum value for this component (0) does not match actual minimum (21).",
+          "severity": 0,
+          "pointer": "/accessors/0/min/1"
+        },
+        {
+          "code": "ACCESSOR_MIN_MISMATCH",
+          "message": "Declared minimum value for this component (0) does not match actual minimum (31).",
+          "severity": 0,
+          "pointer": "/accessors/0/min/2"
+        },
+        {
+          "code": "ACCESSOR_MAX_MISMATCH",
+          "message": "Declared maximum value for this component (100) does not match actual maximum (13).",
+          "severity": 0,
+          "pointer": "/accessors/0/max/0"
+        },
+        {
+          "code": "ACCESSOR_MAX_MISMATCH",
+          "message": "Declared maximum value for this component (100) does not match actual maximum (24).",
+          "severity": 0,
+          "pointer": "/accessors/0/max/1"
+        },
+        {
+          "code": "ACCESSOR_MAX_MISMATCH",
+          "message": "Declared maximum value for this component (100) does not match actual maximum (31).",
+          "severity": 0,
+          "pointer": "/accessors/0/max/2"
+        }
+      ],
+      "truncated": false
+    },
+    "info": {
+      "version": "2.0",
+      "resources": [
+        {
+          "pointer": "/buffers/0",
+          "mimeType": "application/gltf-buffer",
+          "storage": "external",
+          "uri": "manual.bin",
+          "byteLength": 36
+        }
+      ],
+      "animationCount": 0,
+      "materialCount": 0,
+      "hasMorphTargets": false,
+      "hasSkins": false,
+      "hasTextures": false,
+      "hasDefaultScene": true,
+      "drawCallCount": 1,
+      "totalVertexCount": 3,
+      "totalTriangleCount": 1,
+      "maxUVs": 0,
+      "maxInfluences": 0,
+      "maxAttributes": 1
+    }
+  }
+}

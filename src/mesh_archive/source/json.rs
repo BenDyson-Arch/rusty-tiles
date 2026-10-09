@@ -1,4 +1,4 @@
-//! Preserve one interpretation: duplicate JSON keys and non-space GLB padding fail.
+//! Preserve one interpretation: duplicate keys fail; container padding remains strict.
 use super::{invalid, Result};
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
@@ -6,15 +6,25 @@ use serde::{
 };
 use serde_json::{Map, Value};
 
-pub(super) fn parse(bytes: &[u8]) -> Result<Value> {
+pub(super) fn parse(bytes: &[u8], glb_padding: bool) -> Result<Value> {
     let mut stream = serde_json::Deserializer::from_slice(bytes).into_iter::<Unique>();
     let value = stream
         .next()
-        .ok_or_else(|| invalid("missing GLB JSON"))?
-        .map_err(|e| invalid(format!("invalid GLB JSON: {e}")))?
+        .ok_or_else(|| invalid("missing glTF JSON"))?
+        .map_err(|e| invalid(format!("invalid glTF JSON: {e}")))?
         .0;
-    if bytes[stream.byte_offset()..].iter().any(|&b| b != b' ') {
-        return Err(invalid("GLB JSON padding must contain only spaces"));
+    if bytes[stream.byte_offset()..].iter().any(|&b| {
+        if glb_padding {
+            b != b' '
+        } else {
+            !matches!(b, b' ' | b'\t' | b'\n' | b'\r')
+        }
+    }) {
+        return Err(invalid(if glb_padding {
+            "GLB JSON padding must contain only spaces"
+        } else {
+            "glTF JSON has non-whitespace trailing bytes"
+        }));
     }
     Ok(value)
 }

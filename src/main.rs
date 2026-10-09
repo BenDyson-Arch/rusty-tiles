@@ -73,7 +73,7 @@ enum Command {
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// Static GLB with embedded base-color images in local metre/Y-up coordinates → explicit .3tz
+    /// Static local GLB/glTF with bounded local resources in metre/Y-up coordinates → explicit .3tz
     #[command(name = "mesh-local-to-3tz")]
     MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial

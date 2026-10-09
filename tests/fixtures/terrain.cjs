@@ -14,9 +14,12 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
     headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader']});
   try {
     const page = await browser.newPage({viewport: {width: 1100, height: 800}});
-    const errors = [], external = [], requests = [];
+    const errors = [], external = [], requests = [], requestFailures = [], httpFailures = [], consoleErrors = [];
     page.on('pageerror', e => errors.push(String(e)));
+    page.on('console', message => {if (message.type() === 'error') consoleErrors.push(message.text());});
     page.on('request', r => requests.push(r.url()));
+    page.on('requestfailed', r => requestFailures.push({url: r.url(), error: r.failure()?.errorText}));
+    page.on('response', r => {if (r.status() >= 400) httpFailures.push({url: r.url(), status: r.status()});});
     await page.route('**/*', route => {
       const url = new URL(route.request().url());
       if (!['127.0.0.1', 'localhost'].includes(url.hostname)) {
@@ -25,8 +28,33 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
       return route.continue();
     });
     const inspect = async () => {
-      await page.waitForFunction(() => window.terrainSurface && window.terrain && window.loaded,
-        null, {timeout: 60000});
+      try {
+        await page.waitForFunction(() => window.failures?.length ||
+          (window.terrainSurface && window.terrain && window.loaded), null, {timeout: 60000});
+        assert.deepEqual(await page.evaluate(() => window.failures || []), [], 'preview initialization failed');
+      } catch (error) {
+        const scene = await page.evaluate(() => ({
+          status: document.getElementById('status')?.textContent,
+          failures: window.failures, loaded: !!window.loaded, hasViewer: !!window.viewer,
+          hasTerrainSurface: !!window.terrainSurface, hasTerrain: !!window.terrain,
+          terrainTilesLoaded: window.terrain?.tilesLoaded,
+          terrainSelected: window.terrain?._selectedTiles.length,
+          terrainCommands: window.terrain?._statistics.numberOfCommands,
+          terrainPendingRequests: window.terrain?._statistics.numberOfPendingRequests,
+          terrainTilesProcessing: window.terrain?._statistics.numberOfTilesProcessing,
+          terrainAttemptedRequests: window.terrain?._statistics.numberOfAttemptedRequests,
+          globeShow: window.viewer?.scene.globe.show,
+          globeTilesLoaded: window.viewer?.scene.globe.tilesLoaded,
+          renderLoop: window.viewer?.useDefaultRenderLoop,
+          sampleHeightSupported: window.viewer?.scene.sampleHeightSupported,
+          clampToHeightSupported: window.viewer?.scene.clampToHeightSupported,
+          documentVisibility: document.visibilityState,
+          cesiumVersion: window.Cesium?.VERSION,
+        })).catch(diagnosticError => ({diagnosticError: String(diagnosticError)}));
+        console.error(JSON.stringify({scene, errors, consoleErrors, requestFailures, httpFailures, external,
+          browserVersion: browser.version(), requestCount: requests.length, recentRequests: requests.slice(-20)}, null, 2));
+        throw error;
+      }
       await page.getByRole('button', {name: 'Terrain extent', exact: true}).click();
       return page.evaluate(async oracle => {
         const C = Cesium, scene = viewer.scene, surface = window.terrainSurface;
