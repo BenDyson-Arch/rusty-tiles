@@ -6,6 +6,9 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
+    Validation(#[from] crate::validate::ValidationFailure),
+
+    #[error(transparent)]
     Job(#[from] crate::JobFailure),
 
     #[error("{0}")]
@@ -58,6 +61,7 @@ impl Error {
     /// Stable CLI failure categories: usage=2, data=3, environment=4, conflict=5.
     pub fn category(&self) -> (&'static str, u8) {
         match self {
+            Self::Validation(failure) => failure.category(),
             Self::Environment(_) => ("environment", 4),
             Self::OutputExists(_) => ("output_conflict", 5),
             Self::Io(_) => ("io", 1),

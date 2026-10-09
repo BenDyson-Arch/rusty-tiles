@@ -161,7 +161,10 @@ fn mesh_audit_rejects_changed_winding_even_when_archive_validation_passes() {
     );
     runner::audit::check("mesh", &input, &output).unwrap();
     write(vec![0, 2, 1]);
-    assert!(rusty_tiles::validate::archive(&output, None).is_ok());
+    assert!(
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .is_ok()
+    );
     assert!(runner::audit::check("mesh", &input, &output)
         .unwrap_err()
         .to_string()
@@ -215,7 +218,10 @@ fn point_audit_rejects_changed_attributes_even_when_archive_validation_passes() 
         .unwrap();
     file.write_all(&999u16.to_le_bytes()).unwrap();
     drop(file);
-    assert!(rusty_tiles::validate::archive(&output, None).is_ok());
+    assert!(
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .is_ok()
+    );
     assert!(runner::audit::check("points", &input, &output)
         .unwrap_err()
         .to_string()

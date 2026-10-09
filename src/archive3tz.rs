@@ -404,7 +404,12 @@ pub fn list_zip_names(path: &Path) -> Result<Vec<String>, CodecError> {
 /// Check Maxar 3TZ v1.4 layout: root `tileset.json`, last member `@3dtilesIndex1@`
 /// stored, index offsets point at local file headers whose names match the MD5.
 pub fn validate_3tz(path: &Path) -> Result<(), CodecError> {
-    let mut zip = zip::ZipArchive::new(File::open(path)?)?;
+    validate_open_3tz(File::open(path)?)
+}
+
+/// Validate the selected open file, without resolving its pathname again.
+pub(crate) fn validate_open_3tz(mut file: File) -> Result<(), CodecError> {
+    let mut zip = zip::ZipArchive::new(file.try_clone()?)?;
     let n = zip.len();
     if n < 2 {
         return Err(CodecError::invalid(
@@ -454,7 +459,7 @@ pub fn validate_3tz(path: &Path) -> Result<(), CodecError> {
         ));
     }
     let mut previous = None;
-    let mut f = File::open(path)?;
+    let f = &mut file;
     for rec in index.as_chunks::<24>().0 {
         let key = (
             u64::from_le_bytes(rec[..8].try_into().unwrap()),

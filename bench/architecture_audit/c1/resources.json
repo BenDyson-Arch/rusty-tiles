@@ -1,0 +1,611 @@
+{
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+  "runs": [
+    {
+      "exitCode": 0,
+      "maximumRssKiB": 101032,
+      "userSeconds": 0.108259,
+      "systemSeconds": 0.016811,
+      "wallSeconds": 0.12785666399577167,
+      "peakDescriptors": 6,
+      "descriptorSamples": 60,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "triangle",
+      "repetition": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-reviewed-resources/corpus/triangle.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "exitCode": 0,
+      "maximumRssKiB": 101428,
+      "userSeconds": 0.103183,
+      "systemSeconds": 0.019839,
+      "wallSeconds": 0.12496768099663313,
+      "peakDescriptors": 7,
+      "descriptorSamples": 59,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "triangle",
+      "repetition": 1,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-reviewed-resources/corpus/triangle.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 3
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101128,
+      "userSeconds": 0.11200399999999999,
+      "systemSeconds": 0.010990999999999999,
+      "wallSeconds": 0.1254876220045844,
+      "peakDescriptors": 6,
+      "descriptorSamples": 59,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "count_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 100924,
+      "userSeconds": 0.099537,
+      "systemSeconds": 0.019882,
+      "wallSeconds": 0.12082951999036595,
+      "peakDescriptors": 6,
+      "descriptorSamples": 57,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "count_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101408,
+      "userSeconds": 0.103903,
+      "systemSeconds": 0.015972,
+      "wallSeconds": 0.1226116719917627,
+      "peakDescriptors": 6,
+      "descriptorSamples": 58,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "count_sum_overflow",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101820,
+      "userSeconds": 0.105283,
+      "systemSeconds": 0.016481,
+      "wallSeconds": 0.12442586399265565,
+      "peakDescriptors": 6,
+      "descriptorSamples": 59,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "count_sum_overflow",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "accessor element overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101136,
+      "userSeconds": 0.098826,
+      "systemSeconds": 0.018962,
+      "wallSeconds": 0.11861700899316929,
+      "peakDescriptors": 6,
+      "descriptorSamples": 56,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "meshopt_count_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "meshopt decoded size overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101816,
+      "userSeconds": 0.099449,
+      "systemSeconds": 0.02089,
+      "wallSeconds": 0.12186097400262952,
+      "peakDescriptors": 6,
+      "descriptorSamples": 58,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "meshopt_count_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "meshopt decoded size overflow"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 107076,
+      "userSeconds": 0.221602,
+      "systemSeconds": 0.017955,
+      "wallSeconds": 0.24190598900895566,
+      "peakDescriptors": 6,
+      "descriptorSamples": 115,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "json_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "JSON exceeds byte limit"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 106092,
+      "userSeconds": 0.219194,
+      "systemSeconds": 0.021904,
+      "wallSeconds": 0.24253596499329433,
+      "peakDescriptors": 6,
+      "descriptorSamples": 115,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "json_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "JSON exceeds byte limit"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 120788,
+      "userSeconds": 0.195152,
+      "systemSeconds": 0.014919,
+      "wallSeconds": 0.21141964600246865,
+      "peakDescriptors": 6,
+      "descriptorSamples": 100,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "shared_primitives",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "resource limit: JSON depth/items at line 1 column 668419"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 119668,
+      "userSeconds": 0.18398299999999998,
+      "systemSeconds": 0.023951999999999998,
+      "wallSeconds": 0.21066002000588924,
+      "peakDescriptors": 6,
+      "descriptorSamples": 100,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "shared_primitives",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "resource limit: JSON depth/items at line 1 column 668419"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 0,
+      "maximumRssKiB": 103832,
+      "userSeconds": 0.208558,
+      "systemSeconds": 0.020939,
+      "wallSeconds": 0.23213002299598884,
+      "peakDescriptors": 6,
+      "descriptorSamples": 110,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "legal_shared_indices",
+      "repetition": 0,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-reviewed-resources/corpus/legal_shared_indices.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1000,
+            "uri": "tile.glb",
+            "vertices": 3000
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "exitCode": 0,
+      "maximumRssKiB": 103500,
+      "userSeconds": 0.21495199999999998,
+      "systemSeconds": 0.017757,
+      "wallSeconds": 0.23502353100047912,
+      "peakDescriptors": 6,
+      "descriptorSamples": 111,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "legal_shared_indices",
+      "repetition": 1,
+      "report": {
+        "archive": "/home/bend/.cache/rusty-tiles-c1-reviewed-resources/corpus/legal_shared_indices.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1000,
+            "uri": "tile.glb",
+            "vertices": 3000
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 106012,
+      "userSeconds": 0.219989,
+      "systemSeconds": 0.020985999999999998,
+      "wallSeconds": 0.24369009399379138,
+      "peakDescriptors": 6,
+      "descriptorSamples": 116,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_json_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "JSON exceeds byte limit"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 106336,
+      "userSeconds": 0.22268,
+      "systemSeconds": 0.019865,
+      "wallSeconds": 0.246064857012243,
+      "peakDescriptors": 6,
+      "descriptorSamples": 117,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_json_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "JSON exceeds byte limit"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 102376,
+      "userSeconds": 0.113035,
+      "systemSeconds": 0.013979,
+      "wallSeconds": 0.1289825960120652,
+      "peakDescriptors": 6,
+      "descriptorSamples": 61,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_json_items_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "resource limit: JSON depth/items at line 1 column 196715"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 101824,
+      "userSeconds": 0.11030799999999999,
+      "systemSeconds": 0.016867999999999998,
+      "wallSeconds": 0.1288881390064489,
+      "peakDescriptors": 6,
+      "descriptorSamples": 61,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_json_items_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "resource limit: JSON depth/items at line 1 column 196715"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 100548,
+      "userSeconds": 0.094091,
+      "systemSeconds": 0.02477,
+      "wallSeconds": 0.12017870100680739,
+      "peakDescriptors": 6,
+      "descriptorSamples": 57,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_capacity_limit",
+      "repetition": 0,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "implicit subtree exceeds admitted node capacity"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    },
+    {
+      "exitCode": 3,
+      "maximumRssKiB": 100992,
+      "userSeconds": 0.100871,
+      "systemSeconds": 0.018826,
+      "wallSeconds": 0.12231598900689278,
+      "peakDescriptors": 6,
+      "descriptorSamples": 58,
+      "descriptorPermissionDenials": 0,
+      "stderr": "",
+      "name": "implicit_capacity_limit",
+      "repetition": 1,
+      "report": {
+        "error": {
+          "code": "resource_limit",
+          "message": "implicit subtree exceeds admitted node capacity"
+        },
+        "exitCode": 3,
+        "ok": false
+      }
+    }
+  ],
+  "readOnly": true,
+  "limitations": "Fresh-process Linux wait4 observations only, not a universal RSS ceiling; shared geometry stresses bounded work without enormous payload."
+}

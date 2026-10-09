@@ -1,0 +1,15 @@
+{
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+  "fixtureSha256": "22c18115507eba7d1f13215ac55aa291dc2faabd462567c482d16a06dabda785",
+  "exitCode": 3,
+  "report": {
+    "error": {
+      "code": "invalid_input",
+      "message": "buffer byteLength does not match actual resource"
+    },
+    "exitCode": 3,
+    "ok": false
+  },
+  "readOnly": true,
+  "control": "Historical missing BIN acceptance defect; independently hand-authored corpus reproduces claimed missing bytes."
+}

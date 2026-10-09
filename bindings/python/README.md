@@ -62,7 +62,7 @@ staging and atomic archive replacement.
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `convert_to_implicit(input, output, ...)` | `force=False` |
-| `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
+| `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
 
 `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
 `rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh
@@ -217,7 +217,7 @@ signals during preparation and events, and does not deliberately check them
 after installation. Python asynchronous interruption or allocation failure
 after commitment can still interrupt caller-side execution.
 
-Rust failures raise subclasses of `TilesError`: `DataError`,
+Rust failures raise subclasses of `TilesError`: `DataError`, `ResourceLimitError`,
 `EnvironmentError`, `OutputExistsError`, `TilesIOError` or `UnsupportedError`.
 Invalid Python arguments raise `TypeError` or `ValueError`. Original callback
 exceptions are preserved.

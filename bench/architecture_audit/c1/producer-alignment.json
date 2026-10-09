@@ -1,0 +1,1052 @@
+{
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+  "sourceSha256": "d8b25927d26a5777c6a71e3f2036e3e87c2b88a6768f756754d680d069cb532a",
+  "archiveSha256": "f20a785de75e5ec20ab98ddc4ed54264de04a0fa9f988167373da0ccbcb05559",
+  "command": [
+    "/home/bend/.cache/rusty-tiles-c1-native-0a1cc94",
+    "vector",
+    "-i",
+    "/home/bend/.cache/rusty-tiles-c1-foundation/tests/fixtures/countries-source.geojson",
+    "-o",
+    "/home/bend/.cache/rusty-tiles-c1-reviewed-producer/countries.3tz",
+    "--explicit",
+    "--reproducible",
+    "--maxVertices",
+    "32",
+    "--maxBytes",
+    "16384",
+    "--json"
+  ],
+  "controls": [
+    {
+      "member": "t/05cae1f99f131f6fc3da73a4dc60866a65ce9eaf949ff55bba161c15334d1e1d.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/06f948bed31a1af3636c6f88d8be189250a3ce93114254dd89c4dea9d4a9ae63.b3dm",
+      "b3dmBytes": 2120,
+      "glbBytes": 2072,
+      "binBytes": 184,
+      "declaredBufferBytes": 184
+    },
+    {
+      "member": "t/082cef4e0f274182cb0dea2895e74e155b101b25cd10059ef4315d58ce25ff99.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/088b3d35909fde815229a4d288c9bedf1f22e824705218ecd00f77439105dc99.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/0915ae86ffaaafdcfc1e2c4547693ce6ed894bafef019bed429d6fb2465483dd.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/0b38f6ea16bcf747d3204120fdcd4fe7215ce0ec9e701f95f6a4063f07d2e85a.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/0c0f622c43941c81e6eb527dafcb0b9f4cba3c40beef7b55ecf85b45c1a6e93c.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/0e93cc1e9c448229348fce3dd71dad29bb7c5f29cf408cc244d6049422f3d64b.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/107a1052bb8d3ccd9e7b4b2a3bb79a8b53ef7b457c516f8f7375751f35388a8b.b3dm",
+      "b3dmBytes": 2232,
+      "glbBytes": 2184,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/131231ff2d73875f1ab7446a5fe72f05b191ff104c9c3efc4847bd37de848645.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/1378bcfc5ccdeb8ca6ac1779a0fb2f9943dc2879f41307d8a3631e7297112911.b3dm",
+      "b3dmBytes": 2232,
+      "glbBytes": 2184,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/147d125c49a08f7b202ca0d4059bcd10168db91803a37c16e69ffbcd401cda81.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/156f651d2124028e537875e93df8ac09a85707fd29d49dd4e944949d22f03e28.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/15f4aca64c59c13d813cfef9b66b9db09411f83e34ce9540cfc4399917df4870.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/1935a6c56d2f550780382619da6a83baabfc7694894cea277fb6a09d7b919679.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/1d8fdb5d3d6c0d881c72fafbe76350ef0f7862c5b19ccad3145a79ed96074fa6.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/1f1a61172907db508a142c77c09d2f965d1355a86cd665d1a579611a967eb7e3.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/1f87fef810186c8ec0b6e4a1e81564254d887ab740ba5460b4e16c52d614f8d8.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/21b4aab95a4710015ed9b860189eda61e4c1916a3a7168219f90bf3f36f4132c.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/225ad16172e8405a057f43b0f0c47f53501b32dfd38bbbe88e75a386b474b71c.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/251416d6c828afe18caafbb8adf36159e368d9f2b57335f93cf25407c603a79a.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/253069468e39b187607dc8715c082b0588d69b126850a4c245f7f60e8b070f18.b3dm",
+      "b3dmBytes": 2232,
+      "glbBytes": 2184,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/27343bdc0f8246013f89ef0eaf686dd9e5c1f16c588fa59cd8c6dc8b64102de6.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/292e28e71f034ab3e8ba00a7fcd48cddaa1394f7a0a9d17aa43ec1b83b7e80ee.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/29d2ccbcdab329d55592a3ed14d32393b633b2941d0f4624d25a875602cddced.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/2b5b8b6a808d17a59070bef9cb257be0345bcc773d0c9bca31be5cd1d203a407.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/2c47d9d507e0e50c0c8ee48c054fd5737552077e22346ae232fc70e13a86e8a3.b3dm",
+      "b3dmBytes": 2232,
+      "glbBytes": 2184,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/2d36ac280a77583e613779b3656bfa3fb46ee573d2830a8ed474fe3fdd8b6580.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/31dc028b968a6ddeb1ad633c2486e77611c937541d73bccc949e6dbb81ce004e.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/38cc33446de25e98d655e5f4adf5c35be5b114ef8f1c0f18683752ecc649dec9.b3dm",
+      "b3dmBytes": 2168,
+      "glbBytes": 2120,
+      "binBytes": 244,
+      "declaredBufferBytes": 244
+    },
+    {
+      "member": "t/3953350bca435b827c3617c4b3649739b0102e1f89aa5272101837813591764a.b3dm",
+      "b3dmBytes": 2128,
+      "glbBytes": 2080,
+      "binBytes": 184,
+      "declaredBufferBytes": 184
+    },
+    {
+      "member": "t/3d614778dcbfd7a7c39b763036b83d5ce340c803028ff616c5ae4b4cd0fc7f71.b3dm",
+      "b3dmBytes": 2200,
+      "glbBytes": 2152,
+      "binBytes": 252,
+      "declaredBufferBytes": 252
+    },
+    {
+      "member": "t/424a019d931f5b08659a560ecef61697c88062d2aa1ff2e486ab36e7956a130c.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/42548bae2cf221eba466ab6de6217c08e5e79262b86c2587dc452b993d4e2eb8.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/42bbfb61c380294bd567aaf7116277902d120cc813fe9ab5b64ab32ab564f9ab.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/44d8963eb5decb3dd71cd88fc7a3e8e0d84bf71925f47e0f4ed63002c62bfddd.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/464580c9be4f33f9a167647b4d298aebdc0112268893ea62eb5f46c2f77a7006.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/4d2296b8efb906d74ed0e3b6cdcf5962926ae34c475509410e559586773dbb3d.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/4e111af651f803821013e68edebd714dc6cea326d718380086cea62002e19425.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/4e1b53da8cdae26f955c9aa28086b0aabd6d01d62a2953006a9824657dbc09cb.b3dm",
+      "b3dmBytes": 2120,
+      "glbBytes": 2072,
+      "binBytes": 184,
+      "declaredBufferBytes": 184
+    },
+    {
+      "member": "t/4e701107583238b693647e675345d208cde1e88162cbab8ffdf529396866a644.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/4f341ab1d0d55f21f0bc418e89bb80c12fc457501359f0912dd063bedd00ad6b.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/4fc88d4dd4ff7025fa8b65ee8463328fb490e21964d32e316836535d777f2dd4.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/5010bd65d1a74d48945928fca392c419f356506f348db80fb348a64ddc9014b2.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/51921fbda37fde9336005baec8c919d8de8f9fd9c0d4cbc35f71d50ea3604534.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/5245dd5329ee70460d9b1e4d09091e16edb0208069cffa46183f1a4b77507b18.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/53d6580031a89d44b39582f4e9da50c1ea291a180f8d0773189b7f4c3a93ac95.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/56a968f77ff9b210e3931a4d5f818bb2b45c25f46785bd443fa596dabc7f80e6.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/59dbbbeef0d73d49f97302d81b5ab36fbced3e4d5993a6c303808ab212d82ea6.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/5a6e862778e86db2aa6198be183fd7332237d1175f1dde885f015963e85c5272.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/5f0b4d56c05202f3b58824e7f3c2f46dacbab4e1d6180613fa174f5e8cc78b2b.b3dm",
+      "b3dmBytes": 2128,
+      "glbBytes": 2080,
+      "binBytes": 184,
+      "declaredBufferBytes": 184
+    },
+    {
+      "member": "t/6010fa42dc1048d62e51184869dc39fa107ccd96488b9224f099e966d571a9d7.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/61eb8ca4e74a3559a658ff54c192b8e59c1f070d5cc53baa7ad6c9b6af24a81f.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/62985da63713267b9f993226f355c923a2e9212f2e82ba424c929fbae62298e4.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/6307828ada72366181b3934fc677839b992f904081ff4c068e7a7c8fbadfa3f8.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/6336bf3545fd8f7d039cca50d8cdef2abb62d7fb0e3ca01904a87ae7c420f9dd.b3dm",
+      "b3dmBytes": 2120,
+      "glbBytes": 2072,
+      "binBytes": 176,
+      "declaredBufferBytes": 176
+    },
+    {
+      "member": "t/6515daa8ee38e04b536468913c9e2a901d531a4518bb051200be0059f6b8db84.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/66cebee16cc3e95c9fda1e7149abbfbeb6b29cb01232701127e14a924276c19d.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/672799b43ff8718ef99a39c90e6bc98527a193e78665f3f1ab17736efc8d815c.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/684b99091297ecd9d024b29bf73ce5f6b73cb25ee3ae38717258dad146c503d7.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/6a5a97ad55a0467eb759c0c670722d5ddf072c714401d34f9a3e9992fd711072.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/6b075f9763da12dbe47f3d4f053f9df5fd5180c4d088e309c4e705a07058c081.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 296,
+      "declaredBufferBytes": 296
+    },
+    {
+      "member": "t/6b5c547a867f901d750fb54603bf870ff933524b5e52d8434bdcab9d26de7363.b3dm",
+      "b3dmBytes": 2520,
+      "glbBytes": 2472,
+      "binBytes": 584,
+      "declaredBufferBytes": 584
+    },
+    {
+      "member": "t/6c188e4b42284336af84c8e647356d3a91306f810a4642022ca86de54a53042f.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/6c58915b85e1b0c5c89cfd51c4016ab4559ec0a57e2957167098fdf44e480c8a.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/6c9188e273359d8c0d2ebc2b66f0fac73c791b94dcb8e78c4cdc582defd767a4.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/6d1203ccec3371513533b0049effd8608ea9763e901c598fc2f43aca72f191f8.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/6d4d4c47066af9328dbc33da9faaa2cdb1c0b4300ae50ba1bdbe59026a127ff2.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/702bffd66a884d0b5c7275b580d4f73fe9af2922eaea2ac713b858ad53e85bbc.b3dm",
+      "b3dmBytes": 2104,
+      "glbBytes": 2056,
+      "binBytes": 176,
+      "declaredBufferBytes": 176
+    },
+    {
+      "member": "t/71f78ae9a0c938c41d0cecf01b7c40df0a29eff3f57faadbfc7fd21fb53aff56.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/71ffd220deb06e225566784bdaa2f7ac749b9413f406d41e0e60dce607c2ca9f.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/753ac2b9a296ddeabdcfdbfb811609c848eaa72ea9dcb19b03d1b0366ecae630.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/772d9a2803fa0e90c0db2049c8ffb2f7610d8eae93ba97631cb9d76cdece8ce6.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/783cda33d28a9b070b47c3de6c17db23fbc7018e27fd51288e53ec1ad27b0a03.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/78e300b002cd278925c244346ac5736b26e7c77330ffb863fcb224afe41681e6.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/7a1b1fca1908fdd85f947cda3f81ece4214c8a0ec66d30bfac28afce57bea92e.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/7b47b38abc337027077f6aca8da328ca184562059f061f346b75568efd8be651.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/7c4c6fbbaa5fbf9ca7a6f35a25cf6e82d6278a8d8cba8483c8f55361ee6b4229.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/7f008ec47a14318381327749cbd7ae0ba272c8864afcd175516359a6bc107b9a.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/7f67b0366a0f8e58d248f1b4656cef97572d7de0b957922e2d882be0fb89904e.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/7f8e5e934e4c344b52c68911a7be252364e2b1b65dfd3545a3989b107b6ff1cc.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/80f61008056439f9a46055827f50eb235d588f738923b049d3f1cf8abe617228.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/818d6012a6b873964c458f039bf3ea6928e872c243ebf696840848b0fe092a12.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/86dd5d6ba909bb0e6aae4b82ca7591edc6772545160bd6d08963b0a1af616d3f.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/86e702bd41fa0b0ec08b97fb59567887279b06124a307dab755cfe54323e685e.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/8f4a5270943b7d856e90ba447c7641efb11f2ad6eeaa93c48a4fbb423daae968.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/961bb46bbc0d4ae8cc5969be28368cc0ee298871ce9fd216833d5b1c108adb05.b3dm",
+      "b3dmBytes": 2408,
+      "glbBytes": 2360,
+      "binBytes": 464,
+      "declaredBufferBytes": 464
+    },
+    {
+      "member": "t/9773e2e0463192e0bbca18dd38bf7bf0dbaafaeaff115bd960c324467a76e5e1.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/98aaeaced1ca465f3fd206d4d80c0094c285ffcc3e949b36b0cce1b9b5ffc871.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/9a7ffaf7bb38be8b68c959103f1768e43ae976e02100f5d4695f75dc68a0aeab.b3dm",
+      "b3dmBytes": 2480,
+      "glbBytes": 2432,
+      "binBytes": 544,
+      "declaredBufferBytes": 544
+    },
+    {
+      "member": "t/9e56c753805a5a26db4e8e0d63d05e8861dc56c378caa16ff70099acf4e55774.b3dm",
+      "b3dmBytes": 2192,
+      "glbBytes": 2144,
+      "binBytes": 252,
+      "declaredBufferBytes": 252
+    },
+    {
+      "member": "t/9ee048ec3251fc67b438fb47212f2d97c0af5fce0d2af50f77f6fad3dc4bdb68.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/9f5cd28a1d924c7d934b68c8df94993c49461e1aff06c4221f56b9f52be79cd7.b3dm",
+      "b3dmBytes": 2224,
+      "glbBytes": 2176,
+      "binBytes": 296,
+      "declaredBufferBytes": 296
+    },
+    {
+      "member": "t/a4a325515f092cce8d7f1aa6f974251fc5aff20508a551fd09847c0dfde7f123.b3dm",
+      "b3dmBytes": 2480,
+      "glbBytes": 2432,
+      "binBytes": 544,
+      "declaredBufferBytes": 544
+    },
+    {
+      "member": "t/a6f7c6e428fbf7a2997e7bcf1d04aa006357e38b29ebde05da3aa021e002df28.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/a8e430827ae9542b47c96fb27f6b2e06bebca0537948df11c200782591fbc3c1.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/aabf2be6f22b92d15efff05d147f3fe0ef87085a23cc7aa42014d76ba0ce503c.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/b0ca64de41c531627ac683633feef0c9e2a9e136c442809a74cf510061490b43.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/b3c2f50bbd7d8dabd2f7635b5103d9f1ff2b763a38f810ca5184cfca514392cc.b3dm",
+      "b3dmBytes": 2232,
+      "glbBytes": 2184,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/b60d40219f71fffb3a4793683d22ba85751e968caa95e081d461d5ee9e80a8c3.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/b6982d184bfc5f5b9d599cbde5e82aaad951ff52f3c084f4c6b90caba263b8e7.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/b9675b4f1de319f85e0c554ca0bd543327d99a37db09ebfdd1291e8bba2a9595.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/bb2a87ca38a107e8981b3621e4cadfdf6a37dab65644f3ff0327c56e609e8496.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/bb79ebeb1dac5cb672e525f2b8b2721fc564edd768b6ece328ed5922bc5d11bd.b3dm",
+      "b3dmBytes": 2192,
+      "glbBytes": 2144,
+      "binBytes": 252,
+      "declaredBufferBytes": 252
+    },
+    {
+      "member": "t/bd4501d78127c30724680e22778ccab19aefef58818b7043915fc702d32a1a3d.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/bf639e058cc192d5329d145a4a747130a3ca3ee9770ee7b1013396cfcfb9be85.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/bfd9b55f7d745b2294b3fd628913397d7d718f36299ec5c65c1bff8d9325dd6c.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c0070d5f775a8d913988d5eddaa328d13ac6199d1f39559b263317bfbe27b68b.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c0fec50465cd6a7052efc8703173ee7cb5db00fd79f7bef835a89883715eea21.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c1958aa68c51838b779487bf327ccaeed80d488c8fe335fe40e8226547815014.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/c1f6304633cbf217d0bce4b743d9c7d9cfebbb3864dfb2d761d3203680b57abc.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c2172398decbeb56abeda2b421d9386394b4e1c9691252e4ae9e4ea61a1fa2c4.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/c28d58ea8a14eb216bfe3bed0c0b89745be4d1599632e86974a9c4faf84b9b6f.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c2e3fab1c31279167cbde20eb53c19130fc26ee4cc442acdeba81a66ceae0247.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c43304c43538e0f681d78617029830d70f59c72f219c3bf3b2cda622a2447c2b.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c6ae07cddaafc84edacf03eb240926528fa57faa4efce9cab5f61f434558205d.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/c8129ce104b192495fae9465bf44c55032683a9890c9d115a886f0cedf5b57cc.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/c9c757f080c5c8cd6ec5a596fe8fa5124d6d22a030e7004dc9c426fe87f4203a.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/cbceb9efef0c6a2165d6cc01a308d296120384074ab17f6b62589ba0d70aeb7c.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/cdf1ebdf179b607186814e02f5186cc78e6e9065aab729f4fe1a7cc806b9a65f.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/ce56f180557f92e4f8dff44a290ab86a3eca6db4ec2004480a071727a4abaf0d.b3dm",
+      "b3dmBytes": 2296,
+      "glbBytes": 2248,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/ce5ae91e0c285dd3b77b4a237d7b7f12d92cf8e86b2e7ed464aa694542bdc195.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/cf5a14b12d70784b8779c979eecac510381cb133821ee92f19e223b4a761a4cd.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/d1a3813c8a644eaf1df03d3acf413766ff92d93851abd568c56b09457f011f0b.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/d1b9a9733e305b8e001a4ddfbababd985bc934d14108fe0f9b98d70c0cffd7bb.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/d5596437a9a2a05fa72971d5a380aee397998e6601b50cee1f6242e01815ef01.b3dm",
+      "b3dmBytes": 2184,
+      "glbBytes": 2136,
+      "binBytes": 252,
+      "declaredBufferBytes": 252
+    },
+    {
+      "member": "t/d637ae4ad4f2841ed7272367eb5107453bb7a6d5df1498de6ae3113d386288c4.b3dm",
+      "b3dmBytes": 2192,
+      "glbBytes": 2144,
+      "binBytes": 252,
+      "declaredBufferBytes": 252
+    },
+    {
+      "member": "t/d76c0bd05ff55f1575b0f3f668c084f884228249b0c5370aab31b995bd9e6cd8.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/d91b2a1db68086beabbecee6435dc36676758133b4890208788ea35223957427.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/db8b4b44051e33da73cc8df5807751d5cfae0cc621dd719ab1fac72ceec661b6.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/dd689647413f6f91840373a271df6eed89df7547ff81b5204f5f8a1ec61c364b.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/deb7a0c92d5c1712810504463fd88e0c791870f2ec23d069a1bfa5f84cc0cf59.b3dm",
+      "b3dmBytes": 2192,
+      "glbBytes": 2144,
+      "binBytes": 244,
+      "declaredBufferBytes": 244
+    },
+    {
+      "member": "t/e4850547e3aaef4d3de9c709b314d4261532f87ab47de121186d25be4e676c6c.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/e769d1160cc4d323f17ebab80ac80ba66745ec09792910a8591fe3421b6d13b6.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/e794348d2d29d4dd06adbe887217c9555ee82b54858339cad4ae8e1d29f7ed01.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/e7c6af31998b871050c206da7dc07de423e54e454723b4f57c0be1018c30404b.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/e8f169a947ff80416b639e42465b3b23dce669e625036f58893e20c539a556ed.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 364,
+      "declaredBufferBytes": 364
+    },
+    {
+      "member": "t/ea43f8692567effe11eef0ab1e7bfa5b39be7c20af65a1ae5359aad04f6e1c20.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/ecb339f834492f7a2d1162814edb8b2158c458feb6b1de6bee740565077e4c7e.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/edc3b5f2d9bf6f2c0c805ab6ffb0e662dcfdc2ad7daa1d680d2cc32d2844e960.b3dm",
+      "b3dmBytes": 2304,
+      "glbBytes": 2256,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/f4fc5a3a85b891c8a33ec43fceebde49b4187242a1269965cfb37a12ac3e7769.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/f5b93f7c5df662ac815394e65249c5583c12dd6e4767823f25aaf43b66d5ad28.b3dm",
+      "b3dmBytes": 2320,
+      "glbBytes": 2272,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/f629d9638db0eb9b3dfa96044d8bb4bec3701063e5ea447e6413d967a9a2751b.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/f83c9239a12c8e818ee8698d10d08b2f1474d4efdab1110ca724dcc8bbcd2d4c.b3dm",
+      "b3dmBytes": 2240,
+      "glbBytes": 2192,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/f889b155a9e1b1d41476c1d891b1ab2515e0dce2691d70961d2503d82e37bdbe.b3dm",
+      "b3dmBytes": 2312,
+      "glbBytes": 2264,
+      "binBytes": 372,
+      "declaredBufferBytes": 372
+    },
+    {
+      "member": "t/fc364bacca16e905112d82e9dd2e8d596f10383412d578f66973bb199c5a1154.b3dm",
+      "b3dmBytes": 2248,
+      "glbBytes": 2200,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    },
+    {
+      "member": "t/fde52f49b370d65f4587932d7a96d6f038e667e9203ecfbbea942880762ea340.b3dm",
+      "b3dmBytes": 2256,
+      "glbBytes": 2208,
+      "binBytes": 304,
+      "declaredBufferBytes": 304
+    }
+  ],
+  "sourceReadOnly": true
+}

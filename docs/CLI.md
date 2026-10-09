@@ -233,34 +233,27 @@ The [pinned 3D Tiles 1.1 implicit-root constraints](https://github.com/CesiumGS/
 rusty-tiles validate output/example.3tz
 ```
 
-| Argument or option | Default | Meaning |
-| --- | --- | --- |
-| `INPUT` | required | The `.3tz` archive to check |
-| `--external-validator PATH` | none | Also run a locally installed official `3d-tiles-validator` |
+`INPUT` is a self-contained `.3tz` archive. Inspection is read-only and uses the
+fixed [C1 validation profile](VALIDATION.md). Directories, including T1 terrain
+and raster outputs, are rejected as invalid input; package supported content before inspection.
 
-`validate` checks `.3tz` archives only. A directory or other file fails with exit code 3 and says so. Raster and terrain directories are not validated yet.
+The typed JSON report lists `checks` and `notInspected`, per-payload accessor,
+primitive and vertex counts, archive counts, and fixed admission `limits`.
+Passing inspection means the listed checks completed within that profile.
+`hierarchyBounds` checks declared child volumes; decoded world-space content
+containment, source fidelity, geometric-error accuracy and metadata/material
+semantics are not implied. Optional extensions retain explicit inspection gaps;
+unknown required extensions fail as unsupported.
 
-Validation is read-only. It runs these checks in order:
+Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit`
+(exit 3), or `io` (exit 1). Oversized inputs receive a resource-limit outcome
+before the work covered by that ceiling. Parser usage errors remain exit 2.
+The Rust and Python APIs share the same core inspection and fixed limits.
 
-- ZIP CRCs and the complete 3TZ index.
-- The bundled 3D Tiles tileset schema.
-- Binary implicit subtree headers, aligned buffer views, availability, parent links and native semantic tile metadata.
-- Child bounds inside parent bounds, and geometric error that never increases toward the leaves.
-- Local content and resource references, including `schemaUri` files.
-- Hash-named payload checksums and the build-state checksum.
-- Unused entries.
-- Recorded budgets for encoded bytes, vertices, points and tiles.
-
-Equal geometric errors are allowed for routing nodes and for parents whose child error is the larger bound. Boxes and spheres use relative tile transforms. Region containment handles the antimeridian. Sphere containment under nonuniform scale uses a conservative bound. An external tileset is checked at each placement, with the referring tile's bounds, error and depth. Only references on the active path count as cycles.
-
-The built-in check covers explicit and native implicit, self-contained archives of GLB, glTF, b3dm and external tileset JSON. Native implicit boundaries are expanded with their actual boxes and errors for the same containment and budget checks. These cases are reported as unsupported rather than passed:
-
-- Mixed region and Cartesian bounds.
-- Implicit regions, external subtree buffers, or foreign tile metadata layouts.
-- Remote or percent-encoded URIs.
-- Other content formats.
-
-Check unsupported cases and content extensions with the official [3d-tiles-validator](https://github.com/CesiumGS/3d-tiles-validator). `--external-validator` runs a local install after the built-in checks pass. It passes `--tilesetFile` and a temporary `--reportFile`, and keeps the tool's log on stderr. Reported errors fail the command even if the tool exits successfully. rusty-tiles never installs the validator, extracts the archive or changes it.
+`--external-validator` has been removed. Run an independently installed official
+validator separately when its additional checks are needed; its result cannot
+silently upgrade unsupported built-in inspection. The library launches no
+validator process, fetches no remote resources, and writes no output files.
 
 The schema bundle comes from the Cesium GS 3D Tiles specification at commit `4d781014b52294759834018a931223b98ac1ce47`. Its relative references were rewritten to local `$defs`. Attribution and the CC BY 4.0 notice are in [`docs/schema/LICENSE.adoc`](schema/LICENSE.adoc). Schema loading makes no network or file reference lookups.
 

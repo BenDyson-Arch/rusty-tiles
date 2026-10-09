@@ -41,6 +41,17 @@ jobs:
         run: cargo fmt --all --check
       - name: Test native build
         run: cargo test --locked --features native-jpeg
+      - name: Independently check validation controls and finite work
+        run: |
+          python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"
+          python3 -B bench/architecture_audit/c1/resource_probe.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-resources" --output "${{ runner.temp }}/c1-resources.json"
+          python3 -B tests/c1_producer_alignment.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-producer" --output "${{ runner.temp }}/c1-producer.json"
+      - name: Retain validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: c1-validation-evidence
+          path: ${{ runner.temp }}/c1-*.json
+          if-no-files-found: error
       - name: Independently decode local mesh candidates and corruption controls
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
       - name: Independently verify vector acceptance and archive inventory
@@ -242,6 +253,8 @@ jobs:
         run: |
           npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
           target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Independently verify validator positive geometry controls
+        run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
       - name: Prove terrain rendering, queries, clamping and imagery draping
         shell: bash -el {0}
         run: |

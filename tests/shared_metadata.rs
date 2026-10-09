@@ -127,7 +127,10 @@ fn node_features_survive_instancing_partition_and_parent_lods() {
                     },
                 )
                 .unwrap();
-                rusty_tiles::validate::archive(&output, None).unwrap();
+                rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(
+                    &output,
+                ))
+                .unwrap();
                 let mut archive =
                     zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
                 let manifest: Value =

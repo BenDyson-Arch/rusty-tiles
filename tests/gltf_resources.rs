@@ -234,14 +234,15 @@ fn implicit_small_external_gltf_keeps_the_reviewers_buffer_repro() {
     fs::write(&input, &source).unwrap();
     fs::write(work.path().join("buffer.bin"), &bin).unwrap();
     small_mesh(&input, &output, false, false).unwrap();
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
     let model = implicit_model(&mut zip);
     assert_eq!(read_member(&mut zip, &model), source);
     assert_eq!(read_member(&mut zip, "implicit-content/buffer.bin"), bin);
     let explicit = work.path().join("explicit.3tz");
     small_mesh(&input, &explicit, false, true).unwrap();
-    rusty_tiles::validate::archive(&explicit, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&explicit))
+        .unwrap();
     let mut explicit = zip::ZipArchive::new(fs::File::open(explicit).unwrap()).unwrap();
     assert_eq!(read_member(&mut explicit, "external.gltf"), source);
     assert_eq!(read_member(&mut explicit, "buffer.bin"), bin);
@@ -296,7 +297,8 @@ fn implicit_small_mesh_preserves_nested_buffer_image_and_schema_uri_bases() {
         fs::write(&input, &source).unwrap();
         let output = work.path().join("model.3tz");
         small_mesh(&input, &output, false, false).unwrap();
-        rusty_tiles::validate::archive(&output, None).unwrap();
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .unwrap();
         let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
         let model = implicit_model(&mut zip);
         assert_eq!(read_member(&mut zip, &model), source);
@@ -375,7 +377,7 @@ fn implicit_small_mesh_keeps_a_declared_reference_to_the_source_document() {
     fs::write(&input, &source).unwrap();
     fs::write(work.path().join("model.bin"), bin).unwrap();
     small_mesh(&input, &output, false, false).unwrap();
-    rusty_tiles::validate::archive(&output, None).unwrap();
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
     assert_eq!(read_member(&mut zip, "implicit-content/model.gltf"), source);
 }
