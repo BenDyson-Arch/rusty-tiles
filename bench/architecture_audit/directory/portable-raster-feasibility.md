@@ -76,23 +76,29 @@ not implied by the aligned RGB pilot.
 ## Observed native pilot oracle evidence
 
 The independent script was run against the copied native candidate
-`/home/bend/.cache/rusty-tiles-118-native-candidate`. Its SHA-256, source fixture
+`/home/bend/.cache/rusty-tiles-118-review-native-candidate`. Its SHA-256, source fixture
 hashes, report facts and child RSS are recorded in `oracle.json`; the associated
 uncommitted source snapshot hashes are in `oracle-source-manifest.json`.
-All eight positives passed (classic TIFF and BigTIFF in both byte orders;
+All forty positives passed (classic TIFF and BigTIFF in both byte orders;
 zoom 0, 3 and 24; a valid TIFF padded to exactly
-32 MiB; and a 30 MiB ASCII ImageDescription). Fifteen refusal/preservation
+32 MiB; and a 30 MiB ASCII ImageDescription). Thirty-eight refusal/preservation
 controls and three oracle sensitivity controls passed. These results have no
 silent native-feature skip. Successful CLI rasterReport values matched the
 disk reports; refusals required their expected structured error kinds and no
 hidden directory staging residue. Truncated headers, invalid table offsets
-and an oversized first-IFD entry count were tested explicitly.
+and an oversized first-IFD entry count were tested explicitly. BigTIFF first-IFD
+offsets 2^63, u64::MAX, file-end, file-end-minus-seven and an invalid small
+offset require invalid_input / exit 3 in both byte orders; equivalent classic
+TIFF limits were checked too. All 32 combinations of raw/Adobe Deflate,
+contiguous/separate planes, two 128-row strips/four 128-square tiles and four
+TIFF encodings match every analytic pixel. LZW, JPEG, ZSTD, legacy Deflate
+32946 (with valid zlib blocks) and Predictor 2 are explicitly refused.
 
 The initial `/usr/bin/time` approach could not run because that executable is
 absent. The script instead compiles the existing small `measure_child.c`
 launcher using `cc`; exec into that launcher precedes fork/wait4, avoiding
-inherited Python fixture-generator RSS. Observed peak child RSS was 65,872–
-66,660 KiB for ordinary/padded fixtures and 152,720 KiB for the metadata-heavy
+inherited Python fixture-generator RSS. Observed peak child RSS was 61,644–
+62,888 KiB for ordinary/padded fixtures and 149,120 KiB for the metadata-heavy
 fixture. This measures these native processes; it establishes no universal
 memory ceiling. Scratch and descriptor peaks were not sampled by this script.
 
@@ -105,7 +111,10 @@ color/transfer profiles. A bounded first-IFD scan rejects standalone TIFF
 TransferFunction tag 301, orientation other than default/top-left, additional
 image IFDs and SubIFDs. The TransferFunction control originally demonstrated
 that GDAL COLOR_PROFILE metadata alone did not reveal that tag; this source
-policy now checks it directly. Native codecs and metadata parsing still require
+policy now checks it directly. The D1 profile admits only Compression absent/1 or Adobe Deflate 8,
+Predictor absent/1, and PlanarConfiguration absent/1/2; broader upstream
+reader codec support in the audit table is not a D1 support claim.
+Native codecs and metadata parsing still require
 separate resource evidence; this is not a general allocation proof. The metadata-heavy measurement also demonstrates native metadata
 parsing costs substantially more than the 196,608-byte RGB sample buffer.
 No full #82 portability or arbitrary-TIFF resource claim follows from this run.

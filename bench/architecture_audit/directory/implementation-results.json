@@ -62,5 +62,24 @@
     ],
     "blender_build_hash": "d13f752e3b9c"
   },
-  "ci": "Final PR platform qualification pending; local native pilot tested on Linux only."
+  "ci": "Windows and both macOS portable directory tests passed at 129001c. Container fixture failure corrected; final review-fix CI pending.",
+  "review_fix": {
+    "source_commit": "08d56a6fcb07bf9318b9a21111d8534db215e81f",
+    "checks": {
+      "native": {
+        "status": "passed",
+        "log_sha256": "d1e6fbfd92ba8a9e346c3ed3e161a938b211176ee41cb148147a26305391a005",
+        "passed": 376,
+        "ignored": 9
+      },
+      "native_clippy": {
+        "status": "passed",
+        "log_sha256": "91915c0479ae6b39692e40c22ea37ca896257ae5732c8c397e8a6c8f696a61d9"
+      },
+      "container_fixture_regression": {
+        "status": "passed",
+        "log_sha256": "cb748ca8cd768abd5e49cd7ceab76de67f86969780759c25b6af77b7d22362af"
+      }
+    }
+  }
 }

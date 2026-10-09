@@ -16,10 +16,11 @@ not claim native GDAL raster execution on Windows or macOS. Platform CI is
 required to qualify the actual exclusive directory primitives there.
 
 `oracle.json` records the independently generated/decoded TIFF-to-PNG cases:
-eight positives, fifteen typed refusals/preservation controls and three
+40 positives, 38 typed refusals/preservation controls and three
 sensitivity controls. The fixture writer and PNG reader use only Python's
 standard library, with no production or GDAL format helpers. Positives cover
-classic TIFF and BigTIFF in both byte orders, zoom boundaries, a 32 MiB source,
+all 32 raw/AdobeDeflate × contiguous/separate × strip/tile × classic/BigTIFF ×
+byte-order combinations, zoom boundaries, a 32 MiB source,
 and 30 MiB of ASCII metadata. Every positive checks 65,536 RGB samples, exact
 output closure, geographic bounds and disk/CLI report parity. Refusals include
 compensated PixelIsPoint, standalone transfer functions, embedded ICC profiles,
@@ -32,7 +33,7 @@ The fixture remains a required refusal, not a waived unsupported test.
 
 Peak RSS is observed through a fresh small child launcher using Linux wait4,
 not inherited Python fixture-generation memory. Ordinary cases used roughly
-65 MiB and the metadata-heavy case roughly149 MiB. These are observed process
+61 MiB and the metadata-heavy case roughly146 MiB. These are observed process
 high-water marks, not universal native-allocation bounds; descriptor/thread
 and scratch peaks are not measured by this oracle. Native blocks are limited
 to256×256, but GDAL metadata/codec allocations remain an explicit limitation.
@@ -60,5 +61,20 @@ concurrent facade attempts, CWD redirection and installed-interface behavior.
 
 The first macOS CI compile found a libc `getattrlist` pointer-type mismatch.
 The platform-only cast correction is included after `a299e6c`; a rebuilt native
-Linux CLI remains byte-for-byte identical to the tested binary. The source
-manifest records this equivalence. Actual macOS execution still requires CI.
+Linux CLI remains byte-for-byte identical to the tested binary. Windows and both macOS architecture directory tests passed on `129001c`.
+Final review-fix CI remains required.
+
+The review at `129001c` reproduced extreme BigTIFF offsets classified as I/O
+failures. The reader now checks each requested byte range against source length
+before seeking, including checked addition. The oracle requires exit 3 and
+`invalid_input` for both endian forms of the extreme offsets, EOF and truncated
+count boundaries, with no output or staging residue. The original reproduction
+is retained in `review-large-ifd-offset-before-fix.json`.
+
+Admission is now limited to uncompressed or AdobeDeflate, predictor 1, and
+contiguous or separate storage. Other codec/predictor values are refused before
+GDAL open. This matches the independently proved storage combinations rather
+than admitting every installed GDAL codec. The review-fix native suite passes
+376 tests (9 existing ignored), including the new public offset regression.
+The Docker test fixture now uses the same supported-filesystem selector as the
+runtime tests; overlay filesystem admission remains unchanged.
