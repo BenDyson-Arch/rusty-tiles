@@ -123,6 +123,43 @@ mod native {
         );
     }
 
+    #[test]
+    fn malformed_bigtiff_offsets_are_input_errors_before_seek() {
+        for little in [false, true] {
+            for offset in [16u64, 17, 23, 24, 1 << 40, 1 << 63, u64::MAX] {
+                let root = fixture();
+                let mut source = vec![0u8; 24];
+                source[..2].copy_from_slice(if little { b"II" } else { b"MM" });
+                source[2..4].copy_from_slice(&if little {
+                    43u16.to_le_bytes()
+                } else {
+                    43u16.to_be_bytes()
+                });
+                source[4..6].copy_from_slice(&if little {
+                    8u16.to_le_bytes()
+                } else {
+                    8u16.to_be_bytes()
+                });
+                source[8..16].copy_from_slice(&if little {
+                    offset.to_le_bytes()
+                } else {
+                    offset.to_be_bytes()
+                });
+                fs::write(root.path().join("source.tif"), source).unwrap();
+                let failure =
+                    raster_to_directory(request(root.path(), "output"), &RunControl::default())
+                        .unwrap_err();
+                assert_eq!(
+                    failure.error.kind(),
+                    JobErrorKind::InvalidInput,
+                    "offset={offset}, little={little}: {failure}"
+                );
+                assert!(failure.retained_paths.is_empty());
+                assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+            }
+        }
+    }
+
     struct Refuse(&'static str);
     impl Observer for Refuse {
         fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {

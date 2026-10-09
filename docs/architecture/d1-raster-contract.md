@@ -35,8 +35,14 @@ Future GDAL-free work may add a concrete owned-byte decoder. D1 does not add an
 unused generic backend interface or implement the broader #82 raster scope.
 
 Every native band must declare a block width and height in 1..=256 before sample
-reading, rejecting oversized strips/tiles. GDAL-supported GTiff compression and
-planar storage are accepted when they decode to the admitted RGB samples.
+reading, rejecting oversized strips/tiles. TIFF Compression (tag 259) is absent/default 1 (uncompressed) or 8
+(AdobeDeflate). Predictor (tag 317) is absent/default or 1 only.
+PlanarConfiguration (tag 284) is absent/default 1 (contiguous) or 2 (separate).
+These selected layout tags, when present, must be single SHORT values. Other
+codecs and predictors are refused before GDAL opens the source. Strips and tiles
+within the native block limit are admitted. Independent analytic fixtures cover
+the raw/AdobeDeflate × contiguous/separate × strip/tile combinations in classic
+TIFF and BigTIFF, with both byte orders.
 Only PixelIsArea (the default when AREA_OR_POINT is absent) is admitted.
 PixelIsPoint is refused because its point sample semantics are not represented
 by this imagery output. Any nonempty COLOR_PROFILE domain is refused, including

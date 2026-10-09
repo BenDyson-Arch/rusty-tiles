@@ -106,6 +106,15 @@ fn admit_tiff_tags(path: &Path, source_bytes: u64) -> Result<(), JobError> {
     let mut file =
         File::open(path).map_err(|e| JobError::io("open raster tag directory", path, e))?;
     let mut read = |at: u64, bytes: &mut [u8]| -> Result<(), JobError> {
+        if at
+            .checked_add(bytes.len() as u64)
+            .is_none_or(|end| end > source_bytes)
+        {
+            return Err(error(
+                JobErrorKind::InvalidInput,
+                "TIFF requested byte range outside source",
+            ));
+        }
         file.seek(SeekFrom::Start(at))
             .and_then(|_| file.read_exact(bytes))
             .map_err(|e| {
@@ -185,18 +194,18 @@ fn admit_tiff_tags(path: &Path, source_bytes: u64) -> Result<(), JobError> {
                 "D1 raster forbids TIFF sub-IFDs",
             ));
         }
-        if tag == 274 {
-            let value_at = if count_size == 8 { 12 } else { 8 };
-            if uint(&entry[2..4]) != 3 || uint(&entry[4..value_at]) != 1 {
-                return Err(error(
-                    JobErrorKind::InvalidInput,
-                    "TIFF orientation must be a single SHORT",
-                ));
-            }
-            if uint(&entry[value_at..value_at + 2]) != 1 {
+        if [259, 274, 284, 317].contains(&tag) {
+            let value = inline_short(entry, count_size == 8, &uint)?;
+            let admitted = match tag {
+                259 => [1, 8].contains(&value),
+                284 => [1, 2].contains(&value),
+                274 | 317 => value == 1,
+                _ => unreachable!("selected scalar TIFF tag"),
+            };
+            if !admitted {
                 return Err(error(
                     JobErrorKind::Unsupported,
-                    "D1 raster requires top-left TIFF orientation",
+                    format!("D1 raster does not support TIFF tag {tag} value {value}"),
                 ));
             }
         }
@@ -208,6 +217,18 @@ fn admit_tiff_tags(path: &Path, source_bytes: u64) -> Result<(), JobError> {
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "native-geospatial")]
+fn inline_short(entry: &[u8], big: bool, uint: &impl Fn(&[u8]) -> u64) -> Result<u64, JobError> {
+    let value_at = if big { 12 } else { 8 };
+    if uint(&entry[2..4]) != 3 || uint(&entry[4..value_at]) != 1 {
+        return Err(error(
+            JobErrorKind::InvalidInput,
+            "TIFF layout scalar must be a single SHORT",
+        ));
+    }
+    Ok(uint(&entry[value_at..value_at + 2]))
 }
 
 #[cfg(feature = "native-geospatial")]
@@ -483,7 +504,7 @@ mod tests {
     #[test]
     fn composed_partial_member_failure_cleans_real_staging() {
         for failing_member in ["0.png", "report.json"] {
-            let parent = tempfile::tempdir().unwrap();
+            let parent = crate::runtime::directory::test_directory();
             let output = parent.path().join("published");
             let request = RasterDirectoryRequest::web_mercator_rgb("unused", &output, 0, 0, 0);
             let report = RasterDirectoryReport {

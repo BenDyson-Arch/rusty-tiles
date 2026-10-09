@@ -10,6 +10,9 @@ use tempfile::TempDir;
 #[path = "directory_platform.rs"]
 mod platform;
 
+#[cfg(all(test, feature = "native-geospatial"))]
+pub(crate) use platform::test_directory;
+
 /// Read-only destination preparation, before any private output is created.
 pub(crate) struct DirectoryTarget {
     output: PathBuf,

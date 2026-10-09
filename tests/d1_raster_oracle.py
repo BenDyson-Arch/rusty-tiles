@@ -5,6 +5,7 @@ No GDAL writer, production transform helper, or historical raster oracle is used
 """
 import argparse
 import hashlib
+import itertools
 import shutil
 import json
 import math
@@ -26,7 +27,7 @@ def affine(zoom, x, y):
 
 
 def write_fixture(path, zoom=3, x=5, y=2, *, missing_crs=False,
-                  shifted=False, nodata=False, alpha=False, mask=False, large_metadata=False, point=False, color_profile=False, oversized_block=False, transfer_profile=False, orientation=False, bigtiff=False, little_endian=True):
+                  shifted=False, nodata=False, alpha=False, mask=False, large_metadata=False, point=False, color_profile=False, oversized_block=False, transfer_profile=False, orientation=False, bigtiff=False, little_endian=True, codec=1, predictor=None):
     """Write one raw TIFF strip with explicit GeoTIFF tags from first principles."""
     endian = '<' if little_endian else '>'
     inline = 8 if bigtiff else 4
@@ -48,7 +49,7 @@ def write_fixture(path, zoom=3, x=5, y=2, *, missing_crs=False,
         (256, 4, 1, struct.pack(endian + 'I', 256)),
         (257, 4, 1, struct.pack(endian + 'I', 256)),
         (258, 3, bands, struct.pack(endian + '' + 'H' * bands, *([8] * bands))),
-        (259, 3, 1, struct.pack(endian + 'H', 1)),
+        (259, 3, 1, struct.pack(endian + 'H', codec)),
         (262, 3, 1, struct.pack(endian + 'H', 2)),
         (273, 4, 1, b'OFFSET'),
         (277, 3, 1, struct.pack(endian + 'H', bands)),
@@ -62,6 +63,8 @@ def write_fixture(path, zoom=3, x=5, y=2, *, missing_crs=False,
         keys = (1, 1, 0, 4, 1024, 0, 1, 1, 1025, 0, 1, 2 if point else 1,
                 3072, 0, 1, 3857, 3076, 0, 1, 9001)
         entries.append((34735, 3, len(keys), struct.pack(endian + '20H', *keys)))
+    if predictor is not None:
+        entries.append((317, 3, 1, struct.pack(endian + 'H', predictor)))
     if nodata:
         entries.append((42113, 2, 2, b'0\0'))
     if alpha:
@@ -131,6 +134,65 @@ def write_fixture(path, zoom=3, x=5, y=2, *, missing_crs=False,
         image.extend(struct.pack(endian + 'I', 0))
         image.extend(b'\xff' * 8192)
     Path(path).write_bytes(image)
+
+
+def write_storage_fixture(path, *, compression, planar, tiled, bigtiff, little_endian):
+    """Independent finite storage matrix: two strips or four 128-square tiles."""
+    endian = '<' if little_endian else '>'
+    inline, header_size, count_size, entry_size = (8, 16, 8, 20) if bigtiff else (4, 8, 2, 12)
+    def pack(code, *values):
+        return struct.pack(endian + code, *values)
+    blocks = []
+    planes = range(3) if planar == 2 else (None,)
+    for plane in planes:
+        for row_origin in (0, 128):
+            for col_origin in ((0, 128) if tiled else (0,)):
+                width = 128 if tiled else 256
+                block = b''.join(rgb(c, r) if plane is None else rgb(c, r)[plane:plane + 1]
+                                 for r in range(row_origin, row_origin + 128)
+                                 for c in range(col_origin, col_origin + width))
+                blocks.append(zlib.compress(block) if compression in (8, 32946) else block)
+    left, top, step = affine(3, 5, 2)
+    keys = (1, 1, 0, 4, 1024, 0, 1, 1, 1025, 0, 1, 1, 3072, 0, 1, 3857, 3076, 0, 1, 9001)
+    entries = [(256, 4, 1, pack('I', 256)), (257, 4, 1, pack('I', 256)),
+               (258, 3, 3, pack('3H', 8, 8, 8)), (259, 3, 1, pack('H', compression)),
+               (262, 3, 1, pack('H', 2)), (277, 3, 1, pack('H', 3)),
+               (284, 3, 1, pack('H', planar)), (317, 3, 1, pack('H', 1)),
+               (33550, 12, 3, pack('3d', step, step, 0)),
+               (33922, 12, 6, pack('6d', 0, 0, 0, left, top, 0)),
+               (34735, 3, 20, pack('20H', *keys))]
+    offset_tag, count_tag = (324, 325) if tiled else (273, 279)
+    if tiled:
+        entries.extend([(322, 4, 1, pack('I', 128)), (323, 4, 1, pack('I', 128))])
+    else:
+        entries.append((278, 4, 1, pack('I', 128)))
+    offset_code, offset_type = ('Q', 16) if bigtiff else ('I', 4)
+    entries.extend([(offset_tag, offset_type, len(blocks), bytes(len(blocks) * inline)),
+                    (count_tag, 4, len(blocks), pack('I' * len(blocks), *(len(b) for b in blocks)))])
+    entries.sort()
+    external_start = header_size + count_size + entry_size * len(entries) + inline
+    data_start = external_start + sum(len(value) + len(value) % 2 for _, _, _, value in entries if len(value) > inline)
+    offsets, position = [], data_start
+    for block in blocks:
+        offsets.append(position)
+        position += len(block)
+    entries = [(tag, kind, count, pack(offset_code * len(offsets), *offsets) if tag == offset_tag else value)
+               for tag, kind, count, value in entries]
+    directory = bytearray(pack('Q' if bigtiff else 'H', len(entries)))
+    external = bytearray()
+    for tag, kind, count, value in entries:
+        if len(value) <= inline:
+            field = value.ljust(inline, b'\0')
+        else:
+            field = pack('Q' if bigtiff else 'I', external_start + len(external))
+            external.extend(value)
+            if len(value) % 2:
+                external.append(0)
+        directory.extend(pack('HHQ' if bigtiff else 'HHI', tag, kind, count) + field)
+    directory.extend(pack('Q' if bigtiff else 'I', 0))
+    marker = b'II' if little_endian else b'MM'
+    header = marker + (pack('HHHQ', 43, 8, 0, 16) if bigtiff else pack('HI', 42, 8))
+    Path(path).write_bytes(header + directory + external + b''.join(blocks))
 
 
 def decode_png(path):
@@ -257,17 +319,25 @@ def run(binary, json_output=None):
             measurements = rss.read_text().splitlines()
             peak = int(measurements[-1])
             return result, peak
-        for name, zoom, x, y, padded in [('analytic', 3, 5, 2, False),
+        storage_cases = {}
+        for compression, planar, tiled, bigtiff, little_endian in itertools.product((1, 8), (1, 2), (False, True), (False, True), (False, True)):
+            name = f'storage-c{compression}-p{planar}-t{int(tiled)}-b{int(bigtiff)}-le{int(little_endian)}'
+            storage_cases[name] = dict(compression=compression, planar=planar, tiled=tiled, bigtiff=bigtiff, little_endian=little_endian)
+        positive_cases = [('analytic', 3, 5, 2, False),
                                         ('zoom0', 0, 0, 0, False),
                                         ('zoom24', 24, 12345678, 8765432, False),
                                         ('input-ceiling', 3, 5, 2, True),
                                         ('large-metadata', 3, 5, 2, False),
                                         ('classic-big-endian', 3, 5, 2, False),
                                         ('bigtiff-little-endian', 3, 5, 2, False),
-                                        ('bigtiff-big-endian', 3, 5, 2, False)]:
+                                        ('bigtiff-big-endian', 3, 5, 2, False)]
+        positive_cases.extend((name, 3, 5, 2, False) for name in storage_cases)
+        for name, zoom, x, y, padded in positive_cases:
             source, output = root / (name + '.tif'), root / (name + '-out')
             write_fixture(source, zoom, x, y, large_metadata=name == 'large-metadata',
                           bigtiff=name.startswith('bigtiff-'), little_endian=not name.endswith('big-endian'))
+            if name in storage_cases:
+                write_storage_fixture(source, **storage_cases[name])
             if padded:
                 with source.open('r+b') as stream:
                     stream.truncate(32 * 1024 * 1024)
@@ -304,9 +374,16 @@ def run(binary, json_output=None):
                               ('oversized-storage-block', {'oversized_block': True}),
                               ('bottom-up-orientation', {'orientation': True}),
                               ('truncated-header', {}), ('bad-table-offset', {}),
-                              ('oversized-entry-count', {})]:
+                              ('oversized-entry-count', {}),
+                              ('codec-lzw-refused', {'codec': 5}),
+                              ('codec-jpeg-refused', {'codec': 7}),
+                              ('codec-zstd-refused', {'codec': 50000}),
+                              ('codec-legacy-deflate-refused', {}),
+                              ('predictor-two-refused', {'predictor': 2})]:
             invalid, destination = root / (name + '.tif'), root / (name + '-out')
             write_fixture(invalid, **options)
+            if name == 'codec-legacy-deflate-refused':
+                write_storage_fixture(invalid, compression=32946, planar=1, tiled=False, bigtiff=False, little_endian=True)
             if name == 'above-input-ceiling':
                 with invalid.open('r+b') as stream:
                     stream.truncate(32 * 1024 * 1024 + 1)
@@ -328,6 +405,24 @@ def run(binary, json_output=None):
             assert not destination.exists(), name
             evidence['refusal_cases'].append(dict(name=name, error_kind=expected_kind, exit_code=refused.returncode,
                                                    child_peak_rss_kib=peak))
+        for bigtiff, little_endian in itertools.product((True, False), (True, False)):
+            for label in ('high-bit', 'maximum', 'file-end', 'tail-seven', 'small-offset'):
+                if not bigtiff and label == 'high-bit':
+                    continue
+                invalid, destination = root / 'offset.tif', root / 'offset-out'
+                write_fixture(invalid, bigtiff=bigtiff, little_endian=little_endian)
+                data = bytearray(invalid.read_bytes())
+                offset = {'high-bit': 2 ** 63, 'maximum': 2 ** (64 if bigtiff else 32) - 1,
+                          'file-end': len(data), 'tail-seven': len(data) - (7 if bigtiff else 1),
+                          'small-offset': 4}[label]
+                struct.pack_into(('<' if little_endian else '>') + ('Q' if bigtiff else 'I'), data, 8 if bigtiff else 4, offset)
+                invalid.write_bytes(data)
+                refused, peak = invoke(invalid, destination)
+                failure = json.loads(refused.stdout)
+                assert refused.returncode == 3 and failure['error']['kind'] == 'invalid_input', (label, failure)
+                assert not destination.exists() and not list(root.glob('.tiles-dir-*'))
+                evidence['refusal_cases'].append(dict(name=f'offset-b{int(bigtiff)}-le{int(little_endian)}-{label if bigtiff or label != "tail-seven" else "tail-one"}',
+                    error_kind='invalid_input', exit_code=refused.returncode, child_peak_rss_kib=peak))
         before = {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()}
         refused, peak = invoke(source, output)
         assert refused.returncode != 0
@@ -342,7 +437,7 @@ def run(binary, json_output=None):
     evidence['num_sensitivity_controls'] = len(evidence['sensitivity_controls'])
     if json_output:
         Path(json_output).write_text(json.dumps(evidence, indent=2) + '\n')
-    print('Independent D1 raster oracle passed: 8 positives, 15 refusals, 3 sensitivity controls')
+    print(f"Independent D1 raster oracle passed: {evidence['num_positive_cases']} positives, {evidence['num_refusal_cases']} refusals, {evidence['num_sensitivity_controls']} sensitivity controls")
     return evidence
 
 
