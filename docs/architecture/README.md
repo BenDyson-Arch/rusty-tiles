@@ -110,7 +110,7 @@ src/
     point_cloud/          source, sampling, hierarchy, content encoding
     vector/               model, readers, geometry, spool, LOD, encoding, reuse
     raster/               source, display, tiling
-    terrain/              sampling, simplification, quantized mesh
+    terrain/              owned sampling, bounded GLB terrain surfaces
   validation/             independent archive/content validation
   cli/                    parsing, application dispatch, presentation
   lib.rs                  deliberate public facade

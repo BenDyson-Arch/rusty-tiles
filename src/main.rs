@@ -540,7 +540,7 @@ enum Outcome {
     Mesh(MeshResult),
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
-    Terrain(terrain::TerrainResult),
+    Terrain(Box<terrain::TerrainResult>),
     PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
@@ -788,6 +788,7 @@ const COUNT_KEYS: &[&str] = &[
     // point-cloud, terrain and vector
     "points",
     "tiles",
+    "vertices",
     // vector
     "features",
     "fragments",
@@ -1142,7 +1143,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 terrain::TerrainOptions::new(a.cells_per_leaf),
             )
             .with_policy(policy);
-            Outcome::Terrain(terrain::terrain_to_directory(request, &run)?)
+            Outcome::Terrain(Box::new(terrain::terrain_to_directory(request, &run)?))
         }
         Command::Raster(a) => Outcome::Converted(rusty_tiles::raster::raster_reported(
             &a.io.input,

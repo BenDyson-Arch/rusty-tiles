@@ -87,6 +87,7 @@ def main():
     parser.add_argument('--cesium-dir', type=pathlib.Path, required=True)
     parser.add_argument('--node-modules', type=pathlib.Path, required=True)
     parser.add_argument('--json-output', type=pathlib.Path, required=True)
+    parser.add_argument('--validator-modules', type=pathlib.Path, help='Separate pinned Khronos validator modules, if not in node-modules')
     parser.add_argument('--timeout', type=int, default=180)
     args = parser.parse_args()
     binary = args.binary.resolve(strict=True); cesium = args.cesium_dir.resolve(strict=True)
@@ -97,7 +98,9 @@ def main():
     before = {'binary': {'path': str(binary), 'sha256': sha256(binary)},
               'cesium': {'path': str(cesium), **runtime_hash(cesium)},
               'browserFixtureSha256': sha256(pathlib.Path(__file__).parent / 'fixtures/terrain.cjs')}
-    environment = dict(os.environ, NODE_PATH=str(modules))
+    module_paths = [str(modules)]
+    if args.validator_modules: module_paths.append(str(args.validator_modules.resolve(strict=True)))
+    environment = dict(os.environ, NODE_PATH=os.pathsep.join(module_paths))
     evidence = {'inputs': before}
     with tempfile.TemporaryDirectory(prefix='rusty-tiles-t1-viewer-') as temporary:
         directory = pathlib.Path(temporary)
@@ -108,6 +111,9 @@ def main():
                         '--cells-per-leaf', '16', '--height-offset', '10.25', '--fill-height', '-999.125', '--json'],
                        converter_environment, args.timeout)
         evidence['terrainCli'] = json.loads(stdout)
+        stdout, _ = run([node, str(pathlib.Path(__file__).parent / 'fixtures/t1_validate_glb.cjs'),
+                         str(directory / 'terrain')], environment, args.timeout)
+        evidence['khronosValidation'] = json.loads(stdout)
         stdout, _ = run([str(binary), 'raster', '-i', str(imagery), '-o', str(directory / 'imagery'),
                         '--maxZoom', '10', '--json'], converter_environment, args.timeout)
         evidence['imageryCli'] = json.loads(stdout)

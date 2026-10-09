@@ -49,6 +49,26 @@ class NativeTerrainTests(unittest.TestCase):
             self.assertEqual(oracle.check_directory(output)['leaf_tiles'], 6)
             self.assertEqual(oracle.check_plane(output, width=33, height=17, pixel=.01), {'nodes': 612, 'triangles': 1122})
 
+    def test_native_float64_fraction_earns_its_reported_storage_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / 'fraction.tif'
+            oracle.write_fixture(source, 'constant', width=1, height=1, pixel=.000001)
+            dataset = gdal.Open(str(source), gdal.GA_Update)
+            literal = 1000.123456789
+            dataset.GetRasterBand(1).Fill(literal); dataset = None
+            output = root / 'output'; result, summary = self.call(source, output, offset=0)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            manifest = json.loads((output/'tileset.json').read_text())
+            _, primitives = oracle.glb(output/manifest['root']['children'][0]['content']['uri'])
+            positions = primitives[0][0]
+            truth = [oracle.ecef(lon, lat, literal) for lat in [21-.000001,21] for lon in [10,10+.000001]]
+            errors = []
+            for position, expected in zip(positions, truth):
+                actual = oracle.transform(manifest['root']['transform'], (position[0],-position[2],position[1]))
+                errors.append(sum((a-b)**2 for a,b in zip(actual,expected))**.5)
+            self.assertLessEqual(max(errors), summary['terrainReport']['positionErrorMetres']+2e-8)
+            self.assertGreater(max(errors), .00001)  # A hidden Float32 source cast cannot earn a near-zero receipt.
+
     def test_source_refusals_preserve_replacement_and_leave_no_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -60,7 +80,7 @@ class NativeTerrainTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, summary)
                 self.assertEqual((output / 'old').read_bytes(), b'old')
                 self.assertEqual(set(root.iterdir()), {source, output})
-            for alteration in ['unit', 'scale', 'offset', 'mask', 'rotation', 'point', 'crs', 'overview']:
+            for alteration in ['unit', 'scale', 'offset', 'mask', 'rotation', 'point', 'crs', 'overview', 'collapsed']:
                 oracle.write_fixture(source)
                 dataset = gdal.Open(str(source), gdal.GA_Update)
                 band = dataset.GetRasterBand(1)
@@ -73,6 +93,7 @@ class NativeTerrainTests(unittest.TestCase):
                 if alteration == 'crs':
                     crs = osr.SpatialReference(); crs.ImportFromEPSG(3857); dataset.SetProjection(crs.ExportToWkt())
                 if alteration == 'overview': dataset.BuildOverviews('NEAREST', [2])
+                if alteration == 'collapsed': dataset.SetGeoTransform([0,1e-60,0,.004,0,-.001])
                 band = None; dataset = None
                 result, summary = self.call(source, output, '--force')
                 self.assertNotEqual(result.returncode, 0, (alteration, summary))

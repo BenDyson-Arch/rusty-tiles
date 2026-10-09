@@ -168,16 +168,6 @@ fn prepare_with_close(
                 "DEM source changed during decoding or checked close",
             ));
         }
-        standalone(path).map_err(|e| {
-            if e.kind() == JobErrorKind::Unsupported {
-                error(
-                    JobErrorKind::InvalidInput,
-                    "DEM external dependencies changed during decoding or checked close",
-                )
-            } else {
-                e
-            }
-        })?;
         source.source_bytes = before.len();
         Ok(source)
     });

@@ -330,6 +330,14 @@ fn box_for(bounds: [[f64; 3]; 2]) -> [f64; 12] {
     ]
 }
 #[cfg(feature = "native-geospatial")]
+struct PreparedPlan {
+    leaves: Vec<Leaf>,
+    bounds: [[f64; 3]; 2],
+    vertices: u64,
+    position_error: f64,
+    height_range: [f64; 2],
+}
+#[cfg(feature = "native-geospatial")]
 fn plan(
     raster: &raster::PreparedRaster,
     cells: u16,
@@ -337,7 +345,7 @@ fn plan(
     offset: f64,
     fill: f64,
     attempt: &Attempt,
-) -> Result<(Vec<Leaf>, [[f64; 3]; 2], u64, f64, [f64; 2]), JobError> {
+) -> Result<PreparedPlan, JobError> {
     let cells = usize::from(cells);
     let count = raster.width.div_ceil(cells) * raster.height.div_ceil(cells);
     // Uncompressed positions, indices, and conservative JSON overhead per leaf.
@@ -385,7 +393,13 @@ fn plan(
             "terrain Float32 position error exceeds 0.05 metres",
         ));
     }
-    Ok((leaves, bounds, vertices, maximum, height_range))
+    Ok(PreparedPlan {
+        leaves,
+        bounds,
+        vertices,
+        position_error: maximum,
+        height_range,
+    })
 }
 pub fn terrain_to_directory(
     request: TerrainRequest,
@@ -435,7 +449,13 @@ pub fn terrain_to_directory(
         let (source, target) = prepare().map_err(|e| attempt.fail(e))?;
         let raster = raster::prepare(&source, &attempt)?;
         let frame = Frame::new(raster.bounds);
-        let (leaves, bounds, vertices, position_error, height_range) = plan(
+        let PreparedPlan {
+            leaves,
+            bounds,
+            vertices,
+            position_error,
+            height_range,
+        } = plan(
             &raster,
             request.options.cells_per_leaf,
             &frame,
@@ -754,8 +774,13 @@ mod tests {
             let attempt = control.begin().unwrap();
             let raster = raster::test_raster();
             let frame = Frame::new(raster.bounds);
-            let (leaves, bounds, vertices, error, range) =
-                plan(&raster, 16, &frame, 0., 0., &attempt).unwrap();
+            let PreparedPlan {
+                leaves,
+                bounds,
+                vertices,
+                position_error: error,
+                height_range: range,
+            } = plan(&raster, 16, &frame, 0., 0., &attempt).unwrap();
             let mut report = report(&raster, 16, &leaves, bounds, vertices, error, range);
             let staging = DirectoryTarget::prepare(&output, OutputPolicy::Replace)
                 .unwrap()
@@ -863,8 +888,13 @@ mod tests {
             fs::write(output.join("old"), b"old inventory").unwrap();
             let raster = raster::test_raster();
             let frame = Frame::new(raster.bounds);
-            let (leaves, bounds, vertices, error, range) =
-                plan(&raster, 16, &frame, 0., 0., &attempt).unwrap();
+            let PreparedPlan {
+                leaves,
+                bounds,
+                vertices,
+                position_error: error,
+                height_range: range,
+            } = plan(&raster, 16, &frame, 0., 0., &attempt).unwrap();
             let mut report = report(&raster, 16, &leaves, bounds, vertices, error, range);
             let staging = DirectoryTarget::prepare(&output, OutputPolicy::Replace)
                 .unwrap()

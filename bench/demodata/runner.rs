@@ -466,15 +466,21 @@ fn check(case: &Case, sample: &Sample, input: &Path, output: &Path, log: &Path) 
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())
             .find(|doc| doc.get("ok").is_some())
             .ok_or("missing machine error result")?;
-        if sample.exit_code != Some(3)
-            || diagnostic["error"]["code"] != "data"
-            || !diagnostic["error"]["message"]
-                .as_str()
-                .is_some_and(|m| m.contains(&case.expect))
+        let (category, exit_code, message) = match case.expect.as_str() {
+            "unsupported" => ("unsupported", 2, None),
+            reason => ("data", 3, Some(reason)),
+        };
+        if sample.exit_code != Some(exit_code)
+            || diagnostic["error"]["code"] != category
+            || message.is_some_and(|reason| {
+                !diagnostic["error"]["message"]
+                    .as_str()
+                    .is_some_and(|m| m.contains(reason))
+            })
             || output.exists()
         {
             return Err(format!(
-                "{}: expected safe data rejection, see {}",
+                "{}: expected safe rejection, see {}",
                 case.id,
                 log.display()
             )
