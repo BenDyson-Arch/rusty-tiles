@@ -1,6 +1,6 @@
 # F0: small, explicit runtime foundations
 
-Status: scoped as [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) under [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), reviewed against `7f6abf0`; no production implementation. This document narrows the first implementation slice. The [mesh API proposal](api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
+Status: scoped as [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115) under [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), originally reviewed against `7f6abf0`; subsequently implemented in PR #116. The concrete [implementation decisions](f0-implementation.md) and [evidence](f0-evidence.md) control F0 behavior. This document narrows the first implementation slice. The [mesh API proposal](api-contract.md) becomes downstream F1, not a prerequisite for F0. Read with the [runtime contract](runtime-contract.md) and [architecture plan](README.md).
 
 Current code is an untrusted candidate. Build the smallest correct plumbing around a real operation; retain code only when independently tested against the requirements below. F0 does not promise perfect software or every filesystem guarantee. It gives failures and ownership explicit places, so converters do not accumulate policy branches.
 

@@ -1,0 +1,15 @@
+{
+  "source_revision": "62aca29a2f5c3361263fa7945fef86b4d76c65ad",
+  "build_features": "native-geospatial,native-jpeg",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "library_sha256": "12eb9002ad83435c740b67aedc67f922498dfa7e8d01341f7b6c8b27fa5f264e",
+  "probe_sha256": "a1b9f866294b5f82166827ee3c41f10bb7fb9ea7f1cf81a1ddf176087c5afe47",
+  "executable_sha256": "11b32c606815560ddd0ff8ab1f1588dbbe533a84cb3a7aa5832f582400aead59",
+  "observation": {
+    "flat_control": 0,
+    "spike_at_zero": 66.66666412353516,
+    "spike_at_one": 0,
+    "independent_spike_distance_metres": 100
+  },
+  "limits": "Direct constructed parent/child estimator calls; flat and reordered-spike controls. Does not establish an end-to-end converter underbound or a violated promised universal bound."
+}
