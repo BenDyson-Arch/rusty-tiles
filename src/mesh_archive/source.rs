@@ -592,6 +592,12 @@ struct Primitive {
     count: usize,
     material: Option<usize>,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BufferViewUse {
+    Vertex(usize),
+    Indices,
+}
+
 fn primitives(
     doc: &Value,
     data: &[Accessor<'_>],
@@ -601,9 +607,31 @@ fn primitives(
         data.get(i)
             .ok_or_else(|| invalid("primitive accessor out of range"))
     };
+    let mut view_uses = vec![None; list(doc, "bufferViews")?.len()];
+    let mut use_view = |accessor: usize, usage: BufferViewUse| -> Result<&Value> {
+        let index = field(&doc["accessors"][accessor], "bufferView")?;
+        let slot = &mut view_uses[index];
+        match (*slot, usage) {
+            (Some(BufferViewUse::Vertex(first)), BufferViewUse::Vertex(next)) => {
+                if first != next && doc["bufferViews"][index].get("byteStride").is_none() {
+                    return Err(invalid("shared vertex bufferView requires byteStride"));
+                }
+            }
+            (None, _) | (Some(BufferViewUse::Indices), BufferViewUse::Indices) => {
+                *slot = Some(usage);
+            }
+            _ => {
+                return Err(invalid(
+                    "bufferView cannot mix vertex attributes and indices",
+                ))
+            }
+        }
+        Ok(&doc["bufferViews"][index])
+    };
     let mut meshes = Vec::new();
     let mut total = 0;
     let mut primitive_count = 0;
+    let mut used_indices = vec![false; data.len()];
     let mut checked_positions = std::collections::HashSet::new();
     let mut checked_normals = std::collections::HashSet::new();
     for mesh in list(doc, "meshes")? {
@@ -636,7 +664,7 @@ fn primitives(
                     return Err(invalid("NORMAL/POSITION count mismatch"));
                 }
                 let raw = &doc["accessors"][i];
-                let view = &doc["bufferViews"][field(raw, "bufferView")?];
+                let view = use_view(i, BufferViewUse::Vertex(i))?;
                 if !offset(raw, "byteOffset")?.is_multiple_of(4)
                     || !a.stride.is_multiple_of(4)
                     || view
@@ -676,10 +704,11 @@ fn primitives(
             let indices = p.get("indices").map(uint).transpose()?;
             let count = if let Some(i) = indices {
                 let a = get(i)?;
+                used_indices[i] = true;
                 if a.width != 1 || ![5121, 5123, 5125].contains(&a.component) {
                     return Err(unsupported("indices must be unsigned SCALAR"));
                 }
-                let view = &doc["bufferViews"][field(&doc["accessors"][i], "bufferView")?];
+                let view = use_view(i, BufferViewUse::Indices)?;
                 if view.get("byteStride").is_some()
                     || view
                         .get("target")
@@ -729,6 +758,15 @@ fn primitives(
             });
         }
         meshes.push(prepared);
+    }
+    if data
+        .iter()
+        .zip(used_indices)
+        .any(|(a, used)| a.component == 5125 && !used)
+    {
+        return Err(invalid(
+            "u32 accessor must be referenced by primitive indices",
+        ));
     }
     Ok(meshes)
 }

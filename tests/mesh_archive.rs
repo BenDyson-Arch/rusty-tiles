@@ -186,6 +186,43 @@ fn public_facade_multileaf_report_and_repeat_are_isolated() {
 fn malformed_and_unsupported_sources_fail_before_output_work_for_every_leaf_limit() {
     type Mutation = fn(&mut Value, &mut Vec<u8>);
     let cases: &[(&str, JobErrorKind, Mutation)] = &[
+        ("unused-u32", JobErrorKind::InvalidInput, |d, _| {
+            d["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView": 0, "componentType": 5125, "count": 1, "type": "SCALAR"
+            }));
+        }),
+        (
+            "shared-vertex-without-stride",
+            JobErrorKind::InvalidInput,
+            |d, b| {
+                let offset = b.len();
+                for _ in 0..6 {
+                    for v in [0f32, 0., 1.] {
+                        b.extend_from_slice(&v.to_le_bytes());
+                    }
+                }
+                d["buffers"][0]["byteLength"] = json!(b.len());
+                d["bufferViews"][0]["byteLength"] = json!(b.len());
+                d["accessors"].as_array_mut().unwrap().push(json!({
+                    "bufferView": 0, "byteOffset": offset, "componentType": 5126,
+                    "count": 6, "type": "VEC3"
+                }));
+                d["meshes"][0]["primitives"][0]["attributes"]["NORMAL"] = json!(1);
+            },
+        ),
+        ("mixed-buffer-view", JobErrorKind::InvalidInput, |d, b| {
+            let offset = b.len();
+            for index in 0..6u16 {
+                b.extend_from_slice(&index.to_le_bytes());
+            }
+            d["buffers"][0]["byteLength"] = json!(b.len());
+            d["bufferViews"][0]["byteLength"] = json!(b.len());
+            d["accessors"].as_array_mut().unwrap().push(json!({
+                "bufferView": 0, "byteOffset": offset, "componentType": 5123,
+                "count": 6, "type": "SCALAR"
+            }));
+            d["meshes"][0]["primitives"][0]["indices"] = json!(1);
+        }),
         (
             "quaternion-component",
             JobErrorKind::InvalidInput,
