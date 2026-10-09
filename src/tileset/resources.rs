@@ -6,6 +6,19 @@ use serde_json::Value;
 use crate::Error;
 
 pub(super) fn members(input: &std::path::Path) -> Result<Vec<(String, PathBuf)>, Error> {
+    resolve(input, true)
+}
+
+/// Declared dependencies only: the implicit writer stages and renames the model.
+/// A declared reference to the source document still belongs in this list.
+pub(super) fn dependencies(input: &std::path::Path) -> Result<Vec<(String, PathBuf)>, Error> {
+    resolve(input, false)
+}
+
+fn resolve(
+    input: &std::path::Path,
+    include_document: bool,
+) -> Result<Vec<(String, PathBuf)>, Error> {
     let file = File::open(input)?;
     // SAFETY: Read-only mapping used only while parsing. Source files must remain
     // unchanged during conversion, as they must during archive publication.
@@ -27,7 +40,10 @@ pub(super) fn members(input: &std::path::Path) -> Result<Vec<(String, PathBuf)>,
     let root = parent.unwrap_or(std::path::Path::new(".")).canonicalize()?;
     let input_name = super::file_name(input)?;
     local_name(&input_name)?;
-    let mut files = BTreeMap::from([(input_name, input.to_path_buf())]);
+    let mut files = BTreeMap::new();
+    if include_document {
+        files.insert(input_name, input.to_path_buf());
+    }
     let mut uris = Vec::new();
     for key in ["buffers", "images"] {
         for item in document[key].as_array().into_iter().flatten() {

@@ -60,6 +60,8 @@ Spatial splitting supports static triangle meshes with optional normals, UVs in 
 
 Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, images and structural metadata schemas are bundled alongside the original glTF or GLB. Resources must be inside the model's directory (subdirectories are supported); data URIs stay embedded. Remote, absolute, escaping and percent-encoded resource URIs are refused before publication.
 
+Small local meshes that fit the `mesh-to-3tz` budgets also retain their source bytes. In the default implicit layout, declared resources move alongside the content under `implicit-content/`, preserving nested relative URI bases. A resource name that collides with generated content is refused before publication, including with `--force`.
+
 ### Mesh placement
 
 | Option | Use |

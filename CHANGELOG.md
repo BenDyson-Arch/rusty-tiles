@@ -56,6 +56,7 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Small local `mesh-to-3tz` inputs with external glTF buffers, images or structural metadata schemas now include those resources beside unchanged implicit content. Nested URI bases are preserved, and generated-name collisions or unsafe dependencies fail before replacing the output.
 - Retiling untextured mesh materials without a PBR object preserves that omission instead of inserting an invalid `pbrMetallicRoughness: null` member. Representative textured converter digests remain unchanged.
 - Release acceptance checks the README route on default binaries as well as native builds. Missing optional raster/terrain support is reported separately from required mesh, validation and preview readiness.
 - Georeferenced polygons with constant source height now retain their source XY topology through globe placement, LOD and fragmentation. This restores Sudan and Antarctica fills in country conversions without changing source vertices or relaxing repair safeguards. Polar seam fragments retain original boundaries and conservative bounds. Previous vector archives need a fresh conversion to use the corrected encoder.

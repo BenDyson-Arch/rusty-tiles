@@ -138,7 +138,19 @@ impl Job {
         root: &Path,
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
-        let files = crate::pack::tree_members(root, &self.output)?;
+        self.publish_tree_with_resources_3tz(root, &[], report)
+    }
+
+    /// Include source dependencies alongside staged files. The common publisher
+    /// rejects duplicate archive names before writing or replacing the output.
+    pub(crate) fn publish_tree_with_resources_3tz(
+        self,
+        root: &Path,
+        resources: &[(String, PathBuf)],
+        report: Option<Value>,
+    ) -> Result<ConversionResult, Error> {
+        let mut files = crate::pack::tree_members(root, &self.output)?;
+        files.extend_from_slice(resources);
         self.publish_3tz(&files, report)
     }
 }

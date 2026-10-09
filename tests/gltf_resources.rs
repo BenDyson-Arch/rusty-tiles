@@ -197,3 +197,228 @@ fn resources_cannot_escape_through_symlinks() {
     assert_eq!(wrap(&input, &output, false).status.code(), Some(3));
     assert!(!output.exists());
 }
+
+fn small_mesh(
+    input: &Path,
+    output: &Path,
+    force: bool,
+    explicit: bool,
+) -> Result<(), rusty_tiles::Error> {
+    rusty_tiles::tile::mesh_to_3tz(
+        input,
+        output,
+        &rusty_tiles::MeshTo3tzOptions {
+            force,
+            explicit,
+            ..Default::default()
+        },
+    )
+}
+fn implicit_model(zip: &mut zip::ZipArchive<fs::File>) -> String {
+    let manifest: Value = serde_json::from_slice(&read_member(zip, "tileset.json")).unwrap();
+    assert!(manifest["root"]["implicitTiling"].is_object());
+    let template = manifest["root"]["content"]["uri"].as_str().unwrap();
+    ["{level}", "{x}", "{y}", "{z}"]
+        .iter()
+        .fold(template.to_owned(), |uri, key| uri.replace(key, "0"))
+}
+
+#[test]
+fn implicit_small_external_gltf_keeps_the_reviewers_buffer_repro() {
+    let work = tempfile::tempdir().unwrap();
+    let (mut doc, bin) = model();
+    doc["buffers"][0]["uri"] = json!("buffer.bin");
+    let input = work.path().join("external.gltf");
+    let output = work.path().join("implicit.3tz");
+    let source = serde_json::to_vec(&doc).unwrap();
+    fs::write(&input, &source).unwrap();
+    fs::write(work.path().join("buffer.bin"), &bin).unwrap();
+    small_mesh(&input, &output, false, false).unwrap();
+    rusty_tiles::validate::archive(&output, None).unwrap();
+    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let model = implicit_model(&mut zip);
+    assert_eq!(read_member(&mut zip, &model), source);
+    assert_eq!(read_member(&mut zip, "implicit-content/buffer.bin"), bin);
+    let explicit = work.path().join("explicit.3tz");
+    small_mesh(&input, &explicit, false, true).unwrap();
+    rusty_tiles::validate::archive(&explicit, None).unwrap();
+    let mut explicit = zip::ZipArchive::new(fs::File::open(explicit).unwrap()).unwrap();
+    assert_eq!(read_member(&mut explicit, "external.gltf"), source);
+    assert_eq!(read_member(&mut explicit, "buffer.bin"), bin);
+}
+
+#[test]
+fn implicit_small_mesh_preserves_nested_buffer_image_and_schema_uri_bases() {
+    for binary in [false, true] {
+        let work = tempfile::tempdir().unwrap();
+        let (mut doc, bin) = model();
+        fs::create_dir(work.path().join("buffers")).unwrap();
+        fs::create_dir(work.path().join("textures")).unwrap();
+        fs::create_dir(work.path().join("schemas")).unwrap();
+        if !binary {
+            doc["buffers"][0]["uri"] = json!("./buffers/model.bin");
+            doc["buffers"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"byteLength":1,"uri":"data:application/octet-stream;base64,AA=="}));
+            fs::write(work.path().join("buffers/model.bin"), &bin).unwrap();
+        }
+        doc["images"] =
+            json!([{"uri":"textures/color.png"},{"uri":"textures/../textures/color.png"}]);
+        doc["extensionsUsed"] = json!(["EXT_structural_metadata"]);
+        doc["extensions"] = json!({"EXT_structural_metadata":{"schemaUri":"schemas/schema.json"}});
+        let schema = br#"{"id":"invented-small-mesh","classes":{}}"#;
+        fs::write(work.path().join("schemas/schema.json"), schema).unwrap();
+        let image_path = work.path().join("textures/color.png");
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([64, 128, 255, 128]))
+            .save(&image_path)
+            .unwrap();
+        let image = fs::read(image_path).unwrap();
+        fs::write(work.path().join("unreferenced.txt"), b"omit").unwrap();
+        let input = work
+            .path()
+            .join(if binary { "model.glb" } else { "model.gltf" });
+        let source = if binary {
+            gltf::binary::Glb {
+                header: gltf::binary::Header {
+                    magic: *b"glTF",
+                    version: 2,
+                    length: 0,
+                },
+                json: serde_json::to_vec(&doc).unwrap().into(),
+                bin: Some(bin.clone().into()),
+            }
+            .to_vec()
+            .unwrap()
+        } else {
+            serde_json::to_vec_pretty(&doc).unwrap()
+        };
+        fs::write(&input, &source).unwrap();
+        let output = work.path().join("model.3tz");
+        small_mesh(&input, &output, false, false).unwrap();
+        rusty_tiles::validate::archive(&output, None).unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        let model = implicit_model(&mut zip);
+        assert_eq!(read_member(&mut zip, &model), source);
+        assert_eq!(
+            read_member(&mut zip, "implicit-content/textures/color.png"),
+            image
+        );
+        assert_eq!(
+            read_member(&mut zip, "implicit-content/schemas/schema.json"),
+            schema
+        );
+        assert!(!zip
+            .file_names()
+            .any(|name| name.ends_with("unreferenced.txt")));
+        assert_eq!(
+            zip.file_names()
+                .filter(|name| name.ends_with("color.png"))
+                .count(),
+            1
+        );
+        if !binary {
+            assert_eq!(
+                read_member(&mut zip, "implicit-content/buffers/model.bin"),
+                bin
+            );
+        }
+        // A separate glTF reader resolves resources from the emitted model's
+        // actual directory, then independently decodes positions and both images.
+        let extracted = work.path().join("extracted");
+        zip.extract(&extracted).unwrap();
+        let (document, buffers, images) = gltf::import(extracted.join(model)).unwrap();
+        let primitive = document
+            .meshes()
+            .next()
+            .unwrap()
+            .primitives()
+            .next()
+            .unwrap();
+        let reader = primitive.reader(|buffer| Some(buffers[buffer.index()].0.as_slice()));
+        assert_eq!(
+            reader.read_positions().unwrap().collect::<Vec<_>>(),
+            [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]
+        );
+        assert_eq!(images.len(), 2);
+        for image in images {
+            assert_eq!(image.pixels, [64, 128, 255, 128]);
+        }
+        assert_eq!(fs::read(&input).unwrap(), source);
+        let original = fs::read(&output).unwrap();
+        assert!(matches!(
+            small_mesh(&input, &output, false, false),
+            Err(rusty_tiles::Error::OutputExists(_))
+        ));
+        assert_eq!(fs::read(&output).unwrap(), original);
+        small_mesh(&input, &output, true, false).unwrap();
+        assert_eq!(fs::read(&output).unwrap(), original);
+    }
+}
+
+#[test]
+fn implicit_small_mesh_keeps_a_declared_reference_to_the_source_document() {
+    let work = tempfile::tempdir().unwrap();
+    let (mut doc, bin) = model();
+    doc["buffers"][0]["uri"] = json!("model.bin");
+    doc["extensionsUsed"] = json!(["EXT_structural_metadata"]);
+    doc["extensions"] = json!({"EXT_structural_metadata":{"schemaUri":"model.gltf"}});
+    // A glTF document may also carry the referenced schema. The source member
+    // is required in this case, even though implicit tiling renames its content.
+    doc["classes"] = json!({});
+    let source = serde_json::to_vec(&doc).unwrap();
+    let input = work.path().join("model.gltf");
+    let output = work.path().join("self-schema.3tz");
+    fs::write(&input, &source).unwrap();
+    fs::write(work.path().join("model.bin"), bin).unwrap();
+    small_mesh(&input, &output, false, false).unwrap();
+    rusty_tiles::validate::archive(&output, None).unwrap();
+    let mut zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
+    assert_eq!(read_member(&mut zip, "implicit-content/model.gltf"), source);
+}
+
+#[test]
+fn implicit_resource_collisions_missing_schemas_and_escapes_preserve_prior_output() {
+    let work = tempfile::tempdir().unwrap();
+    let (doc, bin) = model();
+    let input = work.path().join("model.gltf");
+    let output = work.path().join("result.3tz");
+    for (mut doc, name) in [
+        (doc.clone(), "collision"),
+        (doc.clone(), "missing-schema"),
+        (doc, "escape"),
+    ] {
+        doc["buffers"][0]["uri"] = json!(if name == "collision" {
+            "0-0-0-0-0.gltf"
+        } else {
+            "model.bin"
+        });
+        fs::write(
+            work.path().join(if name == "collision" {
+                "0-0-0-0-0.gltf"
+            } else {
+                "model.bin"
+            }),
+            &bin,
+        )
+        .unwrap();
+        if name != "collision" {
+            doc["extensionsUsed"] = json!(["EXT_structural_metadata"]);
+            doc["extensions"] = json!({"EXT_structural_metadata":{"schemaUri":if name=="escape" {"../outside.json"} else {"missing.json"}}});
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        if output.exists() {
+            fs::remove_file(&output).unwrap();
+        }
+        assert!(small_mesh(&input, &output, false, false).is_err(), "{name}");
+        assert!(!output.exists());
+        fs::write(&output, b"KEEP").unwrap();
+        assert!(small_mesh(&input, &output, true, false).is_err(), "{name}");
+        assert_eq!(fs::read(&output).unwrap(), b"KEEP");
+        assert!(!fs::read_dir(work.path()).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tiles-work-")));
+    }
+}
