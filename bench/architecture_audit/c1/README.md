@@ -33,3 +33,7 @@ Resource observations are not universal RSS or time guarantees. The finite profi
 and uninspected material/metadata, implicit addressing, decoded bounds and source/LOD
 semantics are defined in [VALIDATION.md](../../../docs/VALIDATION.md).
 Remote CI remains the merge gate; no release/publication is authorized.
+
+Clean source archive at `ca2356a97a2cb8d230b5b6d621341fde0e9baf2c` was unpacked and compiled by
+`cargo package --locked` (531 files). Its archive/log hashes are recorded in
+`verification.json`; later packaging-record edits change evidence only.

@@ -175,10 +175,19 @@
       "status": "passed",
       "evidence": "wheel-parity.json",
       "evidenceSha256": "3c65052eab1181714c97c7c1af5a96beb4dc9badb82dc144b59af0d3125004a8"
+    },
+    "sourceArchive": {
+      "status": "passed",
+      "command": "cargo package --locked",
+      "commit": "ca2356a97a2cb8d230b5b6d621341fde0e9baf2c",
+      "archiveSha256": "1a62b66e929ac408cfbe0d0ffec8dcad3a7eea3cd6b89620444600667d6eaf09",
+      "files": 531,
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-package.log",
+      "logSha256": "9f9870f2e87225664caa692b3be60c485e12b9694e63a6157ecfb7620c3db709",
+      "verification": "Cargo unpacked and compiled the clean archive using default features; no --no-verify or --allow-dirty and no publication."
     }
   },
   "pending": [
-    "source archive verification",
     "remote CI"
   ]
 }
