@@ -632,7 +632,7 @@ pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {
             }
             result["unchangedModelMembers"] = json!(names.len());
         }
-        result["archiveValidation"] = validation;
+        result["archiveValidation"] = serde_json::to_value(validation)?;
         Ok(result)
     } else {
         match kind {
