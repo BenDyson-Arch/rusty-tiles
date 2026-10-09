@@ -68,7 +68,7 @@ def relative_uri(uri):
             part = decoded.decode('utf-8', 'strict')
         except UnicodeDecodeError:
             reject('invalid_input', 'decoded path is not UTF-8')
-        if any(ord(character) < 32 or ord(character) == 127 for character in part):
+        if any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in part):
             reject('invalid_input', 'decoded control octet')
         if part in ('.', '..') and raw == uri.split('/')[-1]:
             reject('invalid_input', 'terminal dot names a directory')
@@ -385,6 +385,8 @@ def refusal_bundles():
         ('empty', '', 'invalid_input'), ('percent-short', 'images/a%0', 'invalid_input'),
         ('percent-nonhex', 'images/a%GG.png', 'invalid_input'), ('raw-space', 'images/a b.png', 'invalid_input'),
         ('raw-backslash', 'images\\color.png', 'invalid_input'), ('raw-control', 'images/a\t.png', 'invalid_input'),
+        ('raw-C1-control', 'images/a\u0085.png', 'invalid_input'),
+        ('encoded-C1-control', 'images/a%C2%85.png', 'invalid_input'),
         ('raw-plus', 'images/a+b.png', 'invalid_input'), ('raw-ampersand', 'images/a&b.png', 'invalid_input'),
         ('raw-semicolon', 'images/a;b.png', 'invalid_input'), ('raw-at', 'images/a@b.png', 'invalid_input'),
         ('terminal-decoded-dot', 'images/%2e', 'invalid_input'), ('terminal-decoded-dotdot', 'images/%2e%2e', 'invalid_input'),
