@@ -452,10 +452,8 @@ pub(super) fn inspect(
     }
     let buffer_docs = list(&doc, "buffers")?;
     let mut placeholder_covered = vec![true; buffer_docs.len()];
-    let mut placeholder_referenced = vec![false; buffer_docs.len()];
     for view in list(&doc, "bufferViews")? {
         let buffer = at(buffer_docs, &view["buffer"])?;
-        placeholder_referenced[buffer] = true;
         if view["extensions"].get("EXT_meshopt_compression").is_none() {
             placeholder_covered[buffer] = false;
         }
@@ -471,6 +469,16 @@ pub(super) fn inspect(
     let mut buffer_budget = 0usize;
     let mut resource_bytes = 0usize;
     for (i, b) in list(&doc, "buffers")?.iter().enumerate() {
+        if let Some(marker) = b["extensions"]["EXT_meshopt_compression"].get("fallback") {
+            let fallback = marker
+                .as_bool()
+                .ok_or_else(|| invalid("meshopt fallback marker must be boolean"))?;
+            if fallback && !placeholder_covered[i] {
+                return Err(invalid(
+                    "meshopt fallback buffer has non-fallback references",
+                ));
+            }
+        }
         let n = field(b, "byteLength")?;
         if n == 0 {
             return Err(invalid("empty buffer"));
@@ -492,7 +500,7 @@ pub(super) fn inspect(
             }
         } else if let (0, Some(bin)) = (i, bin) {
             Cow::Borrowed(bin)
-        } else if placeholder_covered[i] && placeholder_referenced[i] && meshopt_required {
+        } else if placeholder_covered[i] && meshopt_required {
             buffers.push(Cow::Borrowed(&[][..]));
             continue;
         } else {

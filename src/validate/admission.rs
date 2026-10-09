@@ -282,6 +282,21 @@ pub(super) fn admit(file: &mut File, limits: &ValidationLimits) -> Result<(), Fa
             zip64_sizes([u32_at(&local, 22), u32_at(&local, 18)], &local_extra)?;
         let crc = u32_at(&h, 16);
         if u16_at(&local, 6) & 8 != 0 {
+            let invalid_sizes = [
+                (u32_at(&local, 22), local_member, member),
+                (u32_at(&local, 18), local_compressed, compressed),
+            ]
+            .into_iter()
+            .any(|(stored, expanded, expected)| {
+                if stored == u64::from(u32::MAX) {
+                    expanded != 0 && expanded != expected
+                } else {
+                    stored != 0
+                }
+            });
+            if u32_at(&local, 14) != 0 || invalid_sizes {
+                return Err(malformed("invalid local ZIP data-descriptor fields"));
+            }
             let zip64 = [
                 u32_at(&local, 18),
                 u32_at(&local, 22),

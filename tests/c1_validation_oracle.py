@@ -290,6 +290,29 @@ def generate(directory):
         else: broken.pop('extensionsRequired')
         meshopt_case('meshopt_placeholder_' + name, broken, 'invalid_input',
                      'Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.')
+    doc = copy.deepcopy(document)
+    doc.update(extensionsUsed=['EXT_meshopt_compression'], extensionsRequired=['EXT_meshopt_compression'])
+    doc['buffers'][0]['extensions'] = {'EXT_meshopt_compression': {'fallback': True}}
+    emit('fallback_marker_uncompressed', glb(doc, payload), 'invalid_input',
+         'Fallback-marked actual BIN buffer is referenced by ordinary uncompressed views, violating the marker role constraint.')
+    doc = copy.deepcopy(external_meshopt)
+    doc['buffers'][0]['extensions'] = {'EXT_meshopt_compression': {'fallback': True}}
+    meshopt_case('fallback_marker_compressed_source', doc, 'invalid_input',
+                 'Fallback-marked actual resource is referenced as a compressed source, which the fallback marker forbids.')
+    doc = copy.deepcopy(external_meshopt)
+    doc['buffers'][0]['extensions'] = {'EXT_meshopt_compression': {'fallback': 'true'}}
+    meshopt_case('fallback_marker_bad_type', doc, 'invalid_input',
+                 'EXT_meshopt_compression buffer fallback marker is a string rather than its defined boolean.')
+    doc = copy.deepcopy(external_meshopt)
+    doc['buffers'].append({'byteLength': len(decoded), 'uri': 'fallback.bin',
+                           'extensions': {'EXT_meshopt_compression': {'fallback': True}}})
+    doc['bufferViews'][0]['buffer'] = 1
+    emit('fallback_marker_actual_resource', json.dumps(doc).encode(), None,
+         'Fallback-marked actual decoded resource serves only a compressed view and is never used as a compressed source.',
+         extras={'data.bin': encoded, 'fallback.bin': decoded}, manifest=external_manifest)
+    doc = copy.deepcopy(external_meshopt); doc['buffers'].append({'byteLength': 48})
+    meshopt_case('meshopt_unused_placeholder', doc, None,
+                 'Required meshopt document has a URI-less unused placeholder; no references violate fallback coverage roles.')
     changes = [
         ('empty_bin', 'invalid_input', 'Declared 42-byte buffer and required POSITION payload absent.'),
         ('stride_one', 'invalid_input', 'POSITION stride 1 cannot hold a 12-byte element.'),
@@ -414,6 +437,22 @@ def generate(directory):
                 container_case(name + '_' + field + '_mismatch',
                                framed_archive(zip_files, zip64=wide, descriptor=signature, corrupt='descriptor_' + field),
                                'invalid_input', 'Immediate descriptor ' + field + ' contradicts actual data and central directory.')
+    for field in ['crc', 'compressed_size', 'uncompressed_size']:
+        container_case('zip_descriptor_32_local_' + field + '_nonzero',
+                       framed_archive(zip_files, descriptor='signed', corrupt='local_' + field), 'invalid_input',
+                       'Bit3 ordinary local ' + field + ' is nonzero instead of its defined zero placeholder, despite a correct descriptor.')
+    container_case('zip_descriptor_64_local_crc_nonzero',
+                   framed_archive(zip_files, zip64=True, descriptor='signed', corrupt='local_crc'), 'invalid_input',
+                   'Bit3 local CRC must be zero even when size fields use ZIP64 sentinels and a correct descriptor follows.')
+    known_sizes = bytearray(framed_archive(zip_files, zip64=True, descriptor='signed'))
+    local_extra_values = 30 + len('tileset.json') + 4
+    struct.pack_into('<QQ', known_sizes, local_extra_values, len(zip_files['tileset.json']), len(zip_files['tileset.json']))
+    container_case('zip_descriptor_64_known_local_sizes', bytes(known_sizes), None,
+                   'ZIP64 local extra sizes are known and agree with descriptor/central; ordinary fields retain sentinels and CRC remains zero.')
+    for field in ['compressed_size', 'uncompressed_size']:
+        container_case('zip_descriptor_64_local_' + field + '_mismatch',
+                       framed_archive(zip_files, zip64=True, descriptor='signed', corrupt='local_' + field), 'invalid_input',
+                       'ZIP64 local extra ' + field + ' is neither zero nor the correct descriptor/central size.')
     # Four literal bytes analytically selected so CRC equals descriptor signature.
     # Unsigned descriptor must not lose its CRC to an assumed signature prefix.
     signature_crc_bytes = bytes.fromhex('ac0a7ad5')

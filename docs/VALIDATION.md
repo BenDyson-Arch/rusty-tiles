@@ -23,6 +23,12 @@ prove unit-length normals, rendered material meaning or source/LOD fidelity.
 KHR_mesh_quantization permits
 its specified extra attribute representations. EXT_meshopt_compression supports
 bounded decoding with the NONE filter; unavailable filters are unsupported.
+All buffer consumers, including compressed streams, are restricted to declared
+buffer lengths. Required meshopt may use URI-less fallback placeholders, including
+an unused placeholder or GLB buffer zero without a BIN chunk. The optional fallback
+marker has the same buffer-role restrictions whether actual bytes are provided or not.
+Application-owned `extras` and extension-owned JSON remain opaque to the generic
+extension-declaration walk.
 C1 also inspects the experimental `KHR_mesh_primitive_restart` draft at
 [CesiumGS/glTF revision `9811e8407d4533500cfc6b10e3bc408345035a6f`](https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md).
 Its admitted draw mode is indexed LINE_STRIP: the maximum unsigned component
@@ -63,6 +69,10 @@ stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
+
+ZIP admission reconciles local and central CRC/size fields, including ZIP64
+sizes and immediate data descriptors with or without signatures. Nonregular
+inputs are Unsupported; POSIX FIFO admission does not wait for a writer.
 
 Fixed ceilings are 8 MiB JSON with depth 64, 64 MiB per member, 1 GiB source archive and total
 stored member bytes, 16 MiB central directory, 65,536 archive entries/document
