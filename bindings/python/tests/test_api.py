@@ -11,6 +11,7 @@ import platform
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -44,11 +45,155 @@ def write_las(path, *, epsg=None):
             stream.write(struct.pack("<iiiHBBbBH", x, y, z, 7, 9, 2, 0, 0, 0))
 
 
+def write_local_mesh(path, *, extras=False):
+    """Hand-authored embedded GLB with three unindexed, untextured triangles."""
+    points = [(x + dx, y, z) for dx in (0, 3, 6)
+              for x, y, z in ((0, 0, 0), (1, 0, 0), (0, 1, 0))]
+    payload = b"".join(struct.pack("<3f", *point) for point in points)
+    document = {
+        "asset": {"version": "2.0"}, "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0, "translation": [10, 2, 3]}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "buffers": [{"byteLength": len(payload)}],
+        "bufferViews": [{"buffer": 0, "byteLength": len(payload)}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 9,
+                       "type": "VEC3", "min": [0, 0, 0], "max": [7, 1, 0]}],
+    }
+    if extras:
+        document["extras"] = {"not_supported": True}
+    encoded = json.dumps(document, separators=(",", ":")).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    path.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
+                     + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+                     + struct.pack("<II", len(payload), 0x004E4942) + payload)
+
+
 class WheelAPI(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
         self.root = Path(self.work.name)
+
+    def test_local_mesh_explicit_limit_report_and_precommit_events(self):
+        source = self.root / "local.glb"
+        write_local_mesh(source)
+        output = self.root / "local.3tz"
+        events = []
+
+        def observe(event):
+            self.assertFalse(output.exists(), "mesh callback ran after installation")
+            events.append(event)
+
+        result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
+                                               callback=observe)
+        self.assertIsInstance(result, rusty_tiles.MeshResult)
+        self.assertTrue(result.output.is_absolute())
+        self.assertEqual(result.output.resolve(), output.resolve())
+        self.assertEqual(result.report["triangles"], 3)
+        self.assertEqual(result.report["leaf_tiles"], 3)
+        self.assertEqual(result.report["leaf_triangles"], 1)
+        self.assertEqual(result.report["coordinates"], "local-gltf")
+        self.assertEqual(result.report["profile"], "f1a-local-static-glb-v1")
+        self.assertEqual(result.cleanup_diagnostics, [])
+        self.assertTrue(events)
+        self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(json.loads(archive.read("conversion.json")), result.report)
+            manifest = json.loads(archive.read("tileset.json"))
+            children = manifest["root"]["children"]
+            self.assertEqual(len(children), 3)
+            content_names = [child["content"]["uri"] for child in children]
+            self.assertEqual(set(archive.namelist()),
+                             {"tileset.json", "conversion.json", "@3dtilesIndex1@", *content_names})
+
+    def test_local_mesh_validation_and_unsupported_source_create_no_work(self):
+        output = self.root / "absent" / "local.3tz"
+        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+            rusty_tiles.mesh_local_to_3tz(self.root / "missing.glb", output, leaf_triangles=0)
+        self.assertEqual(caught.exception.kind, "invalid_request")
+        self.assertFalse(output.parent.exists())
+        source = self.root / "unsupported.glb"
+        write_local_mesh(source, extras=True)
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1)
+        self.assertEqual(caught.exception.kind, "unsupported")
+        self.assertFalse(output.parent.exists())
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_local_to_3tz(source, output)
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=42)
+
+    def test_local_mesh_callbacks_abort_preserve_original_and_destination(self):
+        source = self.root / "callback.glb"
+        write_local_mesh(source)
+        for final in (False, True):
+            for force in (False, True):
+                with self.subTest(final=final, force=force):
+                    output = self.root / f"callback-{final}-{force}.3tz"
+                    if force:
+                        output.write_bytes(b"previous destination")
+                    original = RuntimeError("selected mesh observer failure")
+
+                    def observe(event):
+                        if not final or event.get("phase") == "ready_to_publish":
+                            raise original
+
+                    with self.assertRaises(RuntimeError) as caught:
+                        rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
+                                                     force=force, callback=observe)
+                    self.assertIs(caught.exception, original)
+                    if force:
+                        self.assertEqual(output.read_bytes(), b"previous destination")
+                    else:
+                        self.assertFalse(output.exists())
+        self.assertFalse(any(path.name.startswith(".tiles-") for path in self.root.iterdir()))
+
+    def test_local_mesh_callback_cwd_change_cannot_redirect_relative_output(self):
+        source = self.root / "cwd.glb"
+        write_local_mesh(source)
+        initial = self.root / "initial"
+        redirected = self.root / "redirected"
+        initial.mkdir()
+        redirected.mkdir()
+        script = """
+import os, sys
+from pathlib import Path
+import rusty_tiles
+source, initial, redirected = map(Path, sys.argv[1:])
+os.chdir(initial)
+def observe(event):
+    os.chdir(redirected)
+result = rusty_tiles.mesh_local_to_3tz(source, "bound.3tz", leaf_triangles=1, callback=observe)
+assert result.output.is_absolute()
+assert result.output.resolve() == (initial / "bound.3tz").resolve()
+assert (initial / "bound.3tz").exists()
+assert not (redirected / "bound.3tz").exists()
+"""
+        completed = subprocess.run([sys.executable, "-c", script, str(source.resolve()),
+                                    str(initial.resolve()), str(redirected.resolve())],
+                                   capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def test_local_mesh_nested_and_concurrent_jobs_have_independent_results(self):
+        source = self.root / "independent.glb"
+        write_local_mesh(source)
+        nested = []
+
+        def observe(event):
+            if not nested:
+                nested.append(rusty_tiles.mesh_local_to_3tz(
+                    source, self.root / "nested-local.3tz", leaf_triangles=3))
+
+        outer = rusty_tiles.mesh_local_to_3tz(source, self.root / "outer-local.3tz",
+                                              leaf_triangles=1, callback=observe)
+        self.assertEqual(outer.report["leaf_tiles"], 3)
+        self.assertEqual(nested[0].report["leaf_tiles"], 1)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            results = list(executor.map(lambda i: rusty_tiles.mesh_local_to_3tz(
+                source, self.root / f"concurrent-local-{i}.3tz", leaf_triangles=1), range(3)))
+        self.assertEqual(len({result.output for result in results}), 3)
+        self.assertTrue(all(result.report == results[0].report for result in results))
 
     def test_vector_geojson_options_progress_reuse_and_atomic_failure(self):
         source = self.root / "features.geojson"

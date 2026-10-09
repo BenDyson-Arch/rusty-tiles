@@ -18,8 +18,8 @@ use tiles_core::{
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, CreateTilesetOptions, Error, Event, EventSink, JobError, JobErrorKind,
-    JobFailure, MeshTo3tzOptions, Observer, OutputPolicy, Reporter, RunControl, RunEvent,
-    SourceAxes,
+    JobFailure, MeshRequest, MeshTo3tzOptions, Observer, OutputPolicy, Reporter, RunControl,
+    RunEvent, SourceAxes,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -70,7 +70,7 @@ fn job_failure_to_python(py: Python<'_>, failure: JobFailure) -> PyErr {
         JobErrorKind::InvalidState => TilesError::new_err(message),
     };
     // Newly created domain exceptions carry transport metadata. Original
-    // callback/signal exceptions are returned untouched by the pack adapter.
+    // callback/signal exceptions are returned untouched by the job adapter.
     let value = error.value(py);
     let _ = value.setattr("kind", job_kind(failure.error.kind()));
     let secondary: Vec<_> = failure
@@ -94,7 +94,8 @@ struct PackageReceipt {
     archive_bytes: u64,
 }
 
-#[pyclass(frozen, module = "rusty_tiles")]
+#[derive(Clone)]
+#[pyclass(frozen, skip_from_py_object, module = "rusty_tiles")]
 struct CleanupDiagnostic {
     #[pyo3(get)]
     path: PathBuf,
@@ -139,12 +140,12 @@ impl PackageResult {
     }
 }
 
-struct PackageObserver {
+struct RunObserver {
     callback: Option<Py<PyAny>>,
     error: Mutex<Option<PyErr>>,
 }
 
-fn package_event(event: &RunEvent<'_>) -> Value {
+fn run_event(event: &RunEvent<'_>) -> Value {
     match event {
         RunEvent::Progress { phase, done, total } => {
             serde_json::json!({"event":"progress", "phase":phase,"done":done,"total":total})
@@ -156,12 +157,12 @@ fn package_event(event: &RunEvent<'_>) -> Value {
     }
 }
 
-impl Observer for PackageObserver {
+impl Observer for RunObserver {
     fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
         Python::attach(|py| {
             let result = py.check_signals().and_then(|()| {
                 if let Some(callback) = &self.callback {
-                    let value = json_to_python(py, &package_event(event))?;
+                    let value = json_to_python(py, &run_event(event))?;
                     callback.call1(py, (value,))?;
                 }
                 Ok(())
@@ -179,6 +180,97 @@ impl Observer for PackageObserver {
             Ok(())
         })
     }
+}
+
+/// Run a new fallible-observer job; postcommit Python checks do not rewrite its outcome.
+fn run_job<T: Send>(
+    py: Python<'_>,
+    callback: Option<Py<PyAny>>,
+    work: impl FnOnce(&RunControl) -> Result<T, JobFailure> + Send,
+) -> PyResult<T> {
+    if callback
+        .as_ref()
+        .is_some_and(|callback| !callback.bind(py).is_callable())
+    {
+        return Err(PyTypeError::new_err("callback must be callable"));
+    }
+    py.check_signals()?;
+    let observer = Arc::new(RunObserver {
+        callback,
+        error: Mutex::new(None),
+    });
+    let run = RunControl::new(Some(observer.clone()));
+    match py.detach(|| work(&run)) {
+        Ok(result) => Ok(result),
+        Err(failure) => {
+            if failure.error.kind() == JobErrorKind::ObserverFailure {
+                if let Some(error) = observer.error.lock().unwrap().take() {
+                    return Err(error);
+                }
+            }
+            Err(job_failure_to_python(py, failure))
+        }
+    }
+}
+
+fn cleanup_diagnostics(diagnostics: Vec<tiles_core::CleanupDiagnostic>) -> Vec<CleanupDiagnostic> {
+    diagnostics
+        .into_iter()
+        .map(|diagnostic| CleanupDiagnostic {
+            path: diagnostic.path,
+            kind: job_kind(diagnostic.error.kind()).to_owned(),
+            message: diagnostic.error.to_string(),
+        })
+        .collect()
+}
+
+/// Published F1a local mesh with its finalized report and cleanup diagnostics.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct MeshResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl MeshResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
+/// Convert the F1a embedded static untextured GLB profile in local metre/Y-up coordinates.
+#[pyfunction]
+#[pyo3(signature = (input, output, *, leaf_triangles, force=false, callback=None))]
+fn mesh_local_to_3tz(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    leaf_triangles: usize,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<MeshResult> {
+    let policy = if force {
+        OutputPolicy::Replace
+    } else {
+        OutputPolicy::CreateNew
+    };
+    let request = MeshRequest::local_gltf(input, output, leaf_triangles).with_policy(policy);
+    let result = run_job(py, callback, |run| {
+        tiles_core::mesh_to_archive(request, run)
+    })?;
+    Ok(MeshResult {
+        output: result.output,
+        report: serde_json::json!(result.report),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
 }
 
 fn json_to_python(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
@@ -549,54 +641,23 @@ fn convert_to_3tz(
     force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<PackageResult> {
-    if callback
-        .as_ref()
-        .is_some_and(|callback| !callback.bind(py).is_callable())
-    {
-        return Err(PyTypeError::new_err("callback must be callable"));
-    }
-    py.check_signals()?;
-    let observer = Arc::new(PackageObserver {
-        callback,
-        error: Mutex::new(None),
-    });
-    let run = RunControl::new(Some(observer.clone()));
     let policy = if force {
         OutputPolicy::Replace
     } else {
         OutputPolicy::CreateNew
     };
     let request = PackageRequest::directory(input, output).with_policy(policy);
-    let result = py.detach(|| package(request, &run));
-    match result {
-        Ok(result) => Ok(PackageResult {
-            output: result.output,
-            archive: true,
-            receipt: PackageReceipt {
-                member_count: result.receipt.member_count,
-                source_bytes: result.receipt.source_bytes,
-                archive_bytes: result.receipt.archive_bytes,
-            },
-            cleanup_diagnostics: result
-                .cleanup_diagnostics
-                .into_iter()
-                .map(|diagnostic| CleanupDiagnostic {
-                    path: diagnostic.path,
-                    kind: job_kind(diagnostic.error.kind()).to_owned(),
-                    message: diagnostic.error.to_string(),
-                })
-                .collect(),
-        }),
-        Err(failure) => {
-            if failure.error.kind() == JobErrorKind::ObserverFailure {
-                let original = observer.error.lock().unwrap().take();
-                if let Some(error) = original {
-                    return Err(error);
-                }
-            }
-            Err(job_failure_to_python(py, failure))
-        }
-    }
+    let result = run_job(py, callback, |run| package(request, run))?;
+    Ok(PackageResult {
+        output: result.output,
+        archive: true,
+        receipt: PackageReceipt {
+            member_count: result.receipt.member_count,
+            source_bytes: result.receipt.source_bytes,
+            archive_bytes: result.receipt.archive_bytes,
+        },
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
 }
 
 /// Rewrite an eligible rusty-tiles explicit point/vector archive as implicit tiling.
@@ -634,6 +695,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ConversionResult>()?;
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
+    module.add_class::<MeshResult>()?;
     module.add_class::<CleanupDiagnostic>()?;
     module.add("TilesError", module.py().get_type::<TilesError>())?;
     module.add(
@@ -657,6 +719,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<UnsupportedError>(),
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(point_cloud_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;

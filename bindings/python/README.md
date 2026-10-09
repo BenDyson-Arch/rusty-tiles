@@ -55,6 +55,7 @@ staging and atomic archive replacement.
 
 | Function | Keyword arguments |
 | --- | --- |
+| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
@@ -83,6 +84,33 @@ is outside this wheel's API because it requires an external encoder.
 `metadata_attributes=True` adds point property attributes named
 `vertex_classification`, `vertex_intensity` and `vertex_return_number`, retaining
 the original LAS property tables for picking and table styling.
+
+### Local static mesh foundation
+
+```python
+result = rusty_tiles.mesh_local_to_3tz(
+    "local.glb", "local.3tz", leaf_triangles=1000,
+)
+assert result.report["coordinates"] == "local-gltf"
+```
+
+`mesh_local_to_3tz(input, output, *, leaf_triangles, force=False, callback=None)`
+requires a positive explicit per-leaf triangle limit and interprets the input
+as local metre/Y-up geometry. It accepts the finite embedded static untextured
+GLB profile in the [F1a contract](../../docs/architecture/f1a-contract.md),
+including declared material factors and node transforms. Textures, extras,
+extensions, animation and other unsupported semantics are rejected before output
+staging. The operation produces actual spatial leaves without a small-file wrap
+bypass, coarse approximation, texture processing or coordinate guessing.
+
+It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
+dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.
+The limit bounds triangles per leaf, not process memory or output bytes. This
+entry point is separate from `mesh_to_3tz`; unsupported sources do not fall back.
+It shares packaging's fallible precommit callback and typed domain-error contract,
+including preservation of the original callback exception when that cause wins.
+Python result materialization and external asynchronous exceptions remain outside
+the core publication guarantee. `force=True` permits completed-file replacement.
 
 `glb_to_3tz` wraps GLB/glTF without making new levels of detail.
 `convert_to_3tz` packs the regular files beneath a tileset directory or the

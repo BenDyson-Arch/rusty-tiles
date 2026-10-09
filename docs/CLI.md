@@ -300,6 +300,28 @@ Programs should test the exit code or `error.code`, not the message text.
 
 An out-of-range option value names the flag and its range. For example, `--lod-levels 40` prints `--lodLevels must be between 1 and 16, got 40` and exits with code 3.
 
+## mesh-local-to-3tz
+
+`mesh-local-to-3tz -i local.glb -o local.3tz --leaf-triangles 1000` converts the
+F1a static embedded untextured GLB profile, explicitly interpreted as local
+metres with Y up. `--leaf-triangles` is required and positive; it limits each
+leaf's triangle count, not archive bytes, memory or geometric error. `--force`
+uses completed-file replacement. This operation emits an explicit hierarchy
+with exact leaf geometry and no coarse LOD, texture processing or guessed CRS.
+
+Unsupported source semantics, including textures, animation, extensions and
+extras, fail consistently before output staging. See the [finite source,
+numerical and admission contract](architecture/f1a-contract.md). This command
+is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
+does not silently route it through that operation.
+
+`--json` returns `meshReport` with the same snake_case fields published in
+`conversion.json`, plus `cleanupDiagnostics`. The output is its resolved
+absolute installation path. `--progress json` uses fallible precommit domain
+events; required observer/finalization failures preserve the previous destination.
+The root geometric error is an extent-derived omission/selection metric,
+not a measured simplification bound. Leaves retain all accepted triangles.
+
 ## Machine output
 
 ### Human summary
@@ -360,6 +382,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
+| `mesh-local-to-3tz` | `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |
 
 Events report work units, not time remaining.
 

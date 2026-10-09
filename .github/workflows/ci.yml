@@ -41,6 +41,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Test native build
         run: cargo test --locked --features native-jpeg
+      - name: Independently decode local mesh candidates and corruption controls
+        run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
       - name: Check source packaging
         run: cargo package --locked --no-verify
       - name: Test portable JPEG
