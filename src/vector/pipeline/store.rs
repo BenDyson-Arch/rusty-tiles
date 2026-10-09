@@ -1,6 +1,6 @@
 //! Disk-backed feature/lock indexing, deterministic spatial partitions and LOD.
 use super::*;
-use crate::report::Reporter;
+use crate::runtime::{Attempt, RunEvent};
 use encoding::Candidate;
 use rayon::prelude::*;
 use reuse::{Cut, Reuse};
@@ -13,7 +13,59 @@ use std::{
     time::Instant,
 };
 
-#[derive(Default, Serialize)]
+fn cleanup_failure(original: FeatureFailure, cleanup: Error) -> Error {
+    // A rejection is provisional, not a job abort cause. If it cannot be
+    // rolled back safely, infrastructure failure is the first fatal cause.
+    let (primary, secondary) = match original {
+        FeatureFailure::Rejected(rejection) => (cleanup, Error::Data(rejection.message)),
+        FeatureFailure::Fatal(error) => (error, cleanup),
+    };
+    let mut failure = match primary {
+        Error::Job(failure) => failure,
+        other => crate::JobFailure {
+            error: super::super::job_error(other),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        },
+    };
+    failure.secondary.push(super::super::job_error(secondary));
+    Error::Job(failure)
+}
+
+fn emit(attempt: &Attempt, event: RunEvent<'_>) -> Result<(), Error> {
+    attempt
+        .emit(&event)
+        .map_err(|error| Error::Job(attempt.fail(error)))
+}
+
+fn final_members(output: &Path) -> Result<Vec<VectorMember>, Error> {
+    // The workspace contains only finalized producer resources; scratch stays
+    // in a separately owned temporary directory.
+    fn visit(root: &Path, directory: &Path, out: &mut Vec<VectorMember>) -> Result<(), Error> {
+        for entry in std::fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                visit(root, &path, out)?;
+            } else {
+                let name = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.push(VectorMember { name, path });
+            }
+        }
+        Ok(())
+    }
+    let mut members = Vec::new();
+    visit(output, output, &mut members)?;
+    members.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(members)
+}
+
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Counters {
     pub features: usize,
@@ -33,15 +85,20 @@ pub(super) struct Node {
     pub padding: f64,
 }
 struct Reports {
-    file: std::fs::File,
+    file: Box<dyn Write>,
     first: Vec<Value>,
     count: usize,
 }
 impl Reports {
+    fn finish(&mut self) -> Result<(), Error> {
+        self.file.flush()?;
+        Ok(())
+    }
     fn write(&mut self, value: Value) -> Result<(), Error> {
-        self.count += 1;
-        serde_json::to_writer(&mut self.file, &value)?;
+        let bytes = serde_json::to_vec(&value)?;
+        self.file.write_all(&bytes)?;
         self.file.write_all(b"\n")?;
+        self.count += 1;
         if self.first.len() < 100 {
             self.first.push(value);
         }
@@ -53,8 +110,8 @@ fn split(
     feature: &Feature,
     repair: bool,
     counters: &mut Counters,
-    reports: &mut Reports,
-) -> Result<Vec<Feature>, Error> {
+    reports: &mut Vec<Value>,
+) -> FeatureResult<Vec<Feature>> {
     let mut geometries = Vec::new();
     match &feature.geometry {
         Geometry::LineString(p) if p.len() > 2 => {
@@ -92,7 +149,7 @@ fn split(
         }
         Geometry::MultiPolygon(p) if p.len() == 1 => {
             if feature.surface_fragment {
-                return Err(data(
+                return Err(FeatureFailure::reject(
                     "indivisible polygon fill/boundary or metadata exceeds tile budget",
                 ));
             }
@@ -100,7 +157,9 @@ fn split(
             f.geometry = Geometry::Polygon(p[0].clone());
             if let Some(intrinsic) = &mut f.intrinsic {
                 let Geometry::MultiPolygon(source) = &intrinsic.geometry else {
-                    return Err(data("intrinsic polygon correspondence was lost"));
+                    return Err(FeatureFailure::reject(
+                        "intrinsic polygon correspondence was lost",
+                    ));
                 };
                 intrinsic.geometry = Geometry::Polygon(source[0].clone());
             }
@@ -110,7 +169,9 @@ fn split(
             let polygon = geometry::polygon_for(feature, rings, 0, [0.; 3], repair)?;
             let triangles = polygon.indices.as_chunks::<3>().0.to_vec();
             if triangles.len() <= 1 {
-                return Err(data("one triangle or its metadata exceeds tile budget"));
+                return Err(FeatureFailure::reject(
+                    "one triangle or its metadata exceeds tile budget",
+                ));
             }
             // Boundary ownership comes from the source loops, not triangle
             // incidence. Dropping a zero-area seam face must not expose its
@@ -161,7 +222,7 @@ fn split(
             report["sourceId"] = feature.source_id().clone();
             report["sourceLayer"] = json!(feature.layer());
             report["reason"]=json!("oversized polygon surfaces partitioned; original boundary rendered separately without internal edges");
-            reports.write(report)?;
+            reports.push(report);
             let middle = parts.len() / 2;
             return Ok([(0, middle), (middle, parts.len())]
                 .into_iter()
@@ -177,7 +238,7 @@ fn split(
                 })
                 .collect());
         }
-        _ => return Err(data(
+        _ => return Err(FeatureFailure::reject(
             "indivisible geometry or its metadata exceeds tile budget; raise maxVertices/maxBytes",
         )),
     }
@@ -221,8 +282,8 @@ impl Spool<'_> {
         path: &str,
         hint: bool,
         counters: &mut Counters,
-        reports: &mut Reports,
-    ) -> Result<(), Error> {
+        reports: &mut Vec<Value>,
+    ) -> FeatureResult<()> {
         let Self {
             db,
             repair,
@@ -230,7 +291,8 @@ impl Spool<'_> {
         } = self;
         if hint
             && (feature.geometry.size() > options.max_vertices
-                || feature.estimate() > options.max_bytes)
+                || feature.estimate() > options.max_bytes
+                || !encoding::fits_feature(&feature, repair, options)?)
         {
             for (index, mut part) in split(&feature, repair, counters, reports)?
                 .into_iter()
@@ -241,9 +303,61 @@ impl Spool<'_> {
             }
             return Ok(());
         }
-        insert_row(db, &feature, path)
+        insert_row(db, &feature, path)?;
+        Ok(())
     }
 }
+fn accept_feature(
+    db: &Connection,
+    mut feature: Feature,
+    repair: bool,
+    ambiguous: bool,
+    options: &VectorOptions,
+    counters: &mut Counters,
+    reports: &mut Reports,
+) -> FeatureResult<()> {
+    db.execute_batch("SAVEPOINT feature;").map_err(sql)?;
+    let mut delta_counters = Counters::default();
+    let mut delta_reports = Vec::new();
+    let result = (|| -> FeatureResult<()> {
+        delta_reports.extend(geometry::validate(&mut feature, repair, ambiguous)?);
+        Spool {
+            db,
+            repair,
+            options,
+        }
+        .insert(feature, "", true, &mut delta_counters, &mut delta_reports)?;
+        Ok(())
+    })();
+    if let Err(original) = result {
+        if let Err(cleanup) = db.execute_batch("ROLLBACK TO feature; RELEASE feature;") {
+            return Err(FeatureFailure::Fatal(cleanup_failure(
+                original,
+                sql(cleanup),
+            )));
+        }
+        return Err(original);
+    }
+    // Required diagnostics are committed only after feature work succeeds.
+    // Any failure here aborts the entire private workspace.
+    for report in delta_reports {
+        if let Err(error) = reports.write(report) {
+            let original = FeatureFailure::Fatal(error);
+            if let Err(cleanup) = db.execute_batch("ROLLBACK TO feature; RELEASE feature;") {
+                return Err(FeatureFailure::Fatal(cleanup_failure(
+                    original,
+                    sql(cleanup),
+                )));
+            }
+            return Err(original);
+        }
+    }
+    db.execute_batch("RELEASE feature;").map_err(sql)?;
+    counters.features += 1;
+    counters.fragmented_polygons += delta_counters.fragmented_polygons;
+    Ok(())
+}
+
 fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Error> {
     let (lo, hi) = bounds(feature.rendered_points())?;
     let center = mul(add(lo, hi), 0.5);
@@ -295,7 +409,7 @@ struct Stats {
     hi: Point,
 }
 struct Build<'a> {
-    reporter: &'a Reporter,
+    attempt: &'a Attempt,
     db: &'a Connection,
     spool: &'a Path,
     output: &'a Path,
@@ -341,8 +455,10 @@ impl Build<'_> {
         candidate: Candidate,
     ) -> Result<(Option<Value>, Option<&'static str>), Error> {
         self.workers.insert(candidate.worker);
-        for report in candidate.reports {
-            self.reports.write(report)?;
+        if candidate.node.is_some() {
+            for report in candidate.reports {
+                self.reports.write(report)?;
+            }
         }
         Ok((candidate.node, candidate.reason))
     }
@@ -390,8 +506,14 @@ impl Build<'_> {
             value["children"] = Value::Array(children.into_iter().map(|n| n.value).collect());
         }
         self.counters.tiles += 1;
-        self.reporter
-            .progress("encoding", self.counters.tiles as u64, None);
+        emit(
+            self.attempt,
+            RunEvent::Progress {
+                phase: "encoding",
+                done: self.counters.tiles as u64,
+                total: None,
+            },
+        )?;
         if self.counters.tiles > self.options.max_tiles {
             return Err(data(
                 "hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly",
@@ -414,6 +536,9 @@ impl Build<'_> {
         })
     }
     fn build(&mut self, prefix: &str, depth: usize) -> Result<Node, Error> {
+        self.attempt
+            .check()
+            .map_err(|error| Error::Job(self.attempt.fail(error)))?;
         let signature = self.reuse.signature(self.db, prefix)?;
         let n = self.stats(prefix)?.count;
         if let Some(node) = self.reuse.restore(
@@ -449,13 +574,14 @@ impl Build<'_> {
                 self.counters.leaf_tiles += 1;
                 let mut node = self.attach(leaf, &stats, center, Vec::new())?;
                 for candidate in candidates {
+                    if candidate.node.as_ref().is_some_and(|coarse| {
+                        coarse["extras"]["vertices"].as_u64().unwrap()
+                            >= node.value["extras"]["vertices"].as_u64().unwrap()
+                    }) {
+                        continue;
+                    }
                     let (coarse, _) = self.consume(candidate)?;
                     if let Some(coarse) = coarse {
-                        if coarse["extras"]["vertices"].as_u64().unwrap()
-                            >= node.value["extras"]["vertices"].as_u64().unwrap()
-                        {
-                            continue;
-                        }
                         node = self.attach(coarse, &stats, center, vec![node])?;
                     }
                 }
@@ -473,7 +599,14 @@ impl Build<'_> {
                 )
                 .map_err(sql)?;
             let feature: Feature = serde_json::from_str(&value)?;
-            let parts = split(&feature, self.repair, &mut self.counters, &mut self.reports)?;
+            let mut staged_reports = Vec::new();
+            let parts = split(
+                &feature,
+                self.repair,
+                &mut self.counters,
+                &mut staged_reports,
+            )
+            .map_err(FeatureFailure::into_error)?;
             self.db
                 .execute("DELETE FROM features WHERE id=?1", params![id])
                 .map_err(sql)?;
@@ -485,13 +618,11 @@ impl Build<'_> {
                     repair: self.repair,
                     options: self.options,
                 }
-                .insert(
-                    part,
-                    prefix,
-                    false,
-                    &mut self.counters,
-                    &mut self.reports,
-                )?;
+                .insert(part, prefix, false, &mut self.counters, &mut staged_reports)
+                .map_err(FeatureFailure::into_error)?;
+            }
+            for report in staged_reports {
+                self.reports.write(report)?;
             }
             self.counters.fragments += n - 1;
             let mut stmt = self
@@ -592,29 +723,38 @@ impl Build<'_> {
 pub(super) fn convert(
     input: &Path,
     output: &Path,
-    max_features: usize,
-    repair: bool,
-    ambiguous: bool,
     options: &VectorOptions,
-    reporter: &Reporter,
-) -> Result<Value, Error> {
+    attempt: &Attempt,
+) -> Result<CompletedVector, Error> {
+    let max_features = options.max_features;
+    let repair = options.repair;
+    let ambiguous = options.ambiguous_outlines;
     super::available()?;
     let started = Instant::now();
-    reporter.progress("ingestion", 0, None);
+    emit(
+        attempt,
+        RunEvent::Progress {
+            phase: "ingestion",
+            done: 0,
+            total: None,
+        },
+    )?;
     std::fs::create_dir_all(output.join("t"))?;
     let reuse = Reuse::new(output, options)?;
-    let mut reader = Reader::new(input, options, reuse.frame.clone())?;
-    let scratch = tempfile::tempdir_in(output.parent().unwrap_or(Path::new(".")))?;
+    let mut reader = Reader::new(input, options, reuse.frame.clone(), output)?;
+    let scratch = tempfile::tempdir_in(output)?;
     let spool: PathBuf = scratch.path().join("features.sqlite");
     let db = Connection::open(&spool).map_err(sql)?;
-    db.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-32768;
+    db.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-32768;
         CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,fingerprint TEXT,sortkey TEXT);
         CREATE INDEX paths ON features(path);
         CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,PRIMARY KEY(x,y,z)) WITHOUT ROWID;
         BEGIN;").map_err(sql)?;
     let counters = RefCell::new(Counters::default());
     let reports = RefCell::new(Reports {
-        file: std::fs::File::create(output.join("geometry-reports.jsonl"))?,
+        file: Box::new(std::fs::File::create(
+            output.join("geometry-reports.jsonl"),
+        )?),
         first: Vec::new(),
         count: 0,
     });
@@ -622,33 +762,19 @@ pub(super) fn convert(
     let first_failure = RefCell::new(None);
     reader.read(
         options,
-        |mut feature| {
-            db.execute_batch("SAVEPOINT feature;").map_err(sql)?;
-            let result = (|| {
-                let geometry_reports = geometry::validate(&mut feature, repair, ambiguous)?;
-                Spool {
-                    db: &db,
-                    repair,
-                    options,
-                }
-                .insert(
-                    feature,
-                    "",
-                    true,
-                    &mut counters.borrow_mut(),
-                    &mut reports.borrow_mut(),
-                )?;
-                for report in geometry_reports {
-                    reports.borrow_mut().write(report)?;
-                }
-                counters.borrow_mut().features += 1;
-                Ok(())
-            })();
-            if result.is_err() {
-                db.execute_batch("ROLLBACK TO feature;").map_err(sql)?;
-            }
-            db.execute_batch("RELEASE feature;").map_err(sql)?;
-            result
+        |feature| -> FeatureResult<()> {
+            attempt
+                .check()
+                .map_err(|error| Error::Job(attempt.fail(error)))?;
+            accept_feature(
+                &db,
+                feature,
+                repair,
+                ambiguous,
+                options,
+                &mut counters.borrow_mut(),
+                &mut reports.borrow_mut(),
+            )
         },
         |mut value, invalid| {
             if invalid {
@@ -672,7 +798,13 @@ pub(super) fn convert(
                     value["sourceId"].as_str().unwrap_or(""),
                     value["reason"].as_str().unwrap_or("")
                 );
-                reporter.warn(&message, Some(&value));
+                emit(
+                    attempt,
+                    RunEvent::Warning {
+                        code: "vector-feature-rejected",
+                        message: &message,
+                    },
+                )?;
             }
             reports.borrow_mut().write(value)
         },
@@ -682,7 +814,14 @@ pub(super) fn convert(
     }
     let ingestion_seconds = started.elapsed().as_secs_f64();
     let ingested = counters.borrow().features as u64;
-    reporter.progress("ingestion", ingested, ingested);
+    emit(
+        attempt,
+        RunEvent::Progress {
+            phase: "ingestion",
+            done: ingested,
+            total: Some(ingested),
+        },
+    )?;
     db.execute_batch("COMMIT;").map_err(sql)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
@@ -719,7 +858,7 @@ pub(super) fn convert(
         .build()
         .map_err(|e| Error::Environment(format!("cannot start vector workers: {e}")))?;
     let mut build = Build {
-        reporter,
+        attempt,
         db: &db,
         spool: &spool,
         output,
@@ -811,7 +950,7 @@ pub(super) fn convert(
         .reuse
         .publish(&mut manifest, frame, explicit_root.as_ref())?;
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
-    build.reports.file.flush()?;
+    build.reports.finish()?;
     let shared: usize = db
         .query_row("SELECT COUNT(*) FROM vertices WHERE shared=1", [], |r| {
             Ok(r.get::<_, i64>(0)? as usize)
@@ -870,12 +1009,335 @@ pub(super) fn convert(
     if !options.explicit {
         report["tiling"] = json!("implicit");
     }
-    crate::output::write_report(output, report, true)
+    let report = crate::output::write_report(output, report, true)?;
+    // Close resources explicitly before inventory admission. Earlier failures
+    // leave scratch beneath the facade-owned workspace for required cleanup.
+    drop(build);
+    db.close().map_err(|(_, error)| sql(error))?;
+    scratch.close()?;
+    let members = final_members(output)?;
+    Ok(CompletedVector { report, members })
 }
 
 #[cfg(test)]
 mod countries_fragment_tests {
     use super::*;
+
+    fn fixture_db() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
+        db
+    }
+    fn fixture_feature(geometry: Geometry) -> Feature {
+        Feature {
+            properties: BTreeMap::from([
+                ("_source_id".into(), json!("fixture")),
+                ("_source_layer".into(), json!("test")),
+            ]),
+            geometry,
+            intrinsic: None,
+            surface_fragment: false,
+            triangle_boundaries: Vec::new(),
+            fragment_path: String::new(),
+        }
+    }
+    fn fixture_reports() -> Reports {
+        Reports {
+            file: Box::new(Vec::<u8>::new()),
+            first: Vec::new(),
+            count: 0,
+        }
+    }
+    #[test]
+    fn sql_admission_faults_are_fatal_and_do_not_commit_delta() {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization, TransactionOperation};
+        for fault in ["savepoint", "insert", "release", "rollback"] {
+            let db = fixture_db();
+            db.authorizer(Some(move |context: AuthContext<'_>| {
+                let deny = match context.action {
+                    AuthAction::Savepoint {
+                        operation: TransactionOperation::Begin,
+                        ..
+                    } => fault == "savepoint",
+                    AuthAction::Savepoint {
+                        operation: TransactionOperation::Release,
+                        ..
+                    } => fault == "release",
+                    AuthAction::Savepoint {
+                        operation: TransactionOperation::Rollback,
+                        ..
+                    } => fault == "rollback",
+                    AuthAction::Insert { table_name } => {
+                        fault == "insert" && table_name == "features"
+                    }
+                    _ => false,
+                };
+                if deny {
+                    Authorization::Deny
+                } else {
+                    Authorization::Allow
+                }
+            }))
+            .unwrap();
+            let feature = if fault == "rollback" {
+                fixture_feature(Geometry::LineString(Vec::new()))
+            } else {
+                fixture_feature(Geometry::Point([0.; 3]))
+            };
+            let mut counters = Counters::default();
+            let mut reports = fixture_reports();
+            let options = VectorOptions {
+                skip_invalid: true,
+                ..VectorOptions::default()
+            };
+            let error = accept_feature(
+                &db,
+                feature,
+                false,
+                false,
+                &options,
+                &mut counters,
+                &mut reports,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error, FeatureFailure::Fatal(_)),
+                "{fault}: {error}"
+            );
+            assert_eq!(
+                (
+                    counters.features,
+                    counters.fragmented_polygons,
+                    reports.count
+                ),
+                (0, 0, 0)
+            );
+            assert!(reports.first.is_empty());
+            if fault == "rollback" {
+                let FeatureFailure::Fatal(Error::Job(failure)) = error else {
+                    panic!("cleanup must preserve both causes")
+                };
+                assert_eq!(failure.error.kind(), crate::JobErrorKind::Io);
+                assert!(failure.error.to_string().contains("not authorized"));
+                assert_eq!(failure.secondary.len(), 1);
+                assert!(failure.secondary[0]
+                    .to_string()
+                    .contains("empty/degenerate feature"));
+            }
+        }
+    }
+    struct ReportFault {
+        flush: bool,
+    }
+    impl Write for ReportFault {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if self.flush {
+                Ok(bytes.len())
+            } else {
+                Err(std::io::Error::from_raw_os_error(28))
+            }
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from_raw_os_error(28))
+        }
+    }
+    #[test]
+    fn required_report_write_and_finalization_failures_remain_io_fatal() {
+        let db = fixture_db();
+        let ring: Vec<_> = (0..=20)
+            .map(|i| {
+                let angle = (i % 20) as f64 * std::f64::consts::TAU / 20.;
+                [angle.cos(), angle.sin(), 0.]
+            })
+            .collect();
+        let options = VectorOptions {
+            max_vertices: 16,
+            max_bytes: 100_000,
+            skip_invalid: true,
+            explicit: true,
+            ..VectorOptions::default()
+        };
+        let mut counters = Counters::default();
+        let mut reports = Reports {
+            file: Box::new(ReportFault { flush: false }),
+            first: Vec::new(),
+            count: 0,
+        };
+        let error = accept_feature(
+            &db,
+            fixture_feature(Geometry::Polygon(vec![ring.clone()])),
+            false,
+            false,
+            &options,
+            &mut counters,
+            &mut reports,
+        )
+        .unwrap_err();
+        let FeatureFailure::Fatal(Error::Io(error)) = error else {
+            panic!("report ENOSPC must be fatal I/O")
+        };
+        assert_eq!(error.raw_os_error(), Some(28));
+        assert_eq!(
+            (
+                counters.features,
+                counters.fragmented_polygons,
+                reports.count
+            ),
+            (0, 0, 0)
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM features", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        // A later rollback failure must not replace the first fatal ENOSPC.
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization, TransactionOperation};
+        db.authorizer(Some(|context: AuthContext<'_>| {
+            if matches!(
+                context.action,
+                AuthAction::Savepoint {
+                    operation: TransactionOperation::Rollback,
+                    ..
+                }
+            ) {
+                Authorization::Deny
+            } else {
+                Authorization::Allow
+            }
+        }))
+        .unwrap();
+        let combined = accept_feature(
+            &db,
+            fixture_feature(Geometry::Polygon(vec![ring])),
+            false,
+            false,
+            &options,
+            &mut counters,
+            &mut reports,
+        )
+        .unwrap_err();
+        let FeatureFailure::Fatal(Error::Job(failure)) = combined else {
+            panic!("both fatal causes must survive")
+        };
+        let source = std::error::Error::source(&failure.error)
+            .unwrap()
+            .downcast_ref::<std::io::Error>()
+            .unwrap();
+        assert_eq!(source.raw_os_error(), Some(28));
+        assert_eq!(failure.secondary.len(), 1);
+        assert!(failure.secondary[0].to_string().contains("not authorized"));
+        reports.file = Box::new(ReportFault { flush: true });
+        let Error::Io(error) = reports.finish().unwrap_err() else {
+            panic!("flush ENOSPC must remain I/O")
+        };
+        assert_eq!(error.raw_os_error(), Some(28));
+    }
+    #[test]
+    fn ingestion_commit_fault_is_fatal() {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+        let db = fixture_db();
+        db.execute_batch("BEGIN;").unwrap();
+        db.authorizer(Some(|context: AuthContext<'_>| {
+            if matches!(context.action, AuthAction::Transaction { .. }) {
+                Authorization::Deny
+            } else {
+                Authorization::Allow
+            }
+        }))
+        .unwrap();
+        let error = db.execute_batch("COMMIT;").map_err(sql).unwrap_err();
+        assert!(matches!(error, Error::Io(_)));
+        assert!(error.to_string().contains("not authorized"));
+    }
+
+    #[test]
+    fn rejected_late_fragment_restores_exact_sql_inventory() {
+        // Fixture expectation is independent of Spool traversal: only the
+        // pre-existing accepted source row and its two vertices may survive.
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
+        let make = |id: &str, geometry: Geometry| Feature {
+            properties: BTreeMap::from([
+                ("_source_id".into(), json!(id)),
+                ("_source_layer".into(), json!("fixture")),
+            ]),
+            geometry,
+            intrinsic: None,
+            surface_fragment: false,
+            triangle_boundaries: Vec::new(),
+            fragment_path: String::new(),
+        };
+        insert_row(
+            &db,
+            &make(
+                "accepted",
+                Geometry::LineString(vec![[10., 0., 0.], [11., 0., 0.]]),
+            ),
+            "",
+        )
+        .unwrap();
+        let options = VectorOptions {
+            max_vertices: 2,
+            max_bytes: 1_000_000,
+            explicit: true,
+            ..VectorOptions::default()
+        };
+        let rejected = make(
+            "rejected",
+            Geometry::MultiLineString(vec![
+                vec![[0., 0., 0.], [1., 0., 0.]],
+                vec![[-1e39, 0., 0.], [1e39, 0., 0.]],
+            ]),
+        );
+        db.execute_batch("SAVEPOINT feature;").unwrap();
+        let outcome = Spool {
+            db: &db,
+            repair: false,
+            options: &options,
+        }
+        .insert(
+            rejected,
+            "",
+            true,
+            &mut Counters::default(),
+            &mut Vec::new(),
+        );
+        assert!(matches!(outcome, Err(FeatureFailure::Rejected(_))));
+        let provisional: i64 = db
+            .query_row("SELECT COUNT(*) FROM features", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            provisional, 2,
+            "fixture must exercise insertion before rejection"
+        );
+        db.execute_batch("ROLLBACK TO feature; RELEASE feature;")
+            .unwrap();
+        let mut query = db.prepare("SELECT data FROM features ORDER BY id").unwrap();
+        let inventory: Vec<(String, String, String)> = query
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(|row| {
+                let feature: Feature = serde_json::from_str(&row.unwrap()).unwrap();
+                (
+                    feature.layer().to_string(),
+                    feature.source_id().as_str().unwrap().to_string(),
+                    feature.fragment_path,
+                )
+            })
+            .collect();
+        assert_eq!(
+            inventory,
+            vec![("fixture".into(), "accepted".into(), "".into())]
+        );
+        let vertices: Vec<(f64, f64, f64, i64)> = db
+            .prepare("SELECT x,y,z,shared FROM vertices ORDER BY x,y,z")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(vertices, vec![(10., 0., 0., 0), (11., 0., 0., 0)]);
+    }
 
     #[test]
     fn source_boundaries_outside_a_fill_triangle_enter_spool_bounds() {
@@ -942,13 +1404,7 @@ mod countries_fragment_tests {
                 })
             })
             .collect();
-        let temp = tempfile::tempfile().unwrap();
-        let mut reports = Reports {
-            file: temp,
-            first: vec![],
-            count: 0,
-        };
-        let parts = split(&feature, false, &mut Counters::default(), &mut reports).unwrap();
+        let parts = split(&feature, false, &mut Counters::default(), &mut Vec::new()).unwrap();
         let actual: BTreeSet<_> = parts
             .iter()
             .flat_map(|f| f.triangle_boundaries.iter().flatten())

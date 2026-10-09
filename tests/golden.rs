@@ -126,8 +126,16 @@ fn derivative_missing_inputs_do_not_publish_output() {
     let tmp = tempfile::tempdir().unwrap();
     let output = tmp.path().join("out");
     let input = tmp.path().join("missing");
-    let err = vector::vector_to_3tz(&input, &output, 64, false, false).unwrap_err();
-    assert!(matches!(err, rusty_tiles::Error::InputNotFound(_)));
+    let err = vector::vector_to_archive(
+        vector::VectorRequest::new(
+            &input,
+            output.with_extension("3tz"),
+            vector::VectorOptions::default(),
+        ),
+        &rusty_tiles::RunControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(err.error.kind(), rusty_tiles::JobErrorKind::Io);
     let err = terrain::dem_to_terrain(
         &input,
         &output,

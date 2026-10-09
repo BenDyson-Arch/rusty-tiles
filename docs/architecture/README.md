@@ -55,6 +55,7 @@ remain proposals wherever the concrete scope has not adopted them.
 - [Post-F0 audit and ordered scopes](next-foundation-scopes.md)
 - [F0 implementation and migrations](f0-implementation.md)
 - [F0 acceptance evidence](f0-evidence.md)
+- [Vector feature acceptance and publication contract](vector-acceptance-contract.md)
 - [Foundation contracts and first implementation slice](foundation-contracts.md)
 - [Boundary/conditional-complexity audit](boundary-audit.md)
 - [Publication primitive evidence](platform-evidence.md)

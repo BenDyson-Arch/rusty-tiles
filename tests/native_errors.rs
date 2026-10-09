@@ -112,8 +112,8 @@ fn option_errors_name_the_flag() {
             .output()
             .unwrap();
         let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-        assert_eq!(result.status.code(), Some(3), "{extra:?}");
-        assert_eq!(report["error"]["code"], "data");
+        assert_eq!(result.status.code(), Some(2), "{extra:?}");
+        assert_eq!(report["error"]["code"], "invalid_request");
         assert!(
             report["error"]["message"]
                 .as_str()

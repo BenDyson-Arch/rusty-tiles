@@ -59,7 +59,7 @@ staging and atomic archive replacement.
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, `source_crs="local"`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
-| `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage |
+| `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `convert_to_implicit(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the validation dictionary; always uses the bundled validator |
@@ -182,6 +182,10 @@ Vector keyword defaults are `force=False`, `source_crs=None`, `height_offset=Non
 Layer and field selections are lists of strings. `where_clause` is a read-only
 SQLite expression, `list_fields="json"` preserves list/object fields as JSON
 strings, and `reuse_tileset` names an earlier compatible portable archive.
+The returned `VectorResult` exposes `output`, `archive=True`, the finalized
+`report`, and `cleanup_diagnostics`. Only explicitly typed feature rejections
+are skippable. I/O, source reads, SQLite, required report writes, cancellation
+and callback failures abort even with `skip_invalid=True`.
 See [vector conversion](../../docs/VECTOR.md) for geometry, filtering, repair
 and reuse limits. Close or checkpoint a GeoPackage with unmerged WAL edits
 before conversion.
@@ -198,15 +202,16 @@ Conversions release the GIL. A callback can run on a Rust worker thread;
 Blender callers should queue events for their main thread before changing
 Blender state. The first callback exception is saved, later callbacks are
 skipped, and the original exception is raised after Rust finishes. A callback
-exception does not cancel these converters, so the output may already exist.
+exception does not cancel the legacy mesh/point converters, so their output may already exist.
 
-Packaging uses a fallible synchronous callback. Every package callback finishes
+Packaging, local mesh, raster directory and vector conversion use a fallible
+synchronous callback. Every callback for these operations finishes
 before sealing and installation, including `ready_to_publish`. A callback
 exception aborts before publication and preserves the existing destination,
 including with `force=True`. The original exception is raised when observer
 failure is the job's selected primary cause; the first fatal cause accepted by
 the job gate is primary and later failures are secondary. Nested calls and
-concurrent package calls use independent state. Packaging checks pending Python
+concurrent calls use independent state. These operations check pending Python
 signals during preparation and events, and does not deliberately check them
 after installation. Python asynchronous interruption or allocation failure
 after commitment can still interrupt caller-side execution.

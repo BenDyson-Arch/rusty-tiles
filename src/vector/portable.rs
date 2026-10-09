@@ -4,6 +4,7 @@
 //! at a time; original JSON scalars and IDs never pass through float coercions.
 //! GeoPackage geometry is standard GP binary with ISO WKB, decoded by geozero.
 use super::super::source_fields;
+use super::acceptance::{FeatureFailure, FeatureResult};
 use super::*;
 use geozero::{CoordDimensions, GeomProcessor, GeozeroGeometry};
 use rusqlite::{
@@ -21,7 +22,16 @@ use std::{
 };
 
 fn input_sql(error: rusqlite::Error) -> Error {
-    data(format!("vector input: {error}"))
+    Error::Io(std::io::Error::other(error))
+}
+// Only SQL expression errors are bad input; allocation, storage and access
+// failures keep the original SQLite cause and abort the operation.
+fn filter_sql(error: rusqlite::Error) -> Error {
+    if error.sqlite_error_code() == Some(rusqlite::ErrorCode::Unknown) {
+        data(format!("invalid attribute filter: {error}"))
+    } else {
+        input_sql(error)
+    }
 }
 fn quoted(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
@@ -60,7 +70,7 @@ enum Source {
     Gpkg(GpkgSource),
 }
 pub(super) struct Reader {
-    source: Source,
+    source: Option<Source>,
     pub driver: String,
     pub schemas: BTreeMap<String, String>,
     pub layer_reports: Vec<Value>,
@@ -69,7 +79,12 @@ pub(super) struct Reader {
 }
 
 impl Reader {
-    pub fn new(input: &Path, options: &VectorOptions, frame: Option<Frame>) -> Result<Self, Error> {
+    pub fn new(
+        input: &Path,
+        options: &VectorOptions,
+        frame: Option<Frame>,
+        scratch: &Path,
+    ) -> Result<Self, Error> {
         validate_filter(options.where_clause.as_deref())?;
         let extension = input.extension().and_then(|s| s.to_str()).unwrap_or("");
         let source = if extension.eq_ignore_ascii_case("gpkg") {
@@ -77,7 +92,7 @@ impl Reader {
         } else if extension.eq_ignore_ascii_case("geojson")
             || extension.eq_ignore_ascii_case("json")
         {
-            Source::GeoJson(open_geojson(input, options)?)
+            Source::GeoJson(open_geojson(input, options, scratch)?)
         } else {
             return Err(Error::Environment("portable vector input supports GeoJSON and GeoPackage; use native-geospatial for other drivers".into()));
         };
@@ -99,7 +114,7 @@ impl Reader {
         }
         Ok(Self {
             driver: driver.into(),
-            source,
+            source: Some(source),
             schemas: BTreeMap::new(),
             layer_reports: Vec::new(),
             frame,
@@ -110,8 +125,30 @@ impl Reader {
     pub fn read(
         &mut self,
         options: &VectorOptions,
-        mut accept: impl FnMut(Feature) -> Result<(), Error>,
+        mut accept: impl FnMut(Feature) -> FeatureResult<()>,
         mut report: impl FnMut(Value, bool) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        if self.source.is_none() {
+            return Err(data("vector reader has already been consumed"));
+        }
+        let result = self.read_features(options, &mut accept, &mut report);
+        let closed = match self.source.take().unwrap() {
+            Source::GeoJson(GeoJsonSource { db, _file, .. }) => {
+                let closed = db.close().map_err(|(_, error)| input_sql(error));
+                let removed = _file.close().map_err(Error::from);
+                combine_source_results(closed, removed)
+            }
+            Source::Gpkg(GpkgSource { db, .. }) => {
+                db.close().map_err(|(_, error)| input_sql(error))
+            }
+        };
+        combine_source_results(result, closed)
+    }
+    fn read_features(
+        &mut self,
+        options: &VectorOptions,
+        accept: &mut impl FnMut(Feature) -> FeatureResult<()>,
+        report: &mut impl FnMut(Value, bool) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let local = options.source_crs.as_deref() == Some("local");
         if local && options.height_offset.is_some() {
@@ -119,7 +156,7 @@ impl Reader {
                 "local XYZ is in metres; height-offset is for geospatial placement",
             ));
         }
-        let (db, layers, geojson, row_column) = match &self.source {
+        let (db, layers, geojson, row_column) = match self.source.as_ref().unwrap() {
             Source::GeoJson(source) => (
                 &source.db,
                 vec![source.layer.clone()],
@@ -145,7 +182,7 @@ impl Reader {
                         })?,
                 )
             };
-            let mut transform = definition
+            let transform = definition
                 .map(|definition| {
                     crate::crs::Transform::new(definition, options.height_offset.unwrap_or(0.))
                 })
@@ -156,24 +193,6 @@ impl Reader {
                 .iter()
                 .filter(|field| source_fields::keep(options, &field.name))
                 .collect();
-            for field in &fields {
-                if matches!(field.name.as_str(), "_source_id" | "_source_layer") {
-                    return Err(data(format!("reserved source property: {}", field.name)));
-                }
-                let kind = if field.kind == "list" && options.list_fields == "json" {
-                    json_fields.insert(field.name.clone());
-                    "string"
-                } else {
-                    field.kind.as_str()
-                };
-                if !matches!(kind, "boolean" | "integer" | "real" | "string") {
-                    return Err(data(format!(
-                        "unsupported field type for {name}.{}",
-                        field.name
-                    )));
-                }
-                source_fields::register(&mut self.schemas, &field.name, kind)?;
-            }
             let expression = options.where_clause.as_deref().unwrap_or("1");
             let query = if geojson && row_column.is_empty() {
                 "SELECT seq,json FROM rusty_features ORDER BY seq".into()
@@ -192,9 +211,7 @@ impl Reader {
                     quoted(&layer.fid)
                 )
             };
-            let mut statement = db
-                .prepare(&query)
-                .map_err(|error| data(format!("invalid attribute filter: {error}")))?;
+            let mut statement = db.prepare(&query).map_err(filter_sql)?;
             if !statement.readonly() || statement.parameter_count() != 0 {
                 return Err(data(
                     "invalid attribute filter: expected a read-only expression without parameters",
@@ -221,11 +238,13 @@ impl Reader {
                         native.get("properties"),
                         None | Some(Value::Null | Value::Object(_))
                     ) {
-                        Err(data("GeoJSON feature properties must be an object or null"))
+                        Err(FeatureFailure::reject(
+                            "GeoJSON feature properties must be an object or null",
+                        ))
                     } else if let Some(geometry) = native.get("geometry") {
                         decode_geojson(geometry, options.max_source_vertices)
                     } else {
-                        Err(data(
+                        Err(FeatureFailure::reject(
                             "GeoJSON feature needs a geometry member (null is allowed)",
                         ))
                     }
@@ -235,7 +254,9 @@ impl Reader {
                         ValueRef::Blob(blob) => {
                             decode_gpkg(blob, layer.srs, options.max_source_vertices)
                         }
-                        _ => Err(data("GeoPackage geometry must be a binary blob or null")),
+                        _ => Err(FeatureFailure::reject(
+                            "GeoPackage geometry must be a binary blob or null",
+                        )),
                     }
                 };
                 if matches!(decoded, Ok(None)) {
@@ -247,20 +268,45 @@ impl Reader {
                     )?;
                     continue;
                 }
-                let result = (|| {
+                let mut proposed_schemas = self.schemas.clone();
+                let mut proposed_json_fields = json_fields.clone();
+                let mut proposed_frame = self.frame.clone();
+                let result = (|| -> FeatureResult<()> {
                     let (mut geometry, has_z) = decoded?.unwrap();
+                    for field in fields.iter().filter(|_| !geojson) {
+                        if matches!(field.name.as_str(), "_source_id" | "_source_layer") {
+                            return Err(FeatureFailure::reject(format!(
+                                "reserved source property: {}",
+                                field.name
+                            )));
+                        }
+                        let kind = if field.kind == "list" && options.list_fields == "json" {
+                            proposed_json_fields.insert(field.name.clone());
+                            "string"
+                        } else {
+                            field.kind.as_str()
+                        };
+                        if !matches!(kind, "boolean" | "integer" | "real" | "string") {
+                            return Err(FeatureFailure::reject(format!(
+                                "unsupported field type for {name}.{}",
+                                field.name
+                            )));
+                        }
+                        source_fields::register(&mut proposed_schemas, &field.name, kind)?;
+                    }
+
                     if !geojson {
                         validate_declared_geometry(&layer, &geometry, has_z)?;
                     }
                     if has_z && !local && !geojson && options.height_offset.is_none() {
-                        return Err(data("3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres, or --sourceCrs with the correct compound CRS"));
+                        return Err(FeatureFailure::reject("3D horizontal-CRS input requires explicit height-offset to ellipsoidal metres, or --sourceCrs with the correct compound CRS"));
                     }
                     let mut properties = if let Some(native) = &native {
                         source_fields::geojson_properties(
                             native,
                             options,
-                            &mut self.schemas,
-                            &mut json_fields,
+                            &mut proposed_schemas,
+                            &mut proposed_json_fields,
                         )?
                     } else {
                         let mut properties = BTreeMap::new();
@@ -283,19 +329,29 @@ impl Reader {
                             .and_then(crate::crs::Transform::polygon_units),
                     )?;
                     let points: Vec<_> = geometry.points().copied().collect();
-                    let points = if let Some(transform) = &mut transform {
+                    // A rejected feature must not select a persistent fallback
+                    // backend for later accepted coordinates.
+                    let mut candidate_transform = definition
+                        .map(|definition| {
+                            crate::crs::Transform::new(
+                                definition,
+                                options.height_offset.unwrap_or(0.),
+                            )
+                        })
+                        .transpose()?;
+                    let points = if let Some(transform) = &mut candidate_transform {
                         transform.transform(&points)?
                     } else {
                         points
                     };
-                    if self.frame.is_none() {
-                        self.frame = Some(if local {
+                    if proposed_frame.is_none() {
+                        proposed_frame = Some(if local {
                             Frame::local(points[0])
                         } else {
                             Frame::georeferenced(points[0])?
                         });
                     }
-                    let frame = self.frame.as_ref().unwrap();
+                    let frame = proposed_frame.as_ref().unwrap();
                     if let Some(intrinsic) = &mut intrinsic {
                         intrinsic.earth_center = frame.project([0.; 3]);
                     }
@@ -313,12 +369,17 @@ impl Reader {
                     })
                 })();
                 match result {
-                    Ok(()) => accepted += 1,
-                    Err(error @ Error::Environment(_)) => return Err(error),
-                    Err(error) => {
+                    Ok(()) => {
+                        accepted += 1;
+                        self.frame = proposed_frame;
+                        self.schemas = proposed_schemas;
+                        json_fields = proposed_json_fields;
+                    }
+                    Err(FeatureFailure::Fatal(error)) => return Err(error),
+                    Err(FeatureFailure::Rejected(error)) => {
                         rejected += 1;
                         report(
-                            json!({"sourceLayer":name,"sourceId":id,"reason":error.to_string()}),
+                            json!({"sourceLayer":name,"sourceId":id,"reason":error.message}),
                             true,
                         )?;
                     }
@@ -334,7 +395,32 @@ impl Reader {
     }
 }
 
-fn sql_property(value: ValueRef<'_>, kind: &str, name: &str) -> Result<Value, Error> {
+fn combine_source_results(
+    result: Result<(), Error>,
+    closed: Result<(), Error>,
+) -> Result<(), Error> {
+    match (result, closed) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Ok(()), Err(error)) | (Err(error), Ok(())) => Err(error),
+        (Err(primary), Err(secondary)) => {
+            let secondary = super::super::job_error(secondary);
+            match primary {
+                Error::Job(mut failure) => {
+                    failure.secondary.push(secondary);
+                    Err(Error::Job(failure))
+                }
+                primary => Err(Error::Job(crate::JobFailure {
+                    error: super::super::job_error(primary),
+                    secondary: vec![secondary],
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })),
+            }
+        }
+    }
+}
+
+fn sql_property(value: ValueRef<'_>, kind: &str, name: &str) -> Result<Value, FeatureFailure> {
     Ok(match (value, kind) {
         (ValueRef::Null, _) => Value::Null,
         (ValueRef::Integer(value), "boolean") if matches!(value, 0 | 1) => json!(value != 0),
@@ -346,8 +432,12 @@ fn sql_property(value: ValueRef<'_>, kind: &str, name: &str) -> Result<Value, Er
         }
         (ValueRef::Real(value), "real") if value.is_finite() => json!(value),
         (ValueRef::Text(value), "string") => json!(std::str::from_utf8(value)
-            .map_err(|_| data(format!("invalid UTF-8 property: {name}")))?),
-        _ => return Err(data(format!("invalid typed property: {name}"))),
+            .map_err(|_| FeatureFailure::reject(format!("invalid UTF-8 property: {name}")))?),
+        _ => {
+            return Err(FeatureFailure::reject(format!(
+                "invalid typed property: {name}"
+            )))
+        }
     })
 }
 
@@ -449,6 +539,7 @@ struct JsonSpool<'a> {
     next: i64,
     kinds: BTreeMap<String, Option<String>>,
     large_unsigned: bool,
+    failure: Option<Error>,
     options: &'a VectorOptions,
 }
 impl JsonSpool<'_> {
@@ -480,10 +571,11 @@ impl JsonSpool<'_> {
                 };
                 match current.as_deref() {
                     None => *current = Some(kind.into()),
-                    Some(previous) if previous == kind => {},
-                    Some("integer" | "real") if matches!(kind, "integer" | "real") => *current = Some("real".into()),
-                    Some(_) if source_fields::keep(self.options, name) => return Err(data(format!("incompatible scalar schemas for {name:?}; convert these layers separately"))),
-                    Some(_) => {},
+                    Some(previous) if previous == kind => {}
+                    Some("integer" | "real") if matches!(kind, "integer" | "real") => {
+                        *current = Some("real".into())
+                    }
+                    Some(_) => *current = Some("string".into()),
                 }
             }
         }
@@ -573,9 +665,11 @@ impl<'de> DeserializeSeed<'de> for FeaturesSeed<'_, '_> {
             }
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<(), A::Error> {
                 while let Some(feature) = seq.next_element::<UniqueValue>()? {
-                    self.0
-                        .feature(feature.0)
-                        .map_err(serde::de::Error::custom)?;
+                    if let Err(error) = self.0.feature(feature.0) {
+                        let message = error.to_string();
+                        self.0.failure = Some(error);
+                        return Err(serde::de::Error::custom(message));
+                    }
                 }
                 Ok(())
             }
@@ -624,8 +718,12 @@ impl<'de> DeserializeSeed<'de> for RootSeed<'_, '_> {
     }
 }
 
-fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, Error> {
-    let file = tempfile::NamedTempFile::new()?;
+fn open_geojson(
+    input: &Path,
+    options: &VectorOptions,
+    scratch: &Path,
+) -> Result<GeoJsonSource, Error> {
+    let file = tempfile::NamedTempFile::new_in(scratch)?;
     let db = Connection::open(file.path()).map_err(input_sql)?;
     db.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false)
         .map_err(input_sql)?;
@@ -635,10 +733,13 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
         next: 0,
         kinds: BTreeMap::new(),
         large_unsigned: false,
+        failure: None,
         options,
     };
     let mut de = serde_json::Deserializer::from_reader(BufReader::new(File::open(input)?));
-    let (metadata, has_features) = RootSeed(&mut spool).deserialize(&mut de)?;
+    let parsed = RootSeed(&mut spool).deserialize(&mut de);
+    let (metadata, has_features) =
+        parsed.map_err(|error| spool.failure.take().unwrap_or(Error::Json(error)))?;
     de.end()?;
     let root = Value::Object(metadata);
     match root["type"].as_str() {
@@ -840,7 +941,7 @@ fn open_geojson(input: &Path, options: &VectorOptions) -> Result<GeoJsonSource, 
                 {
                     data(format!("invalid attribute filter: ambiguous GeoJSON property names {} use case-insensitive SQLite identifiers; rename these properties before filtering them", json!(ambiguous_names)))
                 } else {
-                    data(format!("invalid attribute filter: {e}"))
+                    filter_sql(e)
                 }
             })?;
         statement
@@ -904,7 +1005,7 @@ fn validate_declared_geometry(
     layer: &Layer,
     geometry: &Geometry,
     has_z: bool,
-) -> Result<(), Error> {
+) -> Result<(), FeatureFailure> {
     let actual = match geometry {
         Geometry::Point(_) => "POINT",
         Geometry::MultiPoint(_) => "MULTIPOINT",
@@ -918,12 +1019,12 @@ fn validate_declared_geometry(
         .as_deref()
         .is_some_and(|declared| declared != "GEOMETRY" && declared != actual)
     {
-        return Err(data(
+        return Err(FeatureFailure::reject(
             "GeoPackage geometry type differs from its layer declaration",
         ));
     }
     if (layer.z == 0 && has_z) || (layer.z == 1 && !has_z) || layer.m == 1 {
-        return Err(data(
+        return Err(FeatureFailure::reject(
             "GeoPackage geometry dimensions differ from its layer declaration",
         ));
     }
@@ -1123,7 +1224,7 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
                 quoted(&layer.name),
                 options.where_clause.as_deref().unwrap_or("1")
             ))
-            .map_err(|e| data(format!("invalid attribute filter: {e}")))?;
+            .map_err(filter_sql)?;
         if !statement.readonly() || statement.parameter_count() != 0 {
             return Err(data(
                 "invalid attribute filter: expected a read-only expression without parameters",
@@ -1138,8 +1239,8 @@ fn open_gpkg(input: &Path, options: &VectorOptions) -> Result<GpkgSource, Error>
     Ok(GpkgSource { db, layers })
 }
 
-fn vertex_limit() -> Error {
-    data("source feature exceeds maxSourceVertices; explicitly raise the limit or subdivide the source")
+fn vertex_limit() -> FeatureFailure {
+    FeatureFailure::reject("source feature exceeds maxSourceVertices; explicitly raise the limit or subdivide the source")
 }
 fn inspect_coordinates(
     value: &Value,
@@ -1147,17 +1248,17 @@ fn inspect_coordinates(
     count: &mut usize,
     limit: usize,
     has_z: &mut bool,
-) -> Result<(), Error> {
+) -> Result<(), FeatureFailure> {
     let array = value
         .as_array()
-        .ok_or_else(|| data("geometry coordinates must be arrays"))?;
+        .ok_or_else(|| FeatureFailure::reject("geometry coordinates must be arrays"))?;
     if nesting > 0 {
         for value in array {
             inspect_coordinates(value, nesting - 1, count, limit, has_z)?;
         }
     } else {
         if !matches!(array.len(), 2 | 3) {
-            return Err(data("coordinates must have exactly two or three ordinates; measured geometry is unsupported"));
+            return Err(FeatureFailure::reject("coordinates must have exactly two or three ordinates; measured geometry is unsupported"));
         }
         *count = count.checked_add(1).ok_or_else(vertex_limit)?;
         if *count > limit {
@@ -1165,12 +1266,12 @@ fn inspect_coordinates(
         }
         *has_z |= array.len() == 3;
         if !array.iter().all(|v| v.as_f64().is_some_and(f64::is_finite)) {
-            return Err(data("coordinates must be finite XYZ"));
+            return Err(FeatureFailure::reject("coordinates must be finite XYZ"));
         }
     }
     Ok(())
 }
-fn decode_geojson(value: &Value, limit: usize) -> Result<Option<(Geometry, bool)>, Error> {
+fn decode_geojson(value: &Value, limit: usize) -> Result<Option<(Geometry, bool)>, FeatureFailure> {
     if value.is_null() {
         return Ok(None);
     }
@@ -1179,8 +1280,12 @@ fn decode_geojson(value: &Value, limit: usize) -> Result<Option<(Geometry, bool)
         Some("MultiPoint" | "LineString") => 1,
         Some("MultiLineString" | "Polygon") => 2,
         Some("MultiPolygon") => 3,
-        Some(name) => return Err(data(format!("unsupported geometry: {name}"))),
-        None => return Err(data("geometry needs a type")),
+        Some(name) => {
+            return Err(FeatureFailure::reject(format!(
+                "unsupported geometry: {name}"
+            )))
+        }
+        None => return Err(FeatureFailure::reject("geometry needs a type")),
     };
     let mut count = 0;
     let mut has_z = false;
@@ -1201,7 +1306,7 @@ fn decode_geojson(value: &Value, limit: usize) -> Result<Option<(Geometry, bool)
     let mut builder = GeometryBuilder::new(limit);
     geozero::geojson::GeoJson(std::str::from_utf8(&bytes).unwrap())
         .process_geom(&mut builder)
-        .map_err(|e| data(format!("invalid GeoJSON geometry: {e}")))?;
+        .map_err(|e| FeatureFailure::reject(format!("invalid GeoJSON geometry: {e}")))?;
     Ok(Some((builder.finish()?, has_z)))
 }
 
@@ -1213,21 +1318,21 @@ struct WkbScan<'a> {
     has_z: bool,
 }
 impl WkbScan<'_> {
-    fn take<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+    fn take<const N: usize>(&mut self) -> Result<[u8; N], FeatureFailure> {
         let end = self
             .position
             .checked_add(N)
-            .ok_or_else(|| data("invalid WKB length"))?;
+            .ok_or_else(|| FeatureFailure::reject("invalid WKB length"))?;
         let value = self
             .bytes
             .get(self.position..end)
-            .ok_or_else(|| data("truncated WKB geometry"))?
+            .ok_or_else(|| FeatureFailure::reject("truncated WKB geometry"))?
             .try_into()
             .unwrap();
         self.position = end;
         Ok(value)
     }
-    fn int(&mut self, little: bool) -> Result<u32, Error> {
+    fn int(&mut self, little: bool) -> Result<u32, FeatureFailure> {
         let bytes = self.take()?;
         Ok(if little {
             u32::from_le_bytes(bytes)
@@ -1235,7 +1340,7 @@ impl WkbScan<'_> {
             u32::from_be_bytes(bytes)
         })
     }
-    fn float(&mut self, little: bool) -> Result<f64, Error> {
+    fn float(&mut self, little: bool) -> Result<f64, FeatureFailure> {
         let bytes = self.take()?;
         Ok(if little {
             f64::from_le_bytes(bytes)
@@ -1243,7 +1348,7 @@ impl WkbScan<'_> {
             f64::from_be_bytes(bytes)
         })
     }
-    fn point(&mut self, little: bool, z: bool, allow_empty: bool) -> Result<(), Error> {
+    fn point(&mut self, little: bool, z: bool, allow_empty: bool) -> Result<(), FeatureFailure> {
         let x = self.float(little)?;
         let y = self.float(little)?;
         let height = if z { self.float(little)? } else { 0. };
@@ -1251,7 +1356,7 @@ impl WkbScan<'_> {
             return Ok(());
         }
         if ![x, y, height].into_iter().all(f64::is_finite) {
-            return Err(data("coordinates must be finite XYZ"));
+            return Err(FeatureFailure::reject("coordinates must be finite XYZ"));
         }
         self.vertices = self.vertices.checked_add(1).ok_or_else(vertex_limit)?;
         if self.vertices > self.limit {
@@ -1259,36 +1364,46 @@ impl WkbScan<'_> {
         }
         Ok(())
     }
-    fn count(&mut self, little: bool) -> Result<usize, Error> {
+    fn count(&mut self, little: bool) -> Result<usize, FeatureFailure> {
         let size = self.int(little)? as usize;
         if size > self.limit {
             return Err(vertex_limit());
         }
         Ok(size)
     }
-    fn geometry(&mut self, expected: Option<(u32, bool)>, depth: usize) -> Result<(), Error> {
+    fn geometry(
+        &mut self,
+        expected: Option<(u32, bool)>,
+        depth: usize,
+    ) -> Result<(), FeatureFailure> {
         if depth > 64 {
-            return Err(data("WKB geometry nesting limit exceeded"));
+            return Err(FeatureFailure::reject(
+                "WKB geometry nesting limit exceeded",
+            ));
         }
         let endian = self.take::<1>()?[0];
         if endian > 1 {
-            return Err(data("invalid WKB byte order"));
+            return Err(FeatureFailure::reject("invalid WKB byte order"));
         }
         let little = endian == 1;
         let kind = self.int(little)?;
         let dimensions = kind / 1000;
         if matches!(dimensions, 2 | 3) {
-            return Err(data(
+            return Err(FeatureFailure::reject(
                 "measured geometry is unsupported; retain or explicitly remove M",
             ));
         }
         if dimensions > 1 {
-            return Err(data("unsupported WKB type or extended encoding"));
+            return Err(FeatureFailure::reject(
+                "unsupported WKB type or extended encoding",
+            ));
         }
         let kind = kind % 1000;
         let z = dimensions == 1;
         if expected.is_some_and(|expected| expected != (kind, z)) {
-            return Err(data("invalid WKB multi-geometry member type or dimensions"));
+            return Err(FeatureFailure::reject(
+                "invalid WKB multi-geometry member type or dimensions",
+            ));
         }
         self.has_z |= z;
         match kind {
@@ -1314,18 +1429,28 @@ impl WkbScan<'_> {
                     self.geometry(Some((kind - 3, z)), depth + 1)?;
                 }
             }
-            _ => return Err(data(format!("unsupported WKB geometry type: {kind}"))),
+            _ => {
+                return Err(FeatureFailure::reject(format!(
+                    "unsupported WKB geometry type: {kind}"
+                )))
+            }
         }
         Ok(())
     }
 }
 
-fn decode_gpkg(blob: &[u8], srs: i32, limit: usize) -> Result<Option<(Geometry, bool)>, Error> {
+fn decode_gpkg(
+    blob: &[u8],
+    srs: i32,
+    limit: usize,
+) -> Result<Option<(Geometry, bool)>, FeatureFailure> {
     if blob.len() < 8 || &blob[..2] != b"GP" {
-        return Err(data("invalid GeoPackage geometry header"));
+        return Err(FeatureFailure::reject("invalid GeoPackage geometry header"));
     }
     if blob[2] != 0 || blob[3] & 0xe0 != 0 {
-        return Err(data("unsupported extended GeoPackage geometry header"));
+        return Err(FeatureFailure::reject(
+            "unsupported extended GeoPackage geometry header",
+        ));
     }
     let flags = blob[3];
     let little = flags & 1 != 0;
@@ -1336,7 +1461,7 @@ fn decode_gpkg(blob: &[u8], srs: i32, limit: usize) -> Result<Option<(Geometry, 
         i32::from_be_bytes(raw_srs)
     };
     if raw_srs != srs {
-        return Err(data(
+        return Err(FeatureFailure::reject(
             "GeoPackage geometry SRS differs from its layer declaration",
         ));
     }
@@ -1346,16 +1471,20 @@ fn decode_gpkg(blob: &[u8], srs: i32, limit: usize) -> Result<Option<(Geometry, 
         1 => 32,
         2 => 48,
         3 | 4 => {
-            return Err(data(
+            return Err(FeatureFailure::reject(
                 "measured GeoPackage geometry envelopes are unsupported",
             ))
         }
-        _ => return Err(data("invalid GeoPackage envelope indicator")),
+        _ => {
+            return Err(FeatureFailure::reject(
+                "invalid GeoPackage envelope indicator",
+            ))
+        }
     };
     let offset = 8 + envelope_bytes;
     let wkb = blob
         .get(offset..)
-        .ok_or_else(|| data("truncated GeoPackage envelope"))?;
+        .ok_or_else(|| FeatureFailure::reject("truncated GeoPackage envelope"))?;
     for bounds in blob[8..offset].as_chunks::<16>().0 {
         let minimum: [u8; 8] = bounds[..8].try_into().unwrap();
         let maximum: [u8; 8] = bounds[8..].try_into().unwrap();
@@ -1365,7 +1494,7 @@ fn decode_gpkg(blob: &[u8], srs: i32, limit: usize) -> Result<Option<(Geometry, 
             (f64::from_be_bytes(minimum), f64::from_be_bytes(maximum))
         };
         if !minimum.is_finite() || !maximum.is_finite() || minimum > maximum {
-            return Err(data("invalid GeoPackage envelope bounds"));
+            return Err(FeatureFailure::reject("invalid GeoPackage envelope bounds"));
         }
     }
     let mut scan = WkbScan {
@@ -1377,21 +1506,27 @@ fn decode_gpkg(blob: &[u8], srs: i32, limit: usize) -> Result<Option<(Geometry, 
     };
     scan.geometry(None, 0)?;
     if scan.position != wkb.len() {
-        return Err(data("trailing bytes after GeoPackage WKB geometry"));
+        return Err(FeatureFailure::reject(
+            "trailing bytes after GeoPackage WKB geometry",
+        ));
     }
     let empty = flags & 0x10 != 0;
     if empty != (scan.vertices == 0) || (empty && envelope != 0) {
-        return Err(data("invalid GeoPackage empty geometry flag or envelope"));
+        return Err(FeatureFailure::reject(
+            "invalid GeoPackage empty geometry flag or envelope",
+        ));
     }
     if envelope == 2 && !scan.has_z {
-        return Err(data("GeoPackage XYZ envelope requires Z geometry"));
+        return Err(FeatureFailure::reject(
+            "GeoPackage XYZ envelope requires Z geometry",
+        ));
     }
     if scan.vertices == 0 {
         return Ok(None);
     }
     let mut builder = GeometryBuilder::new(limit);
     geozero::wkb::process_wkb_geom(&mut &wkb[..], &mut builder)
-        .map_err(|e| data(format!("invalid GeoPackage WKB geometry: {e}")))?;
+        .map_err(|e| FeatureFailure::reject(format!("invalid GeoPackage WKB geometry: {e}")))?;
     Ok(Some((builder.finish()?, scan.has_z)))
 }
 
@@ -1420,11 +1555,12 @@ impl GeometryBuilder {
             count: 0,
         }
     }
-    fn finish(self) -> Result<Geometry, Error> {
+    fn finish(self) -> Result<Geometry, FeatureFailure> {
         if !self.stack.is_empty() {
-            return Err(data("unclosed geometry"));
+            return Err(FeatureFailure::reject("unclosed geometry"));
         }
-        self.geometry.ok_or_else(|| data("empty geometry"))
+        self.geometry
+            .ok_or_else(|| FeatureFailure::reject("empty geometry"))
     }
     fn error(message: &str) -> geozero::error::GeozeroError {
         geozero::error::GeozeroError::Geometry(message.into())
@@ -1654,6 +1790,120 @@ mod tests {
     }
 
     #[test]
+    fn accept_io_failure_is_fatal_without_committing_reader_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.geojson");
+        source(
+            &path,
+            json!([
+                feature(json!(1), json!({"provisional": true}), point(10.)),
+                feature(json!(2), json!({"later": 3}), point(20.))
+            ]),
+        );
+        let before = fs::read(&path).unwrap();
+        let options = VectorOptions {
+            skip_invalid: true,
+            ..local_options()
+        };
+        let mut reader = Reader::new(&path, &options, None, dir.path()).unwrap();
+        let mut attempted = 0;
+        let mut reported = 0;
+        let failure = reader
+            .read(
+                &options,
+                |_| {
+                    attempted += 1;
+                    Err(FeatureFailure::Fatal(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::StorageFull,
+                        "injected accept ENOSPC",
+                    ))))
+                },
+                |_, _| {
+                    reported += 1;
+                    Ok(())
+                },
+            )
+            .unwrap_err();
+        assert!(
+            matches!(failure, Error::Io(ref error) if error.kind() == std::io::ErrorKind::StorageFull)
+        );
+        assert_eq!(attempted, 1);
+        assert_eq!(reported, 0);
+        assert!(reader.frame.is_none());
+        assert!(reader.schemas.is_empty());
+        assert!(reader.layer_reports.is_empty());
+        assert!(reader.source.is_none());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn source_query_failure_is_fatal_and_closes_owned_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.geojson");
+        source(&path, json!([feature(json!(1), json!({}), point(10.))]));
+        let before = fs::read(&path).unwrap();
+        let options = VectorOptions {
+            skip_invalid: true,
+            ..local_options()
+        };
+        let mut reader = Reader::new(&path, &options, None, dir.path()).unwrap();
+        let Some(Source::GeoJson(source)) = &reader.source else {
+            unreachable!()
+        };
+        source
+            .db
+            .authorizer(Some(|context: AuthContext<'_>| {
+                if matches!(context.action, AuthAction::Read { .. }) {
+                    Authorization::Deny
+                } else {
+                    Authorization::Allow
+                }
+            }))
+            .unwrap();
+        let failure = reader
+            .read(
+                &options,
+                |_| panic!("source failure reached acceptance"),
+                |_, _| panic!("source failure became feature rejection"),
+            )
+            .unwrap_err();
+        let Error::Io(error) = failure else {
+            panic!("source query failure lost its cause")
+        };
+        assert!(error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<rusqlite::Error>()
+            .is_some());
+        assert!(reader.source.is_none());
+        assert!(reader.frame.is_none());
+        assert!(reader.schemas.is_empty());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn sqlite_filter_storage_failure_preserves_original_cause() {
+        let error = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_FULL),
+            Some("injected disk full".into()),
+        );
+        let Error::Io(error) = filter_sql(error) else {
+            panic!("storage failure became invalid input")
+        };
+        let sqlite = error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<rusqlite::Error>()
+            .unwrap();
+        assert_eq!(
+            sqlite.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::DiskFull)
+        );
+    }
+
+    #[test]
     fn geojson_streams_original_ids_scalars_lists_and_late_metadata() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("input with spaces.geojson");
@@ -1674,7 +1924,7 @@ mod tests {
             ..local_options()
         };
         let before = fs::read(&path).unwrap();
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &options);
         assert_eq!(reader.driver, "GeoJSON");
         assert_eq!(reader.without_geometry, 1);
@@ -1729,7 +1979,7 @@ mod tests {
             fields: vec!["label".into()],
             ..local_options()
         };
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &options);
         assert_eq!(features.len(), 1);
         assert!(reports.is_empty());
@@ -1771,7 +2021,7 @@ mod tests {
                 fields: vec!["keep".into()],
                 ..local_options()
             };
-            let mut reader = Reader::new(&path, &options, None).unwrap();
+            let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
             let (features, reports) = read(&mut reader, &options);
             assert_eq!(features.len(), count, "{expression}");
             assert!(reports.is_empty());
@@ -1784,7 +2034,7 @@ mod tests {
             where_clause: Some("keep = 1".into()),
             ..local_options()
         };
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let features = read(&mut reader, &options).0;
         assert_eq!(features[0].properties["A"], 1);
         assert_eq!(features[0].properties["a"], 2);
@@ -1826,7 +2076,9 @@ mod tests {
                 fields: vec!["keep".into()],
                 ..local_options()
             };
-            let error = Reader::new(&path, &options, None).err().unwrap();
+            let error = Reader::new(&path, &options, None, path.parent().unwrap())
+                .err()
+                .unwrap();
             assert!(
                 error
                     .to_string()
@@ -1862,13 +2114,16 @@ mod tests {
                 where_clause: Some(expression.into()),
                 ..local_options()
             };
-            assert!(Reader::new(&path, &options, None).is_err(), "{expression}");
+            assert!(
+                Reader::new(&path, &options, None, path.parent().unwrap()).is_err(),
+                "{expression}"
+            );
         }
         let options = VectorOptions {
             where_clause: Some("name = 'x; DROP TABLE roads'".into()),
             ..local_options()
         };
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert!(read(&mut reader, &options).0.is_empty());
     }
 
@@ -1888,7 +2143,7 @@ mod tests {
             fields: vec!["name".into()],
             ..local_options()
         };
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 1);
         for options in [
             VectorOptions {
@@ -1904,12 +2159,16 @@ mod tests {
                 ..local_options()
             },
         ] {
-            assert!(Reader::new(&path, &options, None).is_err());
+            assert!(Reader::new(&path, &options, None, path.parent().unwrap()).is_err());
         }
-        let mut reader = Reader::new(&path, &local_options(), None).unwrap();
-        assert!(reader
-            .read(&local_options(), |_| Ok(()), |_, _| Ok(()))
-            .is_err());
+        let mut reader =
+            Reader::new(&path, &local_options(), None, path.parent().unwrap()).unwrap();
+        let (features, reports) = read(&mut reader, &local_options());
+        assert!(features.is_empty());
+        assert_eq!(reports.len(), 1);
+        assert!(reports[0].1);
+        assert!(reader.frame.is_none());
+        assert!(!reader.schemas.contains_key("name"));
     }
 
     #[test]
@@ -1925,7 +2184,7 @@ mod tests {
             ..local_options()
         };
         assert!(matches!(
-            Reader::new(&path, &options, None),
+            Reader::new(&path, &options, None, path.parent().unwrap()),
             Err(Error::Environment(_))
         ));
         source(
@@ -1937,7 +2196,7 @@ mod tests {
             )]),
         );
         let options = VectorOptions::default();
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, _) = read(&mut reader, &options);
         let expected =
             crate::georef::geodetic_to_ecef(crate::georef::Cartographic::new(153., -27., 123.));
@@ -2041,6 +2300,40 @@ mod tests {
     }
 
     #[test]
+    fn gpkg_incompatible_later_layer_rejects_only_candidate_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("source.gpkg");
+        gpkg(&path);
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(
+            "DROP TABLE sites; CREATE TABLE sites(fid INTEGER PRIMARY KEY, geom BLOB, large TEXT);",
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sites VALUES(9,?1,'different type')",
+            params![gpkg_blob(&point(5.), 4326)],
+        )
+        .unwrap();
+        db.close().unwrap();
+        let before = fs::read(&path).unwrap();
+        let options = VectorOptions {
+            fields: vec!["large".into()],
+            all_layers: true,
+            skip_invalid: true,
+            ..local_options()
+        };
+        let mut reader = Reader::new(&path, &options, None, dir.path()).unwrap();
+        let (features, reports) = read(&mut reader, &options);
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0].layer(), "roads");
+        assert_eq!(reports.iter().filter(|(_, invalid)| *invalid).count(), 1);
+        assert_eq!(reader.schemas["large"], "integer");
+        assert_eq!(reader.layer_reports[1]["features"], 0);
+        assert_eq!(reader.layer_reports[1]["invalidFeatures"], 1);
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
     fn gpkg_readonly_filters_typing_selection_and_nullable_fields_preserve_source() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("source with spaces.gpkg");
@@ -2050,9 +2343,9 @@ mod tests {
         options.where_clause =
             Some("large = 1152921504606846979 AND label = 'x; DROP TABLE roads'".into());
         options.fields.retain(|v| v != "large");
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert!(
-            matches!(&reader.source,Source::Gpkg(source) if source.db.is_readonly(rusqlite::MAIN_DB).unwrap())
+            matches!(&reader.source,Some(Source::Gpkg(source)) if source.db.is_readonly(rusqlite::MAIN_DB).unwrap())
         );
         let (features, reports) = read(&mut reader, &options);
         assert_eq!(features.len(), 1);
@@ -2063,7 +2356,7 @@ mod tests {
         assert_eq!(features[0].properties["flag"], true);
         assert_eq!(features[0].properties["created"], "2026-10-09");
         assert_eq!(fs::read(&path).unwrap(), before);
-        let mut reader = Reader::new(&path, &gpkg_options(), None).unwrap();
+        let mut reader = Reader::new(&path, &gpkg_options(), None, path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &gpkg_options());
         assert_eq!(
             features[0].properties["large"].as_i64(),
@@ -2075,12 +2368,12 @@ mod tests {
             layers: Vec::new(),
             ..gpkg_options()
         };
-        assert!(Reader::new(&path, &options, None).is_err());
+        assert!(Reader::new(&path, &options, None, path.parent().unwrap()).is_err());
         let options = VectorOptions {
             all_layers: true,
             ..options
         };
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 2);
         assert_eq!(reader.layer_reports.len(), 2);
         assert!(!dir.path().join("source with spaces.gpkg-journal").exists());
@@ -2093,14 +2386,14 @@ mod tests {
         gpkg(&path);
         let mut options = gpkg_options();
         options.source_crs = None;
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &options);
         assert!(features.is_empty());
         assert!(reports.iter().any(
             |(v, invalid)| *invalid && v["reason"].as_str().unwrap().contains("height-offset")
         ));
         options.height_offset = Some(5.);
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, _) = read(&mut reader, &options);
         assert_eq!(features.len(), 1);
         let expected =
@@ -2110,13 +2403,13 @@ mod tests {
         db.execute("UPDATE gpkg_spatial_ref_sys SET definition='undefined'", [])
             .unwrap();
         drop(db);
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert!(reader.read(&options, |_| Ok(()), |_, _| Ok(())).is_err());
         options.source_crs = Some("EPSG:4326".into());
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 1);
         options.source_crs = Some("local".into());
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert!(reader.read(&options, |_| Ok(()), |_, _| Ok(())).is_err());
     }
 
@@ -2142,7 +2435,8 @@ mod tests {
         );
         let options = local_options();
         let frame = Frame::local([100., 200., 300.]);
-        let mut reader = Reader::new(&path, &options, Some(frame.clone())).unwrap();
+        let mut reader =
+            Reader::new(&path, &options, Some(frame.clone()), path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &options);
         assert_eq!(features.len(), 1);
         assert_eq!(reports.len(), 2);
@@ -2167,7 +2461,7 @@ mod tests {
             ]),
         );
         let options = local_options();
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         let (features, reports) = read(&mut reader, &options);
         assert_eq!(features.len(), 1);
         assert_eq!(reports.iter().filter(|(_, invalid)| *invalid).count(), 2);
@@ -2175,7 +2469,7 @@ mod tests {
             where_clause: Some("_RUSTY_ROW = 1".into()),
             ..options
         };
-        let mut reader = Reader::new(&path, &filtered, None).unwrap();
+        let mut reader = Reader::new(&path, &filtered, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &filtered).0.len(), 1);
         for contents in [
             r#"{"type":"FeatureCollection","features":[]} {}"#,
@@ -2185,7 +2479,7 @@ mod tests {
             r#"{"type":"Point","coordinates":[1,2],"coordinates":[3,4]}"#,
         ] {
             fs::write(&path, contents).unwrap();
-            assert!(Reader::new(&path, &local_options(), None).is_err());
+            assert!(Reader::new(&path, &local_options(), None, path.parent().unwrap()).is_err());
         }
     }
 
@@ -2218,11 +2512,11 @@ mod tests {
         )
         .unwrap();
         let options = gpkg_options();
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 1);
         for (declared, z) in [("LINESTRING", 1), ("POINT", 0)] {
             db.execute("UPDATE gpkg_geometry_columns SET geometry_type_name=?1,z=?2 WHERE table_name='roads'", params![declared, z]).unwrap();
-            let mut reader = Reader::new(&path, &options, None).unwrap();
+            let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
             let (features, reports) = read(&mut reader, &options);
             assert!(features.is_empty());
             assert!(reports.iter().any(|(value, invalid)| *invalid
@@ -2254,16 +2548,16 @@ mod tests {
             ALTER TABLE gpkg_spatial_ref_sys ADD COLUMN epoch DOUBLE;
             UPDATE gpkg_spatial_ref_sys SET epoch=2020.0;").unwrap();
         let mut options = gpkg_options();
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 1);
         options.source_crs = None;
         assert!(matches!(
-            Reader::new(&path, &options, None),
+            Reader::new(&path, &options, None, path.parent().unwrap()),
             Err(Error::Environment(_))
         ));
         options.source_crs = Some("EPSG:4326".into());
         options.height_offset = Some(0.);
-        let mut reader = Reader::new(&path, &options, None).unwrap();
+        let mut reader = Reader::new(&path, &options, None, path.parent().unwrap()).unwrap();
         assert_eq!(read(&mut reader, &options).0.len(), 1);
     }
 
@@ -2274,12 +2568,12 @@ mod tests {
         gpkg(&path);
         let journal = dir.path().join("input.gpkg-journal");
         fs::write(&journal, [0u8; 1024]).unwrap();
-        assert!(Reader::new(&path, &gpkg_options(), None).is_ok());
+        assert!(Reader::new(&path, &gpkg_options(), None, path.parent().unwrap()).is_ok());
         let mut header = [0u8; 1024];
         header[..8].copy_from_slice(&[0xd9, 0xd5, 0x05, 0xf9, 0x20, 0xa1, 0x63, 0xd7]);
         fs::write(&journal, header).unwrap();
         assert!(
-            matches!(Reader::new(&path, &gpkg_options(), None), Err(Error::Data(message)) if message.contains("rollback journal"))
+            matches!(Reader::new(&path, &gpkg_options(), None, path.parent().unwrap()), Err(Error::Data(message)) if message.contains("rollback journal"))
         );
     }
 }

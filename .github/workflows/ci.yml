@@ -43,6 +43,8 @@ jobs:
         run: cargo test --locked --features native-jpeg
       - name: Independently decode local mesh candidates and corruption controls
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
+      - name: Independently verify vector acceptance and archive inventory
+        run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
       - name: Check source packaging
         run: cargo package --locked --no-verify
       - name: Test portable JPEG
@@ -165,6 +167,11 @@ jobs:
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo test --locked --features native-geospatial
+      - name: Independently verify native vector acceptance and archive inventory
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native"
       - name: Check native geospatial lint
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'

@@ -1,4 +1,5 @@
 //! Exact scalar metadata policies shared by vector readers.
+use super::pipeline::acceptance::{FeatureFailure, FeatureResult};
 use super::VectorOptions;
 use crate::Error;
 use serde_json::{json, Value};
@@ -15,13 +16,13 @@ pub(super) fn register(
     schemas: &mut BTreeMap<String, String>,
     name: &str,
     kind: &str,
-) -> Result<(), Error> {
+) -> FeatureResult<()> {
     let kind = match schemas.get(name).map(String::as_str) {
         Some(previous) if previous != kind => {
             if matches!(previous, "integer" | "real") && matches!(kind, "integer" | "real") {
                 "real"
             } else {
-                return Err(Error::Data(format!(
+                return Err(FeatureFailure::reject(format!(
                     "incompatible scalar schemas for {name:?}; convert these layers separately"
                 )));
             }
@@ -51,7 +52,7 @@ pub(super) fn geojson_properties(
     options: &VectorOptions,
     schemas: &mut BTreeMap<String, String>,
     json_fields: &mut BTreeSet<String>,
-) -> Result<BTreeMap<String, Value>, Error> {
+) -> FeatureResult<BTreeMap<String, Value>> {
     let mut properties = BTreeMap::new();
     if let Some(props) = native["properties"].as_object() {
         for (key, value) in props {
@@ -59,7 +60,9 @@ pub(super) fn geojson_properties(
                 continue;
             }
             if matches!(key.as_str(), "_source_id" | "_source_layer") {
-                return Err(Error::Data(format!("reserved source property: {key}")));
+                return Err(FeatureFailure::reject(format!(
+                    "reserved source property: {key}"
+                )));
             }
             let value = if value.is_array() && options.list_fields == "json" {
                 json_fields.insert(key.clone());
@@ -77,7 +80,9 @@ pub(super) fn geojson_properties(
                 } else if value.is_string() {
                     "string"
                 } else {
-                    return Err(Error::Data(format!("unsupported complex property: {key}")));
+                    return Err(FeatureFailure::reject(format!(
+                        "unsupported complex property: {key}"
+                    )));
                 };
                 register(schemas, key, kind)?;
             }

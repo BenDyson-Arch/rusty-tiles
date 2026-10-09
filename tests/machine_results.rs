@@ -174,7 +174,7 @@ fn data_and_environment_errors_have_distinct_codes() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(report["error"]["code"], "data");
+    assert_eq!(report["error"]["code"], "invalid_input");
     assert!(!out.exists());
     // Restore a valid source so only the PROJ database is missing.
     self::source(root.path());
@@ -184,8 +184,8 @@ fn data_and_environment_errors_have_distinct_codes() {
         &args("EPSG:4326"),
         &[("PROJ_DATA", &missing), ("PROJ_LIB", &missing)],
     );
-    assert_eq!(result.status.code(), Some(4));
-    assert_eq!(report["error"]["code"], "environment");
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(report["error"]["code"], "unsupported");
     assert!(report["error"]["message"]
         .as_str()
         .unwrap()

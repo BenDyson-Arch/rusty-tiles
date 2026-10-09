@@ -558,6 +558,7 @@ enum Outcome {
     /// Published F1a local mesh with its finalized report.
     Mesh(MeshResult),
     RasterDirectory(RasterDirectoryResult),
+    Vector(vector::VectorResult),
     /// A plain output file without a conversion report (createTilesetJson).
     Wrote(PathBuf),
     Done,
@@ -611,6 +612,7 @@ fn main() -> ExitCode {
                 )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
+                Outcome::Vector(result) => Some((vector_summary(&result), result.output)),
                 Outcome::RasterDirectory(result) => {
                     Some((raster_directory_summary(&result), result.output))
                 }
@@ -731,6 +733,12 @@ fn raster_directory_summary(result: &RasterDirectoryResult) -> Value {
     let mut summary = output_summary(&result.output, None, false);
     summary["rasterReport"] = json!(result.report);
     summary["counts"] = json!({"tiles":1});
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn vector_summary(result: &vector::VectorResult) -> Value {
+    let mut summary = output_summary(&result.output, Some(&result.report), true);
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
 }
@@ -1034,24 +1042,28 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 reporter,
             )?)
         }
-        Command::Vector(a) => Outcome::Converted(vector::vector_to_3tz_reported(
-            &a.io.input,
-            &a.io.output,
-            a.max_features,
-            a.repair,
-            a.ambiguous_outlines,
-            &vector::VectorOptions {
+        Command::Vector(a) => {
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let run = RunControl::new(observer);
+            let policy = if a.io.force {
+                OutputPolicy::Replace
+            } else {
+                OutputPolicy::CreateNew
+            };
+            let options = vector::VectorOptions {
                 explicit: a.explicit,
                 reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,
                 meshopt: a.meshopt,
-                meshopt_encoder: None,
                 parent_repair: a.parent_repair,
                 aggregate_points: a.aggregate_points,
                 max_parent_features: a.max_parent_features,
                 where_clause: a.where_clause,
-                force: a.io.force,
+                max_features: a.max_features,
+                repair: a.repair,
+                ambiguous_outlines: a.ambiguous_outlines,
                 list_fields: a.list_fields,
                 fields: a.fields,
                 drop_fields: a.drop_fields,
@@ -1069,9 +1081,11 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 max_bytes: a.max_bytes,
                 max_tiles: a.max_tiles,
                 max_source_vertices: a.max_source_vertices,
-            },
-            reporter,
-        )?),
+            };
+            let request =
+                vector::VectorRequest::new(a.io.input, a.io.output, options).with_policy(policy);
+            Outcome::Vector(vector::vector_to_archive(request, &run)?)
+        }
         Command::Terrain(a) => Outcome::Converted(terrain::dem_to_terrain_reported(
             &a.io.input,
             &a.io.output,

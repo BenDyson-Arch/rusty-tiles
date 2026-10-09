@@ -345,23 +345,19 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
         let output = root.path().join(format!("library-{explicit}.3tz"));
         let options = rusty_tiles::vector::VectorOptions {
             source_crs: Some("local".into()),
+            max_features: 2,
             explicit,
             reproducible: true,
             jobs: 2,
             ..Default::default()
         };
-        let result = rusty_tiles::vector::vector_to_3tz_reported(
-            &source,
-            &output,
-            2,
-            false,
-            false,
-            &options,
-            &rusty_tiles::Reporter::silent(),
+        let result = rusty_tiles::vector::vector_to_archive(
+            rusty_tiles::vector::VectorRequest::new(&source, &output, options),
+            &rusty_tiles::RunControl::default(),
         )
         .unwrap();
-        assert!(result.archive);
-        assert_eq!(result.report.unwrap()["features"], 6);
+        assert_eq!(result.output, output);
+        assert_eq!(result.report["features"], 6);
         assert_eq!(
             rusty_tiles::validate::archive(&output, None).unwrap()["ok"],
             true
@@ -559,7 +555,7 @@ fn invalid_null_and_collapsed_features_have_explicit_publication_policy() {
 }
 
 #[test]
-fn unsupported_driver_and_grid_crs_are_environment_errors_without_archives() {
+fn unsupported_driver_and_grid_crs_are_unsupported_without_archives() {
     let root = tempfile::tempdir().unwrap();
     let unsupported = root.path().join("unsupported.shp");
     fs::write(&unsupported, b"invented unsupported driver").unwrap();
@@ -583,8 +579,8 @@ fn unsupported_driver_and_grid_crs_are_environment_errors_without_archives() {
     ] {
         let output = root.path().join("unpublished.3tz");
         let (result, report) = run(input, &output, &arguments);
-        assert_eq!(result.status.code(), Some(4), "{report}");
-        assert_eq!(report["error"]["code"], "environment");
+        assert_eq!(result.status.code(), Some(2), "{report}");
+        assert_eq!(report["error"]["code"], "unsupported");
         assert!(
             report["error"]["message"]
                 .as_str()
@@ -678,7 +674,7 @@ fn active_geopackage_wal_is_refused_until_checkpointed() {
     let output = root.path().join("writer.3tz");
     let (result, report) = run(&source, &output, &["--layer", "roads"]);
     assert_eq!(result.status.code(), Some(3), "{report}");
-    assert_eq!(report["error"]["code"], "data");
+    assert_eq!(report["error"]["code"], "invalid_input");
     assert!(!output.exists());
     assert_eq!(fs::read(&source).unwrap(), before);
     assert_eq!(fs::read(&wal).unwrap(), wal_before);
@@ -757,7 +753,7 @@ fn malformed_geopackage_declarations_headers_and_wkb_do_not_publish() {
             &["--layer", "roads", "--source-crs", "local"],
         );
         assert_eq!(result.status.code(), Some(3), "{name}: {report}");
-        assert_eq!(report["error"]["code"], "data", "{name}: {report}");
+        assert_eq!(report["error"]["code"], "invalid_input", "{name}: {report}");
         assert!(!output.exists(), "{name}");
         assert_eq!(fs::read(&source).unwrap(), before, "{name}");
     }
@@ -850,8 +846,8 @@ fn selected_geopackage_epochs_need_native_or_explicit_crs_override() {
     );
     let rejected = root.path().join("survey-rejected.3tz");
     let (result, report) = run(&source, &rejected, &["--layer", "survey"]);
-    assert_eq!(result.status.code(), Some(4), "{report}");
-    assert_eq!(report["error"]["code"], "environment");
+    assert_eq!(result.status.code(), Some(2), "{report}");
+    assert_eq!(report["error"]["code"], "unsupported");
     let message = report["error"]["message"].as_str().unwrap();
     assert!(
         message.contains("epoch") && message.contains("native-geospatial"),
