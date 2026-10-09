@@ -11,6 +11,8 @@
 #   4. validate validate --json on the archive
 #   5. preview  preview --json starts on a free port, serves config.json and
 #               the extracted tileset manifest (curl), then stops on SIGTERM
+#               (strict browser mode also renders/picks this README pyramid
+#               before and after a cache-disabled reload)
 # Optional browser steps, run only when everything they need is present:
 #   6. layers   tests/fixtures/preview_layers.py writes all five preview layers
 #   7. probes   preview_layers.cjs, point_cloud.cjs, terrain.cjs and
@@ -26,6 +28,8 @@
 #   CHROMIUM         Chromium executable for the probes (default /usr/bin/chromium)
 #   PYTHON           Python with GDAL, NumPy, laspy and pyproj (default python3)
 #   ACCEPTANCE_WORK  scratch directory (default: a new temporary directory)
+#   ACCEPTANCE_REQUIRE_BROWSER  1 requires all five layers and browser probes;
+#                              0 (default) permits missing prerequisites locally
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,6 +40,7 @@ CESIUM_DIR=${CESIUM_DIR:-$REPO/target/preview-runtime/node_modules/cesium/Build/
 export CHROMIUM=${CHROMIUM:-/usr/bin/chromium}
 PASSED=() SKIPPED=()
 SERVER=
+REQUIRE_BROWSER=${ACCEPTANCE_REQUIRE_BROWSER:-0}
 
 fail() {
   echo "FAIL: $1" >&2
@@ -52,6 +57,41 @@ stop_server() {
   fi
 }
 trap stop_server EXIT
+
+case $REQUIRE_BROWSER in
+  0|1) ;;
+  *) fail "ACCEPTANCE_REQUIRE_BROWSER must be 0 or 1" ;;
+esac
+
+browser_prerequisites() {
+  missing=()
+  command -v node >/dev/null || missing+=("node")
+  [[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
+  node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")
+  [[ -x $CHROMIUM ]] || missing+=("Chromium at CHROMIUM=$CHROMIUM")
+  "$PYTHON" -c "import osgeo, numpy, laspy, pyproj" >/dev/null 2>&1 \
+    || missing+=("$PYTHON with GDAL, NumPy, laspy and pyproj")
+}
+
+missing_browser_reason() {
+  reason="missing: $(printf '%s; ' "${missing[@]}")"
+  reason=${reason%; }
+}
+
+browser_converter_prerequisites() {
+  env PATH="" "$BIN" doctor --command vector --command point-cloud --command raster --command terrain --json \
+    >"$WORK/browser-readiness.json" 2>"$WORK/browser-readiness.err" \
+    || missing+=("selected binary's vector/point-cloud/raster/terrain capabilities")
+}
+
+# Fail before a potentially expensive build when a release gate cannot run.
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  browser_prerequisites
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    missing_browser_reason
+    fail "required browser acceptance prerequisites: $reason"
+  fi
+fi
 
 # json_field FILE EXPRESSION: evaluate a Python expression on the JSON `d`.
 json_field() {
@@ -83,6 +123,14 @@ else
     --features native-geospatial >"$WORK/build.log" 2>&1 || fail build "$WORK/build.log"
   BIN=$REPO/target/release/rusty-tiles
   pass build
+fi
+
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  browser_converter_prerequisites
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    missing_browser_reason
+    fail "required browser acceptance prerequisites: $reason" "$WORK/browser-readiness.json"
+  fi
 fi
 
 # 2. doctor
@@ -120,6 +168,10 @@ curl -fsS "${URL}config.json" -o "$WORK/config.json" || fail "curl config.json"
   || fail "config.json does not name the mesh manifest" "$WORK/config.json"
 curl -fsS "${URL}mesh/tileset.json" -o "$WORK/served-tileset.json" || fail "curl tileset.json"
 cmp -s "$WORK/served-tileset.json" "$WORK/output/example/tileset.json" || fail "served manifest differs"
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  node "$REPO/tests/fixtures/quick_start.cjs" "$URL" >"$WORK/quick-start-browser.log" 2>&1 \
+    || fail "README quick-start browser probe" "$WORK/quick-start-browser.log"
+fi
 PREVIEW_PID=$SERVER
 stop_server
 kill -0 "$PREVIEW_PID" 2>/dev/null && fail "preview still running after SIGTERM"
@@ -127,19 +179,11 @@ curl -fsS --max-time 2 "${URL}config.json" -o /dev/null 2>/dev/null && fail "pre
 pass preview
 
 # 6-7. optional browser acceptance
-missing=()
-env PATH="" "$BIN" doctor --command vector --command point-cloud --command raster --command terrain --json \
-  >"$WORK/browser-readiness.json" 2>"$WORK/browser-readiness.err" \
-  || missing+=("selected binary's vector/point-cloud/raster/terrain capabilities")
-command -v node >/dev/null || missing+=("node")
-[[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
-node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")
-[[ -x $CHROMIUM ]] || missing+=("Chromium at CHROMIUM=$CHROMIUM")
-"$PYTHON" -c "import osgeo, numpy, laspy, pyproj" >/dev/null 2>&1 \
-  || missing+=("$PYTHON with GDAL, NumPy, laspy and pyproj")
+browser_prerequisites
+browser_converter_prerequisites
 if [[ ${#missing[@]} -gt 0 ]]; then
-  reason="missing: $(printf '%s; ' "${missing[@]}")"
-  reason=${reason%; }
+  missing_browser_reason
+  [[ $REQUIRE_BROWSER == 0 ]] || fail "required browser acceptance prerequisites: $reason"
   skip "preview layers" "$reason"
   skip "browser probes" "$reason"
 else

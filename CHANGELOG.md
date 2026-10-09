@@ -6,6 +6,8 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Added
 
+- Self-contained per-converter demo recipes, including an invented LAS generator. Strict release acceptance renders and picks the README example and exercises all five preview layers before and after a cache-disabled reload.
+- Candidate and release wheels are gated on checksum-pinned official Blender 4.5 LTS bundles for Linux x64, Windows x64 and both macOS architectures, in addition to CPython 3.10/3.14 on all five wheel platforms.
 - General mesh horizontal CRS placement through the shared grid-free/native resolver, with explicit `--source-axes` and `--height-offset`, CRS-unit E/N shifts and metre heights. Authored normals retain hard edges through inverse-transpose projection; legacy geographic/Web Mercator placement defaults remain compatible. Python adds `source_axes` and `height_offset` keywords, and `doctor` reports the shared CRS tier.
 - `convert-to-implicit` and Rust/Python APIs migrate eligible explicit point-cloud/vector archives into regular implicit hierarchies while retaining GLB/b3dm payload bytes, placement and metadata. Irregular trees, unsupported content and malformed historical b3dm alignment are refused before publication; converted vector archives require a fresh source conversion before reuse.
 - GeoJSON and GeoPackage vector conversion in the default binary and Python wheel, using streaming Rust readers, bundled SQLite, grid-free CRS transforms and constrained polygon triangulation. Both builds share tiling, metadata, LOD, compression and reuse; `native-geospatial` retains OGR/GEOS/PROJ for all vector inputs. Python adds `vector_to_3tz`, and `doctor` reports supported inputs and CRS limits.

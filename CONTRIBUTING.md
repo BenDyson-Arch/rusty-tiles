@@ -196,7 +196,7 @@ It generates invented GeoPackages, checks byte-identical changesets, cross-appli
 
 ### Demo-data acceptance and benchmarks
 
-The native Rust `demodata-suite` example exercises the openly licensed corpus assembled on 2026-10-08, normally in the sibling `../demodata` directory. Keep the approximately 1.5 GB of assets outside this checkout. [The manifest](bench/demodata_manifest.json) pins 416 files by size and SHA-256 and retains their source URLs, licences and attribution. Use the corpus's own README and `fetch.py` to provision it separately; provisioning can require Python/GDAL tools and Blender. The suite itself downloads nothing and runs every converter with an empty executable `PATH` and `PROJ_NETWORK=OFF`. Missing or changed required files fail a run.
+The native Rust `demodata-suite` example exercises the openly licensed corpus assembled on 2026-10-08, normally in the sibling `../demodata` directory. Keep the approximately 1.5 GB of assets outside this checkout. [The manifest](bench/demodata_manifest.json) pins 416 files by size and SHA-256 and retains their source URLs, licences and attribution. This is an acceptance harness for an already provisioned corpus: the corpus's README, `fetch.py` and derived-file preparation scripts are external and are not distributed in this checkout. Provisioning can require Python/GDAL tools and Blender; the manifest alone does not reproduce every derived file. For self-contained examples, use [Try each converter](docs/DEMOS.md). The suite itself downloads nothing and runs every converter with an empty executable `PATH` and `PROJ_NETWORK=OFF`. Missing or changed required files fail a run.
 
 ```sh
 cargo build --locked --release --features native-geospatial \
@@ -284,9 +284,12 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 export NODE_PATH="$PWD/target/browser-probe/node_modules"
 node tests/fixtures/preview_layers.cjs http://127.0.0.1:9279
 node tests/fixtures/point_cloud.cjs http://127.0.0.1:9279
+node tests/fixtures/point_cloud.cjs http://127.0.0.1:9279 --slow-refinement
 node tests/fixtures/terrain.cjs http://127.0.0.1:9279
 node tests/fixtures/vector_compat.cjs http://127.0.0.1:9279 --require-native --require-aggregates
 ```
+
+The point-cloud stress option delays the first rendered frame after moving to fine detail, slows browser execution and delays GLB requests. It exercises the stale `tilesLoaded` race while retaining the same 257-point, metadata, picking and hard-refresh assertions. Settlement requires a loaded, stable selection across completed frames; a tile error fails immediately and a 30-second deadline reports unresolved selection/request state.
 
 For `convert-to-implicit`, export the native Rust fixtures and prepare separate preview copies. The helper requires a new destination directory; it preserves the exported manifests. Install CesiumJS 1.146.0 and Playwright 1.63.0 for the recorded gate:
 
@@ -366,7 +369,7 @@ These recipes use `--explicit` for the three spatial converters; the script omit
    scripts/release_acceptance.sh
    ```
 
-   This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Missing optional steps are printed. A failed required step or enabled browser probe fails the script.
+   This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Set `ACCEPTANCE_REQUIRE_BROWSER=1` for release acceptance: missing browser tools or converter capabilities fail instead of skipping. The manual CI job installs Cesium 1.146.0, Playwright 1.63.0 and its Chromium, requires all browser probes and retains the logs. Without the setting, missing optional steps are printed; these skips do not satisfy the browser release gate. A failed required step or enabled browser probe fails the script.
 2. The Docker acceptance stage passes. It runs every native test binary in a runtime image with no Python.
 
    ```sh
@@ -400,6 +403,7 @@ These files record measured runs. Read them for numbers. They describe one machi
 
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |
+| [`release_04_blockers_results.json`](bench/release_04_blockers_results.json) | 0.4 candidate Rust/Python/browser checks, five-platform wheels and official Blender bundle provenance; publication remains separate | Release acceptance and wheel acceptance workflows |
 | [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
 | [`vector_benchmark_results.json`](bench/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
 | [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Native raster against the Python baseline at `9a95862`, with every PNG byte compared | `bench/benchmark_raster.py` |

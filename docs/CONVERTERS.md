@@ -38,4 +38,4 @@ For updated vector sources, `vector --reuse-tileset previous.3tz` can retain com
 
 Run `doctor --command COMMAND` for build readiness and `COMMAND --help` for options. After conversion, run `validate output.3tz`; this validator does not yet accept raster or terrain directories. Use `preview` with extracted archives to check appearance, refinement and picking before publishing.
 
-The [quick start](../README.md#quick-start) uses invented geometry. The [opt-in demo-data suite](../CONTRIBUTING.md#demo-data-acceptance-and-benchmarks) supplies hash-pinned, openly licensed examples for the broader converter set. Conversion never downloads those assets implicitly.
+The [quick start](../README.md#quick-start) uses invented geometry. [Try each converter](DEMOS.md) adds self-contained point, vector, imagery and terrain examples. The [opt-in demo-data suite](../CONTRIBUTING.md#demo-data-acceptance-and-benchmarks) audits an already provisioned, hash-pinned public corpus; its external preparation tools are not distributed here. Conversion never downloads those assets implicitly.
