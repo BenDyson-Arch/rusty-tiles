@@ -525,6 +525,12 @@
       "test_count": 38,
       "receipt": "wheel-api-final.json",
       "log_sha256": "c53249432a02aa48dedfe1e594d291122f8ae617227ac9a9bfe02ec887064201"
+    },
+    {
+      "command": "cargo package --locked (including Cargo verification build)",
+      "status": "passed",
+      "executed_by": "root",
+      "receipt": "source-package-final.json"
     }
   ],
   "artifacts": {
@@ -563,6 +569,7 @@
     "review_probes/runtime-results.json": "2539422436414be0638291d80c984de8661b77279264f60210cddfa52d3e5f6e",
     "review_probes/source-verification.json": "d7031c97b350f3d5ae2ffcf268269a94bdda34fd73c076d702df21b96c9dd1d2",
     "routing-final.json": "fa8ba74577517949e7c517a2d042fd12a651ecff5a0f66c21538996dd2aa711e",
+    "source-package-final.json": "80910c1d417f974cafc5d47adf9d0e2f9f127cb04f755c4a546f458a5d432e72",
     "wheel-api-final.json": "d17d8b3b5fe87b7399fc2e2da1da10a12ea140562a724a1a21bee3adfeb977bf"
   },
   "acceptance_drivers_sha256": {
@@ -581,7 +588,6 @@
     "Final hosted platform, native, wheel and Blender checks remain pending PR CI. No release authorization.",
     "Existing deterministic source snapshot/publication/fault/observer/cancellation tests replay in full Rust and Python suites; this is not a new formal or hostile-filesystem proof.",
     "Lit Three proof covers extracted leaf glTF appearance, and Cesium routing/unlit is separate. No universal renderer or nonconformal tangent bake claim.",
-    "Linux resource results are concrete sampled workloads, not hard memory/performance guarantees.",
-    "Source package verification will be recorded separately after the staged evidence commit."
+    "Linux resource results are concrete sampled workloads, not hard memory/performance guarantees."
   ]
 }
