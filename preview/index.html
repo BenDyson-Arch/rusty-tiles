@@ -115,7 +115,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
       const included = [], indices = [];
       positions.forEach((position, index) => {
         const coordinate = cartographic(position);
-        if (coordinate.longitude >= bounds[0] && coordinate.longitude <= bounds[2]
+        if (coordinate && coordinate.longitude >= bounds[0] && coordinate.longitude <= bounds[2]
             && coordinate.latitude >= bounds[1] && coordinate.latitude <= bounds[3]) {
           coordinate.height = 0;
           included.push(coordinate); indices.push(index);

@@ -39,6 +39,8 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
           C.Cartographic.fromDegrees(p.longitude, p.latitude)));
         const positions = oracle.samples.map(p => C.Cartesian3.fromDegrees(p.longitude, p.latitude, -25000));
         const clamped = await surface.clampPositions(positions);
+        const invalidClamp = await surface.clampPositions([C.Cartesian3.ZERO]);
+        const invalidSample = await surface.sampleHeights([new C.Cartographic(Number.NaN, 0)]);
         const missingClamp = await surface.clampPositions(oracle.outside.map(p =>
           C.Cartesian3.fromDegrees(p.longitude, p.latitude, 2000)));
         // An unrelated scene object must not turn this into a highest-scene-surface query.
@@ -54,7 +56,8 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
           heights: heights.map(height), absent: absent.map(height), isolated: isolated.map(height),
           rawBorderHeights: rawBorder.map(height),
           clamped: clamped.map(p => p && C.Cartographic.fromCartesian(p).height),
-          missingClamp: missingClamp.map(p => !!p), failures: window.failures};
+          missingClamp: missingClamp.map(p => !!p), invalidClamp: invalidClamp.map(p => !!p),
+          invalidSample: invalidSample.map(height), failures: window.failures};
       }, oracle);
     };
     await page.goto(process.argv[2]);
@@ -121,6 +124,8 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
       });
       assert(result.absent.every(h => h == null));
       assert(result.missingClamp.every(p => !p));
+      assert(result.invalidClamp.every(p => !p));
+      assert(result.invalidSample.every(h => h == null));
     }
     const glbs = new Set(requests.filter(url => /\/terrain\/.*\.glb(?:\?|$)/.test(url)));
     assert(glbs.size >= (oracle.minimumLeaves || 2), 'multiple terrain patches must load');
