@@ -1,0 +1,171 @@
+{
+  "sourceCommit": "07928888e808cfd51e0daab9575023898ede894f",
+  "sourceHashes": {
+    "src/mesh_archive.rs": "3b652e7c3b0cf4fdb1f1f32c7970d9426025aac25a871136cece05db962ce06b",
+    "src/mesh_archive/source.rs": "27ab98c502fa100e5574fb0d6f6e5a454ecf8a555e3303e5fab55fc9ba95ca31",
+    "src/mesh_archive/source/texture.rs": "9a470c07f36cb4192230941da9aef66d27d57a5848b5797d02367a5551d948e4",
+    "src/mesh_archive/encode.rs": "aaf62001c3ab5ff287936d80c09112bb28ec758f59e983b706de687a62bcf3f1"
+  },
+  "workingFilesEqualPinnedCommit": true,
+  "binary": "/home/bend/.cache/rusty-tiles-f1b-portable-0792888",
+  "binarySha256": "845db5d1c86b88723918a661ee660f70e1553cde2809e21bfa1037028c8d4d2e",
+  "replayScript": "bench/architecture_audit/f1b1/review_probes/replay.py",
+  "replayScriptSha256": "656a7ca7a2fda08d1c6a47dd7b19a8d43fb8bc8b7ad5261c90835a91949b6667",
+  "inputManifest": {
+    "generatorSha256": "656a7ca7a2fda08d1c6a47dd7b19a8d43fb8bc8b7ad5261c90835a91949b6667",
+    "inputs": {
+      "jpeg_control.glb": "6924f7cbd96c48834eb45b73113893bbb00a96bc760cc045e81d8db14b3de0d1",
+      "jpeg_missing_eoi.glb": "fb1a621a33c72b15ec7c0b577e0776ae6b4b42735979a25f9c000f35cad7bea7",
+      "jpeg_truncated_pixels.glb": "670350b255e5b8b49aa6d0f8e86f19884e1b218ec84ed6cadc73099bb79b3710",
+      "png_after_iend.glb": "25b913103858a93b2a979b7a010c1b961b205731440013a49cbdfd5b7a7eff1b",
+      "png_ancillary_crc_control.glb": "2d83f78f1fe8bb02c708115b19755029d4d9c4dcf00c04880b27c27f89b8c99c",
+      "png_bad_ancillary_crc.glb": "3e0e0ed5d71c03dc6cec1c2abd8e355c53501bc14b7c759b50ba0355f2a43a49",
+      "png_bad_iend_crc.glb": "eea38dd5dfe5409191df12ec86fd16c88569646aeac808ebea387dcb5c0c9eaf",
+      "png_missing_iend.glb": "e38091438aaa4c9aa3dc4716f59322c79776a6da316f520b6816ae0551a457e9",
+      "png_one_frame_apng.glb": "d061086729bef9dae51182635a4890c93da41cec91d2b4f66d300822a9e8e1ff",
+      "png_truncated_pixels.glb": "8da92661bd4909cfd9c05b6724fea62d0c68277a0ddc67acae4b8ce0409ae3df",
+      "rgba16.glb": "50351b7ebfc2d971c677a837a5c654c26abb3e78157bdfc51c28c0b8da619a17",
+      "rgba8.glb": "767756ff9d41b884c7b260579c7b1a2c076f2ce9b04f6de48dd947bc209f0842",
+      "selected_closure_reflection.glb": "ce764f64fe69fc91665caa758c578b6c8f2f962e06e6b90343b9a335b80c4ddd",
+      "uv_reuse_1.glb": "7416dd635b85650d2db2b8a7d201f436d7ded011456ec06c46603e7ff1c37377",
+      "uv_reuse_512.glb": "9dddf6127513ef06ce8d78f1f3c6db5433f7d6608988131ed81c261a63c0bad8",
+      "uv_reuse_64.glb": "d9d46bbcfcef291446abe7bcde205528e9aeb064e5b6face2631ae9385cda408"
+    },
+    "jpegProvenance": {
+      "encoderAndIndependentDecoder": "Pillow",
+      "version": "12.3.0",
+      "dimensions": [
+        1,
+        1
+      ],
+      "sourcePixels": [
+        [
+          255,
+          0,
+          0
+        ]
+      ],
+      "quality": 93
+    }
+  },
+  "cases": [
+    {
+      "name": "rgba8",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "rgba16",
+      "expectedExit": 2,
+      "actualExit": 2,
+      "passed": true
+    },
+    {
+      "name": "png_missing_iend",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "png_bad_iend_crc",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "png_ancillary_crc_control",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "png_bad_ancillary_crc",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "png_one_frame_apng",
+      "expectedExit": 2,
+      "actualExit": 2,
+      "passed": true
+    },
+    {
+      "name": "png_after_iend",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "png_truncated_pixels",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "jpeg_control",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "jpeg_missing_eoi",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "jpeg_truncated_pixels",
+      "expectedExit": 3,
+      "actualExit": 3,
+      "passed": true
+    },
+    {
+      "name": "uv_reuse_1",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "uv_reuse_64",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "uv_reuse_512",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    },
+    {
+      "name": "selected_closure_reflection",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "passed": true
+    }
+  ],
+  "exactImageForwarding": [
+    {
+      "case": "rgba8",
+      "imageBytes": 70,
+      "imageSha256": "4ff6ab670a58c14270e034e2090d9a432caa263a14e0a25785386b0c12f880b5",
+      "conversionReportEqualsCli": true
+    },
+    {
+      "case": "png_ancillary_crc_control",
+      "imageBytes": 106,
+      "imageSha256": "1efe74c693d0c328262a9b64fa50d2276d0974ac761f9d7c706d0826397f3980",
+      "conversionReportEqualsCli": true
+    },
+    {
+      "case": "jpeg_control",
+      "imageBytes": 635,
+      "imageSha256": "f7ec5d0587a8c3f8fc82fa37bc1e34e4459882bf50d2c2956299e7e45c3a52df",
+      "conversionReportEqualsCli": true
+    }
+  ],
+  "claimDisposition": "All three independent review findings remain resolved against the final source-pinned portable binary; all 16 existing independent cases passed. No broader acceptance claim is made.",
+  "fullReceipt": "/home/bend/.cache/f1b-review-final-source-replay/full-receipt.json"
+}

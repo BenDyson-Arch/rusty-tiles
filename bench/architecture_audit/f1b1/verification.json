@@ -1,0 +1,29 @@
+{
+  "source_commit": "07928888e808cfd51e0daab9575023898ede894f",
+  "local_checks": {
+    "default_rust": "242 library tests and integrations pass; final F1b lifecycle2 pass",
+    "native_rust": "286 library tests and integrations incl F1b lifecycle2 pass",
+    "clippy": "default/native all-targets and binding, -D warnings pass",
+    "python": "127 tests,2 existing skips",
+    "installed_wheel_api": "35 tests pass",
+    "installed_wheel_f1b": "84 positive/90 refused, full reports and typed failures, python -I and empty PATH pass",
+    "independent_f1b": "84 positive/90 refused for each portable/native;21 sensitive corruption controls pass",
+    "fresh_independent_review": "16 final source-bound cases pass;3 findings resolved",
+    "resources": "15 boundary cases pass; Linux wait4 plus expressly sampled descriptors/threads/scratch",
+    "viewer": "actual nearest/clamp texels and OPAQUE/MASK with UV/alpha negative controls; near/far/returned-near routing, pinned Cesium1.146.0/Playwright1.63.0/Chromium153.0.8010.12",
+    "formatting": "cargo fmt --all --check and git diff --check pass",
+    "source_package": "clean verified558-file cargo package at0792888"
+  },
+  "resource_summary": {
+    "max_rss_kib_wait4": 62664
+  },
+  "remote_ci": "pending; no merge or release acceptance claimed",
+  "remaining_issue121": [
+    "external resource binding",
+    "additional material/attribute semantics",
+    "placement and source/picking identity",
+    "implicit hierarchy",
+    "justified coarse approximation/error support",
+    "advertised legacy use-case disposition"
+  ]
+}

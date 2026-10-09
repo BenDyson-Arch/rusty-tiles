@@ -36,3 +36,9 @@ python3 -B bench/architecture_audit/f1b1/review_probes/replay.py check --work /p
 ```
 
 Optional `--expected-sha256 SHA` pins the binary before checking. Generation writes a manifest binding every freshly authored input and the script itself; checking rejects changed inputs or a changed generator. The check asserts outcomes/categories, exact PNG/JPEG image forwarding, CLI/embedded-report parity, selected closure inventory, remapped dependencies and ordered reflected UV/position corners. It records UV-reuse timings without a host-dependent speed threshold. The script imports neither production code nor the acceptance oracle.
+
+## Final source binding
+
+Replayed the same independently authored inputs and all 16 checks against final portable binary `/home/bend/.cache/rusty-tiles-f1b-portable-0792888`, SHA-256 `845db5d1c86b88723918a661ee660f70e1553cde2809e21bfa1037028c8d4d2e`, with the executable hash verified before execution. All expected outcomes/categories and exact image/closure/corner/report assertions passed. The four production files were byte-compared to committed source `07928888e808cfd51e0daab9575023898ede894f`; their SHA-256 identities and concise case disposition are retained in `final-source-review.json`. All three independent findings remain resolved against this final source binding. No new probes, broader audit or Cargo runs were added for this replay.
+
+An earlier attempt against a shared binary pathname stopped at its hash guard before CLI execution. Root identified a concurrent packaging build as the provenance mismatch, rebuilt sequentially, and supplied the unique source-pinned path above. That rejected artifact is not this review's final acceptance pin.
