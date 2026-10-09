@@ -376,12 +376,14 @@ These recipes use `--explicit` for the three spatial converters; the script omit
    ```
 
    This builds the release CLI and checks readiness for the README mesh conversion, validation, preview startup, served manifests and shutdown. Set `RUSTY_TILES_BIN` to check an existing default or native build; optional raster/terrain capabilities do not block the default-build README route. The full browser probes run when the binary supports all five preview layers and `CESIUM_DIR`, Playwright on `NODE_PATH`, Chromium and the development Python dependencies are available. `PYTHON` chooses that interpreter. Set `ACCEPTANCE_REQUIRE_BROWSER=1` for release acceptance: missing browser tools or converter capabilities fail instead of skipping. The manual CI job installs Cesium 1.146.0, Playwright 1.63.0 and its Chromium, requires all browser probes and retains the logs. Without the setting, missing optional steps are printed; these skips do not satisfy the browser release gate. A failed required step or enabled browser probe fails the script.
-2. The Docker acceptance stage passes. It runs every native test binary in a runtime image with no Python.
+2. The packaged release CLI passes focused vector and raster acceptance with no Python or network access. The native Rust suite runs in the GDAL matrix jobs; this check verifies the shipped executable, libraries and data without compiling or repeating that suite.
 
    ```sh
-   docker build --target acceptance -t rusty-tiles:native-acceptance .
    docker build --target runtime -t rusty-tiles:native .
-   docker run --rm --network none rusty-tiles:native doctor --json
+   docker run --rm --network none \
+     --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
+     --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
+     --entrypoint /bin/sh rusty-tiles:native /test-packaged-runtime.sh /fixtures
    ```
 
 3. `cargo package --locked --no-verify` includes the docs listed in `Cargo.toml`.

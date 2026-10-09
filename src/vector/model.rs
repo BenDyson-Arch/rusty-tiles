@@ -161,7 +161,6 @@ pub(super) struct Frame {
 impl Frame {
     /// Orient the local frame at a WGS84 ECEF anchor. Keep the exact anchor;
     /// the inverse operation establishes the surface axes only.
-    #[cfg(not(feature = "native-geospatial"))]
     pub(super) fn georeferenced(anchor: Point) -> Result<Self, crate::Error> {
         let geographic = crate::georef::ecef_to_cartographic(anchor)?;
         let matrix = crate::georef::root_transform(geographic, None);

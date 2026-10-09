@@ -10,12 +10,14 @@ pub(super) use native::{quiet_unless_diagnostics, GeometryHandle};
 #[cfg(not(feature = "native-geospatial"))]
 pub(super) use portable::GeometryHandle;
 
-const OUTLINE: &str = "outline fallback: ";
-fn outline(message: &str) -> Error {
-    data(format!("{OUTLINE}{message}"))
+fn data(message: impl Into<String>) -> FeatureFailure {
+    FeatureFailure::reject(message)
 }
-fn is_outline(error: &Error) -> bool {
-    error.to_string().starts_with(OUTLINE)
+fn outline(message: &str) -> FeatureFailure {
+    FeatureFailure::outline(message)
+}
+fn is_outline(error: &FeatureFailure) -> bool {
+    error.is_outline()
 }
 fn opened(ring: &[Point]) -> &[Point] {
     if ring.len() > 1 && ring.first() == ring.last() {
@@ -29,7 +31,7 @@ struct Plane {
     axes: [Point; 3],
 }
 impl Plane {
-    fn fit(points: &[Point]) -> Result<Self, Error> {
+    fn fit(points: &[Point]) -> Result<Self, FeatureFailure> {
         if points.len() < 3 {
             return Err(data("polygon rings need three distinct vertices"));
         }
@@ -105,7 +107,7 @@ pub(super) struct Polygon {
     pub report: Value,
 }
 #[cfg(test)]
-pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, Error> {
+pub(super) fn polygon(rings: &[Vec<Point>], repair: bool) -> Result<Polygon, FeatureFailure> {
     polygon_in_chart(rings, None, repair)
 }
 
@@ -115,7 +117,7 @@ pub(super) fn polygon_for(
     index: usize,
     center: Point,
     repair: bool,
-) -> Result<Polygon, Error> {
+) -> Result<Polygon, FeatureFailure> {
     let chart = feature
         .intrinsic
         .as_ref()
@@ -139,7 +141,7 @@ fn polygon_in_chart(
     rings: &[Vec<Point>],
     chart: Option<(&[Vec<Point>], bool, Point)>,
     repair: bool,
-) -> Result<Polygon, Error> {
+) -> Result<Polygon, FeatureFailure> {
     if rings.is_empty() || rings.iter().any(|r| opened(r).len() < 3) {
         return Err(data("polygon rings need three distinct vertices"));
     }
@@ -202,7 +204,7 @@ fn polygon_in_chart(
         }
     }
     let shape = GeometryHandle::polygon(&projected)?;
-    let valid = shape.valid();
+    let valid = shape.valid()?;
     if !valid && !repair {
         return Err(data(
             "invalid polygon topology; inspect source or explicitly use --repair",
@@ -215,7 +217,7 @@ fn polygon_in_chart(
     }
     let mut added = 0;
     let mut spread: f64 = 0.;
-    let mut position = |q: [f64; 2]| -> Result<u32, Error> {
+    let mut position = |q: [f64; 2]| -> Result<u32, FeatureFailure> {
         let q = [q[0], q[1], 0.];
         let k = key(q);
         if let Some(i) = lookup.get(&k) {
@@ -274,7 +276,7 @@ fn polygon_in_chart(
     for part in &parts {
         triangle_offsets.push(indices.len() as u32);
         loop_offsets.push(loops.len() as u32);
-        for (r, ring) in part.rings().into_iter().enumerate() {
+        for (r, ring) in part.rings()?.into_iter().enumerate() {
             let mut clean = Vec::new();
             for q in ring {
                 if clean.last() != Some(&q) {
@@ -296,7 +298,7 @@ fn polygon_in_chart(
             loops.push(u32::MAX);
         }
         for triangle in part.triangulate()?.parts()? {
-            let rings = triangle.rings();
+            let rings = triangle.rings()?;
             let xy = &rings[0];
             if xy.len() != 3 {
                 return Err(data("triangulator produced a non-triangle"));
@@ -388,7 +390,7 @@ pub(super) fn validate(
     feature: &mut Feature,
     repair: bool,
     ambiguous: bool,
-) -> Result<Vec<Value>, Error> {
+) -> Result<Vec<Value>, FeatureFailure> {
     let polygons = match &feature.geometry {
         Geometry::Polygon(r) => vec![r],
         Geometry::MultiPolygon(p) => p.iter().collect(),
@@ -401,7 +403,7 @@ pub(super) fn validate(
                 return Err(error);
             }
             reports.push(json!({"sourceId":feature.source_id(),"sourceLayer":feature.layer(),"topologyRepaired":false,
-            "outputGeometry":"outline","reason":error.to_string().trim_start_matches(OUTLINE)}));
+            "outputGeometry":"outline","reason":error.to_string()}));
         }
     }
     if !reports.is_empty() {
@@ -494,7 +496,7 @@ fn simplify_polygon(
     rings: &[Vec<Point>],
     tolerance: f64,
     locked: &BTreeSet<PointKey>,
-) -> Result<SimplifiedPolygon, Error> {
+) -> Result<SimplifiedPolygon, FeatureFailure> {
     let original = rings.to_vec();
     let opened: Vec<_> = rings.iter().map(|r| opened(r).to_vec()).collect();
     let plane = Plane::fit(&opened[0])?;
@@ -510,7 +512,7 @@ fn simplify_polygon(
                 .collect::<Vec<_>>(),
         )
     };
-    if !shape(&opened)?.valid() {
+    if !shape(&opened)?.valid()? {
         return Ok((
             original,
             0.,
@@ -525,7 +527,7 @@ fn simplify_polygon(
         error = error.max(e);
     }
     let candidate = shape(&candidates)?;
-    if !candidate.valid() || candidate.area() <= 0. {
+    if !candidate.valid()? || candidate.area()? <= 0. {
         return Ok((
             original,
             0.,
@@ -547,7 +549,7 @@ fn retain_intrinsic(
     original: &[Vec<Point>],
     source: &[Vec<Point>],
     candidate: &[Vec<Point>],
-) -> Result<Vec<Vec<Point>>, Error> {
+) -> Result<Vec<Vec<Point>>, FeatureFailure> {
     if original.len() != source.len() || original.len() != candidate.len() {
         return Err(data("intrinsic ring correspondence was lost"));
     }
@@ -586,7 +588,7 @@ pub(super) fn simplify(
     locked: &BTreeSet<PointKey>,
     reports: &mut Vec<Value>,
     parent_repair: bool,
-) -> Result<(Feature, f64), Error> {
+) -> Result<(Feature, f64), FeatureFailure> {
     let mut result = feature.clone();
     let mut error: f64 = 0.;
     let mut fallback = false;
@@ -621,7 +623,7 @@ pub(super) fn simplify(
                         let retained = retain_intrinsic(rings, source, &candidate)?;
                         let chart = intrinsic_chart(&retained, intrinsic.geographic);
                         let shape = GeometryHandle::polygon(&chart)?;
-                        if !shape.valid() || shape.area() <= 0. {
+                        if !shape.valid()? || shape.area()? <= 0. {
                             reason = Some("simplification would change intrinsic source topology");
                         } else {
                             source_candidate = Some(retained);

@@ -607,6 +607,30 @@ fn point_cloud_to_3tz(
     })
 }
 
+/// Published vector archive and finalized acceptance report.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct VectorResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+#[pymethods]
+impl VectorResult {
+    #[getter]
+    fn archive(&self) -> bool {
+        true
+    }
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
 /// Tile GeoJSON or GeoPackage vector features using the portable pipeline.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, force=false, source_crs=None, height_offset=None,
@@ -650,10 +674,12 @@ fn vector_to_3tz(
     max_parent_features: usize,
     reuse_tileset: Option<PathBuf>,
     callback: Option<Py<PyAny>>,
-) -> PyResult<ConversionResult> {
+) -> PyResult<VectorResult> {
     let defaults = VectorOptions::default();
     let options = VectorOptions {
-        force,
+        max_features,
+        repair,
+        ambiguous_outlines,
         source_crs,
         height_offset,
         layers: layers.unwrap_or_default(),
@@ -680,18 +706,21 @@ fn vector_to_3tz(
         aggregate_points,
         max_parent_features,
         reuse_tileset,
-        ..defaults
     };
-    run_conversion(py, callback, |reporter| {
-        tiles_core::vector::vector_to_3tz_reported(
-            &input,
-            &output,
-            max_features,
-            repair,
-            ambiguous_outlines,
-            &options,
-            reporter,
-        )
+    let policy = if force {
+        OutputPolicy::Replace
+    } else {
+        OutputPolicy::CreateNew
+    };
+    let request =
+        tiles_core::vector::VectorRequest::new(input, output, options).with_policy(policy);
+    let result = run_job(py, callback, |run| {
+        tiles_core::vector::vector_to_archive(request, run)
+    })?;
+    Ok(VectorResult {
+        output: result.output,
+        report: result.report,
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
     })
 }
 
@@ -757,6 +786,7 @@ fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<ConversionResult>()?;
+    module.add_class::<VectorResult>()?;
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;

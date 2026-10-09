@@ -123,7 +123,7 @@ fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
         (
             "--repair",
             "(2 features, 1 tile)",
-            "warnings: 1 feature without geometry, 5 geometry reports; see conversion.json and geometry-reports.jsonl",
+            "warnings: 1 feature without geometry, 2 geometry reports; see conversion.json and geometry-reports.jsonl",
         ),
     ] {
         let output = work.path().join(format!("out {flag}.3tz"));

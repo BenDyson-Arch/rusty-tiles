@@ -6,12 +6,41 @@ The output is experimental. It uses draft glTF vector extensions inside a 3D Til
 
 Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. At boundaries that exceed their implicit cell, standard external tileset roots expose actual bounds before Cesium culls or picks the next levels. Add `--explicit` for the earlier explicit manifest and output bytes.
 
+## Acceptance and library API
+
+GeoJSON `.geojson` and `.json` inputs use the same bounded Rust semantic reader
+in standard and native builds. Native geometry operations remain independent
+of source parsing. GeoJSON under other extensions and GeoJSON text sequences
+are refused; they cannot bypass the shared admission rules through OGR.
+Native GeoPackage and other admitted OGR formats retain their native reader.
+
+Rust callers use one `vector::vector_to_archive(VectorRequest, &RunControl)`
+entry point. Construct `VectorRequest::new(input, output, VectorOptions)` and
+select `OutputPolicy::Replace` with `with_policy` when replacement is intended.
+`VectorOptions` owns `max_features`, `repair`, and `ambiguous_outlines`; output
+policy belongs to the request. The former `vector_to_3tz`, `_with_lod`,
+`_with_options`, and `_reported` Rust wrappers and ignored `meshopt_encoder`
+option have been removed. CLI and Python map their options to this same path.
+
+An explicitly constructed feature rejection is the only skippable failure.
+Under `--skip-invalid`, rejected features contribute no accepted fragments,
+counters, success diagnostics, frame or schema/cache state. Source, storage,
+SQLite, required reporting, cancellation and observer failures abort the run.
+Strict rejection publishes nothing. The destination is bound before observer
+calls; failure preserves an existing archive. Geometry reports and the summary
+finish before the archive is sealed, and no success callback runs afterward.
+`VectorResult` returns the published path, finalized report and cleanup diagnostics.
+
+Without reuse, the first accepted geometry selects the local frame; rejected
+candidates cannot choose it. Reuse prepares a fixed prior frame. This acceptance
+contract does not certify topology, CRS transformations or geometric error.
+
 ## Requirements
 
 The [installation guide](INSTALL.md#choose-a-build) separates the two builds. Installing GDAL does not enable native-geospatial in a standard binary or Python wheel.
 
 - The standard build reads GeoJSON and GeoPackage using Rust and bundled SQLite. It supports local XYZ and the verified grid-free CRS classes described below, including polygons with holes, repair, LOD, aggregation, metadata, meshopt and reuse.
-- Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build keeps its native ingestion, geometry and CRS backend for every vector conversion.
+- Shapefile, other OGR drivers and CRS operations beyond the grid-free tier need `native-geospatial`: GDAL 3.12 or newer built with GEOS 3.10 or newer, PROJ 9.2 or newer, and SQLite. This build uses the shared Rust reader for GeoJSON and native ingestion for other admitted OGR formats; geometry processing remains native.
 - CesiumJS 1.143.0 to display batched vector content. See [Compatibility](#compatibility).
 
 Conversion runs offline and needs no Python or executable helpers. The standard build needs no system GDAL, GEOS, PROJ database or SQLite installation. `doctor --command vector` reports the enabled reader and geometry backends and CRS limits; readiness does not establish that a particular source's CRS operation is supported.
@@ -76,7 +105,7 @@ Each layer uses its declared CRS with traditional X and Y axis order. `--source-
 | Compound or 3D CRS | Need the native build to use the declared height reference |
 | GeoJSON | Uses its conventional ellipsoidal metre heights |
 
-The standard build accepts verified grid-free WGS84 geographic (`EPSG:4326`), UTM north/south and Mercator operations, plus supported WKT/PROJ projections with explicit WGS84 or three-/seven-parameter Helmert datum parameters. It uses the same [strict CRS classes and projection domains as point clouds](FORMATS.md#point-clouds). Unsupported datums, required grids, compound/geoid heights and coordinate epochs fail with an environment error naming `native-geospatial`; no archive is published. Undefined GeoPackage CRS declarations need an explicit `--source-crs` override, including `local` when those coordinates are known to be local metres.
+The standard build accepts verified grid-free WGS84 geographic (`EPSG:4326`), UTM north/south and Mercator operations, plus supported WKT/PROJ projections with explicit WGS84 or three-/seven-parameter Helmert datum parameters. It uses the same [strict CRS classes and projection domains as point clouds](FORMATS.md#point-clouds). Unsupported datums, required grids, compound/geoid heights and coordinate epochs fail with an unsupported-capability error naming `native-geospatial`; no archive is published. Undefined GeoPackage CRS declarations need an explicit `--source-crs` override, including `local` when those coordinates are known to be local metres.
 
 With the native build, three-axis geographic CRSs such as EPSG:7843 use their declared height. Declared coordinate epochs are kept. A missing epoch stays unspecified.
 
@@ -88,7 +117,7 @@ Each tile has its own local origin to reduce float32 rounding. The reported roun
 
 By default, the command checks every selected feature first. It reports each failure with its layer, ID and reason, then publishes nothing.
 
-`--skip-invalid` omits those features and publishes the rest. The omitted identities and reasons go to `conversion.json` and `geometry-reports.jsonl`. Schema errors, configuration errors and encoding errors still fail the job. An initial build needs at least one convertible feature.
+`--skip-invalid` omits those features and publishes the rest. The omitted identities and reasons go to `conversion.json` and `geometry-reports.jsonl`. Feature-local schema incompatibilities are explicit rejections. Configuration errors, infrastructure failures and failures during final hierarchy encoding still fail the job. An initial build needs at least one convertible feature.
 
 Features with NULL or empty geometry are omitted automatically, because they have nothing to draw. They do not need `--skip-invalid`. `featuresWithoutGeometry` counts them, and each appears in the report stream with outcome `no-geometry`. A selection of only geometry-free records publishes a valid empty tileset.
 

@@ -49,6 +49,10 @@ fn encoder() -> String {
         include_str!("../pipeline.rs"),
         include_str!("../model.rs"),
         include_str!("../source_fields.rs"),
+        include_str!("source.rs"),
+        include_str!("acceptance.rs"),
+        include_str!("../portable.rs"),
+        include_str!("../../crs.rs"),
         include_str!("geometry.rs"),
         include_str!("encoding.rs"),
         include_str!("aggregation.rs"),
@@ -78,12 +82,8 @@ fn encoder() -> String {
         hasher.update([0]);
     }
     #[cfg(not(feature = "native-geospatial"))]
-    for source in [
-        include_str!("../portable.rs"),
-        include_str!("geometry/portable.rs"),
-        include_str!("../../crs.rs"),
-    ] {
-        hasher.update(source.as_bytes());
+    {
+        hasher.update(include_str!("geometry/portable.rs").as_bytes());
         hasher.update([0]);
     }
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
@@ -237,7 +237,7 @@ impl Reuse {
         // reuse never records or queries installed GDAL, GEOS or PROJ versions.
         let versions = json!({"backend":"portable", "rustyTiles":env!("CARGO_PKG_VERSION")});
         let layers: Vec<_> = reader
-            .layer_reports
+            .layer_reports()
             .iter()
             .map(|layer| {
                 let mut layer = layer.clone();
@@ -247,15 +247,28 @@ impl Reuse {
                 layer
             })
             .collect();
-        self.config = json!({"encoder":encoder(),"versions":versions,"driver":reader.driver,"schemas":reader.schemas,"layers":layers,
+        self.config = json!({"encoder":encoder(),"versions":versions,"driver":reader.driver(),"schemas":reader.schemas(),"layers":layers,
             "quantize":options.quantize,"meshopt":options.meshopt,"maxFeatures":max_features,"maxParentFeatures":options.max_parent_features,"maxVertices":options.max_vertices,"maxBytes":options.max_bytes,
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
         if !options.explicit {
             self.config["tiling"] = json!("implicit-quadtree-v2");
         }
-        if self.previous.is_some() && self.config != self.old_config {
-            return Err(data("previous encoder, schema, CRS or conversion settings differ; run a fresh conversion without reuseTileset"));
+        // Accepted schema/list inventory is derived from this source revision.
+        // It belongs in cache signatures, but changes must rebuild content rather
+        // than refusing deletions or an empty accepted inventory.
+        fn settings(config: &Value) -> Value {
+            let mut settings = config.clone();
+            settings.as_object_mut().unwrap().remove("schemas");
+            if let Some(layers) = settings["layers"].as_array_mut() {
+                for layer in layers {
+                    layer.as_object_mut().unwrap().remove("jsonFields");
+                }
+            }
+            settings
+        }
+        if self.previous.is_some() && settings(&self.config) != settings(&self.old_config) {
+            return Err(data("previous encoder, CRS or conversion settings differ; run a fresh conversion without reuseTileset"));
         }
         self.configuration_hash = digest(&self.config)?;
         Ok(())

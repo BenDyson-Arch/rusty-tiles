@@ -43,6 +43,8 @@ jobs:
         run: cargo test --locked --features native-jpeg
       - name: Independently decode local mesh candidates and corruption controls
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
+      - name: Independently verify vector acceptance and archive inventory
+        run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
       - name: Check source packaging
         run: cargo package --locked --no-verify
       - name: Test portable JPEG
@@ -165,6 +167,11 @@ jobs:
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cargo test --locked --features native-geospatial
+      - name: Independently verify native vector acceptance and archive inventory
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance-native" --native
       - name: Check native geospatial lint
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
@@ -242,16 +249,6 @@ jobs:
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - name: Test installed native suite in a runtime image without Python
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          target: acceptance
-          outputs: type=cacheonly
-          # Always execute the suite, including when build artifacts are cached.
-          no-cache-filters: acceptance
-          cache-from: type=gha,scope=python-free-acceptance
-          cache-to: type=gha,scope=python-free-acceptance,mode=max
       - name: Build and check packaged runtime
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -259,10 +256,14 @@ jobs:
           target: runtime
           load: true
           tags: rusty-tiles:native
-          # The acceptance export includes this target's SDK and Rust build.
           cache-from: type=gha,scope=python-free-acceptance
-      - name: Check runtime without network access
-        run: docker run --rm --network none rusty-tiles:native doctor --json
+          cache-to: type=gha,scope=python-free-acceptance,mode=max
+      - name: Test packaged conversions without Python or network access
+        run: |
+          docker run --rm --network none \
+            --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
+            --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
+            --entrypoint /bin/sh rusty-tiles:native /test-packaged-runtime.sh /fixtures
 
   release-acceptance:
     name: Release acceptance

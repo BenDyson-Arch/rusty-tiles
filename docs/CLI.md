@@ -298,7 +298,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-An out-of-range option value names the flag and its range. For example, `--lod-levels 40` prints `--lodLevels must be between 1 and 16, got 40` and exits with code 3.
+Vector conversion uses the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Its JSON error includes `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source features are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
 
 ## mesh-local-to-3tz
 

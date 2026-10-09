@@ -261,6 +261,26 @@ class WheelAPI(unittest.TestCase):
             rusty_tiles.vector_to_3tz(source, output, force=True, **options)
         self.assertEqual(output.read_bytes(), before)
 
+    def test_vector_callback_failure_aborts_skip_invalid_and_preserves_output(self):
+        source = self.root / "callback.geojson"
+        source.write_text(json.dumps({"type": "FeatureCollection", "features": [
+            {"type": "Feature", "properties": {},
+             "geometry": {"type": "Point", "coordinates": [1, 2, 3]}}
+        ]}))
+        output = self.root / "callback.3tz"
+        output.write_bytes(b"existing output")
+        marker = RuntimeError("vector observer fault")
+
+        def fail(_event):
+            raise marker
+
+        with self.assertRaises(RuntimeError) as raised:
+            rusty_tiles.vector_to_3tz(source, output, source_crs="local",
+                                     skip_invalid=True, force=True, callback=fail)
+        self.assertIs(raised.exception, marker)
+        self.assertEqual(output.read_bytes(), b"existing output")
+        self.assertEqual(list(self.root.glob(".vector-work-*")), [])
+
     def test_vector_geopackage_readonly_height_and_layer_selection(self):
         source = self.root / "survey.gpkg"
         with closing(sqlite3.connect(source)) as db, db:
@@ -303,7 +323,7 @@ class WheelAPI(unittest.TestCase):
              "geometry": {"type": "Point", "coordinates": [0, 0, 0]}}
         ]}))
         output = self.root / "rejected.3tz"
-        with self.assertRaisesRegex(rusty_tiles.EnvironmentError, "native-geospatial"):
+        with self.assertRaisesRegex(rusty_tiles.UnsupportedError, "native-geospatial"):
             rusty_tiles.vector_to_3tz(source, output, source_crs="EPSG:26910", height_offset=0)
         self.assertFalse(output.exists())
         with self.assertRaises(rusty_tiles.DataError):

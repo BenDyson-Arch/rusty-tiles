@@ -1,15 +1,18 @@
 //! Shared disk-backed vector hierarchy, LOD, encoding and reuse. Source readers
-//! and polygon operations are selected by build; workers receive owned data.
+//! follow admitted formats; polygon operations are selected by build. Workers
+//! receive owned data.
+pub(super) mod acceptance;
 mod aggregation;
+use acceptance::{FeatureFailure, FeatureResult};
 mod encoding;
 mod geometry;
 mod reuse;
+mod source;
 #[cfg(feature = "native-geospatial")]
 #[path = "pipeline/source_native.rs"]
-mod source;
-#[cfg(not(feature = "native-geospatial"))]
+mod source_native;
 #[path = "portable.rs"]
-mod source;
+mod source_portable;
 mod store;
 
 use super::{
@@ -40,7 +43,7 @@ fn digest<T: Serialize>(value: &T) -> Result<String, Error> {
     Ok(hash(&canonical(value)?))
 }
 fn sql(error: rusqlite::Error) -> Error {
-    Error::Data(format!("vector spool: {error}"))
+    Error::Io(std::io::Error::other(error))
 }
 fn data(message: impl Into<String>) -> Error {
     Error::Data(message.into())
@@ -61,24 +64,22 @@ fn bounds<'a>(points: impl Iterator<Item = &'a Point>) -> Result<(Point, Point),
     Ok((lo, hi))
 }
 
+pub(super) struct VectorMember {
+    pub name: String,
+    pub path: std::path::PathBuf,
+}
+pub(super) struct CompletedVector {
+    pub report: Value,
+    pub members: Vec<VectorMember>,
+}
+
 pub(super) fn convert(
     input: &Path,
     output: &Path,
-    max_features: usize,
-    repair: bool,
-    ambiguous_outlines: bool,
     options: &VectorOptions,
-    reporter: &crate::report::Reporter,
-) -> Result<Value, Error> {
-    store::convert(
-        input,
-        output,
-        max_features,
-        repair,
-        ambiguous_outlines,
-        options,
-        reporter,
-    )
+    attempt: &crate::runtime::Attempt,
+) -> Result<CompletedVector, Error> {
+    store::convert(input, output, options, attempt)
 }
 
 pub(crate) fn available() -> Result<(), Error> {
@@ -103,9 +104,11 @@ pub(crate) fn available() -> Result<(), Error> {
                 }
             }
         }
-        geometry::GeometryHandle::polygon(&[vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]])?
+        geometry::GeometryHandle::polygon(&[vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]])
+            .map_err(FeatureFailure::into_error)?
             .triangulate()
             .map(drop)
+            .map_err(FeatureFailure::into_error)
     }
     #[cfg(not(feature = "native-geospatial"))]
     {

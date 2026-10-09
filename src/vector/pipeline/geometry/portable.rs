@@ -2,7 +2,7 @@
 //! Repair uses geo's even-odd MakeValid, then checks every source boundary in
 //! both directions. Unlike GEOS, overlapping/retraced linework is conservatively
 //! refused: discarding a collapsed component must require the outline policy.
-use super::{data, outline, Error, Point};
+use super::{data, outline, FeatureFailure, Point};
 use geo::{
     algorithm::kernels::{Kernel, Orientation, RobustKernel},
     coordinate_position::CoordPos,
@@ -25,12 +25,25 @@ fn key(p: Coord<f64>) -> XYKey {
     [p.x, p.y].map(|v| if v == 0. { 0 } else { v.to_bits() })
 }
 
-// Dependencies use assertions for their numerical invariants. Convert a failed
-// invariant into a data error instead of allowing malformed input to unwind the
-// caller. Finite-coordinate checks precede all R-tree and kernel operations.
-fn guarded<T>(operation: impl FnOnce() -> Result<T, Error>) -> Result<T, Error> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation))
-        .map_err(|_| data("portable polygon kernel could not establish safe topology"))?
+// A dependency assertion indicates an unproven kernel invariant, not a
+// semantic feature rejection. Catch it only to abort through the job boundary.
+fn guarded<T>(operation: impl FnOnce() -> Result<T, FeatureFailure>) -> Result<T, FeatureFailure> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).map_err(|payload| {
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic payload");
+        FeatureFailure::Fatal(crate::Error::Job(crate::JobFailure {
+            error: crate::JobError::new(
+                crate::JobErrorKind::InvalidState,
+                format!("portable polygon kernel panicked: {message}"),
+            ),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        }))
+    })?
 }
 
 #[derive(Clone)]
@@ -41,7 +54,7 @@ pub(in super::super) struct GeometryHandle {
 }
 
 impl GeometryHandle {
-    pub(in super::super) fn polygon(rings: &[Vec<Point>]) -> Result<Self, Error> {
+    pub(in super::super) fn polygon(rings: &[Vec<Point>]) -> Result<Self, FeatureFailure> {
         if rings.is_empty() || rings.iter().any(|ring| ring.is_empty()) {
             return Err(data("polygon rings need three distinct vertices"));
         }
@@ -76,11 +89,11 @@ impl GeometryHandle {
         })
     }
 
-    pub(super) fn valid(&self) -> bool {
-        self.valid
+    pub(super) fn valid(&self) -> Result<bool, FeatureFailure> {
+        Ok(self.valid)
     }
 
-    pub(super) fn repair(&self) -> Result<Self, Error> {
+    pub(super) fn repair(&self) -> Result<Self, FeatureFailure> {
         guarded(|| {
             if self.collapsed {
                 return Err(outline("portable repair would discard collapsed or overlapping source edges; source needs review"));
@@ -126,11 +139,11 @@ impl GeometryHandle {
         })
     }
 
-    pub(super) fn area(&self) -> f64 {
-        self.polygons.iter().map(Area::unsigned_area).sum()
+    pub(super) fn area(&self) -> Result<f64, FeatureFailure> {
+        Ok(self.polygons.iter().map(Area::unsigned_area).sum())
     }
 
-    pub(super) fn parts(&self) -> Result<Vec<Self>, Error> {
+    pub(super) fn parts(&self) -> Result<Vec<Self>, FeatureFailure> {
         if self.collapsed {
             return Err(outline(
                 "polygon contains collapsed source geometry; source needs review",
@@ -148,8 +161,9 @@ impl GeometryHandle {
             .collect())
     }
 
-    pub(super) fn rings(&self) -> Vec<Vec<XY>> {
-        self.polygons
+    pub(super) fn rings(&self) -> Result<Vec<Vec<XY>>, FeatureFailure> {
+        Ok(self
+            .polygons
             .first()
             .map(|polygon| {
                 std::iter::once(polygon.exterior())
@@ -162,10 +176,10 @@ impl GeometryHandle {
                     })
                     .collect()
             })
-            .unwrap_or_default()
+            .unwrap_or_default())
     }
 
-    pub(in super::super) fn triangulate(&self) -> Result<Self, Error> {
+    pub(in super::super) fn triangulate(&self) -> Result<Self, FeatureFailure> {
         guarded(|| {
             if !self.valid || self.collapsed {
                 return Err(data(
@@ -279,7 +293,7 @@ fn root(parents: &mut [usize], mut i: usize) -> usize {
 /// Geo's Validation currently omits the connected-interior rule and its ring
 /// intersection check is quadratic. Use indexed exact predicates for large
 /// rings and a bipartite ring/contact graph to detect disconnected interiors.
-fn topology(polygon: &Polygon<f64>) -> Result<(bool, bool), Error> {
+fn topology(polygon: &Polygon<f64>) -> Result<(bool, bool), FeatureFailure> {
     let rings: Vec<_> = std::iter::once(polygon.exterior())
         .chain(polygon.interiors())
         .collect();
@@ -422,7 +436,7 @@ fn topology(polygon: &Polygon<f64>) -> Result<(bool, bool), Error> {
     Ok((true, false))
 }
 
-fn preserve_boundaries(before: &[Edge], after: &[Edge]) -> Result<(), Error> {
+fn preserve_boundaries(before: &[Edge], after: &[Edge]) -> Result<(), FeatureFailure> {
     // Boundary coverage is checked in both directions: this detects a repaired
     // polygon plus a silently discarded spike/hole, as well as a new chord.
     // The threshold is one hundred times tighter than the shared XYZ edge guard.
@@ -479,7 +493,7 @@ fn preserve_boundaries(before: &[Edge], after: &[Edge]) -> Result<(), Error> {
     Ok(())
 }
 
-fn triangulate(polygon: &Polygon<f64>) -> Result<Vec<Polygon<f64>>, Error> {
+fn triangulate(polygon: &Polygon<f64>) -> Result<Vec<Polygon<f64>>, FeatureFailure> {
     let mut cdt = Cdt::new();
     let mut vertices = BTreeMap::new();
     let lines = edges(polygon);
@@ -584,6 +598,28 @@ fn triangulate(polygon: &Polygon<f64>) -> Result<Vec<Polygon<f64>>, Error> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn kernel_panic_is_fatal_and_never_outline_eligible() {
+        for owned in [false, true] {
+            let result: Result<(), FeatureFailure> = guarded(|| {
+                if owned {
+                    std::panic::panic_any(String::from("fixture kernel invariant"));
+                }
+                panic!("fixture kernel invariant");
+            });
+            let failure = result.unwrap_err();
+            assert!(!failure.is_outline());
+            let FeatureFailure::Fatal(crate::Error::Job(failure)) = failure else {
+                panic!("kernel panic must abort rather than reject a feature")
+            };
+            assert_eq!(failure.error.kind(), crate::JobErrorKind::InvalidState);
+            assert!(failure
+                .error
+                .to_string()
+                .contains("fixture kernel invariant"));
+        }
+    }
+
     fn polygon(rings: &[&[XY]]) -> GeometryHandle {
         GeometryHandle::polygon(
             &rings
@@ -595,15 +631,15 @@ mod tests {
     }
 
     fn assert_area(shape: &GeometryHandle, expected: f64) {
-        assert!(shape.valid());
-        assert!((shape.area() - expected).abs() < 1e-10);
+        assert!(shape.valid().unwrap());
+        assert!((shape.area().unwrap() - expected).abs() < 1e-10);
         let triangles = shape.triangulate().unwrap();
-        assert!((triangles.area() - expected).abs() < 1e-10);
+        assert!((triangles.area().unwrap() - expected).abs() < 1e-10);
         assert!(triangles
             .parts()
             .unwrap()
             .iter()
-            .all(|t| t.rings()[0].len() == 3));
+            .all(|t| t.rings().unwrap()[0].len() == 3));
     }
 
     #[test]
@@ -641,7 +677,7 @@ mod tests {
     #[test]
     fn bowtie_repair_preserves_source_edges_and_adds_only_the_exact_crossing() {
         let shape = polygon(&[&[[0., 0.], [2., 2.], [2., 0.], [0., 2.]]]);
-        assert!(!shape.valid());
+        assert!(!shape.valid().unwrap());
         let repaired = shape.repair().unwrap();
         assert_eq!(repaired.parts().unwrap().len(), 2);
         assert_area(&repaired, 2.);
@@ -678,7 +714,7 @@ mod tests {
             vec![vec![[0., 0.], [1., 0.], [2., 0.], [1., 0.]]],
         ] {
             let shape = polygon(&rings.iter().map(Vec::as_slice).collect::<Vec<_>>());
-            assert!(!shape.valid());
+            assert!(!shape.valid().unwrap());
             let error = shape.repair().err().unwrap();
             assert!(super::super::is_outline(&error), "{error}");
         }
@@ -692,10 +728,10 @@ mod tests {
             &[[2., 2.], [8., 2.], [8., 8.], [2., 8.]],
             &[[3., 3.], [4., 3.], [4., 4.], [3., 4.]],
         ]);
-        assert!(!nested.valid());
+        assert!(!nested.valid().unwrap());
         assert_area(&nested.repair().unwrap(), 65.);
         let outside = polygon(&[&outer, &[[12., 0.], [14., 0.], [14., 2.], [12., 2.]]]);
-        assert!(!outside.valid());
+        assert!(!outside.valid().unwrap());
         assert_area(&outside.repair().unwrap(), 104.);
     }
 
@@ -705,7 +741,7 @@ mod tests {
             &[[0., 0.], [10., 0.], [10., 10.], [0., 10.]],
             &[[0., 5.], [5., 3.], [10., 5.], [5., 7.]],
         ]);
-        assert!(!shape.valid());
+        assert!(!shape.valid().unwrap());
         let repaired = shape.repair().unwrap();
         assert_eq!(repaired.parts().unwrap().len(), 2);
         assert_area(&repaired, 80.);
@@ -721,8 +757,8 @@ mod tests {
         }
         // Valid submillimetre polygons need no repair and retain exact vertices.
         let tiny = polygon(&[&[[0., 0.], [1e-6, 0.], [1e-6, 1e-6], [0., 1e-6]]]);
-        assert!(tiny.valid());
-        assert!((tiny.triangulate().unwrap().area() - 1e-12).abs() < 1e-24);
+        assert!(tiny.valid().unwrap());
+        assert!((tiny.triangulate().unwrap().area().unwrap() - 1e-12).abs() < 1e-24);
         // geo MakeValid's internal endpoint snapping cannot silently turn this
         // hole into nothing while retaining the surrounding square.
         let hole = polygon(&[
@@ -734,7 +770,7 @@ mod tests {
                 [5., 5.000001],
             ],
         ]);
-        assert!(!hole.valid());
+        assert!(!hole.valid().unwrap());
         assert!(super::super::is_outline(&hole.repair().err().unwrap()));
     }
 
@@ -747,10 +783,10 @@ mod tests {
             })
             .collect();
         let shape = polygon(&[&ring]);
-        assert!(shape.valid());
+        assert!(shape.valid().unwrap());
         let triangles = shape.triangulate().unwrap();
         assert_eq!(triangles.parts().unwrap().len(), 1022);
-        assert!((triangles.area() - shape.area()).abs() < 1e-8);
+        assert!((triangles.area().unwrap() - shape.area().unwrap()).abs() < 1e-8);
     }
 
     #[test]
@@ -763,9 +799,9 @@ mod tests {
             }
         }
         let shape = polygon(&rings.iter().map(Vec::as_slice).collect::<Vec<_>>());
-        assert!(shape.valid());
-        assert_eq!(shape.area(), 8424.);
-        assert!((shape.triangulate().unwrap().area() - 8424.).abs() < 1e-8);
+        assert!(shape.valid().unwrap());
+        assert_eq!(shape.area().unwrap(), 8424.);
+        assert!((shape.triangulate().unwrap().area().unwrap() - 8424.).abs() < 1e-8);
     }
 
     #[test]

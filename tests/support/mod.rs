@@ -519,7 +519,11 @@ pub fn force_replaces_only_successful_output(
     directory: bool,
 ) {
     let root = tempfile::tempdir().unwrap();
-    let out = root.path().join(command);
+    let out = root.path().join(if directory {
+        command.to_owned()
+    } else {
+        format!("{command}.3tz")
+    });
     let previous = if directory {
         fs::create_dir(&out).unwrap();
         out.join("previous")
@@ -541,7 +545,7 @@ pub fn force_replaces_only_successful_output(
     let rejected = run(source, &[]);
     assert_eq!(rejected.status.code(), Some(5), "{command}");
     assert!(
-        String::from_utf8_lossy(&rejected.stderr).contains("--force"),
+        String::from_utf8_lossy(&rejected.stderr).contains("exists"),
         "{command}: {}",
         String::from_utf8_lossy(&rejected.stderr)
     );

@@ -68,9 +68,11 @@ fn emit(
     fill_only: bool,
     options: &VectorOptions,
     reports: &mut Vec<Value>,
-) -> Result<Encoded, Error> {
+) -> FeatureResult<Encoded> {
     if items.len() > 16777217 {
-        return Err(data("too many exact feature IDs in one tile"));
+        return Err(FeatureFailure::reject(
+            "too many exact feature IDs in one tile",
+        ));
     }
     let mut glb = MetadataGlb::new("rusty-tiles native vector");
     glb.document["extensionsUsed"] = json!(["EXT_mesh_features", "EXT_structural_metadata"]);
@@ -113,7 +115,7 @@ fn emit(
             let points: Vec<_> = positions.iter().map(|p| sub(*p, center)).collect();
             let batch = batches.entry(mode).or_default();
             let base = u32::try_from(batch.points.len())
-                .map_err(|_| data("tile vertex index overflow"))?;
+                .map_err(|_| FeatureFailure::reject("tile vertex index overflow"))?;
             if mode == 3 && !batch.indices.is_empty() {
                 batch.indices.push(u32::MAX);
                 line_restart = true;
@@ -173,7 +175,7 @@ fn emit(
             .map(|p| p.map(|v| v as f32 as f64))
             .collect();
         if !values.iter().flatten().all(|v| v.is_finite()) {
-            return Err(data("positions exceed float32 range"));
+            return Err(FeatureFailure::reject("positions exceed float32 range"));
         }
         let bytes: Vec<_> = values
             .iter()
@@ -280,6 +282,77 @@ fn emit(
         quantization,
         before_bytes,
     })
+}
+
+/// Test the exact full-detail encodings before admitting a source fragment.
+/// Later cross-feature schema changes remain a fatal hierarchy constraint.
+/// Implicit scene framing uses the same reservation as final candidate encoding.
+pub(super) fn fits_feature(
+    feature: &Feature,
+    repair: bool,
+    options: &VectorOptions,
+) -> FeatureResult<bool> {
+    let (lo, hi) = bounds(feature.rendered_points())?;
+    let center = mul(add(lo, hi), 0.5);
+    let schemas: BTreeMap<_, _> = feature
+        .properties
+        .iter()
+        .filter_map(|(name, value)| {
+            let kind = if value.is_boolean() {
+                "boolean"
+            } else if value.is_i64() || value.is_u64() {
+                "integer"
+            } else if value.is_number() {
+                "real"
+            } else if value.is_string() {
+                "string"
+            } else {
+                return None;
+            };
+            Some((name.clone(), kind.to_string()))
+        })
+        .collect();
+    let mut boundary = feature.clone();
+    if feature.surface_fragment {
+        boundary.geometry = Geometry::MultiLineString(
+            feature
+                .triangle_boundaries
+                .iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        );
+    }
+    let groups = if feature.surface_fragment {
+        vec![(feature, true), (&boundary, false)]
+    } else {
+        vec![(feature, false)]
+    };
+    let mut vertices = 0usize;
+    let mut bytes = 0usize;
+    let mut contents = 0usize;
+    for (part, fill) in groups {
+        if part.geometry.size() == 0 {
+            continue;
+        }
+        let encoded = emit(
+            &[part],
+            center,
+            repair,
+            &schemas,
+            fill,
+            options,
+            &mut Vec::new(),
+        )?;
+        vertices += encoded.vertices;
+        bytes += encoded.bytes.len();
+        if fill {
+            bytes += 28 + (28 + b"{\"BATCH_LENGTH\":0}".len()).next_multiple_of(8) - 28;
+        }
+        contents += 1;
+    }
+    let reserve = if options.explicit { 0 } else { contents * 128 };
+    Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -400,7 +473,8 @@ pub(super) fn encode(
                 &locked,
                 &mut result.reports,
                 options.parent_repair,
-            )?;
+            )
+            .map_err(FeatureFailure::into_error)?;
             error = error.max(e);
             feature
         } else {

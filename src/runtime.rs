@@ -87,7 +87,7 @@ impl JobError {
         }))
     }
 
-    fn same_cause(&self, other: &Self) -> bool {
+    pub(crate) fn same_cause(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
 }
