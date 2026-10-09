@@ -4,6 +4,10 @@ Status: design proposal for [#113](https://github.com/BenDyson-Arch/rusty-tiles/
 
 The design is replacement-first. Treat current code as an untrusted reference implementation, not the definition of correct behavior. Existing algorithms, defaults, coordinate heuristics, report omissions, and packaging helpers must prove that they satisfy an independently stated requirement before retention. Rewrite them when they fail that gate; a mechanical refactor or agreement with current output is not sufficient evidence.
 
+The [post-F0 scopes](next-foundation-scopes.md) narrow the next mesh milestone.
+The broad configuration/context/result sketches here are not an instruction to
+build a universal framework or to include every proposed capability in F1a.
+
 ## Current behavior motivating the proposal
 
 These are source observations at the base revision; they neither define the proposed API nor establish correct behavior. Source links locate claims to investigate, not trusted oracles.

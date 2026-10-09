@@ -43,6 +43,27 @@ correct. Audit fixtures and oracles before carrying tests into the replacement.
 The format/CRS standard review and broad numerical/performance proof work are
 still outstanding; this pass does not claim to have independently verified them.
 
+## Post-F0 update
+
+The initial table below is historical evidence at `8dfd74b`; it is not a claim
+that F0 remains unimplemented. The [post-F0 audit and scopes](next-foundation-scopes.md)
+assign every remaining subsystem and operation a proof/migration owner.
+
+| Area | Updated evidence/disposition | Follow-on owner |
+| --- | --- | --- |
+| Opaque package/file lifecycle/3TZ codec | Implemented in #116 with independent readers, fault/concurrency/platform tests; final review found relative-output redirection, fixed in `c777180` with isolated regression. Bounded F0 acceptance only, never scene certification | #115 / [current evidence](f0-evidence.md) |
+| Mesh orchestration and source boundary | Concrete early-staging, size-dependent admission, raw URI/resource ownership and global-metric problems; one local static milestone before broader support | #117; fidelity #121; spatial #120 |
+| Directory installation/recovery | Existing controlled no-clobber violation remains; no directory guarantee inferred from F0 file primitives | #118 with minimal #124 pilot |
+| Vector acceptance | Observed SQL/counter/report disagreement and injected I/O swallowed as rejection; frame/cache ownership also needs an explicit contract | #119; geometry/identity #123 |
+| CRS/math and decoded fidelity oracles | Analytic/frozen references and small independent decoders are bounded retain candidates; historical shared-kernel encoders do not certify whole subsystems | #120–#124 per operation |
+| Validator and sampled LOD claims | Missing actual BIN payload accepted; content containment not checked by narrower child-bound validation; constructed sampled estimator can miss a 100 m spike. Distinguish those observations from unproved end-to-end defects | #125 and #121 |
+| Remaining operations/public surfaces | Wrapping, convertImplicit, in-place transforms, support tools and broad exported building blocks need explicit lifecycle/API disposition; codec proof alone is insufficient | #126 |
+
+Before release, every advertised operation earns scoped support or receives a
+recorded deliberate scope/migration decision. The issue list is not evidence of
+completion. See the [raw evidence audit](../../bench/architecture_audit/post_f0/evidence-audit.md)
+for per-oracle provenance and counterexamples to broad historical claims.
+
 ## Initial ledger
 
 | Component | Required contract | Evidence at this pass | Status / planned disposition |

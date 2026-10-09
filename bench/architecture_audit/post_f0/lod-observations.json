@@ -1,0 +1,27 @@
+{
+  "source_revision": "d69ba2a7facb99b5b3f5a6efba4e4039bef26be5",
+  "supplied_build_metadata": "Integrator confirms native production CLI matches this revision; rlib is same latest build dependency artifact. Provenance supplied, not embedded.",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "library": "/home/bend/.cache/rusty-tiles-115-target/debug/deps/librusty_tiles-bbdb7fdd09fbdcb3.rlib",
+  "library_sha256": "7f9efb9cb10b896cfef41e62e274a0e02938da0083b5765f68a979d558b3c89b",
+  "source_sha256": "1558f8a9c31369e517fc4516eae2501e4ba19723eb49f3c702a87a455e053208",
+  "compile_command": [
+    "rustc",
+    "--edition=2021",
+    "-C",
+    "debuginfo=0",
+    "/tmp/f1-lod-probe.rs",
+    "--extern",
+    "rusty_tiles=/home/bend/.cache/rusty-tiles-115-target/debug/deps/librusty_tiles-bbdb7fdd09fbdcb3.rlib",
+    "-L",
+    "dependency=/home/bend/.cache/rusty-tiles-115-target/debug/deps",
+    "-o",
+    "/tmp/f1-lod-probe"
+  ],
+  "observation": {
+    "child_triangles": 3000,
+    "estimated_error_metres": 0,
+    "independent_max_child_vertex_distance_metres": 100
+  },
+  "limits": "Direct estimator call with constructed parent/children, not end-to-end mesh conversion. README explicitly describes sampled estimate, not universal visual-error guarantee."
+}

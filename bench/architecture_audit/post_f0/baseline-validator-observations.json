@@ -1,0 +1,117 @@
+{
+  "head": "d69ba2a7facb99b5b3f5a6efba4e4039bef26be5",
+  "binary_sha256": "738eebfb62f52295b34d168b4859da606f87b2b85c88c659d275e87a5ede8ebe",
+  "binary": "/home/bend/.cache/rusty-tiles-115-target/debug/rusty-tiles",
+  "supplied_build_metadata": {
+    "source_revision": "d69ba2a7facb99b5b3f5a6efba4e4039bef26be5",
+    "features": "native-geospatial,native-jpeg",
+    "provenance": "Rust1.98.0; GDAL3.13.3; Linux x86_64; CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0; artifact build metadata supplied by integrator, not embedded provenance"
+  },
+  "fixture_helper": {
+    "path": "bench/architecture_audit/api/probe.py",
+    "sha256": "c6903efcfb0071e493b684bfd2206326e4a2ffe23480cabe41b4e5bb24bc5d43",
+    "provenance": "standard-library independent GLB byte fixture generator retained from #113 baseline API audit"
+  },
+  "cases": {
+    "valid_control": {
+      "fixture_sha256": "1ca11d498a31b065575a4d489d4bebe49439a3680c37eff417ccc4122cde7c9f",
+      "pack": {
+        "arguments": [
+          "--json",
+          "convert",
+          "-i",
+          "<work>/valid_control",
+          "-o",
+          "<work>/valid_control.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":null,\"counts\":{},\"ok\":true,\"output\":\"<work>/valid_control.3tz\",\"packageReceipt\":{\"archiveBytes\":1028,\"memberCount\":2,\"sourceBytes\":652},\"reuse\":null,\"settings\":{},\"skippedFeatures\":null}\n",
+        "stderr": ""
+      },
+      "validate": {
+        "arguments": [
+          "--json",
+          "validate",
+          "<work>/valid_control.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"archive\":\"<work>/valid_control.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+        "stderr": ""
+      },
+      "independent_fact": "all 3 source positions lie inside declared box; BIN contains 36 bytes"
+    },
+    "missing_binary_payload": {
+      "fixture_sha256": "48fb29c1de4e781acd9975081840da4b2f1b3f8cbc718f7026b6ff0b607a96f3",
+      "pack": {
+        "arguments": [
+          "--json",
+          "convert",
+          "-i",
+          "<work>/missing_binary_payload",
+          "-o",
+          "<work>/missing_binary_payload.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":null,\"counts\":{},\"ok\":true,\"output\":\"<work>/missing_binary_payload.3tz\",\"packageReceipt\":{\"archiveBytes\":992,\"memberCount\":2,\"sourceBytes\":616},\"reuse\":null,\"settings\":{},\"skippedFeatures\":null}\n",
+        "stderr": ""
+      },
+      "validate": {
+        "arguments": [
+          "--json",
+          "validate",
+          "<work>/missing_binary_payload.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"archive\":\"<work>/missing_binary_payload.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+        "stderr": ""
+      },
+      "independent_fact": "declared bufferView byteLength=36, actual BIN byteLength=0; required position data absent"
+    },
+    "geometry_outside_bounds": {
+      "fixture_sha256": "4e014ad650207fe3d555915a54eb7c0110825087e0250f4c083590197a3b30b3",
+      "pack": {
+        "arguments": [
+          "--json",
+          "convert",
+          "-i",
+          "<work>/geometry_outside_bounds",
+          "-o",
+          "<work>/geometry_outside_bounds.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":null,\"counts\":{},\"ok\":true,\"output\":\"<work>/geometry_outside_bounds.3tz\",\"packageReceipt\":{\"archiveBytes\":1048,\"memberCount\":2,\"sourceBytes\":672},\"reuse\":null,\"settings\":{},\"skippedFeatures\":null}\n",
+        "stderr": ""
+      },
+      "validate": {
+        "arguments": [
+          "--json",
+          "validate",
+          "<work>/geometry_outside_bounds.3tz"
+        ],
+        "exit": 0,
+        "stdout": "{\"archive\":\"<work>/geometry_outside_bounds.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+        "stderr": ""
+      },
+      "independent_fact": "all source position coordinates >=1000; declared box ranges x/y 0..1, z -0.5..0.5"
+    },
+    "legacy_geographic_offset_cli": {
+      "arguments": [
+        "--json",
+        "meshTo3tz",
+        "-i",
+        "<work>/geographic.glb",
+        "-o",
+        "<work>/offset.3tz",
+        "--sourceCrs",
+        "geographic",
+        "--sourceOffset",
+        "1000",
+        "2000",
+        "300"
+      ],
+      "exit": 3,
+      "stdout": "{\"error\":{\"code\":\"data\",\"message\":\"--sourceOffset requires --sourceCrs auto or epsg:3857\"},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    }
+  }
+}

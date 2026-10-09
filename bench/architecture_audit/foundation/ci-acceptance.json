@@ -1,0 +1,187 @@
+{
+  "accepted_head": "dd0e0afc9b927f43944cc185aa8b806c6032fbde",
+  "merge_commit": "519e8c105dfb9afcdcf6447b82adc91ff0dba630",
+  "accepted_and_merged_tree": "394815ecb9c1435f361e6ac0c6bade9d217b322b",
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 37882662620,
+      "headSha": "dd0e0afc9b927f43944cc185aa8b806c6032fbde",
+      "status": "completed",
+      "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620",
+      "jobs": [
+        {
+          "name": "Python-free runtime",
+          "databaseId": 113665901364,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901364"
+        },
+        {
+          "name": "Python wheel (CPython 3.14)",
+          "databaseId": 113665901472,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901472"
+        },
+        {
+          "name": "Portable CLI (x86_64-apple-darwin)",
+          "databaseId": 113665901495,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901495"
+        },
+        {
+          "name": "Python",
+          "databaseId": 113665901511,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901511"
+        },
+        {
+          "name": "Python wheel (CPython 3.10)",
+          "databaseId": 113665901522,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901522"
+        },
+        {
+          "name": "Native geospatial (GDAL 3.13)",
+          "databaseId": 113665901556,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901556"
+        },
+        {
+          "name": "Portable CLI (aarch64-unknown-linux-gnu)",
+          "databaseId": 113665901563,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901563"
+        },
+        {
+          "name": "Portable CLI (x86_64-unknown-linux-gnu)",
+          "databaseId": 113665901602,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901602"
+        },
+        {
+          "name": "Native geospatial (GDAL 3.12)",
+          "databaseId": 113665901667,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901667"
+        },
+        {
+          "name": "Portable CLI (x86_64-pc-windows-msvc)",
+          "databaseId": 113665901704,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901704"
+        },
+        {
+          "name": "Portable CLI (aarch64-apple-darwin)",
+          "databaseId": 113665901770,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901770"
+        },
+        {
+          "name": "Rust",
+          "databaseId": 113665901810,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665901810"
+        },
+        {
+          "name": "Release acceptance",
+          "databaseId": 113665902452,
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662620/job/113665902452"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 37882662617,
+      "headSha": "dd0e0afc9b927f43944cc185aa8b806c6032fbde",
+      "status": "completed",
+      "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617",
+      "jobs": [
+        {
+          "name": "Installed wheel (x86_64-apple-darwin)",
+          "databaseId": 113665622810,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113665622810"
+        },
+        {
+          "name": "Installed wheel (x86_64-unknown-linux-gnu)",
+          "databaseId": 113665622968,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113665622968"
+        },
+        {
+          "name": "Installed wheel (aarch64-unknown-linux-gnu)",
+          "databaseId": 113665623000,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113665623000"
+        },
+        {
+          "name": "Installed wheel (aarch64-apple-darwin)",
+          "databaseId": 113665623026,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113665623026"
+        },
+        {
+          "name": "Installed wheel (x86_64-pc-windows-msvc)",
+          "databaseId": 113665623119,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113665623119"
+        },
+        {
+          "name": "Official Blender (windows-x64)",
+          "databaseId": 113667048050,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113667048050"
+        },
+        {
+          "name": "Official Blender (macos-arm64)",
+          "databaseId": 113667048076,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113667048076"
+        },
+        {
+          "name": "Official Blender (macos-x64)",
+          "databaseId": 113667048122,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113667048122"
+        },
+        {
+          "name": "Official Blender (linux-x64)",
+          "databaseId": 113667048151,
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113667048151"
+        },
+        {
+          "name": "Distribution Blender (Linux x86_64)",
+          "databaseId": 113667049193,
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37882662617/job/113667049193"
+        }
+      ]
+    }
+  ],
+  "limits": "All active PR jobs pass. workflow_dispatch-only Release acceptance and optional Distribution Blender were skipped. Fresh develop CI starts separately; identical merged tree does not close architecture gate #113 or authorize release."
+}
