@@ -1,24 +1,24 @@
 {
-  "source_commit": "d444d82ac528b0173f1cad4cb0e347bbc8107e98",
+  "source_commit": "0b3af01e2e486b0d2336c8d1be7dd277147c73d8",
   "checks": {
     "portable": {
       "passed": 325,
       "ignored": 8,
-      "log_sha256": "c58d43fa7b5d86884b394bbf51743d80864668a9a46ce84a642af2f9d31f344c",
+      "log_sha256": "d80df1188cd50d955628ee16df8fb85953060631de1234e71a4ceb048e158778",
       "counting": "Unfiltered harness totals; nested subprocess executions excluded."
     },
     "native": {
       "passed": 350,
       "ignored": 9,
-      "log_sha256": "194d4a423842218f20292ab5460e6859e95045aff6c84f5585c9e08a52537c04",
+      "log_sha256": "96be0cf07f86c4f6775e9afaf38184ebbcd62164923762d114e400d0c2ec4268",
       "counting": "Unfiltered harness totals; nested subprocess executions excluded."
     },
     "clippy_workspace_all_targets": {
-      "log_sha256": "f33c27ab03907c5673e1d9a248230ff571c1bdded0a66c38a818b298c23dc36c",
+      "log_sha256": "d7e393ae2bbed3ef194c370c70e71acc95c1b9c8889b4b1527cbcd160a547bff",
       "status": "passed"
     },
     "source_package": {
-      "log_sha256": "8af15b38ce007626ecbace0963259461442d3f0ee184afbabc0ccbc5e0a6d738",
+      "log_sha256": "a555d9243875e653117c9df2c35ca1b617703a6423c7ea37987d48aaaf04d595",
       "status": "passed"
     }
   },
@@ -27,8 +27,8 @@
     "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
     "machine": "x86_64",
     "package_version": "0.4.0",
-    "package_file": "/tmp/rusty-tiles-wheel-lr8isgma/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
-    "wheel_sha256": "7b65c10c5fa5db75ab028df529f0f883323c50005bc4927753e60c0f86852d30",
+    "package_file": "/tmp/rusty-tiles-wheel-fl1y3g1s/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+    "wheel_sha256": "9c04749381d7e118100fd0ba91794567499920077ca188ab0189fc789ab083b3",
     "empty_path": true,
     "tests_run": 27,
     "failures": 0,
@@ -36,7 +36,7 @@
     "skipped": 0,
     "ok": true
   },
-  "ci": "PR128 pending; no local Windows/macOS/official-Blender claim",
+  "ci": "PR128 final-source CI pending; previous f0f1dfc wheel/platform and official-Blender matrix passed, production source has since changed.",
   "resources": "Linux same portable binary, sampled FD/thread/scratch; see resources.json",
   "native_features": [
     "native-geospatial",

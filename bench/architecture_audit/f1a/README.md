@@ -5,7 +5,7 @@ The bounded contract is [f1a-contract.md](../../../docs/architecture/f1a-contrac
 ## Runs and provenance
 
 `implementation-results.json` records final local verification of production
-`d444d82`: 325 portable and 350 native tests passed (8/9 existing ignored),
+`0b3af01`: 325 portable and 350 native tests passed (8/9 existing ignored),
 workspace/all-target clippy with warnings denied, formatting and source packaging.
 `installed-wheel.json` records 27 tests with no failures/errors/skips in an isolated
 Python3.14 environment with an empty PATH. It identifies the rebuilt local abi3
@@ -39,7 +39,7 @@ The first command needs Python's standard library only and fails if the binary i
 
 ## Resource measurement limits
 
-`measure.py` reuses only the independent source fixture generator, not the quadratic small-fixture geometry matcher. `resources.json` exercises small geometry, 100,000 source triangles, 4,096 leaves, source/JSON byte envelopes, their combined workload and over-limit refusal controls. The combined32MiB source/100,000triangle/4,096leaf case used63,348KiB peak RSS, one sampled thread, six sampled descriptors and10,956,860 sampled workspace bytes. It left no workspace. The geometry-only case used49,768KiB; these are observations, not universal maximum-memory promises. Read the recorded sizes and outcomes rather than treating labels as proof of every admission boundary. Expanded-instance/accessor/source/JSON refusal controls run through the public facade in `tests/mesh_archive.rs`; the resource sampler does not claim to measure every possible combination.
+`measure.py` reuses only the independent source fixture generator, not the quadratic small-fixture geometry matcher. `resources.json` exercises small geometry, 100,000 source triangles, 4,096 leaves, source/JSON byte envelopes, their combined workload and over-limit refusal controls. The combined32MiB source/100,000triangle/4,096leaf case used63,912KiB peak RSS, one sampled thread, six sampled descriptors and10,956,860 sampled workspace bytes. It left no workspace. The geometry-only case used49,492KiB; these are observations, not universal maximum-memory promises. Read the recorded sizes and outcomes rather than treating labels as proof of every admission boundary. Expanded-instance/accessor/source/JSON refusal controls run through the public facade in `tests/mesh_archive.rs`; the resource sampler does not claim to measure every possible combination.
 
 `measure_child.c` first starts as a fresh small C process, then forks/execs the converter and reads Linux `wait4` peak RSS. This avoids contaminating the converter's high-water mark with memory inherited from Python's large fixture generator. Compilation requires `cc`; the helper is built in the temporary workspace and removed afterward. Descriptors, threads and workspace files/bytes are sampled through `/proc` at intervals of at least 2 ms: recorded maxima are observations, not proven peaks. An unsampled fast run can report zero descriptors or scratch despite using them. Serial materialization has bounded admission; these measurements do not claim constant memory, all-platform behavior, filesystem durability or crash recovery.
 
