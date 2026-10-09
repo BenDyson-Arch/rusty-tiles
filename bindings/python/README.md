@@ -292,3 +292,11 @@ Updating the Blender pin requires reviewing the official checksum file,
 updating the manifest and rerunning all four platform jobs.
 
 `convert_to_implicit(input, output, *, force=False)` rewrites an eligible rusty-tiles explicit point-cloud/vector `.3tz` as implicit tiling, returning `ConversionResult`. It preserves original GLB/b3dm bytes through implicit tileset roots that own their replacement descendants. Retained originals and coordinate-template aliases typically double payload storage. Eligibility requires distinct regular midpoint cells, with only recorded rounding/minimum-thickness padding; many older binary trees and vector LOD chains need a fresh source conversion. Meshes, foreign and already implicit archives are refused. See [command eligibility and publication semantics](../../docs/CLI.md#convert-to-implicit).
+
+`raster_tile_to_directory(input, output, *, zoom, x, y, callback=None)` exposes
+the D1 request/error boundary. The standard wheel has no GDAL raster capability
+and raises `UnsupportedError` without creating output or invoking callbacks;
+invalid XYZ requests raise `InvalidRequestError` first. No native wheel or pip
+extra is introduced. The native Rust/CLI profile and filesystem guarantees are
+specified in `docs/architecture/d1-raster-contract.md` and
+`docs/architecture/d1-directory-contract.md`.

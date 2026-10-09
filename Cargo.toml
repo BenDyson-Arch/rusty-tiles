@@ -83,5 +83,5 @@ pkg-config = { version = "0.3", optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }
 
-[target.'cfg(unix)'.dev-dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"

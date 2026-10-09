@@ -1,4 +1,4 @@
-//! File staging and one-attempt publication control. Format producers own their
+//! File and completed-directory staging with one-attempt publication control. Format producers own their
 //! workers, encoding, receipts, and finalization; this module owns none of them.
 use std::{
     error::Error as StdError,
@@ -54,6 +54,15 @@ impl JobError {
         }))
     }
 
+    pub(crate) fn conflict(path: &Path, error: io::Error) -> Self {
+        Self(Arc::new(ErrorDetail {
+            kind: JobErrorKind::Conflict,
+            message: "output already exists".into(),
+            path: Some(path.to_owned()),
+            source: Some(Arc::new(error)),
+        }))
+    }
+
     pub fn kind(&self) -> JobErrorKind {
         self.0.kind
     }
@@ -100,7 +109,7 @@ impl StdError for JobError {
 }
 
 /// Failure before successful installation, including actionable cleanup state.
-/// Directory rollback/recovery is outside this file-only runtime.
+/// Directory replacement/rollback remains outside the D1 CreateNew contract.
 #[derive(Clone, Debug)]
 pub struct JobFailure {
     pub error: JobError,
@@ -566,12 +575,7 @@ impl SealedArtifact<'_> {
             }
             Err(error) => {
                 let cause = if error.error.kind() == io::ErrorKind::AlreadyExists {
-                    JobError(Arc::new(ErrorDetail {
-                        kind: JobErrorKind::Conflict,
-                        message: "output already exists".into(),
-                        path: Some(output.to_owned()),
-                        source: Some(Arc::new(error.error)),
-                    }))
+                    JobError::conflict(output, error.error)
                 } else {
                     JobError::io("install completed file", output, error.error)
                 };
@@ -655,3 +659,6 @@ fn inspect_postcommit_name(path: &Path, files: &dyn FileOperations) -> Option<Cl
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(feature = "native-geospatial", test))]
+pub(crate) mod directory;

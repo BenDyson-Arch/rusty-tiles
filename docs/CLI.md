@@ -396,3 +396,21 @@ Events report work units, not time remaining.
 | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
+
+### One RGB raster tile into a new directory
+
+With a `native-geospatial` build, `raster-tile-to-directory` accepts the bounded
+[D1 RGB profile](architecture/d1-raster-contract.md): one 256×256 RGB GeoTIFF
+already aligned to an explicit Web Mercator XYZ tile.
+
+```sh
+rusty-tiles raster-tile-to-directory -i aligned.tif -o ./new-tile --zoom 3 --x 5 --y 2
+```
+
+The parent directory must exist on a supported local filesystem. Existing
+outputs always conflict; this command has no `--force` mode. It publishes the
+PNG tile, `tilejson.json` and `report.json` together. `--json` returns the exact
+`rasterReport` and cleanup diagnostics. Default builds return `unsupported`.
+See the [directory contract](architecture/d1-directory-contract.md) for platform
+support and guarantees. Broader imagery conversion remains the separate
+`raster` command.

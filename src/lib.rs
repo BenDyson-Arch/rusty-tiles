@@ -30,6 +30,7 @@ pub mod pack;
 pub mod package;
 pub mod point_cloud;
 mod point_sampling;
+mod raster_directory;
 pub mod report;
 mod runtime;
 pub mod terrain;
@@ -49,6 +50,9 @@ pub use georef::{
 };
 pub use mesh_archive::{mesh_to_archive, MeshReport, MeshRequest, MeshResult};
 pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
+pub use raster_directory::{
+    raster_to_directory, RasterDirectoryReport, RasterDirectoryRequest, RasterDirectoryResult,
+};
 pub use report::{ConversionResult, Event, EventSink, Reporter};
 pub use runtime::{
     CancellationHandle, CleanupDiagnostic, JobError, JobErrorKind, JobFailure, Observer,

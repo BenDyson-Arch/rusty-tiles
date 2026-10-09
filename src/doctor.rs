@@ -10,6 +10,7 @@ use std::path::Path;
 pub const COMMANDS: &[(&str, &[&str])] = &[
     ("vector", &[]),
     ("raster", &[]),
+    ("raster-tile-to-directory", &[]),
     ("terrain", &[]),
     ("point-cloud", &[]),
     ("mesh-to-3tz", &["meshTo3tz"]),
@@ -58,6 +59,12 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
     report["commands"]["mesh-to-3tz"]["note"] = json!("Local/manual placement and legacy geographic/Web Mercator adapters remain available. General mesh CRS uses the shared horizontal resolver and requires explicit xyz/y-up axes after node transforms and an ellipsoidal metre height offset; E/N shifts use horizontal units, A metres. No compound/geocentric input or manual placement/rotation on the general path.");
     report["commands"]["terrain"] = terrain_readiness(&geospatial);
     report["commands"]["raster"] = raster_readiness(&geospatial);
+    report["commands"]["raster-tile-to-directory"] = json!({
+        "ready": geospatial["ready"] == true,
+        "requires":["native-geospatial", "supported local output filesystem"],
+        "backend":"GDAL RGB source reader / Rust PNG and directory publisher",
+        "note":"Finite aligned RGB tile profile; destination filesystem support is checked per request."
+    });
     report["commands"]["vector"] = vector_readiness(&geospatial);
     let mut names: Vec<String> = Vec::new();
     if selected.is_empty() {
