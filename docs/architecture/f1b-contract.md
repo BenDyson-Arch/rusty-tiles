@@ -1,5 +1,7 @@
 # F1b1: source-faithful base-color textures
 
+Historical resource-admission and report contract. The [F1b2 contract](f1b2-contract.md) now extends this operation to bounded local glTF resources and schema 3. The geometry, material, texture and delivery rules below remain applicable.
+
 First bounded implementation slice of [#121](https://github.com/BenDyson-Arch/rusty-tiles/issues/121), following C1 and the accepted F1a geometry producer. The audit baseline is `fdc5d186faedf80c3d2b4b86556f20e77a970d1f`. This extends the existing `MeshRequest::local_gltf`, CLI `mesh-local-to-3tz`, and Python `mesh_local_to_3tz` operation; there is no second compatibility mode or automatic legacy fallback. #121 and the 0.4.0 gates remain open until their remaining obligations are settled.
 
 ## Ownership and retained geometry contract

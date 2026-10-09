@@ -1,6 +1,8 @@
-//! Finite embedded-GLB admission and decoding. No filesystem, jobs, or legacy mesh IR.
+//! Finite glTF document/resource admission and decoding from borrowed snapshots.
+//! No filesystem, jobs, source dependency discovery, or legacy mesh IR.
 use crate::{JobError, JobErrorKind};
 use serde_json::{Map, Value};
+use std::ops::Range;
 mod json;
 mod texture;
 
@@ -10,6 +12,7 @@ pub(super) const MAX_LEAVES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
 type Result<T> = std::result::Result<T, JobError>;
 type Matrix = [[f64; 4]; 4];
+type Instance = (usize, Matrix, f64, [[f64; 3]; 3]);
 const IDENTITY: Matrix = [
     [1., 0., 0., 0.],
     [0., 1., 0., 0.],
@@ -39,7 +42,6 @@ pub(super) struct Geometry {
     pub images: Vec<Image>,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
-    pub source_bytes: u64,
 }
 
 fn invalid(message: impl Into<String>) -> JobError {
@@ -117,7 +119,7 @@ fn u32_at(bytes: &[u8], at: usize) -> Result<u32> {
     Ok(u32::from_le_bytes(data.try_into().unwrap()))
 }
 
-fn envelope(bytes: &[u8]) -> Result<(&[u8], &[u8])> {
+fn envelope(bytes: &[u8]) -> Result<(&[u8], Option<Range<usize>>)> {
     if bytes.len() > MAX_SOURCE_BYTES {
         return Err(unsupported("source exceeds 32 MiB F1a ceiling"));
     }
@@ -140,6 +142,9 @@ fn envelope(bytes: &[u8]) -> Result<(&[u8], &[u8])> {
     let json = bytes
         .get(20..json_end)
         .ok_or_else(|| invalid("truncated JSON chunk"))?;
+    if json_end == bytes.len() {
+        return Ok((json, None));
+    }
     let bin_len = u32_at(bytes, json_end)? as usize;
     if u32_at(bytes, json_end + 4)? != 0x004e4942 {
         return Err(unsupported("F1a requires one BIN chunk after JSON"));
@@ -169,7 +174,7 @@ fn envelope(bytes: &[u8]) -> Result<(&[u8], &[u8])> {
         }
         return Err(unsupported("unknown GLB chunks outside F1a"));
     }
-    Ok((json, &bytes[bin_start..bin_end]))
+    Ok((json, Some(bin_start..bin_end)))
 }
 
 #[derive(Clone, Copy)]
@@ -178,7 +183,6 @@ struct Accessor<'a> {
     stride: usize,
     count: usize,
     component: usize,
-    width: usize,
 }
 impl Accessor<'_> {
     fn scalar(&self, i: usize, c: usize) -> f64 {
@@ -209,29 +213,26 @@ impl Accessor<'_> {
     }
 }
 
-fn accessors<'a>(
+struct AccessorLayout {
+    buffer: usize,
+    start: usize,
+    length: usize,
+    stride: usize,
+    count: usize,
+    component: usize,
+    width: usize,
+    min: Option<Vec<f64>>,
+    max: Option<Vec<f64>>,
+}
+
+fn accessor_layouts(
     doc: &Value,
-    bin: &'a [u8],
+    buffer_lengths: &[usize],
     check: &mut impl FnMut() -> Result<()>,
-) -> Result<Vec<Accessor<'a>>> {
-    let buffers = list(doc, "buffers")?;
-    if buffers.len() != 1 {
-        return Err(unsupported("F1a requires one embedded buffer"));
-    }
-    object(&buffers[0], &["byteLength", "name"])?;
-    let declared = field(&buffers[0], "byteLength")?;
-    if declared == 0
-        || declared > bin.len()
-        || bin.len() - declared > 3
-        || bin[declared..].iter().any(|&b| b != 0)
-    {
-        return Err(invalid(
-            "BIN payload does not match buffer byteLength/padding",
-        ));
-    }
-    let bin = &bin[..declared];
+) -> Result<Vec<AccessorLayout>> {
     let views = list(doc, "bufferViews")?;
     for view in views {
+        check()?;
         object(
             view,
             &[
@@ -245,11 +246,15 @@ fn accessors<'a>(
         )?;
         let start = offset(view, "byteOffset")?;
         let size = field(view, "byteLength")?;
-        if field(view, "buffer")? != 0
-            || size == 0
-            || start.checked_add(size).is_none_or(|end| end > bin.len())
+        let buffer_length = *buffer_lengths
+            .get(field(view, "buffer")?)
+            .ok_or_else(|| invalid("bufferView buffer reference out of range"))?;
+        if size == 0
+            || start
+                .checked_add(size)
+                .is_none_or(|end| end > buffer_length)
         {
-            return Err(invalid("bufferView range outside actual BIN"));
+            return Err(invalid("bufferView range outside declared buffer"));
         }
         if let Some(stride) = view.get("byteStride") {
             let stride = uint(stride)?;
@@ -349,16 +354,6 @@ fn accessors<'a>(
         {
             return Err(invalid("accessor alignment/range/stride invalid"));
         }
-        let bytes = bin
-            .get(start..start + length)
-            .ok_or_else(|| invalid("accessor outside actual BIN"))?;
-        let accessor = Accessor {
-            bytes,
-            stride,
-            count,
-            component,
-            width,
-        };
         let bounds =
             [value.get("min"), value.get("max")].map(|bound| -> Result<Option<Vec<f64>>> {
                 bound
@@ -398,15 +393,52 @@ fn accessors<'a>(
             });
         let [min, max] = bounds;
         let (min, max) = (min?, max?);
-        for i in 0..count {
+        result.push(AccessorLayout {
+            buffer: field(view, "buffer")?,
+            start,
+            length,
+            stride,
+            count,
+            component,
+            width,
+            min,
+            max,
+        });
+    }
+    Ok(result)
+}
+
+fn decode_accessors<'a>(
+    layouts: &[AccessorLayout],
+    buffers: &[&'a [u8]],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<Accessor<'a>>> {
+    let mut result = Vec::with_capacity(layouts.len());
+    for layout in layouts {
+        check()?;
+        let end = layout
+            .start
+            .checked_add(layout.length)
+            .ok_or_else(|| invalid("accessor range overflow"))?;
+        let bytes = buffers
+            .get(layout.buffer)
+            .and_then(|buffer| buffer.get(layout.start..end))
+            .ok_or_else(|| invalid("accessor outside actual buffer"))?;
+        let accessor = Accessor {
+            bytes,
+            stride: layout.stride,
+            count: layout.count,
+            component: layout.component,
+        };
+        for i in 0..layout.count {
             if i.is_multiple_of(1024) {
                 check()?;
             }
-            for c in 0..width {
+            for c in 0..layout.width {
                 let x = accessor.scalar(i, c);
                 if !x.is_finite()
-                    || min.as_ref().is_some_and(|v| x < v[c])
-                    || max.as_ref().is_some_and(|v| x > v[c])
+                    || layout.min.as_ref().is_some_and(|v| x < v[c])
+                    || layout.max.as_ref().is_some_and(|v| x > v[c])
                 {
                     return Err(invalid(
                         "nonfinite accessor data or data outside declared bounds",
@@ -645,7 +677,7 @@ enum BufferViewUse {
 
 fn primitives(
     doc: &Value,
-    data: &[Accessor<'_>],
+    data: &[AccessorLayout],
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<Vec<Primitive>>> {
     let get = |i: usize| {
@@ -677,9 +709,6 @@ fn primitives(
     let mut total = 0;
     let mut primitive_count = 0;
     let mut used_indices = vec![false; data.len()];
-    let mut checked_positions = std::collections::HashSet::new();
-    let mut checked_normals = std::collections::HashSet::new();
-    let mut checked_texcoords = std::collections::HashSet::new();
     for mesh in list(doc, "meshes")? {
         object(mesh, &["name", "primitives"])?;
         let values = array(&mesh["primitives"])?;
@@ -732,41 +761,10 @@ fn primitives(
                     return Err(invalid("invalid vertex accessor alignment/target"));
                 }
             }
-            if let Some(i) = texcoord.filter(|i| checked_texcoords.insert(*i)) {
-                let a = get(i)?;
-                for index in 0..a.count {
-                    if index.is_multiple_of(1024) {
-                        check()?;
-                    }
-                    if (0..2).any(|c| a.scalar(index, c).abs() > 1_000_000.) {
-                        return Err(unsupported("TEXCOORD_0 outside supported finite magnitude"));
-                    }
-                }
-            }
             if doc["accessors"][position].get("min").is_none()
                 || doc["accessors"][position].get("max").is_none()
             {
                 return Err(invalid("POSITION requires min/max"));
-            }
-            if checked_positions.insert(position) {
-                for i in 0..pos.count {
-                    if i.is_multiple_of(1024) {
-                        check()?;
-                    }
-                    if pos.vec3(i).iter().any(|v| v.abs() > 1_000_000.) {
-                        return Err(unsupported("source position outside local F1a domain"));
-                    }
-                }
-            }
-            if let Some(n) = normal.filter(|n| checked_normals.insert(*n)) {
-                for i in 0..pos.count {
-                    if i.is_multiple_of(1024) {
-                        check()?;
-                    }
-                    if (length(get(n)?.vec3(i)) - 1.).abs() > 1e-4 {
-                        return Err(invalid("source NORMAL must be unit length"));
-                    }
-                }
             }
             let indices = p.get("indices").map(uint).transpose()?;
             let count = if let Some(i) = indices {
@@ -784,22 +782,6 @@ fn primitives(
                         .is_some_and(|n| n != 34963)
                 {
                     return Err(invalid("indices cannot be strided or vertex-targeted"));
-                }
-                let reserved = match a.component {
-                    5121 => u8::MAX as usize,
-                    5123 => u16::MAX as usize,
-                    _ => u32::MAX as usize,
-                };
-                for j in 0..a.count {
-                    if j.is_multiple_of(1024) {
-                        check()?;
-                    }
-                    let index = a.scalar(j, 0) as usize;
-                    if index >= pos.count || index == reserved {
-                        return Err(invalid(
-                            "triangle index out of range or reserved restart value",
-                        ));
-                    }
                 }
                 a.count
             } else {
@@ -847,14 +829,210 @@ fn primitives(
     Ok(meshes)
 }
 
-pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Result<Geometry> {
-    check()?;
-    let (json, bin) = envelope(bytes)?;
-    let doc = json::parse(json)?;
+fn validate_primitive_payload(
+    meshes: &[Vec<Primitive>],
+    data: &[Accessor<'_>],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    let mut positions = std::collections::HashSet::new();
+    let mut normals = std::collections::HashSet::new();
+    let mut texcoords = std::collections::HashSet::new();
+    let mut indices = std::collections::HashSet::new();
+    for p in meshes.iter().flatten() {
+        check()?;
+        let pos = &data[p.position];
+        if positions.insert(p.position) {
+            for i in 0..pos.count {
+                if i.is_multiple_of(1024) {
+                    check()?;
+                }
+                if pos.vec3(i).iter().any(|v| v.abs() > 1_000_000.) {
+                    return Err(unsupported("source position outside local mesh domain"));
+                }
+            }
+        }
+        if let Some(n) = p.normal.filter(|n| normals.insert(*n)) {
+            for i in 0..pos.count {
+                if i.is_multiple_of(1024) {
+                    check()?;
+                }
+                if (length(data[n].vec3(i)) - 1.).abs() > 1e-4 {
+                    return Err(invalid("source NORMAL must be unit length"));
+                }
+            }
+        }
+        if let Some(t) = p.texcoord.filter(|t| texcoords.insert(*t)) {
+            let a = &data[t];
+            for i in 0..a.count {
+                if i.is_multiple_of(1024) {
+                    check()?;
+                }
+                if (0..2).any(|c| a.scalar(i, c).abs() > 1_000_000.) {
+                    return Err(unsupported("TEXCOORD_0 outside supported finite magnitude"));
+                }
+            }
+        }
+        if let Some(index_accessor) = p.indices.filter(|i| indices.insert((*i, pos.count))) {
+            let a = &data[index_accessor];
+            let reserved = match a.component {
+                5121 => u8::MAX as usize,
+                5123 => u16::MAX as usize,
+                _ => u32::MAX as usize,
+            };
+            for i in 0..a.count {
+                if i.is_multiple_of(1024) {
+                    check()?;
+                }
+                let index = a.scalar(i, 0) as usize;
+                if index >= pos.count || index == reserved {
+                    return Err(invalid(
+                        "triangle index out of range or reserved restart value",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub(super) enum BufferSource {
+    Embedded(Range<usize>),
+    External(usize),
+}
+#[derive(Clone, Debug)]
+pub(super) enum ImageSource {
+    BufferView(usize),
+    External(usize),
+}
+#[derive(Clone, Debug)]
+pub(super) struct ResourceRequest {
+    pub uri: String,
+}
+
+/// Pure parsed metadata and layout plans. Root and dependency byte owners stay
+/// in the consumer; embedded data is a range rather than a self-reference.
+pub(super) struct Document {
+    value: Value,
+    buffers: Vec<BufferSource>,
+    buffer_lengths: Vec<usize>,
+    images: Vec<ImageSource>,
+    resources: Vec<ResourceRequest>,
+    accessors: Vec<AccessorLayout>,
+    meshes: Vec<Vec<Primitive>>,
+    instances: Vec<Instance>,
+    triangle_count: usize,
+    materials: Vec<Value>,
+    textures: Vec<Value>,
+    samplers: Vec<Value>,
+}
+impl Document {
+    pub fn parse(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Result<Self> {
+        check()?;
+        if bytes.len() > MAX_SOURCE_BYTES {
+            return Err(unsupported("root document exceeds 32 MiB"));
+        }
+        let (doc, bin) = if bytes.starts_with(b"glTF") {
+            let (json, bin) = envelope(bytes)?;
+            (json::parse(json, true)?, bin)
+        } else {
+            if bytes.len() > MAX_JSON_BYTES {
+                return Err(unsupported("glTF JSON exceeds 1 MiB"));
+            }
+            (json::parse(bytes, false)?, None)
+        };
+        validate_document(&doc)?;
+        let mut resources = Vec::new();
+        let mut buffers = Vec::new();
+        let mut buffer_lengths = Vec::new();
+        let declarations = list(&doc, "buffers")?;
+        if declarations.is_empty() {
+            return Err(invalid("mesh document requires buffers"));
+        }
+        if declarations.len() > 32 {
+            return Err(unsupported("buffer count exceeds 32"));
+        }
+        let mut total_declared = 0usize;
+        for (i, buffer) in declarations.iter().enumerate() {
+            check()?;
+            object(buffer, &["byteLength", "name", "uri"])?;
+            let declared = field(buffer, "byteLength")?;
+            if declared == 0 {
+                return Err(invalid("buffer byteLength must be positive"));
+            }
+            total_declared = total_declared
+                .checked_add(declared)
+                .ok_or_else(|| unsupported("declared buffer byte sum overflow"))?;
+            if total_declared > MAX_SOURCE_BYTES {
+                return Err(unsupported("declared buffers exceed 32 MiB"));
+            }
+            buffer_lengths.push(declared);
+            if let Some(uri) = buffer.get("uri") {
+                let uri = uri
+                    .as_str()
+                    .ok_or_else(|| invalid("buffer URI must be a string"))?;
+                if i == 0 && bin.is_some() {
+                    return Err(invalid("GLB BIN requires URI-less buffer zero"));
+                }
+                buffers.push(BufferSource::External(resources.len()));
+                resources.push(ResourceRequest { uri: uri.into() });
+            } else {
+                if i != 0 {
+                    return Err(unsupported("only GLB buffer zero may omit URI"));
+                }
+                let range = bin
+                    .clone()
+                    .ok_or_else(|| invalid("URI-less buffer requires GLB BIN"))?;
+                if declared > range.len()
+                    || range.len() - declared > 3
+                    || bytes[range.start + declared..range.end]
+                        .iter()
+                        .any(|&b| b != 0)
+                {
+                    return Err(invalid(
+                        "BIN payload does not match buffer byteLength/padding",
+                    ));
+                }
+                buffers.push(BufferSource::Embedded(range.start..range.start + declared));
+            }
+        }
+        let accessors = accessor_layouts(&doc, &buffer_lengths, &mut check)?;
+        let materials = materials(&doc)?;
+        let (images, textures, samplers) = texture::metadata(&doc, &mut resources, &mut check)?;
+        let meshes = primitives(&doc, &accessors, &mut check)?;
+        let (instances, triangle_count) = scene_plan(&doc, &meshes, &mut check)?;
+        check()?;
+        Ok(Self {
+            value: doc,
+            buffers,
+            buffer_lengths,
+            images,
+            resources,
+            accessors,
+            meshes,
+            instances,
+            triangle_count,
+            materials,
+            textures,
+            samplers,
+        })
+    }
+    pub fn resources(&self) -> &[ResourceRequest] {
+        &self.resources
+    }
+    pub fn buffer_sources(&self) -> &[BufferSource] {
+        &self.buffers
+    }
+    pub fn image_sources(&self) -> &[ImageSource] {
+        &self.images
+    }
+}
+
+fn validate_document(doc: &Value) -> Result<()> {
     // Separate profile checks prevent a permissive schema parser from silently
     // ignoring extension, metadata, resource, or rendering semantics.
     object(
-        &doc,
+        doc,
         &[
             "asset",
             "scene",
@@ -893,11 +1071,15 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
             return Err(invalid("asset label must be string"));
         }
     }
-    let material_values = materials(&doc)?;
-    let data = accessors(&doc, bin, &mut check)?;
-    let (images, textures, samplers) = texture::decode(&doc, bin, &mut check)?;
-    let meshes = primitives(&doc, &data, &mut check)?;
-    let nodes = list(&doc, "nodes")?;
+    Ok(())
+}
+
+fn scene_plan(
+    doc: &Value,
+    meshes: &[Vec<Primitive>],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<(Vec<Instance>, usize)> {
+    let nodes = list(doc, "nodes")?;
     if nodes.len() > 4096 {
         return Err(unsupported("F1a node ceiling exceeded"));
     }
@@ -939,7 +1121,7 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
             current = parents[i];
         }
     }
-    let scenes = list(&doc, "scenes")?;
+    let scenes = list(doc, "scenes")?;
     for scene in scenes {
         object(scene, &["name", "nodes"])?;
         let mut roots = std::collections::HashSet::new();
@@ -988,9 +1170,42 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
     if triangle_count == 0 {
         return Err(invalid("selected scene contains no triangles"));
     }
-    let mut triangles = Vec::with_capacity(triangle_count);
-    for (mesh, world, det, normal_matrix) in instances {
-        for p in &meshes[mesh] {
+    Ok((instances, triangle_count))
+}
+
+pub(super) fn decode(
+    document: &Document,
+    supplied_buffers: &[&[u8]],
+    image_resources: &[Option<&[u8]>],
+    mut check: impl FnMut() -> Result<()>,
+) -> Result<Geometry> {
+    check()?;
+    if supplied_buffers.len() != document.buffers.len() {
+        return Err(invalid(
+            "buffer snapshot count disagrees with parsed document",
+        ));
+    }
+    let buffers = supplied_buffers
+        .iter()
+        .zip(&document.buffer_lengths)
+        .map(|(buffer, &length)| {
+            buffer
+                .get(..length)
+                .ok_or_else(|| invalid("actual buffer bytes shorter than declared byteLength"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let data = decode_accessors(&document.accessors, &buffers, &mut check)?;
+    validate_primitive_payload(&document.meshes, &data, &mut check)?;
+    let images = texture::decode(
+        &document.value,
+        &buffers,
+        &document.images,
+        image_resources,
+        &mut check,
+    )?;
+    let mut triangles = Vec::with_capacity(document.triangle_count);
+    for &(mesh, world, det, normal_matrix) in &document.instances {
+        for p in &document.meshes[mesh] {
             for start in (0..p.count).step_by(3) {
                 if start.is_multiple_of(3072) {
                     check()?;
@@ -1042,10 +1257,9 @@ pub(super) fn decode(bytes: &[u8], mut check: impl FnMut() -> Result<()>) -> Res
     }
     Ok(Geometry {
         triangles,
-        materials: material_values,
+        materials: document.materials.clone(),
         images,
-        textures,
-        samplers,
-        source_bytes: bytes.len() as u64,
+        textures: document.textures.clone(),
+        samplers: document.samplers.clone(),
     })
 }

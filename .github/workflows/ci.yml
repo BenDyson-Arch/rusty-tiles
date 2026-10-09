@@ -57,7 +57,9 @@ jobs:
       - name: Independently verify mesh texture fidelity and image closure
         run: |
           python3 -B tests/f1b_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-textures.json"
+          python3 -B tests/f1b2_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-local-resources.json"
           python3 -B bench/architecture_audit/f1b1/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-resources.json"
+          python3 -B bench/architecture_audit/f1b2/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-local-resource-bounds.json"
       - name: Retain mesh texture evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

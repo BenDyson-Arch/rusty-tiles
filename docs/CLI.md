@@ -308,23 +308,27 @@ Vector and point-cloud conversion use the foundation error categories: `invalid_
 ## mesh-local-to-3tz
 
 `mesh-local-to-3tz -i local.glb -o local.3tz --leaf-triangles 1000` converts the
-bounded static GLB profile, explicitly interpreted as local
+bounded static GLB/glTF profile, explicitly interpreted as local
 metres with Y up. `--leaf-triangles` is required and positive; it limits each
 leaf's triangle count, not archive bytes, memory or geometric error. `--force`
 uses completed-file replacement. This operation emits an explicit hierarchy
-with full-detail leaf geometry and source-faithful embedded PNG/JPEG base-color
+with full-detail leaf geometry and source-faithful PNG/JPEG base-color
 textures. Each used image is delivered once in the archive; UVs, material factors,
 alpha masking and sampler settings are preserved. There is no coarse LOD or guessed CRS.
 
-Unsupported source semantics, including external resources, additional PBR texture
+Relative local buffers and images are captured before callbacks. Network, data,
+absolute and escaping resource URIs and dependency symlinks are refused.
+Unsupported source semantics, including additional PBR texture
 channels, alpha blending, animation, extensions and
 extras, fail consistently before output staging. See the [finite source,
-numerical and admission contract](architecture/f1b-contract.md). This command
+numerical and admission contract](architecture/f1b2-contract.md). This command
 is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 
 `--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. The output is its resolved
+`conversion.json`, plus `cleanupDiagnostics`. Schema 3 counts the root document
+as `source_bytes`; `external_files` and `external_bytes` count unique captured
+dependencies, including unused ones. The output is its resolved
 absolute installation path. `--progress json` uses fallible precommit domain
 events; required observer/finalization failures preserve the previous destination.
 The root geometric error is an extent-derived omission/selection metric,

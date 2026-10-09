@@ -1,4 +1,4 @@
-//! One bounded local GLB mesh producer under the F0 file lifecycle.
+//! One bounded local glTF mesh producer under the F0 file lifecycle.
 //! Broader legacy mesh conversion is a separate, unreviewed operation.
 use crate::{
     archive3tz::{self, CodecError, WriteFailure},
@@ -9,10 +9,11 @@ use serde::Serialize;
 use serde_json::json;
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 
+mod binding;
 mod encode;
 mod partition;
 mod source;
@@ -48,6 +49,8 @@ pub struct MeshReport {
     pub profile: &'static str,
     pub coordinates: &'static str,
     pub source_bytes: u64,
+    pub external_files: u64,
+    pub external_bytes: u64,
     pub triangles: u64,
     pub leaf_tiles: u64,
     pub leaf_triangles: u64,
@@ -65,6 +68,9 @@ pub struct MeshResult {
 struct PreparedMesh {
     request: MeshRequest,
     geometry: source::Geometry,
+    source_bytes: u64,
+    external_files: u64,
+    external_bytes: u64,
     leaves: Vec<partition::Leaf>,
     bounds: partition::Bounds,
     images: Vec<usize>,
@@ -174,89 +180,20 @@ fn prepare(
 ) -> Result<PreparedMesh, JobError> {
     attempt.check()?;
     validate(&request)?;
-    let source_metadata = fs::symlink_metadata(&request.input)
-        .map_err(|e| JobError::io("inspect mesh source", &request.input, e))?;
-    if !source_metadata.is_file() {
-        return Err(invalid(
-            JobErrorKind::InvalidInput,
-            "mesh source must be a regular file without a symlink leaf",
-        ));
-    }
-    if source_metadata.len() > source::MAX_SOURCE_BYTES as u64 {
-        return Err(invalid(
-            JobErrorKind::Unsupported,
-            "mesh source exceeds F1a source admission limit",
-        ));
-    }
-    let input = fs::canonicalize(&request.input)
-        .map_err(|e| JobError::io("resolve mesh source", &request.input, e))?;
-    let output = crate::output_path::resolve(&request.output)?;
-    let output_metadata = match fs::symlink_metadata(&request.output) {
-        Ok(m) => Some(m),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(JobError::io("inspect mesh output", &request.output, e)),
-    };
-    if output == input
-        || output.starts_with(&input)
-        || (output_metadata.is_some()
-            && same_file::is_same_file(&request.output, &input).map_err(|e| {
-                JobError::io("compare mesh source/output identity", &request.output, e)
-            })?)
-    {
-        return Err(invalid(
-            JobErrorKind::InvalidRequest,
-            "mesh output overlaps or aliases source",
-        ));
-    }
-    if output_metadata.is_some_and(|m| !m.is_file()) {
-        return Err(invalid(
-            JobErrorKind::InvalidInput,
-            "mesh output must be a regular file without symlinks",
-        ));
-    }
-    request.input = input;
-    request.output = output;
-    let mut file = File::open(&request.input)
-        .map_err(|e| JobError::io("open mesh source", &request.input, e))?;
-    let before = file
-        .metadata()
-        .map_err(|e| JobError::io("inspect open mesh source", &request.input, e))?;
-    if !before.is_file()
-        || before.len() != source_metadata.len()
-        || before.modified().ok() != source_metadata.modified().ok()
-    {
-        return Err(invalid(
-            JobErrorKind::InvalidInput,
-            "mesh source changed during preparation",
-        ));
-    }
-    let mut bytes = Vec::with_capacity(before.len() as usize);
-    (&mut file)
-        .take(source::MAX_SOURCE_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| JobError::io("read mesh source", &request.input, e))?;
-    let after = file
-        .metadata()
-        .map_err(|e| JobError::io("inspect mesh source after reading", &request.input, e))?;
-    if bytes.len() > source::MAX_SOURCE_BYTES {
-        return Err(invalid(
-            JobErrorKind::Unsupported,
-            "mesh source exceeds F1a source admission limit",
-        ));
-    }
-    if bytes.len() as u64 != before.len()
-        || after.len() != before.len()
-        || after.modified().ok() != before.modified().ok()
-    {
-        return Err(invalid(
-            JobErrorKind::InvalidInput,
-            "mesh source changed during bounded reading",
-        ));
-    }
-    drop(file);
+    let snapshot = binding::load(&request.input, &request.output, || attempt.check())?;
+    request.input = snapshot.input.clone();
+    request.output = snapshot.output.clone();
     operations.stage(ProducerStage::Decode)?;
-    let geometry = source::decode(&bytes, || attempt.check())?;
-    drop(bytes);
+    let geometry = source::decode(
+        &snapshot.document,
+        &snapshot.buffers(),
+        &snapshot.images(),
+        || attempt.check(),
+    )?;
+    let source_bytes = snapshot.source_bytes;
+    let external_files = snapshot.external_files;
+    let external_bytes = snapshot.external_bytes;
+    drop(snapshot);
     let (leaves, bounds) = partition::plan(
         &geometry.triangles,
         request.leaf_triangles,
@@ -272,6 +209,9 @@ fn prepare(
     Ok(PreparedMesh {
         request,
         geometry,
+        source_bytes,
+        external_files,
+        external_bytes,
         leaves,
         bounds,
         images,
@@ -370,10 +310,12 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 2,
-        profile: "f1b-local-textured-glb-v1",
+        schema_version: 3,
+        profile: "f1b-local-gltf-v1",
         coordinates: "local-gltf",
-        source_bytes: prepared.geometry.source_bytes,
+        source_bytes: prepared.source_bytes,
+        external_files: prepared.external_files,
+        external_bytes: prepared.external_bytes,
         triangles: prepared.geometry.triangles.len() as u64,
         leaf_tiles: prepared.leaves.len() as u64,
         leaf_triangles: prepared.request.leaf_triangles as u64,

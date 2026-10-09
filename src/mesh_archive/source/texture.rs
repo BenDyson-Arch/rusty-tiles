@@ -1,7 +1,7 @@
-//! Embedded core textures admitted from bounded bytes; no URI resolution or reencoding.
+//! Core textures admitted from bounded borrowed snapshots; no URI resolution or reencoding.
 use super::{
-    field, invalid, list, object, offset, reference, uint, unsupported, Image, Result,
-    MAX_SOURCE_BYTES,
+    field, invalid, list, object, offset, reference, uint, unsupported, Image, ImageSource,
+    ResourceRequest, Result, MAX_SOURCE_BYTES,
 };
 use image::{ColorType, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
 use serde_json::Value;
@@ -103,11 +103,11 @@ fn labels_removed(values: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-pub(super) fn decode(
+pub(super) fn metadata(
     doc: &Value,
-    bin: &[u8],
+    resources: &mut Vec<ResourceRequest>,
     check: &mut impl FnMut() -> Result<()>,
-) -> Result<(Vec<Image>, Vec<Value>, Vec<Value>)> {
+) -> Result<(Vec<ImageSource>, Vec<Value>, Vec<Value>)> {
     let source_images = list(doc, "images")?;
     let textures = list(doc, "textures")?;
     let samplers = list(doc, "samplers")?;
@@ -165,52 +165,119 @@ pub(super) fn decode(
             let end = start
                 .checked_add(field(view, "byteLength")?)
                 .ok_or_else(|| invalid("accessor view range overflow"))?;
-            accessor_ranges.push((start, end));
+            accessor_ranges.push((field(view, "buffer")?, start, end));
         }
     }
+    let mut sources = Vec::with_capacity(source_images.len());
+    for source in source_images {
+        check()?;
+        object(source, &["name", "bufferView", "mimeType", "uri"])?;
+        if let Some(mime) = source.get("mimeType") {
+            match mime.as_str() {
+                Some("image/png" | "image/jpeg") => {}
+                Some(_) => return Err(unsupported("only PNG/JPEG images are supported")),
+                None => return Err(invalid("image mimeType must be a string")),
+            }
+        }
+        match (source.get("uri"), source.get("bufferView")) {
+            (Some(uri), None) => {
+                let uri = uri
+                    .as_str()
+                    .ok_or_else(|| invalid("image URI must be a string"))?;
+                sources.push(ImageSource::External(resources.len()));
+                resources.push(ResourceRequest { uri: uri.into() });
+            }
+            (None, Some(view_index)) => {
+                if source.get("mimeType").is_none() {
+                    return Err(invalid("bufferView image requires mimeType"));
+                }
+                let view = reference(views, view_index)?;
+                if view.get("byteStride").is_some() || view.get("target").is_some() {
+                    return Err(invalid(
+                        "image bufferView must not have byteStride or target",
+                    ));
+                }
+                let buffer = field(view, "buffer")?;
+                let start = offset(view, "byteOffset")?;
+                let end = start
+                    .checked_add(field(view, "byteLength")?)
+                    .ok_or_else(|| invalid("image view range overflow"))?;
+                for (i, &(other_buffer, other_start, other_end)) in
+                    accessor_ranges.iter().enumerate()
+                {
+                    if i.is_multiple_of(1024) {
+                        check()?;
+                    }
+                    if buffer == other_buffer && start < other_end && other_start < end {
+                        return Err(invalid("image bufferView overlaps accessor bufferView"));
+                    }
+                }
+                sources.push(ImageSource::BufferView(uint(view_index)?));
+            }
+            _ => return Err(invalid("image requires exactly one of URI or bufferView")),
+        }
+    }
+    Ok((sources, labels_removed(textures), labels_removed(samplers)))
+}
+
+pub(super) fn decode(
+    doc: &Value,
+    buffers: &[&[u8]],
+    sources: &[ImageSource],
+    external_images: &[Option<&[u8]>],
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<Image>> {
+    let source_images = list(doc, "images")?;
+    if sources.len() != source_images.len() || external_images.len() != source_images.len() {
+        return Err(invalid(
+            "image snapshot count disagrees with parsed document",
+        ));
+    }
+    let views = list(doc, "bufferViews")?;
     let mut images = Vec::with_capacity(source_images.len());
     let mut total_pixels = 0u64;
     let mut total_bytes = 0usize;
-    for source in source_images {
+    for (index, source) in source_images.iter().enumerate() {
         check()?;
-        // In particular, URI, extras, and extensions remain outside this profile.
-        object(source, &["name", "bufferView", "mimeType"])?;
-        let view = reference(views, &source["bufferView"])?;
-        if view.get("byteStride").is_some() || view.get("target").is_some() {
-            return Err(invalid(
-                "image bufferView must not have byteStride or target",
-            ));
-        }
-        let start = offset(view, "byteOffset")?;
-        let length = field(view, "byteLength")?;
-        let end = start
-            .checked_add(length)
-            .ok_or_else(|| invalid("image view range overflow"))?;
-        for (index, &(other_start, other_end)) in accessor_ranges.iter().enumerate() {
-            if index.is_multiple_of(1024) {
-                check()?;
+        let encoded = match &sources[index] {
+            ImageSource::BufferView(view_index) => {
+                if external_images[index].is_some() {
+                    return Err(invalid("bufferView image has an external snapshot"));
+                }
+                let view = views
+                    .get(*view_index)
+                    .ok_or_else(|| invalid("image view index out of range"))?;
+                let start = offset(view, "byteOffset")?;
+                let end = start
+                    .checked_add(field(view, "byteLength")?)
+                    .ok_or_else(|| invalid("image view range overflow"))?;
+                buffers
+                    .get(field(view, "buffer")?)
+                    .and_then(|bytes| bytes.get(start..end))
+                    .ok_or_else(|| invalid("image bufferView outside actual buffer"))?
             }
-            if start < other_end && other_start < end {
-                return Err(invalid("image bufferView overlaps accessor bufferView"));
-            }
-        }
-        let encoded = bin
-            .get(start..end)
-            .ok_or_else(|| invalid("image bufferView outside actual BIN"))?;
+            ImageSource::External(_) => external_images[index]
+                .ok_or_else(|| invalid("URI image requires external snapshot"))?,
+        };
+        let length = encoded.len();
         total_bytes = total_bytes
             .checked_add(length)
             .ok_or_else(|| unsupported("image byte sum overflow"))?;
         if total_bytes > MAX_SOURCE_BYTES {
             return Err(unsupported("owned image bytes exceed 32 MiB"));
         }
+        let detected =
+            image::guess_format(encoded).map_err(|_| invalid("image signature is invalid"))?;
         let (mime_type, extension, format) = match source.get("mimeType").and_then(Value::as_str) {
             Some("image/png") => ("image/png", "png", ImageFormat::Png),
             Some("image/jpeg") => ("image/jpeg", "jpg", ImageFormat::Jpeg),
-            Some(_) => return Err(unsupported("only PNG/JPEG embedded images are supported")),
-            None => return Err(invalid("embedded image requires string mimeType")),
+            Some(_) => return Err(unsupported("only PNG/JPEG images are supported")),
+            None => match detected {
+                ImageFormat::Png => ("image/png", "png", ImageFormat::Png),
+                ImageFormat::Jpeg => ("image/jpeg", "jpg", ImageFormat::Jpeg),
+                _ => return Err(unsupported("only PNG/JPEG image signatures are supported")),
+            },
         };
-        let detected = image::guess_format(encoded)
-            .map_err(|_| invalid("embedded image signature is invalid"))?;
         if detected != format {
             return Err(invalid("image MIME type does not match encoded bytes"));
         }
@@ -268,5 +335,5 @@ pub(super) fn decode(
             height,
         });
     }
-    Ok((images, labels_removed(textures), labels_removed(samplers)))
+    Ok(images)
 }

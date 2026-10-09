@@ -217,8 +217,9 @@ shared image closure under F0. It forwards source bytes without invoking legacy
 atlas, LOD or encoder paths. This deliberately advances the existing operation
 and report profile rather than maintaining an F1a compatibility mode.
 
-Next, define external glTF/GLB resource binding and source stability before
-accepting local resource URIs. Then settle additional material/attribute support,
+The next slice, [F1b2](f1b2-contract.md), defines bounded local glTF/GLB resource
+binding and source stability, with a pure decoder and consumer-owned capture.
+Then settle additional material/attribute support,
 placement and identity requirements, followed by an independently justified
 coarse approximation/error contract. Implicit delivery follows the accepted
 geometry/resource contract. These remain #121/#120/#125 obligations; no legacy
