@@ -1,0 +1,271 @@
+{
+  "arithmetic_controls": [
+    {
+      "box_high_exact": "1",
+      "exact": "1",
+      "exact_result": "contained",
+      "interval_result": "unsupported_cannot_prove",
+      "label": "dyadic-boundary",
+      "ordinary_float_box_high": "1.0",
+      "ordinary_float_would_contain": true,
+      "outward_interval": [
+        "0.9999999999999998",
+        "1.0000000000000004"
+      ]
+    },
+    {
+      "box_high_exact": "1",
+      "exact": "1",
+      "exact_result": "contained",
+      "interval_result": "unsupported_cannot_prove",
+      "label": "normalized-third-cancels",
+      "ordinary_float_box_high": "1.0",
+      "ordinary_float_would_contain": true,
+      "outward_interval": [
+        "0.9999999999999996",
+        "1.0000000000000004"
+      ]
+    },
+    {
+      "box_high_exact": "18014398509481983/18014398509481984",
+      "exact": "1",
+      "exact_result": "invalid_input",
+      "interval_result": "unsupported_cannot_prove",
+      "label": "outside-by-exact-half-ulp",
+      "ordinary_float_box_high": "1.0",
+      "ordinary_float_would_contain": true,
+      "outward_interval": [
+        "0.9999999999999998",
+        "1.0000000000000004"
+      ]
+    },
+    {
+      "label": "finite-over-width",
+      "result": "unsupported"
+    },
+    {
+      "label": "unreduced-intermediate-over-width-despite-small-result",
+      "result": "unsupported"
+    },
+    {
+      "label": "at-work-ceiling-then-one-more",
+      "result": "resource_limit"
+    }
+  ],
+  "baseline": "e4d90897518d2b569fb5e99b876581523e4c418c (coordinator supplied)",
+  "classification": "read-only independent model/fact controls; no product execution/acceptance",
+  "codec_sha256": "207f64595be3d5d0c0d728a981673c3fee8b4d9e671341831d556485d96de8dc",
+  "controls": [
+    {
+      "label": "wrong-POSITION-with-correct-minmax",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "unreferenced-POSITION-outlier",
+      "reason": null,
+      "result": "admitted"
+    },
+    {
+      "label": "unreferenced-mesh-outlier",
+      "reason": null,
+      "result": "admitted"
+    },
+    {
+      "label": "wrong-minmax",
+      "reason": "declared max differs from decoded POSITION",
+      "result": "invalid_input"
+    },
+    {
+      "label": "wrong-node-translation",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "unsupported-rotation",
+      "reason": "rotation profile",
+      "result": "unsupported"
+    },
+    {
+      "label": "unsupported-skin-index-zero",
+      "reason": "dynamic node",
+      "result": "unsupported"
+    },
+    {
+      "label": "invalid-mesh-reference",
+      "reason": "mesh reference",
+      "result": "invalid_input"
+    },
+    {
+      "label": "unsupported-sparse",
+      "reason": "sparse accessor",
+      "result": "unsupported"
+    },
+    {
+      "label": "unsupported-no-default-scene",
+      "reason": "no explicit default scene",
+      "result": "unsupported"
+    },
+    {
+      "label": "unsupported-unknown-spatial-extension",
+      "reason": "unknown spatial extension",
+      "result": "unsupported"
+    },
+    {
+      "label": "invalid-selected-child-root",
+      "reason": "selected child as root",
+      "result": "invalid_input"
+    },
+    {
+      "label": "invalid-unselected-node-cycle",
+      "reason": "node cycle",
+      "result": "invalid_input"
+    },
+    {
+      "label": "positive-nested-nonuniform-TS",
+      "reason": null,
+      "result": "admitted"
+    },
+    {
+      "label": "positive-diagonal-matrix",
+      "reason": null,
+      "result": "admitted"
+    },
+    {
+      "label": "unselected-scene-is-not-rendered",
+      "result": "admitted"
+    },
+    {
+      "label": "wrong-selected-scene",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "authoritative-own-box-too-small",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "translated-child-escapes-ancestor",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "changed-global-frame-is-separate-preservation-obligation",
+      "result": "local_coherence_unchanged",
+      "source_global_matrix_equal": false
+    },
+    {
+      "label": "wrong-quantized-nonuniform-scale",
+      "reason": "decoded content escapes own/ancestor box",
+      "result": "invalid_input"
+    },
+    {
+      "label": "unsupported-b3dm-RTC",
+      "reason": "nontrivial b3dm feature/batch/RTC profile",
+      "result": "unsupported"
+    },
+    {
+      "label": "unsupported-b3dm-batch",
+      "reason": "nontrivial b3dm feature/batch/RTC profile",
+      "result": "unsupported"
+    }
+  ],
+  "inspected_source_sha256": {
+    "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+    "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+    "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+    "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+    "src/validate.rs": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+    "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+    "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+  },
+  "limits_model": {
+    "rational_numerator_denominator_and_intermediate_bits": 127,
+    "rational_operation_count": 1000000,
+    "selected_scene_depth": 31
+  },
+  "method": {
+    "cargo_builds": 0,
+    "codec_priority": 10,
+    "codec_timeout_seconds": 20,
+    "converter_executions": 0,
+    "process_concurrency": 1,
+    "producer_executions": 0
+  },
+  "observations": [
+    {
+      "b3dm_wrappers": [],
+      "label": "point-flat-rounded",
+      "max_reduced_integer_bits": 73,
+      "max_unreduced_intermediate_bits": 83,
+      "own_ancestor_checks": 5,
+      "rational_operations": 243,
+      "selected_primitive_instances": 3,
+      "source_sha256": "d719edaef4cae30debcbfa883db75ef601c2f267538be108f66af66b272f66d1"
+    },
+    {
+      "b3dm_wrappers": [],
+      "label": "vector-flat-rounded",
+      "max_reduced_integer_bits": 63,
+      "max_unreduced_intermediate_bits": 83,
+      "own_ancestor_checks": 4,
+      "rational_operations": 192,
+      "selected_primitive_instances": 2,
+      "source_sha256": "279c947822b0f6507d81ab2be30d810effde3f2f182189a97695f6db2d93f303"
+    },
+    {
+      "b3dm_wrappers": [],
+      "label": "vector-quantized-compressed",
+      "max_reduced_integer_bits": 63,
+      "max_unreduced_intermediate_bits": 83,
+      "own_ancestor_checks": 4,
+      "rational_operations": 192,
+      "selected_primitive_instances": 2,
+      "source_sha256": "a98bc5c9de47d9d70e7c8018f6acdb375b887daeebdbd5a58632573d84e12831"
+    },
+    {
+      "b3dm_wrappers": [],
+      "label": "vector-fragmented-line",
+      "max_reduced_integer_bits": 63,
+      "max_unreduced_intermediate_bits": 116,
+      "own_ancestor_checks": 33,
+      "rational_operations": 1413,
+      "selected_primitive_instances": 11,
+      "source_sha256": "c50e84a87826c815774a3dd3fec2fa754543f2b61caec6de35ab121f71fa22db"
+    },
+    {
+      "b3dm_wrappers": [
+        {
+          "batch_binary": 0,
+          "batch_json": 0,
+          "feature_binary": 0,
+          "table": {
+            "BATCH_LENGTH": 0
+          }
+        }
+      ],
+      "label": "fragmented-array-leaf",
+      "max_reduced_integer_bits": 61,
+      "max_unreduced_intermediate_bits": 77,
+      "own_ancestor_checks": 2,
+      "rational_operations": 162,
+      "selected_primitive_instances": 2,
+      "source_sha256": "85a5eb3e684d1924c551eb96345b7adfcd3f629dc9d6890cfb850731afb693eb"
+    },
+    {
+      "b3dm_wrappers": [],
+      "label": "shared-relative-resources",
+      "max_reduced_integer_bits": 63,
+      "max_unreduced_intermediate_bits": 83,
+      "own_ancestor_checks": 6,
+      "rational_operations": 285,
+      "selected_primitive_instances": 3,
+      "source_sha256": "60c85a18d4d7e089d9d8bdeddb67296debaee8c1066fee09c98425d2b2d46c81"
+    }
+  ],
+  "probe_sha256": "adcddbd0fec566da95c6ba5f0cd8f86dbfe22c5b7637f196f778b13b3d9ea62a",
+  "retained_real_probe_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+  "wrapper_sha256": "9e3addc7360e015e799791f0c10403ed6bf290cc6bd144465fb6f21899249165"
+}

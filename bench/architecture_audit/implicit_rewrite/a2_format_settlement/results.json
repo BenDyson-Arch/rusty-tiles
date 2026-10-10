@@ -1,0 +1,156 @@
+{
+  "actual_client_findings": {
+    "candidate_roots_and_all_slots_preserved": true,
+    "forbidden_root_external_json_loaded": true,
+    "present_TILE_TRANSFORM_ignored": true,
+    "wrong_child_transform_changes_placement": true
+  },
+  "artifact_directory": "/tmp/rusty-tiles-a2-format-settlement-final3",
+  "baseline": "e4d90897518d2b569fb5e99b876581523e4c418c",
+  "capture_sha256": {
+    "client-results.json": "27bff03619c5fbfcb40ee209c864b101ab4c2dc8a9309cdfd54b53a6c2386f77",
+    "manifest.json": "9df3bfe8e3f782d0c133042d48162ae8fe61a46765498b32604e94e5e42e4f11",
+    "reader-results.json": "b5409c82133233af11632e806c183de2a76fd19f07258f89b7a439f2adb7dd62"
+  },
+  "cases": {
+    "octree-candidate": {
+      "accepted": true,
+      "all_content_inside_own_and_ancestor_boxes": true,
+      "client_frames_equal_independent_fraction_reference": true,
+      "five_source_roots_exact": true,
+      "four_terminal_links_exact": true,
+      "six_payload_slots_exact": true
+    },
+    "octree-double-child-transform": {
+      "accepted": false,
+      "expected_sensitive_rejection": "source_world_frame_mismatch"
+    },
+    "octree-metadata-transform": {
+      "accepted": true,
+      "client_ignores_semantic": true,
+      "independent_semantic_matrix_present": true
+    },
+    "octree-root-external-available": {
+      "accepted": false,
+      "expected_sensitive_rejection": "forbidden_root_external_occupancy"
+    },
+    "quadtree-candidate": {
+      "accepted": true,
+      "all_content_inside_own_and_ancestor_boxes": true,
+      "client_frames_equal_independent_fraction_reference": true,
+      "five_source_roots_exact": true,
+      "four_terminal_links_exact": true,
+      "six_payload_slots_exact": true
+    },
+    "quadtree-double-child-transform": {
+      "accepted": false,
+      "expected_sensitive_rejection": "source_world_frame_mismatch"
+    },
+    "quadtree-metadata-transform": {
+      "accepted": true,
+      "client_ignores_semantic": true,
+      "independent_semantic_matrix_present": true
+    },
+    "quadtree-root-external-available": {
+      "accepted": false,
+      "expected_sensitive_rejection": "forbidden_root_external_occupancy"
+    }
+  },
+  "driver_sha256": {
+    "client.mjs": "7d8c3bc3e368347fa7b5446a84b83b90978a05c4ad38cf955d81019df0f8ac35",
+    "prepare.py": "32860a244316628c5a3c9ca504d7c5b655f7b3d463a524fe55c20755195fe8a1",
+    "probe.py": "3c02dffcb5399a66446cf944591cad11603757c61c70da4c7bfb37eba36462e6",
+    "read.py": "ad310acbe296796fa67d9ea2d6f02fadac2631796d4d27172d9c30946ef80867"
+  },
+  "elapsed_seconds": {
+    "client": 0.314329,
+    "prepare": 0.063807,
+    "reader": 0.113887
+  },
+  "kind": "bounded-a2-format-consumer-settlement",
+  "limits": {
+    "cases": 8,
+    "external_document_visits_max": 8,
+    "nice": 10,
+    "no_cargo_no_install_no_browser": true,
+    "payload_slots_per_candidate": 6,
+    "rayon_threads": 2,
+    "serial_stages": true,
+    "source_nodes_per_candidate": 5,
+    "stage_timeout_seconds": 30,
+    "subtree_levels_max": 2
+  },
+  "official_validator_execution": {
+    "executed": false,
+    "implicit_root_external_prohibition_implementation": "TODO",
+    "reason": "not installed; no dependency installation",
+    "source_commit": "7fa62c5f792069b077f174b477aab85dd7fecf22"
+  },
+  "primary_sources_sha256": "1cf50fd05a7903cacd52d2b6ab3fc9b9cfc8264bf768239ee3748a4cf621b8e0",
+  "proof_limits": [
+    "finite terminal-occupancy profile acceptance is not general standards conformance",
+    "literal implicit-root external-template interpretation remains separate conformance gate",
+    "direct actual-client factories with parsed schema, not public fromUrl traversal",
+    "no GPU render/selection/picking/features acceptance",
+    "runtime tree identities cover engine/core JS and lock identity, not whole host attestation",
+    "static tools validator findings are not executed package results"
+  ],
+  "reader_only_controls": {
+    "octree-candidate-actual-json-cycle": {
+      "expected_sensitive_rejection": "external_document_cycle"
+    },
+    "octree-candidate-json-link-has-glb-bytes": {
+      "expected_sensitive_rejection": "resource_role_external_json"
+    },
+    "quadtree-candidate-actual-json-cycle": {
+      "expected_sensitive_rejection": "external_document_cycle"
+    },
+    "quadtree-candidate-json-link-has-glb-bytes": {
+      "expected_sensitive_rejection": "resource_role_external_json"
+    }
+  },
+  "runtime": {
+    "clientPackage": {
+      "name": "@cesium/engine",
+      "version": "26.4.0"
+    },
+    "node": "v26.10.0",
+    "runtime_package_sha256": {
+      "../../.package-lock.json": "dae597fec48ddac9a6e971159f103708133eb6c9441dc53bcefedae2c7d7c32d",
+      "../../cesium/package.json": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11",
+      "../core/index.js": "c989ed7033a220f14888cf9f8911395a3d0829244a47e46bb74373e1bfdfe871",
+      "../core/package.json": "04204071eab73501125de8385ac43867557e023356a82c5551d6738a99b7e0a0",
+      "index.js": "01bfabf4b7afc2da0cc1ba53a69c3f3400d0def8f816504e0e6970ec57998afb",
+      "package.json": "79740486bf756085f666bf92b49a425ffc3dd45d7593ff9a8daa956d1d86da8d"
+    },
+    "runtime_source_sha256": {
+      "Scene/Cesium3DTile.js": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c",
+      "Scene/Cesium3DTileset.js": "04d08416e3ad721f6fea557853eec861f06eee299a845d61657dec1cbfacb48d",
+      "Scene/Implicit3DTileContent.js": "86109c4b82bc0ab209d82df1eb0d6e72e362c3d348fb212b1d0963388f620311",
+      "Scene/ImplicitSubtree.js": "d7610dba654ae33d6291fa9ccd75619284b271bc976df28541c5ee43b3775cdd",
+      "Scene/ImplicitTileset.js": "7371a973304a53f964ffb6626c505d31506f8982139227e5ca9030ea42c22dc6",
+      "Scene/MetadataSchema.js": "480b2c8a6c5d7a851cb8c9dd7ed5f28f0e801b00e41193d2c514773628f851d6",
+      "Scene/MetadataSemantic.js": "fc751f9230160aaa5f4d1f36d4ca2ec728ba7ceb656c8ee3753ffd3fcc6c55e7",
+      "Scene/MetadataTable.js": "eaef5ec8e95d7fbbd2056ac3ab4b743b8c333dac7fdb6a2a19aec363538b43f8",
+      "Scene/Multiple3DTileContent.js": "848dc85a73d819ec2573891cc7a670828eab9ddc8a8db22db683f702ccf40b9a",
+      "Scene/Tileset3DTileContent.js": "50a97428473fea067fffe9959b03c5a446998642efa338549b6369734d4ff5bc"
+    },
+    "runtime_tree_sha256": {
+      "core": {
+        "js_files": 181,
+        "sha256": "9baf2e3a4d32c2bb2e43f1b07e2a9721d5b71c63e958e91e951614d653b9e613"
+      },
+      "engine": {
+        "js_files": 1325,
+        "sha256": "b4a2c19c63c10dd12c7298bff00dc63e5b5297eba0b81cb230e388b79d174eac"
+      }
+    }
+  },
+  "runtime_matches_primary_cesium_commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+  "runtime_matching_primary_files": {
+    "Scene/Cesium3DTile.js": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c",
+    "Scene/Implicit3DTileContent.js": "86109c4b82bc0ab209d82df1eb0d6e72e362c3d348fb212b1d0963388f620311",
+    "Scene/MetadataSemantic.js": "fc751f9230160aaa5f4d1f36d4ca2ec728ba7ceb656c8ee3753ffd3fcc6c55e7",
+    "Scene/Multiple3DTileContent.js": "848dc85a73d819ec2573891cc7a670828eab9ddc8a8db22db683f702ccf40b9a"
+  }
+}

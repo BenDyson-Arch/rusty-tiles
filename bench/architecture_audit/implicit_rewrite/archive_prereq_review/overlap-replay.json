@@ -1,0 +1,41 @@
+{
+  "scope": "two tiny stored archives, independently authored physical nesting control; not full ZIP admission acceptance",
+  "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+  "driver_sha256": "b3dc88628c6ffa423fc63d818a9ab2bcb0729b37c1fce41b7fc1001810f550e1",
+  "records": [
+    {
+      "case": "disjoint-control",
+      "archive_bytes": 1248,
+      "archive_sha256": "bdddf7dcb31f8e6ffba54f979738bb821a66cf85482b0df54396c992a1f63021",
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "/tmp/rusty-tiles-archive-prereq-review-overlap-20261010/disjoint-control.3tz"
+      ],
+      "returncode": 0,
+      "stdout": "Inspected /tmp/rusty-tiles-archive-prereq-review-overlap-20261010/disjoint-control.3tz: 1 tiles, 1 content references\nNot inspected: decodedContentBounds, geometricErrorAccuracy, materialAndImageSemantics, metadata and feature semantics, metadataSemantics, scene transforms, skins, animations, morph targets and rendered bounds\n",
+      "stderr": "",
+      "physical_extents_disjoint": true
+    },
+    {
+      "case": "nested-physical-extents",
+      "archive_bytes": 1225,
+      "archive_sha256": "0ff288955b69a45bc874005bc24d3c66ccb4640f878ba4797fa495e51b31162a",
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "/tmp/rusty-tiles-archive-prereq-review-overlap-20261010/nested-physical-extents.3tz"
+      ],
+      "returncode": 0,
+      "stdout": "Inspected /tmp/rusty-tiles-archive-prereq-review-overlap-20261010/nested-physical-extents.3tz: 1 tiles, 1 content references\nNot inspected: decodedContentBounds, geometricErrorAccuracy, materialAndImageSemantics, metadata and feature semantics, metadataSemantics, scene transforms, skins, animations, morph targets and rendered bounds\n",
+      "stderr": "",
+      "physical_extents_disjoint": false
+    }
+  ]
+}

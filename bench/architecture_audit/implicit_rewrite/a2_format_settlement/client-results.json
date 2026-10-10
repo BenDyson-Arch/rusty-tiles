@@ -1,0 +1,2421 @@
+{
+  "kind": "actual-client-materialization-not-browser-selection",
+  "node": "v26.10.0",
+  "clientPackage": {
+    "name": "@cesium/engine",
+    "version": "26.4.0"
+  },
+  "cases": {
+    "octree-candidate": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0-0.glb",
+            "p1-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            203.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0-0.glb",
+            "p4-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": true,
+      "root_external_slot_materialized": false,
+      "forbidden_root_external_loaded_without_client_rejection": false,
+      "no_webgl_no_content_rendering": true
+    },
+    "octree-double-child-transform": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0-0.glb",
+            "p1-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            204,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            205.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0-0.glb",
+            "p4-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            204,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": false,
+      "root_external_slot_materialized": false,
+      "forbidden_root_external_loaded_without_client_rejection": false,
+      "no_webgl_no_content_rendering": true
+    },
+    "octree-metadata-transform": {
+      "semantic_present": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        9,
+        10,
+        11,
+        1
+      ],
+      "computed_transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "semantic_applied": false,
+      "unsupported_for_byte_preserving_single_tree": true
+    },
+    "octree-root-external-available": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0-0.glb",
+            "p1-0-0-0-0.glb",
+            "n0-link-0-0-0-0.json"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            203.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0-0.glb",
+            "p4-0-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": true,
+      "root_external_slot_materialized": true,
+      "forbidden_root_external_loaded_without_client_rejection": true,
+      "no_webgl_no_content_rendering": true
+    },
+    "quadtree-candidate": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0.glb",
+            "p1-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            203.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0.glb",
+            "p4-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": true,
+      "root_external_slot_materialized": false,
+      "forbidden_root_external_loaded_without_client_rejection": false,
+      "no_webgl_no_content_rendering": true
+    },
+    "quadtree-double-child-transform": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0.glb",
+            "p1-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            204,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            205.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0.glb",
+            "p4-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            204,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": false,
+      "root_external_slot_materialized": false,
+      "forbidden_root_external_loaded_without_client_rejection": false,
+      "no_webgl_no_content_rendering": true
+    },
+    "quadtree-metadata-transform": {
+      "semantic_present": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        9,
+        10,
+        11,
+        1
+      ],
+      "computed_transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "semantic_applied": false,
+      "unsupported_for_byte_preserving_single_tree": true
+    },
+    "quadtree-root-external-available": {
+      "roots": [
+        {
+          "source_id": "n0",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "header_box": [
+            8,
+            8,
+            4,
+            8,
+            0,
+            0,
+            0,
+            8,
+            0,
+            0,
+            0,
+            4
+          ],
+          "geometric_error": 19,
+          "root_available_uris": [
+            "p0-0-0-0.glb",
+            "p1-0-0-0.glb",
+            "n0-link-0-0-0.json"
+          ]
+        },
+        {
+          "source_id": "n1",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "root_available_uris": [
+            "p2-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n2",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            96.75,
+            203.25,
+            302.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "root_available_uris": [
+            "p3-0-0-0.glb",
+            "p4-0-0-0.glb"
+          ]
+        },
+        {
+          "source_id": "n3",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "header_box": [
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "root_available_uris": []
+        },
+        {
+          "source_id": "n4",
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            97.75,
+            202.25,
+            301.25,
+            1
+          ],
+          "header_box": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "root_available_uris": [
+            "p5-0-0-0.glb"
+          ]
+        }
+      ],
+      "terminal_links": [
+        {
+          "source_parent": "n0",
+          "source_child": "n1",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 7,
+          "uri": "n0-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n1",
+          "source_child": "n2",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            1.5,
+            1.5,
+            1.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 3,
+          "uri": "n1-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n0",
+          "source_child": "n3",
+          "coordinates": {
+            "level": 1,
+            "x": 1,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            100,
+            200,
+            300,
+            1
+          ],
+          "semantic_box": [
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "geometric_error": 11,
+          "uri": "n0-link-1-1-0.json",
+          "implicit_children_before_external_load": 0
+        },
+        {
+          "source_parent": "n3",
+          "source_child": "n4",
+          "coordinates": {
+            "level": 1,
+            "x": 0,
+            "y": 0
+          },
+          "computed_transform": [
+            0,
+            1,
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            98,
+            202,
+            301,
+            1
+          ],
+          "semantic_box": [
+            0.5,
+            0.5,
+            0.5,
+            0.25,
+            0,
+            0,
+            0,
+            0.25,
+            0,
+            0,
+            0,
+            0.25
+          ],
+          "geometric_error": 0,
+          "uri": "n3-link-1-0-0.json",
+          "implicit_children_before_external_load": 0
+        }
+      ],
+      "source_frame_equal": true,
+      "root_external_slot_materialized": true,
+      "forbidden_root_external_loaded_without_client_rejection": true,
+      "no_webgl_no_content_rendering": true
+    }
+  },
+  "driver_sha256": "7d8c3bc3e368347fa7b5446a84b83b90978a05c4ad38cf955d81019df0f8ac35",
+  "runtime_package_sha256": {
+    "package.json": "79740486bf756085f666bf92b49a425ffc3dd45d7593ff9a8daa956d1d86da8d",
+    "index.js": "01bfabf4b7afc2da0cc1ba53a69c3f3400d0def8f816504e0e6970ec57998afb",
+    "../core/package.json": "04204071eab73501125de8385ac43867557e023356a82c5551d6738a99b7e0a0",
+    "../core/index.js": "c989ed7033a220f14888cf9f8911395a3d0829244a47e46bb74373e1bfdfe871",
+    "../../cesium/package.json": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11",
+    "../../.package-lock.json": "dae597fec48ddac9a6e971159f103708133eb6c9441dc53bcefedae2c7d7c32d"
+  },
+  "runtime_tree_sha256": {
+    "engine": {
+      "js_files": 1325,
+      "sha256": "b4a2c19c63c10dd12c7298bff00dc63e5b5297eba0b81cb230e388b79d174eac"
+    },
+    "core": {
+      "js_files": 181,
+      "sha256": "9baf2e3a4d32c2bb2e43f1b07e2a9721d5b71c63e958e91e951614d653b9e613"
+    }
+  },
+  "runtime_source_sha256": {
+    "Scene/Cesium3DTileset.js": "04d08416e3ad721f6fea557853eec861f06eee299a845d61657dec1cbfacb48d",
+    "Scene/Cesium3DTile.js": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c",
+    "Scene/Implicit3DTileContent.js": "86109c4b82bc0ab209d82df1eb0d6e72e362c3d348fb212b1d0963388f620311",
+    "Scene/ImplicitSubtree.js": "d7610dba654ae33d6291fa9ccd75619284b271bc976df28541c5ee43b3775cdd",
+    "Scene/ImplicitTileset.js": "7371a973304a53f964ffb6626c505d31506f8982139227e5ca9030ea42c22dc6",
+    "Scene/Multiple3DTileContent.js": "848dc85a73d819ec2573891cc7a670828eab9ddc8a8db22db683f702ccf40b9a",
+    "Scene/Tileset3DTileContent.js": "50a97428473fea067fffe9959b03c5a446998642efa338549b6369734d4ff5bc",
+    "Scene/MetadataSchema.js": "480b2c8a6c5d7a851cb8c9dd7ed5f28f0e801b00e41193d2c514773628f851d6",
+    "Scene/MetadataTable.js": "eaef5ec8e95d7fbbd2056ac3ab4b743b8c333dac7fdb6a2a19aec363538b43f8",
+    "Scene/MetadataSemantic.js": "fc751f9230160aaa5f4d1f36d4ca2ec728ba7ceb656c8ee3753ffd3fcc6c55e7"
+  }
+}
