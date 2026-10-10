@@ -138,5 +138,12 @@
     "uncompressed_bytes": 78996,
     "uncompressed_sha256": "467d117cc075567fb741392d291bd42ac03d72ee31f0f23fe980492472c21591",
     "compressed_sha256": "42a8fdde136fdee008256edf59e5d732d95f76303a0321894b75014e7a1bc352"
+  },
+  {
+    "source_name": "source-package.log",
+    "path": "receipts/source-package.log.gz",
+    "uncompressed_bytes": 400,
+    "uncompressed_sha256": "7d192dd3136a0695a402644716670cf5d929a5850a45f01c37c7544074c84bf9",
+    "compressed_sha256": "b1eeb356b67cc8946de50545c0f022f40114cef0e33ca48b67d1c5a9dd88052a"
   }
 ]

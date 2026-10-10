@@ -18,7 +18,8 @@
   "khronos_leaves": 104,
   "lit_pbr_positive_max_rgb_delta": 0,
   "separate_reviewer": "review_probes/review.json",
-  "source_packaging": "pending",
+  "source_packaging": "passed including verification build and compiled root input comparison",
   "hosted_ci": "pending",
-  "limits": "Local Linuxx86_64 execution. Other OS/architectures, CPython3.10 and official Blender are CI gates; no release or broad CRS/identity/approximation/implicit migration acceptance."
+  "limits": "Local Linuxx86_64 execution. Other OS/architectures, CPython3.10 and official Blender are CI gates; no release or broad CRS/identity/approximation/implicit migration acceptance.",
+  "source_package_snapshot_commit": "5846f4d62cd64236b4186c38017ea563a473dd02"
 }
