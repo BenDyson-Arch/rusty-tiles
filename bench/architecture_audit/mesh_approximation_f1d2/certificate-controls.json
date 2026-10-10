@@ -1,0 +1,462 @@
+{
+  "self_test": {
+    "scope": "Independent exact-cover and synthetic artifact sensitivity only; no producer acceptance",
+    "historical_retriangulation_squared": "16",
+    "exact_positive_cases": [
+      {
+        "case": "equal-retriangulation",
+        "certificate": "0",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 8,
+          "root_patches": 5,
+          "patch_face_tests": 24,
+          "accepted_patches": 8,
+          "max_depth": 1,
+          "ideal_cover_squared": "0",
+          "regions": [
+            {
+              "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+              "proxy_sha256": "1879a34e43d6bf07695d7067d8a6f5d2adef9ff95fa4d8faee3b58f1128e1072",
+              "source_faces": 1,
+              "proxy_faces": 4
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      },
+      {
+        "case": "positive-offset",
+        "certificate": "1/8",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 8,
+          "root_patches": 5,
+          "patch_face_tests": 24,
+          "accepted_patches": 8,
+          "max_depth": 1,
+          "ideal_cover_squared": "1/64",
+          "regions": [
+            {
+              "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+              "proxy_sha256": "c9e39576efc369b84f4156d07ed6adc167a82b03cdc0c5b714366a9034a8fbf5",
+              "source_faces": 1,
+              "proxy_faces": 4
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      },
+      {
+        "case": "reordered-positive-offset",
+        "certificate": "1/8",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 8,
+          "root_patches": 5,
+          "patch_face_tests": 24,
+          "accepted_patches": 8,
+          "max_depth": 1,
+          "ideal_cover_squared": "1/64",
+          "regions": [
+            {
+              "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+              "proxy_sha256": "4080b2fbf3fd2b39ec8ba8ce903402ccebf735058525446deb1ffb56c22541e3",
+              "source_faces": 1,
+              "proxy_faces": 4
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      },
+      {
+        "case": "spike",
+        "certificate": "100",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 2,
+          "root_patches": 2,
+          "patch_face_tests": 2,
+          "accepted_patches": 2,
+          "max_depth": 0,
+          "ideal_cover_squared": "10000",
+          "regions": [
+            {
+              "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+              "proxy_sha256": "e2cccec1b07942e50b88bbee009d5c8d7e9eeef0281de5dc6491d6201242cc03",
+              "source_faces": 1,
+              "proxy_faces": 1
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      },
+      {
+        "case": "degenerate",
+        "certificate": "5",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 2,
+          "root_patches": 2,
+          "patch_face_tests": 2,
+          "accepted_patches": 2,
+          "max_depth": 0,
+          "ideal_cover_squared": "25",
+          "regions": [
+            {
+              "source_sha256": "1af949f978d196360d728afe5cbe939fd17750e5a393197774a2172f84bd74e0",
+              "proxy_sha256": "2c33d28abf2a677a6542b4fa343b8570807a5e6ed1147dd7b4c6782df4963e86",
+              "source_faces": 1,
+              "proxy_faces": 1
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      },
+      {
+        "case": "mixed-thin",
+        "certificate": "1/1073741824",
+        "proof": {
+          "proved": true,
+          "base_patch_face_tests": 2,
+          "root_patches": 2,
+          "patch_face_tests": 2,
+          "accepted_patches": 2,
+          "max_depth": 0,
+          "ideal_cover_squared": "1/1152921504606846976",
+          "regions": [
+            {
+              "source_sha256": "742871e9f143c7335ffb8a169194ca03ba296b8a4055edbda208daf724654c1d",
+              "proxy_sha256": "6942641fb05f1bff6748312803a5b49a7e6a7768f5e5f16e51f1c0e814923aab",
+              "source_faces": 1,
+              "proxy_faces": 1
+            }
+          ],
+          "checker_limits": {
+            "max_depth": 24,
+            "max_patch_face_tests": 100000,
+            "max_seconds": 10,
+            "time_limit_is_cooperative": true
+          }
+        }
+      }
+    ],
+    "hole_artifact": {
+      "source_sha256": "dfc6f8620fd2c3a2c4a24b7de20c7e39cf79c00833d13aa4a7b385fd0c6d491d",
+      "source_triangles": 8,
+      "proxy_triangles": 2,
+      "regions": 1,
+      "authored_components": [
+        {
+          "region": [
+            0,
+            0,
+            0
+          ],
+          "count": 1
+        }
+      ],
+      "base_patch_face_tests": 32,
+      "historical_whole_face_squared": "49",
+      "independent_certificate": {
+        "proved": true,
+        "base_patch_face_tests": 32,
+        "root_patches": 10,
+        "patch_face_tests": 96,
+        "accepted_patches": 16,
+        "max_depth": 1,
+        "ideal_cover_squared": "9",
+        "regions": [
+          {
+            "source_sha256": "daaf97a0db95e96b627f62016713fcc8d667426da83218e5be76a775ce8b0598",
+            "proxy_sha256": "618f93bcd09ff6830fd3a9ea28d5ba1c3cd1db700fa9942b5c53b388e316dcf4",
+            "source_faces": 8,
+            "proxy_faces": 2
+          }
+        ],
+        "checker_limits": {
+          "max_depth": 24,
+          "max_patch_face_tests": 100000,
+          "max_seconds": 10,
+          "time_limit_is_cooperative": true
+        }
+      },
+      "leaves": 1,
+      "emitted_name_bytes": 0,
+      "report": {
+        "schema_version": 7,
+        "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+        "triangles": 8,
+        "leaf_tiles": 1,
+        "leaf_triangles": 100,
+        "approximation": {
+          "kind": "root_proxy",
+          "triangle_limit": 16,
+          "triangles": 2,
+          "regions": 1,
+          "geometric_error_metres": 8,
+          "certificate": {
+            "error_metres": 3,
+            "patch_face_tests": 96,
+            "accepted_patches": 16,
+            "max_depth": 1
+          },
+          "appearance": "opaque-untextured-factors"
+        }
+      },
+      "proxy_member": "t/root.glb",
+      "member_sha256": {
+        "t/0.glb": "e800344c3b0306cb99befdf6a84cf6cc6f09fd0d017380a0bcbfd41bc79d198b",
+        "tileset.json": "426c8b63f5562d86ce6c34a726a204fe8ea01586255cf61e6da2cfc74a0b8846",
+        "conversion.json": "335702a0b6e3ae1aef873092a6dd5fda1b6340ef505a5b9eecec6ee7b9823730",
+        "t/root.glb": "c877d3f52148e55ba0c3b0089f95b346c1d65c0183ee03891fc947916cfa5e38"
+      }
+    },
+    "controls": [
+      {
+        "control": "positive-offset-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "reordered-positive-offset-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "spike-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "degenerate-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "mixed-thin-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "too-tight-positive",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "work-cap",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover work ceiling"
+      },
+      {
+        "control": "depth-cap",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven"
+      },
+      {
+        "control": "time-cap",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover cooperative time ceiling"
+      },
+      {
+        "control": "published-hole-false-zero",
+        "accepted": false,
+        "classification": "unproven",
+        "reason": "independent exact cover depth ceiling; published scalar unproven",
+        "analytic_center_distance_metres": 3
+      },
+      {
+        "name": "false-source-triangle-label",
+        "rejected": true,
+        "reason": "sole proxy_region feature label"
+      },
+      {
+        "name": "wrong-material-factors",
+        "rejected": true,
+        "reason": "exact proxy region PBR factors/omissions"
+      },
+      {
+        "name": "proxy-vertex-not-original",
+        "rejected": true,
+        "reason": "candidate only original decoded positions of its region"
+      },
+      {
+        "name": "invented-original-membership",
+        "rejected": true,
+        "reason": "unique tuple-sorted proxy membership"
+      },
+      {
+        "name": "unequal-proxy-arrays",
+        "rejected": true,
+        "reason": "array storage lengths"
+      },
+      {
+        "name": "wrong-proxy-count",
+        "rejected": true,
+        "reason": "report independently decoded proxy count"
+      },
+      {
+        "name": "wrong-region-count",
+        "rejected": true,
+        "reason": "report region count independently decoded"
+      },
+      {
+        "name": "false-appearance-profile",
+        "rejected": true,
+        "reason": "exact admitted appearance report"
+      },
+      {
+        "name": "removed-pair-field",
+        "rejected": true,
+        "reason": "removed unpartitioned certificate fields"
+      },
+      {
+        "name": "removed-certificate-field",
+        "rejected": true,
+        "reason": "removed unpartitioned certificate fields"
+      },
+      {
+        "name": "negative-certificate",
+        "rejected": true,
+        "reason": "finite admitted certificate"
+      },
+      {
+        "name": "wrong-proof-work",
+        "rejected": true,
+        "reason": "performed patch-face tests cover base within ceiling"
+      },
+      {
+        "name": "excess-proof-work",
+        "rejected": true,
+        "reason": "performed patch-face tests cover base within ceiling"
+      },
+      {
+        "name": "wrong-proof-leaves",
+        "rejected": true,
+        "reason": "reported accepted patches cover independent proof"
+      },
+      {
+        "name": "excess-proof-depth",
+        "rejected": true,
+        "reason": "reported depth covers independent proof"
+      },
+      {
+        "name": "nonintegral-proof-depth",
+        "rejected": true,
+        "reason": "integral proof metrics"
+      },
+      {
+        "name": "boolean-proof-work",
+        "rejected": true,
+        "reason": "integral proof metrics"
+      },
+      {
+        "name": "wrong-profile",
+        "rejected": true,
+        "reason": "F1d2 report schema/profile"
+      },
+      {
+        "name": "wrong-schema",
+        "rejected": true,
+        "reason": "F1d2 report schema/profile"
+      },
+      {
+        "name": "understated-proof-depth",
+        "rejected": true,
+        "reason": "reported depth covers independent proof"
+      },
+      {
+        "name": "zero-root-refinement-budget",
+        "rejected": true,
+        "reason": "root declared positive budget/refinement"
+      },
+      {
+        "name": "child-box-outside-root",
+        "rejected": true,
+        "reason": "root box contains complete child boxes"
+      },
+      {
+        "name": "leaf-winding-reversed",
+        "rejected": true,
+        "reason": "oriented source geometry/key association (0, 0, 0, 7)"
+      },
+      {
+        "name": "leaf-invented-source-ordinal",
+        "rejected": true,
+        "reason": "dense unique sorted source keys"
+      },
+      {
+        "control": "stale-cli-certificate",
+        "accepted": false,
+        "classification": "mismatched adapter result",
+        "reason": "CLI meshReport exactly equals independently checked conversion.json"
+      },
+      {
+        "control": "missing-cli-report",
+        "accepted": false,
+        "classification": "mismatched adapter result",
+        "reason": "CLI meshReport is present"
+      },
+      {
+        "control": "false-cli-success",
+        "accepted": false,
+        "classification": "mismatched adapter result",
+        "reason": "CLI result is successful"
+      },
+      {
+        "control": "wrong-cli-profile",
+        "accepted": false,
+        "classification": "mismatched adapter result",
+        "reason": "CLI meshReport exactly equals independently checked conversion.json"
+      },
+      {
+        "control": "boolean-cli-metric",
+        "accepted": false,
+        "classification": "mismatched adapter result",
+        "reason": "CLI meshReport exactly equals independently checked conversion.json"
+      }
+    ],
+    "passed": true
+  },
+  "driver_sha256": {
+    "f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+    "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+    "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+  },
+  "python": "3.14.7"
+}

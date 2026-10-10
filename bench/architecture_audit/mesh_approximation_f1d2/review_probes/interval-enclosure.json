@@ -1,0 +1,13 @@
+{
+  "scope": "Nonauthor exact-reference checks of the inspected interval operations.\n\nThis is a Python arithmetic reproduction, not execution of Rust or a producer\ncertificate. Exact Fraction addresses supply the independent enclosure truth.",
+  "python": "3.14.7",
+  "driver_sha256": "939b217164a2aec818864e846b818add8ebfdaeb4a525adda3ae2a261579697a",
+  "inspected_certificate_sha256": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+  "seed": 1212026,
+  "paired_corner_cases": 12000,
+  "exact_corner_enclosures": 24000,
+  "exact_squared_and_norm_enclosures": 12000,
+  "mixed_magnitude_midpoint_exact_excess": "1/1427247692705959881058285969449495136382746624",
+  "rounded_midpoint_control_positive_bound": 3.0493186101204146e-20,
+  "passed": true
+}

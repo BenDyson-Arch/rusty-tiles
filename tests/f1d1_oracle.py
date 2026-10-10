@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent F1d1 fixture, rational controls and published-artifact oracle.
+"""Independent F1d2 fixture, rational controls and published-artifact oracle.
 
 No Rust import, optimizer call, production writer or production distance code.
 The F1c2 Python oracle supplies independent GLB decoding and exact leaf identity
@@ -19,6 +19,7 @@ import zipfile
 import zlib
 
 import f1c2_oracle as leaf_oracle
+import f1d2_certificate as surface_oracle
 
 require = leaf_oracle.require
 digest = leaf_oracle.digest
@@ -27,7 +28,7 @@ accessor = leaf_oracle.accessor
 view = leaf_oracle.view
 glb = leaf_oracle.glb
 KEYS = leaf_oracle.KEYS
-PROFILE = 'f1d1-root-proxy-gltf-v1'
+PROFILE = 'f1d2-adaptive-root-proxy-gltf-v1'
 ARRAY_KEYS = ('source_node_indices', 'source_mesh_indices', 'source_primitive_indices', 'source_triangle_indices')
 
 
@@ -98,6 +99,17 @@ def fixture(variant='grid', n=4):
     elif variant=='materialless':
         doc.pop('materials')
         for primitive in doc['meshes'][0]['primitives']:primitive.pop('material')
+    elif variant=='boundary-ring':
+        points=[(0,0,0),(8,0,0),(8,0,1),(0,0,1),(0,0,7),(8,0,7),(8,0,8),(0,0,8),(1,0,1),(1,0,7),(7,0,1),(7,0,7)]
+        faces=[(0,1,2),(0,2,3),(4,5,6),(4,6,7),(3,8,9),(3,9,4),(10,2,5),(10,5,11)]
+        doc['meshes'][0]['primitives']=[{'attributes':{'POSITION':add(points,'VEC3')},'indices':add([i for f in faces for i in f],'SCALAR',5125),'material':0}]
+    elif variant=='bump':
+        primitive=doc['meshes'][0]['primitives'][0]
+        a=doc['accessors'][primitive['attributes']['POSITION']]
+        v=doc['bufferViews'][a['bufferView']]
+        center=(n//2)*(n+1)+n//2
+        struct.pack_into('<f',raw,v['byteOffset']+center*12+4,.25)
+        a['max'][1]=.25
     elif variant=='single-triangle':
         primitive=doc['meshes'][0]['primitives'][0]
         doc['accessors'][primitive['indices']]['count']=3
@@ -138,11 +150,9 @@ def point_triangle_squared(point, triangle):
 
 
 def ideal_face_certificate_squared(source, candidate):
-    """Exact least certificate for the contract's complete-face pairing scheme.
+    """Historical unpartitioned optimum, only a tightening comparison for F1d2.
 
-    Optimal rational witnesses relax the producer's finite dyadic witnesses.
-    This is a lower bound on the producer certificate, not a Hausdorff estimate.
-    An emitted bound smaller than this value is impossible under that scheme.
+    It is NOT a lower bound on the adaptive producer certificate.
     """
     require(source and candidate, 'nonempty certificate supports')
     def directed(left, right):
@@ -239,12 +249,14 @@ def proxy_rows(doc, binary):
     return [{key: value[i] for key,value in columns.items()} for i in range(table['count'])]
 
 
-def inspect_members(source, members, leaf_limit, triangle_limit, max_error, *, exact_certificate=True):
+def inspect_members(source, members, leaf_limit, triangle_limit, max_error, *,
+                    max_checker_tests=surface_oracle.CHECKER_TEST_LIMIT,
+                    max_checker_seconds=surface_oracle.CHECKER_SECONDS):
     members={name:data for name,data in members.items() if name!='@3dtilesIndex1@'}
     truth, names = leaf_oracle.expected_source(source)
     manifest = json.loads(members['tileset.json']); report = json.loads(members['conversion.json'])
     root = manifest['root']; uri = root['content']['uri']
-    require(report['schema_version'] == 6 and report['profile'] == PROFILE, 'F1d1 report schema/profile')
+    require(report['schema_version'] == 7 and report['profile'] == PROFILE, 'F1d2 report schema/profile')
     require(root['refine'] == 'REPLACE' and root['geometricError'] == max_error > 0, 'root declared positive budget/refinement')
     require(manifest['geometricError'] >= max_error, 'top-level omission covers root budget')
     require(root.get('children') and all(leaf['geometricError'] == 0 and not leaf.get('children') for leaf in root['children']), 'unchanged full-detail leaf hierarchy')
@@ -307,14 +319,16 @@ def inspect_members(source, members, leaf_limit, triangle_limit, max_error, *, e
     require(approximation['regions']==len(rows), 'report region count independently decoded')
     require(approximation['appearance']=='opaque-untextured-factors', 'exact admitted appearance report')
     require(approximation['triangle_limit'] == triangle_limit and approximation['geometric_error_metres'] == max_error, 'report declared policy')
-    require(approximation['triangles'] == proxy_count and approximation['comparison_pairs'] == comparisons, 'report independently decoded counts/work')
-    certificate = approximation['certified_error_metres']
-    require(math.isfinite(certificate) and 0 <= certificate <= max_error, 'finite admitted certificate')
-    ideal_squared = F(0)
-    if exact_certificate:
-        for region, candidate in candidates.items():
-            ideal_squared = max(ideal_squared, ideal_face_certificate_squared([truth[key]['positions'] for key in wanted[region]], candidate))
-        require(F(certificate)**2 >= ideal_squared, 'emitted certificate at least exact rational optimum of complete-face scheme')
+    require(approximation['triangles'] == proxy_count, 'report independently decoded proxy count')
+    require('comparison_pairs' not in approximation and 'certified_error_metres' not in approximation, 'removed unpartitioned certificate fields')
+    certificate=approximation['certificate']
+    require(set(certificate)=={'error_metres','patch_face_tests','accepted_patches','max_depth'}, 'exact typed certificate fields')
+    bound=certificate['error_metres']
+    require(type(bound) in (int,float) and math.isfinite(bound) and 0<=bound<=max_error, 'finite admitted certificate')
+    supports=[([truth[key]['positions'] for key in wanted[region]],candidates[region]) for region in sorted(wanted)]
+    independent=surface_oracle.certify_regions(supports,bound,max_tests=max_checker_tests,max_seconds=max_checker_seconds)
+    surface_oracle.validate_metrics(certificate,independent)
+    historical_squared=max(ideal_face_certificate_squared(left,right) for left,right in supports)
     points = [p for record in truth.values() for p in record['positions']] + [p for faces in candidates.values() for face in faces for p in face]
     box = root['boundingVolume']['box']
     require(len(box) == 12 and all(math.isfinite(x) for x in box), 'finite root box')
@@ -338,7 +352,8 @@ def inspect_members(source, members, leaf_limit, triangle_limit, max_error, *, e
     expected_names = {'tileset.json','conversion.json',uri}|{leaf['content']['uri'] for leaf in root['children']}
     require(set(members) == expected_names, 'exact accepted inventory without orphan candidates')
     return {'source_sha256': digest(source), 'source_triangles': len(truth), 'proxy_triangles': proxy_count,
-            'regions': len(rows), 'authored_components':[{'region':list(region),'count':count} for region,count in component_counts.items()], 'comparison_work': comparisons, 'ideal_certificate_squared': str(ideal_squared) if exact_certificate else None,
+            'regions': len(rows), 'authored_components':[{'region':list(region),'count':count} for region,count in component_counts.items()], 'base_patch_face_tests':comparisons,'historical_whole_face_squared':str(historical_squared),
+            'independent_certificate':independent,
             'leaves': leaves['leaves'], 'emitted_name_bytes':name_bytes, 'report': report, 'proxy_member': uri,
             'member_sha256': {key:digest(value) for key,value in members.items()}}
 
@@ -395,9 +410,11 @@ def synthetic_members(source, leaf_limit=100):
     manifest=json.loads(members['tileset.json']); manifest['root']['content']={'uri':'t/root.glb'}
     manifest['root']['geometricError']=8
     members['tileset.json']=json.dumps(manifest).encode()
-    members['conversion.json']=json.dumps({'schema_version':6,'profile':PROFILE,'triangles':len(truth),'leaf_tiles':1,'leaf_triangles':leaf_limit,'approximation':{'kind':'root_proxy','triangle_limit':16,
-        'triangles':len(regions)*2,'regions':len(regions),'geometric_error_metres':8,'certified_error_metres':8,
-        'comparison_pairs':sum(4*len(keys) for keys in tuples_by_region),'appearance':'opaque-untextured-factors'}}).encode()
+    members['conversion.json']=json.dumps({'schema_version':7,'profile':PROFILE,'triangles':len(truth),'leaf_tiles':1,'leaf_triangles':leaf_limit,'approximation':{'kind':'root_proxy','triangle_limit':16,
+        'triangles':len(regions)*2,'regions':len(regions),'geometric_error_metres':8,
+        'certificate':{'error_metres':8,'patch_face_tests':sum(4*len(keys) for keys in tuples_by_region),
+                       'accepted_patches':len(truth)+len(regions)*2,'max_depth':0},
+        'appearance':'opaque-untextured-factors'}}).encode()
     return members
 
 
@@ -427,9 +444,34 @@ def corruption_controls(source, members, leaf_limit, triangle_limit, max_error):
         p=doc['extensions']['EXT_structural_metadata']['propertyTables'][0]['properties']['source_node_indices']
         p['arrayOffsets']=p['values']
     root_change('unequal-proxy-arrays',array_length)
-    for label,key,value in [('understated-certificate','certified_error_metres',0),('wrong-proxy-count','triangles',1),('wrong-pair-work','comparison_pairs',1),('wrong-region-count','regions',999),('false-appearance-profile','appearance','textured-atlas')]:
+    for label,key,value in [('wrong-proxy-count','triangles',1),('wrong-region-count','regions',999),('false-appearance-profile','appearance','textured-atlas'),('removed-pair-field','comparison_pairs',1),('removed-certificate-field','certified_error_metres',0)]:
         out=dict(members); report=json.loads(out['conversion.json']); report['approximation'][key]=value
         out['conversion.json']=json.dumps(report).encode(); changed[label]=out
+    for label,key,value in [('negative-certificate','error_metres',-1),('wrong-proof-work','patch_face_tests',1),('excess-proof-work','patch_face_tests',16777217),('wrong-proof-leaves','accepted_patches',0),('excess-proof-depth','max_depth',25),('nonintegral-proof-depth','max_depth',.5),('boolean-proof-work','patch_face_tests',True)]:
+        out=dict(members);report=json.loads(out['conversion.json']);report['approximation']['certificate'][key]=value
+        out['conversion.json']=json.dumps(report).encode();changed[label]=out
+    for label,key,value in [('wrong-profile','profile','f1d1-root-proxy-gltf-v1'),('wrong-schema','schema_version',6)]:
+        out=dict(members);report=json.loads(out['conversion.json']);report[key]=value
+        out['conversion.json']=json.dumps(report).encode();changed[label]=out
+    # Zero is a valid bound for some equal-support artifacts. Only require this
+    # scalar corruption to fail when independent vertex witnesses prove a gap.
+    out=dict(members);report=json.loads(out['conversion.json'])
+    if report['approximation']['certificate']['error_metres']>0:
+        try:
+            doc,raw,_=decode(out['t/root.glb'])
+            proxy_faces=[]
+            for primitive in doc['meshes'][0]['primitives']:
+                points=accessor(doc,raw,primitive['attributes']['POSITION'])
+                indices=accessor(doc,raw,primitive['indices']) if 'indices' in primitive else list(range(len(points)))
+                proxy_faces.extend([points[i] for i in indices[start:start+3]] for start in range(0,len(indices),3))
+            gap=max(min(point_triangle_squared(p,t) for t in proxy_faces) for record in truth.values() for p in record['positions'])
+        except (KeyError,IndexError,ValueError):gap=F(0)
+        if gap>0:
+            report['approximation']['certificate']['error_metres']=0
+            out['conversion.json']=json.dumps(report).encode();changed['false-zero-certificate-with-exact-vertex-gap']=out
+    if inspect_members(source,members,leaf_limit,triangle_limit,max_error)['independent_certificate']['max_depth']>0:
+        out=dict(members);report=json.loads(out['conversion.json']);report['approximation']['certificate']['max_depth']=0
+        out['conversion.json']=json.dumps(report).encode();changed['understated-proof-depth']=out
     out=dict(members); manifest=json.loads(out['tileset.json']); manifest['root']['geometricError']=0
     out['tileset.json']=json.dumps(manifest).encode(); changed['zero-root-refinement-budget']=out
     out=dict(members);manifest=json.loads(out['tileset.json']);manifest['root']['children'][0]['boundingVolume']['box'][0]+=10000
@@ -463,13 +505,24 @@ def coincident_component_control():
     attrs=doc['meshes'][0]['primitives'][0]['attributes']
     for name in ('POSITION','_FEATURE_ID_0'):doc['accessors'][attrs[name]]['count']=3
     changed['t/root.glb']=glb(doc,raw)
-    report=json.loads(changed['conversion.json']);report['approximation'].update(triangles=1,comparison_pairs=32)
+    report=json.loads(changed['conversion.json']);report['approximation'].update(triangles=1)
+    report['approximation']['certificate'].update(patch_face_tests=32,accepted_patches=17)
     changed['conversion.json']=json.dumps(report).encode()
     try:inspect_members(source,changed,100,16,8)
     except leaf_oracle.OracleError as error:
         return {'positive':positive,'one_face_control':{'rejected':True,'reason':str(error)},
             'limit':'Face floor detects impossible count; identical position-only supports cannot independently identify component origin per output face. Production-key tests and source review remain required.'}
     raise leaf_oracle.OracleError('insensitive one-face coincident component control')
+
+
+def inspect_cli_report(stdout, published_report):
+    """Bind actual adapter success to the independently checked archive report."""
+    response=json.loads(stdout)
+    require(response.get('ok') is True, 'CLI result is successful')
+    require(type(response.get('meshReport')) is dict, 'CLI meshReport is present')
+    def canonical(value):return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
+    require(canonical(response['meshReport'])==canonical(published_report), 'CLI meshReport exactly equals independently checked conversion.json')
+    return {'mesh_report_matches_published':True,'mesh_report_sha256':digest(canonical(published_report).encode())}
 
 
 def run(binary, artifact_dir):
@@ -487,13 +540,14 @@ def run(binary, artifact_dir):
             require(len(stream.namelist())==len(set(stream.namelist())), 'unique actual ZIP member names')
             members={name:stream.read(name) for name in stream.namelist() if name!='@3dtilesIndex1@'}
         checked=inspect_members(source,members,16,limit,8)
+        cli_report=inspect_cli_report(completed.stdout,checked['report'])
         controls=corruption_controls(source,members,16,limit,8)
         receipts.append({'case':variant,'command':command,'exit_code':completed.returncode,'stdout':completed.stdout,'stderr':completed.stderr,
-            'archive_sha256':digest(output.read_bytes()),'artifact':checked,'controls':controls})
+            'archive_sha256':digest(output.read_bytes()),'artifact':checked,'cli_report':cli_report,'controls':controls})
     refusals=[]
     for case,variant,n,limit,error in [('companions','normals-refused',4,16,8),('alpha','alpha-refused',4,16,8),
         ('uv','uv-refused',4,16,8),('color','color-refused',4,16,8),('tangents','tangents-refused',4,16,8),('textures','textures-refused',4,16,8),
-        ('error-budget','grid',4,16,1),('impossible-count','coincident-keys',4,1,8),
+        ('impossible-count','coincident-keys',4,1,8),
         ('no-reduction','single-triangle',1,16,8),('work-ceiling','grid',64,4096,100),
         ('zero-limit','grid',4,0,8),('zero-error','grid',4,16,0)]:
         work=artifact_dir/('refused-'+case);work.mkdir(parents=True,exist_ok=True)
@@ -507,8 +561,7 @@ def run(binary, artifact_dir):
         response=json.loads(completed.stdout)
         expected='invalid_request' if case in ('zero-limit','zero-error') else 'unsupported'
         require(response['error'].get('kind',response['error'].get('code'))==expected,'typed refusal '+case+' '+completed.stdout)
-        if case=='error-budget':require('whole-face certificate exceeds' in response['error']['message'], 'exercise actual certification refusal')
-        if case=='work-ceiling':require('16777216 complete face pairs' in response['error']['message'], 'exercise actual pair admission refusal')
+        if case=='work-ceiling':require('16777216' in response['error']['message'] and 'base' in response['error']['message'], 'exercise actual base admission refusal')
         refusals.append({'case':case,'source_sha256':digest(source),'command':command,'exit_code':completed.returncode,
             'stdout':completed.stdout,'stderr':completed.stderr,'output_parent_absent':True})
     return {'binary_path':str(binary),'binary_sha256':digest(binary.read_bytes()),'successful_artifacts':receipts,'admission_refusals':refusals,
@@ -521,7 +574,7 @@ def main():
     parser.add_argument('--binary',type=Path)
     parser.add_argument('--artifact-dir',type=Path)
     parser.add_argument('--fixture', type=Path)
-    parser.add_argument('--variant', default='grid', choices=['grid','materialless','single-triangle','instances','viewer','coincident-keys','normals-refused','alpha-refused','uv-refused','color-refused','tangents-refused','textures-refused'])
+    parser.add_argument('--variant', default='grid', choices=['grid','bump','boundary-ring','materialless','single-triangle','instances','viewer','coincident-keys','normals-refused','alpha-refused','uv-refused','color-refused','tangents-refused','textures-refused'])
     parser.add_argument('--grid-size', type=int, default=4)
     parser.add_argument('--source', type=Path)
     parser.add_argument('--archive', type=Path)
@@ -554,7 +607,7 @@ def main():
     if args.binary:
         require(args.artifact_dir,'--artifact-dir required for reproducible candidate execution')
         result['execution']=run(args.binary,args.artifact_dir)
-    result['driver_sha256'] = {path.name:digest(path.read_bytes()) for path in (Path(__file__), Path(__file__).with_name('f1c2_oracle.py'))}
+    result['driver_sha256'] = {path.name:digest(path.read_bytes()) for path in (Path(__file__),Path(__file__).with_name('f1d2_certificate.py'),Path(__file__).with_name('f1c2_oracle.py'))}
     encoded = json.dumps(result, indent=2, allow_nan=False)+'\n'
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True); args.json_output.write_text(encoded)

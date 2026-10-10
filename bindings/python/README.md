@@ -156,7 +156,7 @@ limits. `report["approximation"]["certificate"]` contains `error_metres`,
 `patch_face_tests`, `accepted_patches` and `max_depth`. Depth/work refusal means
 the bound could not be certified within the profile; it does not prove the true
 surface distance exceeds the request. See also the
-[bounded evidence](../../bench/architecture_audit/mesh_approximation/README.md).
+[bounded evidence](../../bench/architecture_audit/mesh_approximation_f1d2/README.md).
 
 It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
 dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.

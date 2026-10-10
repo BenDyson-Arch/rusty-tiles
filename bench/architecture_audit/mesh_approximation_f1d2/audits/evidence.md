@@ -169,3 +169,90 @@ adapters with no workspace/publication on refusals. Retain region/material,
 full-detail metadata/geometry, hierarchy/bounds and consumer checks. Finish with
 a separate nonauthor inspection of final code and final evidence. No production
 certificate or public output is accepted by the focused receipt alone.
+
+## Artifact-oracle implementation, awaiting frozen producer
+
+The settled schema-7 migration now lives in `tests/f1d1_oracle.py` (the existing
+consumer entry point), `tests/f1d2_certificate.py` (pure exact geometry checker),
+and `tests/f1d2_oracle.py` (bounded authored controls and execution driver).
+`certificate-controls.json` and `oracle-self-test.json` pin their latest complete
+self-test executions and all imported oracle sources. These records continue to
+be checker/synthetic evidence, not final-producer receipts.
+
+The checker reconstructs exact affine midpoints with fractions, which equal the
+canonical source barycentric geometry without physical-coordinate rounding.
+Every visited patch fully scans its region's targets; the complete DFS uses a
+bounded stack and never skips one of four children. Artifact acceptance checks
+needed work, accepted leaves and depth against reported necessary lower bounds;
+checks report field removal, complete four-child forest cardinality, integral
+metrics, base admission and finite profile limits. It preserves all original
+metadata/material/component/leaf/bounds/inventory checks. A zero bound is allowed
+for equal supports; corruption sensitivity requires an actual independent gap,
+not the old assumption that every conservative positive report must stay positive.
+
+Synthetic published ring-versus-filled-square artifacts pass the independent
+3 m bound and reject forged zero, even though every authored vertex lies on the
+ring. Controls also cover invalid schema/profile, removed fields, negative bound,
+wrong work/leaf/depth counts, nonintegral metrics, lower positive budget,
+independent work/depth/time exhaustion, spike, degenerate point and thin mixed
+magnitudes. Checker exhaustion remains explicitly unproven.
+
+`probes/old_cli_feasibility.py` and `old-cli-feasibility.json` replay the hash-pinned
+existing F1d1 native executable only. A 32-face grid proposes 15 faces; its old
+whole-face squared bound is 4 while an independent prospective 0.5 m cover needs
+4,792 patch-target tests at depth 2. A bumped 32-face grid proposes two faces;
+its removed peak is independently 0.25 m from the proxy, and a 0.5 m cover needs
+1,408 tests at depth 2. The eight-face bump candidate retains the peak, so the
+two-face version is selected for the stronger actual nonzero/refusal control.
+The ring cannot reduce to two faces through the existing candidate generator,
+so it remains an independent synthetic artifact control, without implying a
+producer behavior. These feasibility receipts do not certify the new feature.
+
+The execution driver is ready to test frozen F1d2 binaries: a useful 0.5 m grid
+result must beat its independently calculated historical whole-face certificate;
+a two-face bumped proxy must retain a positive bound; a 0.125 m request on that
+same source must refuse before creating the output parent, and preserve a
+preexisting destination under Replace. The final frozen execution establishes
+that this is the budget-sensitive proposal gate, not a certificate depth gate. Eligibility,
+impossible reduction, base-work and invalid request controls remain active.
+Final binary/source identity, native replay, installed adapters and dynamic-work
+controls remain coordinator-owned gates until actual frozen execution.
+
+
+## Corrected execution expectations and adapter gates
+
+The first frozen portable run completed the baseline and useful/nonzero artifacts
+but failed a provisional driver assertion expecting the bumped 0.125 m request
+to exercise certificate depth. The actual response was Unsupported at the
+candidate proposal: the candidate generator consumes the validated budget, and
+cannot achieve the requested reduction at that value. The driver now records
+that actual gate and does not infer budget-independent candidate geometry from
+old 8 m feasibility runs. The native provisional run hit the same checker
+expectation. Neither incomplete run emitted a final full acceptance receipt.
+Retained first-attempt artifacts are distinct from final full execution receipts.
+
+The portable source is frozen at
+`4553533e64c1494e706888a2c8e3a38a6867ce56`, binary SHA256
+`aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b`.
+Its useful 0.5 m grid result reports 0.4850712500726813 m, 9,912 tests,
+260 accepted patches and depth 3; the two-face bump reports
+0.25000000000000017 m, 1,408 tests, 64 patches and depth 2. These were
+independently checked before the provisional expectation failed. Final full
+portable/native execution remains separately recorded after driver correction.
+
+The nonauthor review found two checker gaps. Both are corrected: successful
+CLI `meshReport` must exactly equal independently checked `conversion.json`,
+including the certificate object, through canonical JSON equality preserving
+boolean/number distinction. Stale/missing/profile/false-success/boolean-metric
+stdout controls now fail. Replace refusal replay must parse an actual failed
+response, require Unsupported and the exact same proof/proposal refusal message
+as the first request, then verify destination bytes and directory preservation.
+A generic unrelated nonzero exit no longer establishes this claim.
+
+`depth-fixture-feasibility.json` truthfully records additional bounded nonuniform
+grid explorations. Limits 31/30 at tiny budgets timed out after 30 seconds;
+limit 16 failed proposal; limit 31 at 0.01 m succeeded at depth 7 with 65,992
+reported tests. These feasibility executions establish no actual depth refusal
+or resource guarantee. The complete-depth and accounting unit/source probes,
+and the separate actual dynamic-work resource replay, remain their proper
+acceptance gates. No production change was made to force a desired fixture.

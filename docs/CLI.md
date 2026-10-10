@@ -381,7 +381,7 @@ Coarse picks expose `proxy_region` membership arrays; fine leaves retain exact
 fail before staging. The [F1d2 contract](architecture/f1d2-certificate-contract.md)
 records proof limits, including a potentially loose certificate and no general
 appearance guarantee. The
-[bounded evidence](../bench/architecture_audit/mesh_approximation/README.md)
+[bounded evidence](../bench/architecture_audit/mesh_approximation_f1d2/README.md)
 records independent decoding, public consumer queries and separate review.
 
 ## Machine output

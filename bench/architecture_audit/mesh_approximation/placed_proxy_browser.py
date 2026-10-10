@@ -143,7 +143,7 @@ def main():
                    'six complete coarse arrays and six exact fine triangle tuples')
     drivers = [Path(__file__), *(REPOSITORY/'tests'/name for name in
                ('f1a_oracle.py', 'f1b_oracle.py', 'f1b2_oracle.py', 'f1b3_oracle.py',
-                'f1c1_oracle.py', 'f1c2_oracle.py', 'f1d1_oracle.py', 'f1d1_viewer.py')),
+                'f1c1_oracle.py', 'f1c2_oracle.py', 'f1d1_oracle.py', 'f1d1_viewer.py', 'f1d2_certificate.py')),
                REPOSITORY/'tests/fixtures/f1d1_viewer.cjs']
     result = {
         'mode': 'candidate-published-WGS84-root-proxy', 'production_source_commit': args.source_commit,

@@ -1,6 +1,7 @@
 """Exercise the installed native extension using only the Python standard library."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from fractions import Fraction
 import importlib.metadata
 import hashlib
 import json
@@ -95,6 +96,36 @@ class WheelAPI(unittest.TestCase):
             with self.assertRaises(rusty_tiles.InvalidRequestError):
                 rusty_tiles.mesh_local_to_3tz(source, absent, leaf_triangles=16, **kwargs)
             self.assertFalse(absent.parent.exists())
+
+    def test_adaptive_certificate_installed_api(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1d1_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        # Decoded artifacts must prove tighter coverage; the report counters
+        # cannot supply the geometry truth for the independent exact checker.
+        for variant, limit in (("grid", 16), ("bump", 2)):
+            with self.subTest(variant=variant):
+                payload = oracle.fixture(variant, 4)
+                source = self.root / ("adaptive-" + variant + ".glb")
+                output = source.with_suffix(".3tz")
+                source.write_bytes(payload)
+                result = rusty_tiles.mesh_local_to_3tz(source, output,
+                    leaf_triangles=16, root_proxy_triangles=limit,
+                    max_proxy_error_metres=0.5)
+                with zipfile.ZipFile(result.output) as stream:
+                    members = {name: stream.read(name) for name in stream.namelist()
+                               if name != "@3dtilesIndex1@"}
+                checked = oracle.inspect_members(payload, members, 16, limit, 0.5)
+                self.assertEqual(result.report, json.loads(members["conversion.json"]))
+                certificate = result.report["approximation"]["certificate"]
+                self.assertLessEqual(certificate["error_metres"], 0.5)
+                self.assertGreater(certificate["max_depth"], 0)
+                if variant == "grid":
+                    self.assertGreater(Fraction(checked["historical_whole_face_squared"]), Fraction(1, 4))
+                else:
+                    self.assertGreater(certificate["error_metres"], 0)
 
     def test_source_identity_metadata_independent_installed_api(self):
         sys.path.insert(0, str(ROOT / "tests"))
