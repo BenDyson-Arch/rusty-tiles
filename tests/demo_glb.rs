@@ -1,186 +1,30 @@
-//! Opt-in checks on a user-supplied GLB. Set RUSTY_TILES_DEMO_GLB explicitly.
-
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
-use rusty_tiles::tileset::{create_tileset_json, CreateTilesetOptions};
-use rusty_tiles::{Cartographic, ORACLE_NPM};
-
-fn demo_glb() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("RUSTY_TILES_DEMO_GLB") {
-        let p = PathBuf::from(p);
-        if p.is_file() {
-            return Some(p);
-        }
-        eprintln!("RUSTY_TILES_DEMO_GLB is not a file: {}", p.display());
-        return None;
-    }
-    None
-}
-
-fn npx_ok(input: &Path, output: &Path, extra: &[&str]) -> bool {
-    let mut args = vec![
-        "--yes",
-        ORACLE_NPM,
-        "createTilesetJson",
-        "-i",
-        input.to_str().unwrap(),
-        "-o",
-        output.to_str().unwrap(),
-        "-f",
-    ];
-    args.extend(extra.iter().copied());
-    match Command::new("npx").args(&args).status() {
-        Ok(st) if st.success() => true,
-        other => {
-            eprintln!("skip demo golden: npx {ORACLE_NPM}: {other:?}");
-            false
-        }
-    }
-}
-
-fn assert_semantic(oracle: &serde_json::Value, ours: &serde_json::Value) {
-    assert_eq!(oracle["asset"]["version"], ours["asset"]["version"]);
-    assert_eq!(
-        oracle["geometricError"].as_f64(),
-        ours["geometricError"].as_f64()
-    );
-    assert_eq!(oracle["root"]["refine"], ours["root"]["refine"]);
-    assert_eq!(
-        oracle["root"]["geometricError"].as_f64(),
-        ours["root"]["geometricError"].as_f64()
-    );
-    assert_eq!(
-        oracle["root"]["content"]["uri"],
-        ours["root"]["content"]["uri"]
-    );
-    let ob = oracle["root"]["boundingVolume"]["box"]
-        .as_array()
-        .expect("oracle box");
-    let ub = ours["root"]["boundingVolume"]["box"]
-        .as_array()
-        .expect("ours box");
-    assert_eq!(ob.len(), 12);
-    assert_eq!(ub.len(), 12);
-    for (i, (a, b)) in ob.iter().zip(ub.iter()).enumerate() {
-        let a = a.as_f64().unwrap();
-        let b = b.as_f64().unwrap();
-        assert!(a.is_finite() && b.is_finite(), "box[{i}] non-finite");
-    }
-    // Centers should agree within a fraction of the model extent. Oracle uses a
-    // dito.ts OBB; we use a Z-up AABB — both enclose the same mesh.
-    let oc = [
-        ob[0].as_f64().unwrap(),
-        ob[1].as_f64().unwrap(),
-        ob[2].as_f64().unwrap(),
-    ];
-    let uc = [
-        ub[0].as_f64().unwrap(),
-        ub[1].as_f64().unwrap(),
-        ub[2].as_f64().unwrap(),
-    ];
-    let extent = (0..3)
-        .map(|i| {
-            (ub[3 + i * 3].as_f64().unwrap().powi(2)
-                + ub[4 + i * 3].as_f64().unwrap().powi(2)
-                + ub[5 + i * 3].as_f64().unwrap().powi(2))
-            .sqrt()
-        })
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
-    for i in 0..3 {
-        let d = (oc[i] - uc[i]).abs();
-        assert!(
-            d < extent * 0.25,
-            "box center[{i}] oracle={} ours={} extent={extent}",
-            oc[i],
-            uc[i]
-        );
-    }
-}
+//! Opt-in exact-byte check on an explicitly supplied admitted static GLB.
+//! Historical large-input/3d-tiles-tools manifest and Euler comparisons were
+//! deliberately retired with that product; W1 has its own finite contract.
+use rusty_tiles::{model_to_archive, ModelWrapRequest, RunControl};
+use std::{fs, io::Read, path::PathBuf};
 
 #[test]
-#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
-fn user_model_create_tileset_json_when_present() {
-    let Some(glb) = demo_glb() else {
-        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB (set RUSTY_TILES_DEMO_GLB)");
-        return;
-    };
-    let tmp = tempfile::tempdir().unwrap();
-    let our_json = tmp.path().join("ours.json");
-    create_tileset_json(&glb, &our_json, &CreateTilesetOptions::default()).unwrap();
-    let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
-    assert_eq!(ours["asset"]["version"], "1.1");
-    assert_eq!(
-        ours["root"]["content"]["uri"],
-        glb.file_name().unwrap().to_str().unwrap()
-    );
-    let b = ours["root"]["boundingVolume"]["box"].as_array().unwrap();
-    assert_eq!(b.len(), 12);
-    assert!(b.iter().all(|v| v.as_f64().is_some_and(f64::is_finite)));
-}
-
-#[test]
-#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
-fn user_model_create_tileset_json_matches_3d_tiles_tools() {
-    let Some(glb) = demo_glb() else {
-        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB (set RUSTY_TILES_DEMO_GLB)");
-        return;
-    };
-    let tmp = tempfile::tempdir().unwrap();
-    let our_json = tmp.path().join("ours.json");
-    eprintln!("rusty-tiles createTilesetJson on {}", glb.display());
-    create_tileset_json(&glb, &our_json, &CreateTilesetOptions::default()).unwrap();
-    let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
-
-    let oracle_json = tmp.path().join("oracle.json");
-    eprintln!("npx {ORACLE_NPM} createTilesetJson (slow on 1.5GiB)");
-    if !npx_ok(&glb, &oracle_json, &[]) {
-        return;
-    }
-    let oracle: serde_json::Value =
-        serde_json::from_slice(&fs::read(&oracle_json).unwrap()).unwrap();
-    assert_eq!(
-        oracle["root"]["content"]["uri"],
-        glb.file_name().unwrap().to_str().unwrap()
-    );
-    assert_semantic(&oracle, &ours);
-}
-
-#[test]
-#[ignore = "requires an explicitly supplied RUSTY_TILES_DEMO_GLB; oracle checks also require npx"]
-fn user_model_cartographic_transform_matches_3d_tiles_tools() {
-    let Some(glb) = demo_glb() else {
-        eprintln!("skip: set RUSTY_TILES_DEMO_GLB to your own GLB");
-        return;
-    };
-    let tmp = tempfile::tempdir().unwrap();
-    let opts = CreateTilesetOptions {
-        cartographic: Some(Cartographic::new(30.0, -20.0, 0.0)),
-        rotation: None,
-        force: true,
-    };
-    let our_json = tmp.path().join("ours.json");
-    create_tileset_json(&glb, &our_json, &opts).unwrap();
-    let ours: serde_json::Value = serde_json::from_slice(&fs::read(&our_json).unwrap()).unwrap();
-
-    let oracle_json = tmp.path().join("oracle.json");
-    if !npx_ok(
-        &glb,
-        &oracle_json,
-        &["--cartographicPositionDegrees", "30.0", "-20.0", "0"],
-    ) {
-        return;
-    }
-    let oracle: serde_json::Value =
-        serde_json::from_slice(&fs::read(&oracle_json).unwrap()).unwrap();
-    let ot = oracle["root"]["transform"].as_array().unwrap();
-    let ut = ours["root"]["transform"].as_array().unwrap();
-    for i in 0..16 {
-        let a = ot[i].as_f64().unwrap();
-        let b = ut[i].as_f64().unwrap();
-        let eps = if i >= 12 { 1e-3 } else { 1e-8 };
-        assert!((a - b).abs() < eps, "transform[{i}] oracle={a} ours={b}");
-    }
+#[ignore = "requires explicitly supplied admitted RUSTY_TILES_DEMO_GLB"]
+fn user_static_model_wrap_preserves_source_bytes() {
+    let input =
+        PathBuf::from(std::env::var_os("RUSTY_TILES_DEMO_GLB").expect("set RUSTY_TILES_DEMO_GLB"));
+    let original = fs::read(&input).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("model.3tz");
+    model_to_archive(
+        ModelWrapRequest::local_gltf(&input, &output),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let mut archive = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let mut captured = Vec::new();
+    archive
+        .by_name("model/source.glb")
+        .unwrap()
+        .read_to_end(&mut captured)
+        .unwrap();
+    assert_eq!(captured, original);
+    assert_eq!(fs::read(input).unwrap(), original);
+    rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(output)).unwrap();
 }

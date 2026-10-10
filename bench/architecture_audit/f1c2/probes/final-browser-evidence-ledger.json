@@ -1,0 +1,484 @@
+{
+  "stage": "Final S3",
+  "checked_at_utc": "2026-10-10T03:49:05.309578+00:00",
+  "scope": "Independent recovery-agent execution of exact final frozen portable browser/core-format acceptance; no Cargo/build/production/commit operations by this agent.",
+  "source_identity": {
+    "source_commit": "4e1bda6de8d9f8be9ee4f776d51671420ff8faf5",
+    "production_sha256": "22f4b82e6379d889441be2f0f9e364aa51570ec6f391b3c98c95be58ef0d8444",
+    "inputs": 91,
+    "all_current_inputs_match": true,
+    "receipt_sha256": "3f7a4e1433ea45998cdeef798806c14e6e2c2d69d155f1451006a6d68658182c"
+  },
+  "binary_sha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1",
+  "receipts": {
+    "unchanged-model-browser-final.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/unchanged-model-browser-final.json",
+      "receipt_sha256": "4a93f9269bdf502cc3caf59fca00db657d639ec88d9e83fe4ab6f225ccc89f77",
+      "driver_pins_match": {
+        "unchanged_model_browser.py": true,
+        "unchanged_model_browser.cjs": true
+      },
+      "accepted_finite_execution": true,
+      "summary": {
+        "ordinary_local_wgs84_runs": 8,
+        "good_exact_target_picks": 4,
+        "negative_controls_per_placement": [
+          "wrong-root",
+          "missing-alias",
+          "zero-omission-error"
+        ]
+      }
+    },
+    "picking-final.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/picking-final.json",
+      "receipt_sha256": "bc0a24a956791cde9783a4723c846681140a44a25b1462cc5f3cf82aca9c84a6",
+      "driver_pins_match": {
+        "f1c2_viewer.py": true,
+        "f1c2_oracle.py": true,
+        "f1c2_viewer.cjs": true
+      },
+      "accepted_finite_execution": true,
+      "summary": [
+        {
+          "mode": "default",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "default",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 0
+        },
+        {
+          "mode": "default",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 0
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 0
+        }
+      ]
+    },
+    "empty-names-picking-final.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/empty-names-picking-final.json",
+      "receipt_sha256": "9838803d2b2fde5caf8df37ce8751fc4329e1fe95a128285b81ded80b77ff78a",
+      "driver_pins_match": {
+        "f1c2_viewer.py": true,
+        "f1c2_oracle.py": true,
+        "f1c2_viewer.cjs": true
+      },
+      "accepted_finite_execution": true,
+      "summary": [
+        {
+          "mode": "default",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "default",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 0
+        },
+        {
+          "mode": "default",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 0
+        },
+        {
+          "mode": "source_primitive",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "good",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "primitive-row-swap",
+          "samples": 12,
+          "matches": 12
+        },
+        {
+          "mode": "source_triangle",
+          "variant": "triangle-row-swap",
+          "samples": 12,
+          "matches": 0
+        }
+      ]
+    },
+    "khronos-final.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/khronos-final.json",
+      "receipt_sha256": "a0f4e2534ccdba35681a0c1b9c129ab65c9c1cb32b2efecec7089ef25046caec",
+      "driver_pins_match": {
+        "f1c2_khronos.py": true,
+        "f1c2_validate.cjs": true,
+        "f1c2_oracle.py": true
+      },
+      "accepted_finite_execution": true,
+      "summary": [
+        {
+          "input": "instances/source.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/0.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/1.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/2.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/3.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/4.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/5.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/6.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "instances/leaves/t/7.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "viewer/source.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "viewer/leaves/t/0.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "viewer/leaves/t/1.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "viewer/leaves/t/2.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "viewer/leaves/t/3.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "empty-names/source.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "empty-names/leaves/t/0.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "empty-names/leaves/t/1.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "empty-names/leaves/t/2.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "empty-names/leaves/t/3.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "first-scene/source.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "first-scene/leaves/t/0.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "first-scene/leaves/t/1.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "synthetic-empty.glb",
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "input": "zero-string-view.glb",
+          "errors": 1,
+          "warnings": 0
+        },
+        {
+          "input": "terminal-four-padding.glb",
+          "errors": 0,
+          "warnings": 1
+        }
+      ]
+    },
+    "final-f1c1-browser.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/final-f1c1-browser.json",
+      "receipt_sha256": "d69f940a3073f33200ebb632e7f67ad3f795bd02c899ef917832d7d7b40ce13b",
+      "driver_pins_match": {
+        "f1c1_viewer.py": true,
+        "f1c1_viewer.cjs": true,
+        "f1c1_oracle.py": true
+      },
+      "accepted_finite_execution": true,
+      "summary": {
+        "brisbane-tilted": {
+          "mesh": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "far": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "returnedNear": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "wrong-axis": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-order": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-height": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "missing-root": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "zero-error": {
+            "triangles": 0,
+            "picks": 0
+          }
+        },
+        "western-tilted": {
+          "mesh": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "far": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "returnedNear": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "wrong-axis": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-order": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-height": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "missing-root": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "zero-error": {
+            "triangles": 0,
+            "picks": 0
+          }
+        },
+        "pole-meridian": {
+          "mesh": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "far": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "returnedNear": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "wrong-axis": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-order": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-height": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "missing-root": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "zero-error": {
+            "triangles": 0,
+            "picks": 0
+          }
+        },
+        "far-small-detail": {
+          "mesh": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "far": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "returnedNear": {
+            "triangles": 3,
+            "picks": 3
+          },
+          "wrong-axis": {
+            "triangles": 3,
+            "picks": 0
+          },
+          "wrong-order": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "wrong-height": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "missing-root": {
+            "triangles": 0,
+            "picks": 0
+          },
+          "zero-error": {
+            "triangles": 0,
+            "picks": 0
+          }
+        }
+      }
+    },
+    "final-f1b3-browser.json": {
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/final-f1b3-browser.json",
+      "receipt_sha256": "4d1224ce1640fa0aadbbdfad5ac96b612d383f9563af8b1410be5d1a492fab50",
+      "driver_pins_match": {
+        "f1b3_viewer.py": true,
+        "fixtures/f1b3_viewer.cjs": true,
+        "f1b3_oracle.py": true,
+        "f1b_oracle.py": true,
+        "f1b2_oracle.py": true
+      },
+      "accepted_finite_execution": true,
+      "summary": {
+        "positive_maximum_RGB_delta": 0,
+        "sensitive_maximum_RGB_deltas": {
+          "wrong-uv": 84,
+          "wrong-slot": 94,
+          "wrong-w": 43,
+          "no-mr": 56,
+          "no-normal": 28,
+          "no-occlusion": 52,
+          "no-emissive": 143,
+          "wrong-color": 73,
+          "wrong-scale": 28,
+          "wrong-strength": 52
+        }
+      }
+    }
+  },
+  "proof_limits": [
+    "W1 finite unchanged static two-triangle textured fixture with exact resource closure and Local/Wgs84 target picks; no broad photometric or GPU bounds precision claim.",
+    "F1c2 finite local picking camera; coincident surface ownership not uniquely observable.",
+    "Khronos does not validate extension semantics;23zero-error/warning positives plus2negative controls,25total.",
+    "F1b3 source/output lit PBR agreement in one pinned Three renderer; F1c1 depth samples include raster error, separate high-precision oracle owns placement numeric accuracy.",
+    "Native/wheel/lifecycle/platform and whole-slice final review remain coordinator/reviewer ownership."
+  ]
+}

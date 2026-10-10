@@ -37,9 +37,6 @@ fn wraps_external_buffers_and_images_without_changing_source_bytes() {
     let work = tempfile::tempdir().unwrap();
     let (mut doc, bin) = model();
     doc["buffers"][0]["uri"] = json!("./buffers/model.bin");
-    doc["buffers"].as_array_mut().unwrap().push(json!({
-        "byteLength":1, "uri":"data:application/octet-stream;base64,AA=="
-    }));
     doc["images"] = json!([
         {"uri":"textures/color.png"},
         {"uri":"textures/../textures/color.png"}
@@ -65,10 +62,10 @@ fn wraps_external_buffers_and_images_without_changing_source_bytes() {
     );
     rusty_tiles::validate_3tz(&output).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
-    assert_eq!(zip.len(), 5); // Manifest, model, two unique resources, index.
-    assert_eq!(read_member(&mut zip, "model.gltf"), original);
-    assert_eq!(read_member(&mut zip, "buffers/model.bin"), bin);
-    assert_eq!(read_member(&mut zip, "textures/color.png"), texture);
+    assert_eq!(zip.len(), 6); // Manifest, report, model, two unique resources, index.
+    assert_eq!(read_member(&mut zip, "model/source.gltf"), original);
+    assert_eq!(read_member(&mut zip, "model/buffers/model.bin"), bin);
+    assert_eq!(read_member(&mut zip, "model/textures/color.png"), texture);
     assert_eq!(fs::read(&input).unwrap(), original);
     assert_eq!(
         fs::read(work.path().join("buffers/model.bin")).unwrap(),
@@ -115,12 +112,12 @@ fn glb_can_also_reference_external_images() {
     );
     rusty_tiles::validate_3tz(&output).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
-    assert_eq!(read_member(&mut zip, "model.glb"), original);
-    assert_eq!(read_member(&mut zip, "texture.png"), texture);
+    assert_eq!(read_member(&mut zip, "model/source.glb"), original);
+    assert_eq!(read_member(&mut zip, "model/texture.png"), texture);
 }
 
 #[test]
-fn wraps_a_local_structural_metadata_schema() {
+fn imported_structural_metadata_is_explicitly_outside_static_profile() {
     let work = tempfile::tempdir().unwrap();
     let (mut doc, bin) = model();
     doc["buffers"][0]["uri"] = json!("model.bin");
@@ -129,36 +126,29 @@ fn wraps_a_local_structural_metadata_schema() {
     doc["extensions"] = json!({"EXT_structural_metadata":{"schemaUri":"schema.json"}});
     let input = work.path().join("model.gltf");
     fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
-    let schema = br#"{"id":"invented-test-schema","classes":{}}"#;
-    fs::write(work.path().join("schema.json"), schema).unwrap();
     let output = work.path().join("result.3tz");
-    let result = wrap(&input, &output, false);
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    rusty_tiles::validate_3tz(&output).unwrap();
-    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
-    assert_eq!(read_member(&mut zip, "schema.json"), schema);
-    fs::remove_file(work.path().join("schema.json")).unwrap();
-    assert_eq!(wrap(&input, &output, true).status.code(), Some(3));
+    fs::write(&output, b"KEEP").unwrap();
+    let result = wrap(&input, &output, true);
+    assert_eq!(result.status.code(), Some(2));
+    let result: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(result["error"]["code"], "unsupported");
+    assert_eq!(fs::read(output).unwrap(), b"KEEP");
 }
 
 #[test]
 fn unavailable_or_unsupported_resources_never_replace_an_archive() {
-    for uri in [
-        "missing.bin",
-        "../outside.bin",
-        "/absolute.bin",
-        "https://example.com/model.bin",
-        "model%20data.bin",
-        "model.bin?query",
-        "model.bin#fragment",
-        "folder\\model.bin",
-        "tileset.json",
-        "@3dtilesIndex1@",
-        "",
+    for (uri, code) in [
+        ("missing.bin", 1),
+        ("../outside.bin", 2),
+        ("/absolute.bin", 2),
+        ("https://example.com/model.bin", 2),
+        ("model%20data.bin", 1),
+        ("model.bin?query", 2),
+        ("model.bin#fragment", 2),
+        ("folder\\model.bin", 3),
+        ("tileset.json", 1),
+        ("@3dtilesIndex1@", 3),
+        ("", 3),
     ] {
         let work = tempfile::tempdir().unwrap();
         let (mut doc, _) = model();
@@ -169,14 +159,14 @@ fn unavailable_or_unsupported_resources_never_replace_an_archive() {
         let failure = wrap(&input, &output, false);
         assert_eq!(
             failure.status.code(),
-            Some(3),
+            Some(code),
             "{uri}: {}",
             String::from_utf8_lossy(&failure.stderr)
         );
         assert!(!output.exists());
         fs::write(&output, b"previous archive").unwrap();
         let failure = wrap(&input, &output, true);
-        assert_eq!(failure.status.code(), Some(3), "{uri}");
+        assert_eq!(failure.status.code(), Some(code), "{uri}");
         assert_eq!(fs::read(&output).unwrap(), b"previous archive");
         assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
     }
@@ -194,7 +184,7 @@ fn resources_cannot_escape_through_symlinks() {
     let input = work.path().join("model.gltf");
     fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
     let output = work.path().join("result.3tz");
-    assert_eq!(wrap(&input, &output, false).status.code(), Some(3));
+    assert_eq!(wrap(&input, &output, false).status.code(), Some(2));
     assert!(!output.exists());
 }
 

@@ -1,5 +1,5 @@
 //! Read-only validation of self-contained explicit and native implicit 3TZ packages.
-use crate::pack::TZ_INDEX_NAME;
+use crate::archive3tz::TZ_INDEX_NAME;
 mod admission;
 mod json;
 mod payload;
@@ -114,23 +114,45 @@ fn uri(base: &str, value: &str) -> Result<String, Error> {
     if value.is_empty() || value.contains('\\') {
         return Err(invalid(format!("invalid resource URI: {value}")));
     }
-    if value.contains([':', '?', '#', '%']) || value.starts_with('/') {
+    if value.contains([':', '?', '#']) || value.starts_with('/') {
         return Err(Error::unsupported(format!(
             "URI outside archive-local profile: {value}"
         )));
     }
-    let mut parts: Vec<&str> = base
-        .rsplit_once('/')
-        .map_or(vec![], |(dir, _)| dir.split('/').collect());
-    for part in value.split('/') {
-        match part {
+    let mut parts: Vec<String> = base.rsplit_once('/').map_or(vec![], |(dir, _)| {
+        dir.split('/').map(str::to_owned).collect()
+    });
+    // Decode each segment once. Encoded separators must never become path
+    // syntax, and a literal percent in a decoded filename stays literal.
+    for raw in value.split('/') {
+        let mut decoded = Vec::with_capacity(raw.len());
+        let mut bytes = raw.bytes();
+        while let Some(byte) = bytes.next() {
+            decoded.push(if byte == b'%' {
+                let digit = |byte: u8| (byte as char).to_digit(16).map(|n| n as u8);
+                let high = bytes.next().and_then(digit);
+                let low = bytes.next().and_then(digit);
+                let (Some(high), Some(low)) = (high, low) else {
+                    return Err(invalid("invalid URI percent escape"));
+                };
+                high * 16 + low
+            } else {
+                byte
+            });
+        }
+        let part =
+            String::from_utf8(decoded).map_err(|_| invalid("URI decoded path must be UTF-8"))?;
+        if part.contains(['/', '\\']) || part.chars().any(char::is_control) {
+            return Err(invalid("URI decoded segment contains a separator/control"));
+        }
+        match part.as_str() {
             "" | "." => (),
             ".." => {
                 if parts.pop().is_none() {
                     return Err(invalid("URI escapes archive"));
                 }
             }
-            other => parts.push(other),
+            _ => parts.push(part),
         }
     }
     Ok(parts.join("/"))
@@ -898,7 +920,11 @@ mod tests {
             std::fs::write(file, serde_json::to_vec(&value).unwrap()).unwrap();
         }
         let output = work.path().join("test.3tz");
-        crate::pack::convert_to_3tz(&data, &output, &Default::default()).unwrap();
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
         inspect(ValidationRequest::new(&output)).map(|r| serde_json::to_value(r).unwrap())
     }
     #[test]
@@ -1062,5 +1088,31 @@ mod tests {
             [1., 0., 0.],
             1.
         ));
+    }
+}
+#[test]
+fn archive_uri_decodes_segments_once_and_confines_paths() {
+    assert_eq!(
+        uri("model/source.gltf", "data/a%20b.bin").unwrap(),
+        "model/data/a b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "a%2520b.bin").unwrap(),
+        "model/a%20b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "%2e%2e/data.bin").unwrap(),
+        "data.bin"
+    );
+    for value in [
+        "%2e%2e/%2e%2e/data.bin",
+        "%2fdata.bin",
+        "a%5cb.bin",
+        "a%00.bin",
+        "%ff.bin",
+        "bad%",
+        "bad%2g",
+    ] {
+        assert!(uri("model/source.gltf", value).is_err(), "{value}");
     }
 }

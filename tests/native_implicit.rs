@@ -107,7 +107,11 @@ fn deep_implicit_mesh_validates_and_corrupt_subtrees_and_boundary_links_are_reje
             _ => unreachable!(),
         }
         let damaged = work.path().join(format!("{case}.3tz"));
-        rusty_tiles::convert_to_3tz(&directory, &damaged, &Default::default()).unwrap();
+        rusty_tiles::package::package(
+            rusty_tiles::package::PackageRequest::directory(&directory, &damaged),
+            &rusty_tiles::RunControl::default(),
+        )
+        .unwrap();
         assert!(
             rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&damaged))
                 .is_err(),

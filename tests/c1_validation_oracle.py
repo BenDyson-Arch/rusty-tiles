@@ -352,9 +352,25 @@ def generate(directory):
         emit('buffer_base64_'+name,glb(embedded,b''),'invalid_input','Inline buffer base64 syntax or decoded byte length fails independently known 42-byte buffer requirements.')
     good = glb(document, payload)
     for name,uri in [('remote','https://example.invalid/positions.bin'),('absolute','/positions.bin'),
-                     ('percent','positions%2ebin'),('query','positions.bin?x=1'),('fragment','positions.bin#part')]:
+                     ('query','positions.bin?x=1'),('fragment','positions.bin#part')]:
         doc=copy.deepcopy(document);doc['buffers'][0]['uri']=uri
         emit('buffer_uri_'+name,glb(doc,payload),'unsupported','Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.')
+    for name, resource_uri, member, kind in [
+            ('percent_dot', 'positions%2ebin', 'positions.bin', None),
+            ('percent_space', 'a%20b.bin', 'a b.bin', None),
+            ('percent_once', 'a%2520b.bin', 'a%20b.bin', None),
+            ('percent_wrong_member', 'positions%2ebin', 'positions%2ebin', 'invalid_input'),
+            ('percent_separator', 'a%2fb.bin', 'a/b.bin', 'invalid_input'),
+            ('percent_backslash', 'a%5cb.bin', 'a/b.bin', 'invalid_input'),
+            ('percent_escape', '%2e%2e/positions.bin', 'positions.bin', 'invalid_input'),
+            ('percent_truncated', 'positions%2', 'positions.bin', 'invalid_input'),
+            ('percent_nonhex', 'positions%gg', 'positions.bin', 'invalid_input'),
+            ('percent_utf8', 'positions%ff', 'positions.bin', 'invalid_input'),
+            ('percent_control', 'positions%00', 'positions.bin', 'invalid_input')]:
+        doc=copy.deepcopy(document);doc['buffers'][0]['uri']=resource_uri
+        emit('buffer_uri_'+name,json.dumps(doc).encode(),kind,
+             'Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.',
+             extras={member:payload},manifest=local)
     for name,uri in [('empty',''),('backslash','a\\positions.bin'),('escape','../positions.bin')]:
         doc=copy.deepcopy(document);doc['buffers'][0]['uri']=uri
         emit('buffer_uri_'+name,glb(doc,payload),'invalid_input','Malformed or archive-escaping URI must fail as invalid input.')

@@ -587,14 +587,6 @@
       "sha256": "275e9779ec6fbfbb16b36fe5c862f64472652b6808efc20b89589defa4cf420e"
     },
     {
-      "name": "buffer_uri_percent",
-      "path": "buffer_uri_percent.3tz",
-      "expectedKind": "unsupported",
-      "exitCode": 2,
-      "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
-      "sha256": "27ef20e2f521ad03eb96df673fb738dbe05f2d802718c735c6c538f5ccbcadb7"
-    },
-    {
       "name": "buffer_uri_query",
       "path": "buffer_uri_query.3tz",
       "expectedKind": "unsupported",
@@ -609,6 +601,94 @@
       "exitCode": 2,
       "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
       "sha256": "3ef597a3b31a538085d2b847ed056c49bf2c48ee63075149e0362ddb27ab6f19"
+    },
+    {
+      "name": "buffer_uri_percent_dot",
+      "path": "buffer_uri_percent_dot.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "bf1ad86c8de8ee067f33f345b2b8b1bc7001e81188123785e87000c5290e6d88"
+    },
+    {
+      "name": "buffer_uri_percent_space",
+      "path": "buffer_uri_percent_space.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "8350b3f3086bf5831607e36d40b980b53bc4a10883d85ce66094727ca163aed8"
+    },
+    {
+      "name": "buffer_uri_percent_once",
+      "path": "buffer_uri_percent_once.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "eab53b679b4ae7db6d0f7580135af3c0910b28b7adf0f7d73747574a5d4d5a60"
+    },
+    {
+      "name": "buffer_uri_percent_wrong_member",
+      "path": "buffer_uri_percent_wrong_member.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "6edbf0f93ff96698ed23afc3e483f6172688ce2f5f8a746eb5b61951a569bd6b"
+    },
+    {
+      "name": "buffer_uri_percent_separator",
+      "path": "buffer_uri_percent_separator.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "467e325e0c7e0fc2d3cc343840dd129cb2c434b3ca5aacd2d1da9cc8c702804b"
+    },
+    {
+      "name": "buffer_uri_percent_backslash",
+      "path": "buffer_uri_percent_backslash.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "ce2ee0b6168be6274fd71b3d787d2ce9edd7c0ebc5229ffa0eb871dd70e32f5d"
+    },
+    {
+      "name": "buffer_uri_percent_escape",
+      "path": "buffer_uri_percent_escape.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "77f12bd331422ac33cd61da6c57cd6dafe29fded2772fed9e98c1835e0cee2d7"
+    },
+    {
+      "name": "buffer_uri_percent_truncated",
+      "path": "buffer_uri_percent_truncated.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "bfd37dc2548bca029bcef6506cd095e2b171df77902184130e703ff9a292b1c3"
+    },
+    {
+      "name": "buffer_uri_percent_nonhex",
+      "path": "buffer_uri_percent_nonhex.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "54945198bf3a796c2cac4a70f1afbb99a31dffb1211873aa2ed0c26f7f5a0cc7"
+    },
+    {
+      "name": "buffer_uri_percent_utf8",
+      "path": "buffer_uri_percent_utf8.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "ad920ed064a2b3ee22a2f905efd8ee49c7ae56deff839cb9c3d7e44d723d3ef4"
+    },
+    {
+      "name": "buffer_uri_percent_control",
+      "path": "buffer_uri_percent_control.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "3c615cff3235401da524bc25404239733a632d38d48fec267afa5bee2f081c12"
     },
     {
       "name": "buffer_uri_empty",

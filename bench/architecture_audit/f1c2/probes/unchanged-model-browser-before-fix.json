@@ -1,0 +1,619 @@
+{
+  "accepted": false,
+  "binary_sha256": "d461c38d88cdab3ae643a16bec8b261c982940b9392a362d93fee9986c7c9bbb",
+  "source_sha256": "8e6c8f7f7e7c72130241f92edcee9551f03568e238cf6228411780de3f57e399",
+  "conversions": [
+    {
+      "placement": "local",
+      "archive_sha256": "a54cdc3d313c2c29e30305b5cb5c60c87b6ac32ac8550f1c182a2abef5ae9644",
+      "members": {
+        "tileset.json": "9c972723d5f2b7ae6b6fc116fd3fbf3530bcc21a7b44c1181b2c014399185dcf",
+        "conversion.json": "5f450ce692fb3a794dd24f85d6a39cb65213cc00b435dff9de9f74e0f2e34cf1",
+        "model/alias%.bin": "fd7af0042efa909eab65dd31ea96039d55cea55e7559d40f7b731e007a514b1a",
+        "model/geometry \u03b2.bin": "fd7af0042efa909eab65dd31ea96039d55cea55e7559d40f7b731e007a514b1a",
+        "model/source.gltf": "8e6c8f7f7e7c72130241f92edcee9551f03568e238cf6228411780de3f57e399",
+        "model/texture % \u03b2.png": "e1a53165949fb556c7710823f3c161efa22c050e8764fcad11e78bada38af16e",
+        "@3dtilesIndex1@": "beb9faaf71b5fd605fdf12928dbee4d4a1a24ca445c7be338aa2c785cb0f56cc"
+      }
+    },
+    {
+      "placement": "wgs84",
+      "archive_sha256": "12d30ce50afd0f8800dfbfe6fb47b6028a7f35fea9dd98a2c5a80ddd0d29afa2",
+      "members": {
+        "tileset.json": "8adda46dcc178e8ab1e490044ae4161030bcf79618cd8a28a7c52a7e1415df9e",
+        "conversion.json": "13c2c4505d53a9c2b3a7b779c354d8dd91d084af85e783f3c253007ca007938e",
+        "model/alias%.bin": "fd7af0042efa909eab65dd31ea96039d55cea55e7559d40f7b731e007a514b1a",
+        "model/geometry \u03b2.bin": "fd7af0042efa909eab65dd31ea96039d55cea55e7559d40f7b731e007a514b1a",
+        "model/source.gltf": "8e6c8f7f7e7c72130241f92edcee9551f03568e238cf6228411780de3f57e399",
+        "model/texture % \u03b2.png": "e1a53165949fb556c7710823f3c161efa22c050e8764fcad11e78bada38af16e",
+        "@3dtilesIndex1@": "61686b7770d505af3e04ae96f7c82b3447164736bffeb2cd6bfb7282fa97f6a6"
+      }
+    }
+  ],
+  "browser": {
+    "cesiumVersion": "1.146.0",
+    "runs": [
+      {
+        "placement": "local",
+        "variant": "good",
+        "loaded": false,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 1.6000000000000023,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              0.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              489.1818133273809,
+              388.4108522607938
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              3.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              610.8181866726176,
+              388.41085226079383
+            ],
+            "picked": false
+          }
+        ]
+      },
+      {
+        "placement": "local",
+        "variant": "wrong-root",
+        "loaded": true,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 41.6,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          40,
+          0,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              0.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              489.1818133273809,
+              388.4108522607938
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              3.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              610.8181866726176,
+              388.41085226079383
+            ],
+            "picked": false
+          }
+        ]
+      },
+      {
+        "placement": "local",
+        "variant": "missing-alias",
+        "loaded": false,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 1.6000000000000023,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              0.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              489.1818133273809,
+              388.4108522607938
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              3.1,
+              0.3333333333333333,
+              0
+            ],
+            "screen": [
+              610.8181866726176,
+              388.41085226079383
+            ],
+            "picked": false
+          }
+        ]
+      },
+      {
+        "placement": "wgs84",
+        "variant": "good",
+        "loaded": false,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 6378147,
+            "y": 1.6000000000000023,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          6378147,
+          0,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              6378147,
+              0.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              489.18181332850486,
+              388.4108522688313
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              6378147,
+              3.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              610.8181866714955,
+              388.4108522688313
+            ],
+            "picked": false
+          }
+        ]
+      },
+      {
+        "placement": "wgs84",
+        "variant": "wrong-root",
+        "loaded": true,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 6378147,
+            "y": 41.6,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          6378147,
+          40,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              6378147,
+              0.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              489.18181332609413,
+              388.4108522683719
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              6378147,
+              3.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              610.8181866739062,
+              388.4108522683719
+            ],
+            "picked": false
+          }
+        ]
+      },
+      {
+        "placement": "wgs84",
+        "variant": "missing-alias",
+        "loaded": false,
+        "triangles": 0,
+        "tileFailures": [],
+        "tilesLoaded": true,
+        "statistics": {
+          "selected": 0,
+          "visited": 0,
+          "numberOfCommands": 0,
+          "numberOfAttemptedRequests": 0,
+          "numberOfPendingRequests": 0,
+          "numberOfTilesProcessing": 0,
+          "numberOfTilesWithContentReady": 0,
+          "numberOfTilesTotal": 1,
+          "numberOfLoadedTilesTotal": 0,
+          "numberOfFeaturesSelected": 0,
+          "numberOfFeaturesLoaded": 0,
+          "numberOfPointsSelected": 0,
+          "numberOfPointsLoaded": 0,
+          "numberOfTrianglesSelected": 0,
+          "numberOfTilesStyled": 0,
+          "numberOfFeaturesStyled": 0,
+          "numberOfTilesCulledWithChildrenUnion": 0,
+          "geometryByteLength": 0,
+          "texturesByteLength": 0,
+          "texturesReferenceCounterById": {},
+          "batchTableByteLength": 0
+        },
+        "rootSphere": {
+          "center": {
+            "x": 6378147,
+            "y": 1.6000000000000023,
+            "z": 0
+          },
+          "radius": 2.692582403567257
+        },
+        "rootTransform": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          6378147,
+          0,
+          0,
+          1
+        ],
+        "modelMatrixIsIdentity": true,
+        "samples": [
+          {
+            "target": [
+              6378147,
+              0.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              489.18181332609413,
+              388.4108522683719
+            ],
+            "picked": false
+          },
+          {
+            "target": [
+              6378147,
+              3.1,
+              0.3333333333333333
+            ],
+            "screen": [
+              610.8181866739062,
+              388.4108522683719
+            ],
+            "picked": false
+          }
+        ]
+      }
+    ],
+    "browserVersion": "153.0.8010.12",
+    "responses": [
+      {
+        "url": "http://127.0.0.1:46473/",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Widgets/widgets.css",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Cesium.js",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Assets/approximateTerrainHeights.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Assets/Images/ion-credit.png",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Assets/IAU2006_XYS/IAU2006_XYS_18.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/cesium/Widgets/InfoBox/InfoBoxDescription.css",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/plan.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/local/good/tileset.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/local/wrong-root/tileset.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/local/missing-alias/tileset.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/wgs84/good/tileset.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/wgs84/wrong-root/tileset.json",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:46473/wgs84/missing-alias/tileset.json",
+        "status": 200
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "consoleErrors": []
+  },
+  "error": "AssertionError [ERR_ASSERTION]: {\"run\":{\"placement\":\"local\",\"variant\":\"good\",\"loaded\":false,\"triangles\":0,\"tileFailures\":[],\"tilesLoaded\":true,\"statistics\":{\"selected\":0,\"visited\":0,\"numberOfCommands\":0,\"numberOfAttemptedRequests\":0,\"numberOfPendingRequests\":0,\"numberOfTilesProcessing\":0,\"numberOfTilesWithContentReady\":0,\"numberOfTilesTotal\":1,\"numberOfLoadedTilesTotal\":0,\"numberOfFeaturesSelected\":0,\"numberOfFeaturesLoaded\":0,\"numberOfPointsSelected\":0,\"numberOfPointsLoaded\":0,\"numberOfTrianglesSelected\":0,\"numberOfTilesStyled\":0,\"numberOfFeaturesStyled\":0,\"numberOfTilesCulledWithChildrenUnion\":0,\"geometryByteLength\":0,\"texturesByteLength\":0,\"texturesReferenceCounterById\":{},\"batchTableByteLength\":0},\"rootSphere\":{\"center\":{\"x\":1.6000000000000023,\"y\":0,\"z\":0},\"radius\":2.692582403567257},\"rootTransform\":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],\"modelMatrixIsIdentity\":true,\"samples\":[{\"target\":[0.1,0.3333333333333333,0],\"screen\":[489.1818133273809,388.4108522607938],\"picked\":false},{\"target\":[3.1,0.3333333333333333,0],\"screen\":[610.8181866726176,388.41085226079383],\"picked\":false}]},\"responses\":[{\"url\":\"http://127.0.0.1:46473/\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Widgets/widgets.css\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Cesium.js\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Assets/approximateTerrainHeights.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Assets/Images/ion-credit.png\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Assets/IAU2006_XYS/IAU2006_XYS_18.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/cesium/Widgets/InfoBox/InfoBoxDescription.css\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/plan.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/local/good/tileset.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/local/wrong-root/tileset.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/local/missing-alias/tileset.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/wgs84/good/tileset.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/wgs84/wrong-root/tileset.json\",\"status\":200},{\"url\":\"http://127.0.0.1:46473/wgs84/missing-alias/tileset.json\",\"status\":200}],\"consoleErrors\":[]}\n    at /home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/review_probes/unchanged_model_browser.cjs:65:14 {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n",
+  "probes": {
+    "unchanged_model_browser.py": "447b40161c61107a69e9d8af1841d20570f91bd31e96fa27c3c0cbdbbb6d5c03",
+    "unchanged_model_browser.cjs": "97390d25274ce86cec656a0ad63dce209a83771d83b62f6297401a29423e5cd7"
+  },
+  "cesium_js_sha256": "a5ab7e638f51d3bc5a6c710a79c9aecea42d9252b5cd2dad34980ea771c2c9af",
+  "limits": "failed ordinary consumer execution; not candidate acceptance; deadlines unchanged",
+  "consumer_source_pins": {
+    "Cesium3DTile.js": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c",
+    "Cesium3DTilesetBaseTraversal.js": "bcd98c4737587756b717f99cb26d0315cab2b7766272b8a15ef37b8b5a57d154",
+    "Cesium3DTileset.js": "04d08416e3ad721f6fea557853eec861f06eee299a845d61657dec1cbfacb48d"
+  },
+  "static_mechanism": "BaseTraversal.selectTiles returns before traversal when root.getScreenSpaceError(frameState,true)<=memoryAdjustedScreenSpaceError. Root parent error is tileset._scaledGeometricError; a zero error returns exact zero.",
+  "production_receipt_sha256": "a6765e9ed709e3da627cc5276f06d880d5a153f9307ace7ddfb4607478af7cd1",
+  "production_sha256": "669242056050f2e040f9f6e33e6557c92ed22fbcc57695256f80f4f2743dd7d7"
+}

@@ -31,7 +31,7 @@ def finite(values):
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
 
 
-PROFILE = 'f1c1-placed-gltf-v1'
+PROFILE = 'f1c2-source-identity-gltf-v1'
 IDENTITY_TRANSFORM = tuple(float(i == j) for j in range(4) for i in range(4))
 
 
@@ -59,7 +59,7 @@ def check_placement(root, report, expectation=None):
     else:
         for i, (a, b) in enumerate(zip(actual, wanted['root_transform'])):
             require(abs(a-b) <= (1e-6 if i in (12,13,14) else 2e-15), 'independent root component ' + str(i))
-    require(report.get('schema_version') == 4 and report.get('profile') == PROFILE and
+    require(report.get('schema_version') == 5 and report.get('profile') == PROFILE and
             report.get('source_coordinates') == 'local-gltf', 'placement profile/source report')
     require(report.get('coordinates') == wanted['coordinates'], 'output coordinate interpretation')
     reported_matrix = report.get('root_transform')
@@ -186,6 +186,27 @@ def material(doc,index):
     return {'present':index is not None,'fields':fields}
 
 
+def geometry_attributes(doc, binary, attributes):
+    """Retain geometry proofs while the F1c2 oracle owns source association.
+
+    Only the two admitted feature streams are excluded from geometric companion
+    checks; validate their scalar representation and corner count here.
+    """
+    result = dict(attributes)
+    count = doc['accessors'][attributes['POSITION']]['count']
+    for name in ('_FEATURE_ID_0', '_FEATURE_ID_1'):
+        if name in result:
+            item = doc['accessors'][result.pop(name)]
+            require(item['type'] == 'SCALAR' and item['componentType'] == 5126 and
+                    not item.get('normalized', False) and item['count'] == count,
+                    'canonical feature stream representation')
+            require(all(type(value) in (int, float) and math.isfinite(value) and
+                        value == int(value) and 0 <= value <= 100000
+                        for value in accessor(doc, binary, attributes[name])),
+                    'exact finite feature IDs')
+    return result
+
+
 def scene_triangles(data, tile_transform=None):
     doc,binary=decode_glb(data);scenes=doc.get('scenes',[])
     selected=doc.get('scene',0);require(scenes and 0<=selected<len(scenes),'selected scene')
@@ -198,8 +219,9 @@ def scene_triangles(data, tile_transform=None):
         if 'mesh' in node:
             for primitive in doc['meshes'][node['mesh']]['primitives']:
                 require(primitive.get('mode',4)==4,'not TRIANGLES')
-                require(set(primitive['attributes'])<={'POSITION','NORMAL'},'unsupported output attribute')
-                for semantic,accessor_index in primitive['attributes'].items():
+                attributes = geometry_attributes(doc, binary, primitive['attributes'])
+                require(set(attributes)<={'POSITION','NORMAL'},'unsupported output attribute')
+                for semantic,accessor_index in attributes.items():
                     a=doc['accessors'][accessor_index]
                     require(a['type']=='VEC3' and a['componentType']==5126,'f32 VEC3 attribute required')
                 p=accessor(doc,binary,primitive['attributes']['POSITION'])
@@ -400,7 +422,7 @@ def inspect(source,archive,leaf_limit,position_tolerance=None,normal_tolerance=2
             actual.extend(triangles)
         require(set(names)=={'tileset.json','conversion.json','@3dtilesIndex1@',*uris},'exact accepted resource closure')
         report=json.loads(z.read('conversion.json'))
-        expected_report={'schema_version':4,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        expected_report={'schema_version':5,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         check_placement(root, report)
         require(close_value(expected_report,report,1e-10*max(1,ge)),'typed report facts/fields')
         check_index(z,Path(archive).read_bytes())
@@ -426,7 +448,7 @@ def archive_controls():
         root=Path(temporary);source=root/'source.glb';source.write_bytes(fixture(2,transformed=False))
         box=[2.5,-0.5,0.5,2.5,0,0,0,0.5,0,0,0,0.5];ge=math.sqrt(27)
         manifest={'asset':{'version':'1.1'},'geometricError':ge,'root':{'transform':list(IDENTITY_TRANSFORM),'boundingVolume':{'box':box},'geometricError':ge,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
-        report={'schema_version':4,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        report={'schema_version':5,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         members={'tileset.json':json.dumps(manifest).encode(),'conversion.json':json.dumps(report).encode(),'t/0.glb':source.read_bytes()}
         archive=root/'control.3tz';write_control_archive(archive,members);inspect(source,archive,2)
         controls={}

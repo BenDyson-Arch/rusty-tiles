@@ -76,7 +76,7 @@ Spatial splitting supports static triangle meshes with optional normals, UVs in 
 - Extra vertex attributes and additional PBR texture channels.
 - Unsupported source extensions.
 
-Use `glb-to-3tz` to wrap a richer model unchanged. Referenced local buffers, images and structural metadata schemas are bundled alongside the original glTF or GLB. Resources must be inside the model's directory (subdirectories are supported); data URIs stay embedded. Remote, absolute, escaping and percent-encoded resource URIs are refused before publication.
+`glb-to-3tz` preserves exact source and resource bytes within the [bounded static model profile](architecture/model-wrapping-contract.md). Local buffers and PNG/JPEG images must remain inside the model directory; admitted percent escapes and dot segments retain their original URI spellings. Animation, skins, morph targets, imported extensions/extras and embedded data URIs are excluded. The former richer-model wrapping escape hatch is retired. Opaque `convert` packaging does not validate or repair excluded model semantics.
 
 Small local meshes that fit the `mesh-to-3tz` budgets also retain their source bytes. In the default implicit layout, declared resources move alongside the content under `implicit-content/`, preserving nested relative URI bases. A resource name that collides with generated content is refused before publication, including with `--force`.
 

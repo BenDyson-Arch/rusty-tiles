@@ -620,7 +620,7 @@ pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {
             let mut zip = zip::ZipArchive::new(File::open(output)?)?;
             let names: Vec<_> = zip
                 .file_names()
-                .filter(|name| !matches!(*name, "tileset.json" | rusty_tiles::pack::TZ_INDEX_NAME))
+                .filter(|name| !matches!(*name, "tileset.json" | rusty_tiles::TZ_INDEX_NAME))
                 .map(str::to_owned)
                 .collect();
             for name in &names {

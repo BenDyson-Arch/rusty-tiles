@@ -1,0 +1,103 @@
+{
+  "oracle_sha256": "76ce7d19820bc27e987a9f59f8350db4894f3c4342ce7e491a214a00b357740c",
+  "self_test": {
+    "mode": "independent-synthetic-decoder-and-control-self-test",
+    "positive": {
+      "source_sha256": "21b1763da786039345f0811f604ea7699b8da015da1eeb9dc4fcccce17b16643",
+      "triangles": 32,
+      "leaves": 1,
+      "source_primitive_instances": 16,
+      "emitted_name_bytes": 102,
+      "keys_sha256": "38369adefa38002dcc561e42b1a2bdc8792c31ad5f88065b525d8cb6393050b2",
+      "report": {
+        "schema_version": 5,
+        "profile": "f1c2-source-identity-gltf-v1"
+      }
+    },
+    "empty_names_positive": {
+      "source_sha256": "3ab617fa51856abf203ce20d232ff1b6655066d1893103018ae2a94199aeb9dc",
+      "triangles": 12,
+      "leaves": 1,
+      "source_primitive_instances": 6,
+      "emitted_name_bytes": 0,
+      "keys_sha256": "6368bcab8ab6c27885700ec77129dafddc3050cd930af1fa784d2e3365c2a5a0",
+      "report": {
+        "schema_version": 5,
+        "profile": "f1c2-source-identity-gltf-v1"
+      }
+    },
+    "controls": [
+      {
+        "name": "swap-feature-sets",
+        "rejected": true,
+        "reason": "feature IDs integral/in-range"
+      },
+      {
+        "name": "wrong-table",
+        "rejected": true,
+        "reason": "exact feature set 0"
+      },
+      {
+        "name": "accessor-component",
+        "rejected": true,
+        "reason": "feature accessor scalar float"
+      },
+      {
+        "name": "accessor-count",
+        "rejected": true,
+        "reason": "feature accessor corner count"
+      },
+      {
+        "name": "presence",
+        "rejected": true,
+        "reason": "exact optional source name"
+      },
+      {
+        "name": "string-offset",
+        "rejected": true,
+        "reason": "complete exact string storage or exact empty sentinel"
+      },
+      {
+        "name": "triangle-ordinal",
+        "rejected": true,
+        "reason": "dense unique sorted source keys"
+      },
+      {
+        "name": "triangle-id",
+        "rejected": true,
+        "reason": "feature IDs integral/in-range"
+      },
+      {
+        "name": "source-column-swap",
+        "rejected": true,
+        "reason": "dense unique sorted source keys"
+      },
+      {
+        "name": "reflected-id-swap",
+        "rejected": true,
+        "reason": "oriented source geometry/key association (4, 0, 2, 0)"
+      },
+      {
+        "name": "missing-leaf",
+        "rejected": true,
+        "reason": "omitted source triangles/instances [(1, 0, 0, 0), (1, 0, 0, 1), (1, 0, 1, 0), (1, 0, 1, 1), (1, 0, 2, 0)]"
+      },
+      {
+        "name": "empty-sentinel-nonzero",
+        "rejected": true,
+        "reason": "complete exact string storage or exact empty sentinel"
+      },
+      {
+        "name": "empty-sentinel-zero-view",
+        "rejected": true,
+        "reason": "nonempty view range"
+      },
+      {
+        "name": "empty-sentinel-extra-zero",
+        "rejected": true,
+        "reason": "complete exact string storage or exact empty sentinel"
+      }
+    ],
+    "scope": "Oracle and representation feasibility only; no candidate binary execution."
+  }
+}

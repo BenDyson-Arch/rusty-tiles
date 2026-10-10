@@ -32,7 +32,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | Only for CRS operations outside the grid-free tier |
-| Local metre/Y-up GLB/glTF with core PBR and full-detail leaves | `mesh-local-to-3tz` | Explicit `.3tz`, optionally rigidly placed at a WGS84 anchor | No; F1c1 placement is a development candidate |
+| Local metre/Y-up GLB/glTF with core PBR and full-detail leaves | `mesh-local-to-3tz` | Explicit `.3tz`, optionally rigidly placed at a WGS84 anchor | No; bounded source profile |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
@@ -257,7 +257,7 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 A constant height offset is not a geoid transformation. Legacy general mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
 
-The F1c1 mesh placement implementation is a development candidate pending independent review and final consumer/platform acceptance. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. Schema 4, profile `f1c1-placed-gltf-v1`, reports source/output coordinates, normalized placement and the exact root matrix. Picking/source identity remains the F1c2 follow-on; no broad legacy mesh API deletion or release acceptance is implied.
+The bounded mesh foundation uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. Schema 5, profile `f1c2-source-identity-gltf-v1`, reports source/output coordinates, normalized placement and the exact root matrix. The F1c2 candidate carries source node/mesh/primitive identity and exact triangle provenance in two labeled standard feature sets; see the [identity contract](docs/architecture/f1c2-contract.md). The wrapping candidate preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). Broader legacy mesh APIs still require separate migration; this does not imply release acceptance.
 
 ## Library use
 

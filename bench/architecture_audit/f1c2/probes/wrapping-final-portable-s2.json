@@ -1,0 +1,1536 @@
+{
+  "schema_version": 1,
+  "profile": "w1-static-model-v1",
+  "binary": {
+    "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-portable-final",
+    "sha256": "92815505d581b8df3aa2a53bd388ca84b9cab394fb35cd6c925524d6e7fa6d79"
+  },
+  "oracle_sha256": "a61db9ad650dcb26f97740d8c667849c5a6234d12172a10652a2688c686ccdc9",
+  "decimal_precision": 80,
+  "cases": [
+    {
+      "case": "identity-None",
+      "source_sha256": "3cace8a7b35a60d93efc5ea0f6581eac5af0640c591dd508063ae482bb8cd7d6",
+      "artifact_sha256": "f130f1c8896f22101f09148a95c2155d1347dd570c1641192c14940d83e52b3a",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.5000000000000011,
+          0.0,
+          0.5000000000000009,
+          0.5000000000000012,
+          0.0,
+          0.0,
+          0.0,
+          1.5e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.500000000000001
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730991,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "identity-[0, 0, 10]",
+      "source_sha256": "3cace8a7b35a60d93efc5ea0f6581eac5af0640c591dd508063ae482bb8cd7d6",
+      "artifact_sha256": "8573b845dee2c2f46006015df6f42cca1d3d4e978611a52e1e0ffb2d9e85b7e1",
+      "members": 4,
+      "max_world_difference_metres": "3.7747582837255322374403476715087890625000000000000000000000000010E-15",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.5000000000000011,
+          0.0,
+          0.5000000000000009,
+          0.5000000000000012,
+          0.0,
+          0.0,
+          0.0,
+          1.5e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.500000000000001
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730991,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "identity-[90, 0, 25]",
+      "source_sha256": "3cace8a7b35a60d93efc5ea0f6581eac5af0640c591dd508063ae482bb8cd7d6",
+      "artifact_sha256": "4eb035e298b48709fcdce96fd29efe6cc58a2fefb8938cb55600f674bfa06d25",
+      "members": 4,
+      "max_world_difference_metres": "3.905535894688227926963008940219879150390625000000000000000000000000010E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.5000000000000011,
+          0.0,
+          0.5000000000000009,
+          0.5000000000000012,
+          0.0,
+          0.0,
+          0.0,
+          1.5e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.500000000000001
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730991,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "sub-metre-None",
+      "source_sha256": "e9919468586ae8239a9df189b5a707fb8ec196dc96c802be9a0ac27e957ee4ae",
+      "artifact_sha256": "07c39aca6fde3ae759f1f0dd44126ae3070292a9b76feb340f308e991a80e1d4",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.12500000000000028,
+          0.0,
+          0.12500000000000022,
+          0.1250000000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.14e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.12500000000000025
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 412,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 412,
+        "model_payload_files": 1,
+        "model_payload_bytes": 412,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "sub-metre-[0, 0, 10]",
+      "source_sha256": "e9919468586ae8239a9df189b5a707fb8ec196dc96c802be9a0ac27e957ee4ae",
+      "artifact_sha256": "36796bd39055829ccc775926d7090f00cee1a9b449a25cd73530b7c95cbb1c3f",
+      "members": 4,
+      "max_world_difference_metres": "3.6082248300317587563768029212951660156250000000000000000000000009E-15",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.12500000000000028,
+          0.0,
+          0.12500000000000022,
+          0.1250000000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.14e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.12500000000000025
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 412,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 412,
+        "model_payload_files": 1,
+        "model_payload_bytes": 412,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "sub-metre-[90, 0, 25]",
+      "source_sha256": "e9919468586ae8239a9df189b5a707fb8ec196dc96c802be9a0ac27e957ee4ae",
+      "artifact_sha256": "6a701ae6d0ecfb9ba9895a7c234cddc421b11c4eb902cb34eb0170fb5698b294",
+      "members": 4,
+      "max_world_difference_metres": "3.905534229353690989228198304772377014160156250000000000000000000000009E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.12500000000000028,
+          0.0,
+          0.12500000000000022,
+          0.1250000000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.14e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.12500000000000025
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 412,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 412,
+        "model_payload_files": 1,
+        "model_payload_bytes": 412,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "degenerate-None",
+      "source_sha256": "86a6ea07efc78e19c658b22b7145ac3d37c4a57fb075d23c63267ca24c7c7a29",
+      "artifact_sha256": "d04bea86fa4d7e26d9a189675340d585f9babf1901c31022263fc04f62a5701f",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "degenerate-[0, 0, 10]",
+      "source_sha256": "86a6ea07efc78e19c658b22b7145ac3d37c4a57fb075d23c63267ca24c7c7a29",
+      "artifact_sha256": "fe426968caaa7152dc06580f071c350c549ee5feb16950233cdbc7c72067c011",
+      "members": 4,
+      "max_world_difference_metres": "3.5527136788005009293556213378906250000000000000000000000000000009E-15",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "degenerate-[90, 0, 25]",
+      "source_sha256": "86a6ea07efc78e19c658b22b7145ac3d37c4a57fb075d23c63267ca24c7c7a29",
+      "artifact_sha256": "30be3192043a706e3ca32b11ec9815ba2e672a1c3892b4275bf68ef3c42d6d1f",
+      "members": 4,
+      "max_world_difference_metres": "3.905533674242178676649928092956542968750000000000000000000000000000009E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323,
+          0.0,
+          0.0,
+          0.0,
+          7e-323
+        ],
+        "tileset_geometric_error_metres": 1.0,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 384,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 384,
+        "model_payload_files": 1,
+        "model_payload_bytes": 384,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "translation-f32-None",
+      "source_sha256": "510bfb55835a7b5f61d2cf42164537c18f804c3f31eb39cbe0eceb7e65a8a440",
+      "artifact_sha256": "c011ebbd4c6c95a3beede6495b5d1baa6fe3070aa0c512854eeb4ddce1318690",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.6000000000000011,
+          -0.2,
+          0.20000000000000073,
+          0.5000000000000013,
+          0.0,
+          0.0,
+          0.0,
+          1.665334536937735e-16,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000000012
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730996,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 416,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 416,
+        "model_payload_files": 1,
+        "model_payload_bytes": 416,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "translation-f32-[0, 0, 10]",
+      "source_sha256": "510bfb55835a7b5f61d2cf42164537c18f804c3f31eb39cbe0eceb7e65a8a440",
+      "artifact_sha256": "539bfda955553f9716570ca6dea94c598058bd0e4e9f3c566226750e2d202c2d",
+      "members": 4,
+      "max_world_difference_metres": "3.7525538232330291053992798737391417102941741167456465161356149461E-15",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.6000000000000011,
+          -0.2,
+          0.20000000000000073,
+          0.5000000000000013,
+          0.0,
+          0.0,
+          0.0,
+          1.665334536937735e-16,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000000012
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730996,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 416,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 416,
+        "model_payload_files": 1,
+        "model_payload_bytes": 416,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "translation-f32-[90, 0, 25]",
+      "source_sha256": "510bfb55835a7b5f61d2cf42164537c18f804c3f31eb39cbe0eceb7e65a8a440",
+      "artifact_sha256": "0f7d3174f5618d48e50e73b52d217783757f7798aeee1348c707b3b241d9faca",
+      "members": 4,
+      "max_world_difference_metres": "3.905535488946603129828714251632664269612889549828557491111561548691880E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.6000000000000011,
+          -0.2,
+          0.20000000000000073,
+          0.5000000000000013,
+          0.0,
+          0.0,
+          0.0,
+          1.665334536937735e-16,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000000012
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730996,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 416,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 416,
+        "model_payload_files": 1,
+        "model_payload_bytes": 416,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "near-unit-quaternion-None",
+      "source_sha256": "8cfa1dea62ab48558a2adf9991765fd9ef7387621609ddf4847e544aa963fc7b",
+      "artifact_sha256": "3242a5d74a2a714ef17d92832c5a73025b8192721816564b959d706bb09bdc97",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          12344.624999831973,
+          -55.5,
+          -30000.0,
+          0.5000001680418792,
+          0.0,
+          0.0,
+          0.0,
+          4.263256414560602e-14,
+          0.0,
+          0.0,
+          0.0,
+          0.5000003360801203
+        ],
+        "tileset_geometric_error_metres": 1.4142142753092848,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 464,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 464,
+        "model_payload_files": 1,
+        "model_payload_bytes": 464,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "near-unit-quaternion-[0, 0, 10]",
+      "source_sha256": "8cfa1dea62ab48558a2adf9991765fd9ef7387621609ddf4847e544aa963fc7b",
+      "artifact_sha256": "88173c9d98b4d6382c75d186fbbb1c92c8c5894793beff15d1c2e6c32414a6ca",
+      "members": 4,
+      "max_world_difference_metres": "2.753491878948466364818159490823745727539062500000000000000000001E-12",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          12344.624999831973,
+          -55.5,
+          -30000.0,
+          0.5000001680418792,
+          0.0,
+          0.0,
+          0.0,
+          4.263256414560602e-14,
+          0.0,
+          0.0,
+          0.0,
+          0.5000003360801203
+        ],
+        "tileset_geometric_error_metres": 1.4142142753092848,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 464,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 464,
+        "model_payload_files": 1,
+        "model_payload_bytes": 464,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "near-unit-quaternion-[90, 0, 25]",
+      "source_sha256": "8cfa1dea62ab48558a2adf9991765fd9ef7387621609ddf4847e544aa963fc7b",
+      "artifact_sha256": "6727be9efa1bb80cf5123ec8d7f6e8df0c644c4eb16e53d0f249cf5b755a44fd",
+      "members": 4,
+      "max_world_difference_metres": "3.91445272769468604427683097463359567944578139955286746843807210716932E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          12344.624999831973,
+          -55.5,
+          -30000.0,
+          0.5000001680418792,
+          0.0,
+          0.0,
+          0.0,
+          4.263256414560602e-14,
+          0.0,
+          0.0,
+          0.0,
+          0.5000003360801203
+        ],
+        "tileset_geometric_error_metres": 1.4142142753092848,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 464,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 464,
+        "model_payload_files": 1,
+        "model_payload_bytes": 464,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "nested-order-None",
+      "source_sha256": "bbcb11931a1166d85ab8b7d1e2f9be15c85a68235ba22b447c1cd0288b6c6179",
+      "artifact_sha256": "3c8b0f38a52b84158f970c1d43e2bdd1cd84865349e4c11c9573790d04017164",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          99997.325,
+          7.250000000000002,
+          -20001.4,
+          1.5000000001309675,
+          0.0,
+          0.0,
+          0.0,
+          1.0658141036401504e-14,
+          0.0,
+          0.0,
+          0.0,
+          1.000000000029104
+        ],
+        "tileset_geometric_error_metres": 3.6055512757142223,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 540,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 540,
+        "model_payload_files": 1,
+        "model_payload_bytes": 540,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "nested-order-[0, 0, 10]",
+      "source_sha256": "bbcb11931a1166d85ab8b7d1e2f9be15c85a68235ba22b447c1cd0288b6c6179",
+      "artifact_sha256": "33931c57b720b36b6e73e2ec9d8fb0cd3a8bd396c3fb0e5af6690f06abaf7b96",
+      "members": 4,
+      "max_world_difference_metres": "2.2209362127156850874649640227807319694223907117239001080155590280095E-11",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          99997.325,
+          7.250000000000002,
+          -20001.4,
+          1.5000000001309675,
+          0.0,
+          0.0,
+          0.0,
+          1.0658141036401504e-14,
+          0.0,
+          0.0,
+          0.0,
+          1.000000000029104
+        ],
+        "tileset_geometric_error_metres": 3.6055512757142223,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 540,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 540,
+        "model_payload_files": 1,
+        "model_payload_bytes": 540,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "nested-order-[90, 0, 25]",
+      "source_sha256": "bbcb11931a1166d85ab8b7d1e2f9be15c85a68235ba22b447c1cd0288b6c6179",
+      "artifact_sha256": "57dabda520e64fb04e0578e9009bdb8adc9ee26e7018c0aaee7b2df99d3216e1",
+      "members": 4,
+      "max_world_difference_metres": "4.11534505545612581884426954963305625083777679610306871905740684823223E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          99997.325,
+          7.250000000000002,
+          -20001.4,
+          1.5000000001309675,
+          0.0,
+          0.0,
+          0.0,
+          1.0658141036401504e-14,
+          0.0,
+          0.0,
+          0.0,
+          1.000000000029104
+        ],
+        "tileset_geometric_error_metres": 3.6055512757142223,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 540,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 540,
+        "model_payload_files": 1,
+        "model_payload_bytes": 540,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "deep-128-None",
+      "source_sha256": "6e855e7312ecc610de10caf86e0ca3eb9975c0e9cdd04d204e828d025a55849d",
+      "artifact_sha256": "471c55be93997f3196391bea62b5e59c1658e5b90028ede08622d5e6c120b9e2",
+      "members": 4,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.49999999999981926,
+          3.588240815588514e-13,
+          0.5000000000007357,
+          0.500000000002642,
+          0.0,
+          0.0,
+          0.0,
+          3.4887648325820947e-12,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000065339
+        ],
+        "tileset_geometric_error_metres": 1.4142135623860725,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 6408,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 6408,
+        "model_payload_files": 1,
+        "model_payload_bytes": 6408,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "deep-128-[0, 0, 10]",
+      "source_sha256": "6e855e7312ecc610de10caf86e0ca3eb9975c0e9cdd04d204e828d025a55849d",
+      "artifact_sha256": "b9bf4222b03e3d7dba76af83954775d8833378daad89141c2829968c94aee952",
+      "members": 4,
+      "max_world_difference_metres": "3.7747582837255319231285807475118978437643997701398616145818110122E-15",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          0.0,
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          6378149.0,
+          -5.0000000000000036,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.49999999999981926,
+          3.588240815588514e-13,
+          0.5000000000007357,
+          0.500000000002642,
+          0.0,
+          0.0,
+          0.0,
+          3.4887648325820947e-12,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000065339
+        ],
+        "tileset_geometric_error_metres": 1.4142135623860725,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 6408,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 6408,
+        "model_payload_files": 1,
+        "model_payload_bytes": 6408,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "deep-128-[90, 0, 25]",
+      "source_sha256": "6e855e7312ecc610de10caf86e0ca3eb9975c0e9cdd04d204e828d025a55849d",
+      "artifact_sha256": "7fbc278a8bae1277527c9335cf4d8ccca213935f8513d0706c50ebea1c367a91",
+      "members": 4,
+      "max_world_difference_metres": "3.905535894688227926961599352169283967574149639005929150885635123223697E-10",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "wgs84-ecef",
+        "placement": {
+          "kind": "wgs84",
+          "anchor_degrees_metres": [
+            90.0,
+            0.0,
+            25.0
+          ],
+          "orientation_xyzw": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "scene_offset_metres": [
+            10.0,
+            2.0,
+            -5.0
+          ]
+        },
+        "root_transform": [
+          2.220446049250313e-16,
+          -1.359631073446891e-32,
+          1.0000000000000002,
+          0.0,
+          1.0000000000000002,
+          -6.123233995736767e-17,
+          -2.220446049250313e-16,
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          0.0,
+          0.0,
+          5.000000000390553,
+          6378164.0,
+          10.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.49999999999981926,
+          3.588240815588514e-13,
+          0.5000000000007357,
+          0.500000000002642,
+          0.0,
+          0.0,
+          0.0,
+          3.4887648325820947e-12,
+          0.0,
+          0.0,
+          0.0,
+          0.5000000000065339
+        ],
+        "tileset_geometric_error_metres": 1.4142135623860725,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 6408,
+        "external_files": 0,
+        "external_bytes": 0,
+        "captured_bytes": 6408,
+        "model_payload_files": 1,
+        "model_payload_bytes": 6408,
+        "triangles": 1
+      }
+    },
+    {
+      "case": "percent-dot-hardlink-image-aliases",
+      "members": 7,
+      "max_world_difference_metres": "0",
+      "report": {
+        "schema_version": 1,
+        "profile": "w1-static-model-v1",
+        "product": "archive",
+        "source_coordinates": "local-gltf",
+        "coordinates": "local-gltf",
+        "placement": {
+          "kind": "local"
+        },
+        "root_transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "bounding_box": [
+          0.5000000000000011,
+          0.0,
+          0.5000000000000009,
+          0.5000000000000012,
+          0.0,
+          0.0,
+          0.0,
+          1.5e-322,
+          0.0,
+          0.0,
+          0.0,
+          0.500000000000001
+        ],
+        "tileset_geometric_error_metres": 1.4142135623730991,
+        "root_geometric_error_metres": 0.0,
+        "source_bytes": 990,
+        "external_files": 2,
+        "external_bytes": 106,
+        "captured_bytes": 1096,
+        "model_payload_files": 4,
+        "model_payload_bytes": 1132,
+        "triangles": 1
+      }
+    }
+  ],
+  "controls_detected": [
+    "zero-tileset-omission-error",
+    "understated-tileset-omission-error",
+    "missing-root-refinement",
+    "shrunken-original-box",
+    "wrong-world-transform",
+    "wrong-world-transform",
+    "omitted-hardlink-alias",
+    "refused-source.gltf",
+    "refused-data:application/octet-stream;base64,AAAA",
+    "refused-../outside.bin",
+    "refused-a%2fb.bin",
+    "refused-source.gltf/data.bin",
+    "refused-source.gltf/nested/data.bin",
+    "refused-source.glb/data.bin",
+    "refused-source.glb/nested/data.bin",
+    "excluded-animations",
+    "excluded-extensionsUsed",
+    "retired-HPR",
+    "retired-arbitrary-manifest-output"
+  ],
+  "proof_limits": [
+    "standalone source tree must remain stable throughout the entire call, including callbacks and alias retargets, and throughout subsequent use",
+    "no animation/imported metadata/unknown extension admission",
+    "browser appearance/picking and platform/wheel/Blender checks are separate"
+  ]
+}

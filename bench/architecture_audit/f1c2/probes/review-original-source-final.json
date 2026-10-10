@@ -1,0 +1,121 @@
+{
+  "binary_sha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1",
+  "probe_sha256": "2decd43846a38b3f49c076afcb4358c0933a83126960d0ed108c2c4e04d84761",
+  "decimal_precision": 100,
+  "cases": [
+    {
+      "case": "f32-bake",
+      "source_sha256": "87ea9da328e23c05bd3a09bd2d208b87da62f058242eaf58be815b238cdcef19",
+      "artifact_sha256": "a45720d62e946c12ee8e64c119497d02fb823ae5f525a58c0c9e381c1d7e8805",
+      "box": [
+        0.6000000000000011,
+        0.3,
+        0.7000000000000008,
+        0.5000000000000013,
+        0.0,
+        0.0,
+        0.0,
+        3.33066907387547e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.5000000000000012
+      ],
+      "corners_checked": 6,
+      "controls": [
+        "normalized-f32-bounds-rejected"
+      ]
+    },
+    {
+      "case": "raw-quaternion",
+      "source_sha256": "9fe6b92933f0ec0e8ba731faf67df02d97ca2fe13c885f45c6e68735252079cd",
+      "artifact_sha256": "33a52cec9f6348bf3a6c55ade4280673607217cc1ed6bba482072c7a2da0fcdc",
+      "box": [
+        -200000.6848305384,
+        300000.0000000002,
+        600000.5840138049,
+        0.6848305407620502,
+        0.0,
+        0.0,
+        0.0,
+        8.731149137020112e-10,
+        0.0,
+        0.0,
+        0.0,
+        0.6848307094769553
+      ],
+      "corners_checked": 6,
+      "controls": [
+        "normalized-only-bounds-rejected"
+      ]
+    },
+    {
+      "case": "matrix-selected-scene",
+      "source_sha256": "608d7e0a56ffbdd7c8463ee1d825b1f08da568540b82a808600273b74ff42aee",
+      "artifact_sha256": "a7f77a928feaf26f7977958c3885df20f48c1ecfaa9579ac7fc0c9010aea59d6",
+      "box": [
+        7.599999999999996,
+        -31.2,
+        19.199999999999996,
+        3.0000000000000218,
+        0.0,
+        0.0,
+        0.0,
+        2.486899575160351e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0000000000000322
+      ],
+      "corners_checked": 6,
+      "controls": [
+        "wrong-scene-bounds-rejected"
+      ]
+    },
+    {
+      "case": "indexed-repeats",
+      "source_sha256": "a586475ae8eb57655cf32def6d71ef5204f0eb1d07062ab7272ca386ae630f0b",
+      "artifact_sha256": "6496edac73982458425f348bc9e2e36d53ea623d1779ea5232971701f5840f60",
+      "box": [
+        0.5000000000000011,
+        0.0,
+        0.5000000000000009,
+        0.5000000000000012,
+        0.0,
+        0.0,
+        0.0,
+        1.5e-322,
+        0.0,
+        0.0,
+        0.0,
+        0.500000000000001
+      ],
+      "corners_checked": 12,
+      "controls": []
+    },
+    {
+      "case": "cancellation",
+      "source_sha256": "86f0d42cd1096f26a8cb600cf83207ae79b56267f08431fae73f9abc1f9d2398",
+      "artifact_sha256": "db0c941a908bbf3d74f6fbe21d8f28b39542e2afcbf1d65a4afefbe2efca1766",
+      "box": [
+        0.12500000000000133,
+        0.0,
+        0.5000000000000014,
+        2.6250000000000036,
+        0.0,
+        0.0,
+        0.0,
+        7.905050333459976e-308,
+        0.0,
+        0.0,
+        0.0,
+        0.5000000000000016
+      ],
+      "corners_checked": 6,
+      "controls": []
+    }
+  ],
+  "limits": [
+    "Local only; mathematical decoded-f64 raw/normalized node semantics; no GPU precision claim"
+  ]
+}

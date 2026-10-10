@@ -72,6 +72,16 @@ jobs:
           name: f1c1-placement-evidence
           path: ${{ runner.temp }}/f1c1-*.json
           if-no-files-found: error
+      - name: Independently verify source identity and metadata association
+        run: python3 -B tests/f1c2_oracle.py --self-test --binary target/debug/rusty-tiles --large --json-output "${{ runner.temp }}/f1c2-identity.json"
+      - name: Independently verify exact model bytes and original-node bounds
+        run: python3 -B tests/model_wrapping_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c2-wrapping.json"
+      - name: Retain source identity evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c2-identity-evidence
+          path: ${{ runner.temp }}/f1c2-*.json
+          if-no-files-found: error
       - name: Retain mesh texture evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -286,6 +296,13 @@ jobs:
           python3 -B tests/f1b3_khronos.py --binary target/debug/rusty-tiles \
             --validator-modules target/terrain-browser/node_modules --source-commit "${{ github.sha }}" \
             --json-output "${{ runner.temp }}/f1b-core-pbr-khronos.json"
+      - name: Validate source identity leaves and format controls with Khronos
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/f1c2_khronos.py --binary target/debug/rusty-tiles \
+            --validator-modules target/terrain-browser/node_modules \
+            --json-output "${{ runner.temp }}/f1c2-khronos.json"
       - name: Prove terrain rendering, queries, clamping and imagery draping
         shell: bash -el {0}
         run: |
@@ -325,6 +342,33 @@ jobs:
             --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
             --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
             --json-output "${{ runner.temp }}/f1c1-browser.json"
+      - name: Prove source primitive and triangle picking
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/f1c2_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1c2-browser.json"
+          python3 -B tests/f1c2_viewer.py --binary target/debug/rusty-tiles --empty-names \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1c2-empty-names-browser.json"
+      - name: Prove unchanged model traversal, resources and placement
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B bench/architecture_audit/f1c2/review_probes/unchanged_model_browser.py \
+            --binary target/debug/rusty-tiles --node-modules target/terrain-browser/node_modules \
+            --chromium "$CHROMIUM" --output "${{ runner.temp }}/f1c2-wrapping-browser.json"
+      - name: Retain source identity and model consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c2-browser-evidence
+          path: ${{ runner.temp }}/f1c2-*.json
+          if-no-files-found: error
       - name: Retain placed mesh consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

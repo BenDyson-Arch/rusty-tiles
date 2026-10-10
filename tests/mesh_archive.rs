@@ -703,8 +703,8 @@ fn placement_is_per_request_and_keeps_encoded_geometry_local() {
     });
     let mut geometry = Vec::new();
     for result in &results {
-        assert_eq!(result.report.schema_version, 4);
-        assert_eq!(result.report.profile, "f1c1-placed-gltf-v1");
+        assert_eq!(result.report.schema_version, 5);
+        assert_eq!(result.report.profile, "f1c2-source-identity-gltf-v1");
         assert_eq!(result.report.source_coordinates, "local-gltf");
         let mut archive = zip::ZipArchive::new(fs::File::open(&result.output).unwrap()).unwrap();
         let manifest: Value =

@@ -58,6 +58,9 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
             "point-cloud" => assert!(first.ends_with(" (3000 points, 15 tiles)"), "{first}"),
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
             "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
+            "glb-to-3tz" | "createTilesetJson" => {
+                assert!(first.ends_with(" (1152 triangles)"), "{first}")
+            }
             // Directories without counts name only the path.
             "raster" => assert_eq!(first, &format!("raster: wrote {}", output.display())),
             // Single files without counts report their size.
@@ -99,6 +102,33 @@ fn json_mode_prints_no_human_summary() {
     assert!(!stderr.contains("next:"), "{stderr}");
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report["ok"], true);
+}
+
+#[test]
+fn sibling_manifest_json_returns_inline_report_without_claiming_a_report_file() {
+    let work = tempfile::tempdir().unwrap();
+    let inputs = work.path().join("inputs");
+    let outputs = work.path().join("outputs");
+    std::fs::create_dir(&outputs).unwrap();
+    write_inputs(&inputs);
+    let recipe = recipes()
+        .into_iter()
+        .find(|r| r.command == "createTilesetJson")
+        .unwrap();
+    let result = run(&recipe, &inputs, &outputs, &["--json"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let summary: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let output = outputs.join(recipe.output);
+    assert!(output.is_file());
+    assert!(summary["conversionReport"].is_null());
+    assert_eq!(summary["modelReport"]["product"], "manifest");
+    assert_eq!(summary["modelReport"]["triangles"], 1152);
+    assert_eq!(summary["counts"]["triangles"], 1152);
+    assert!(!outputs.join("conversion.json").exists());
 }
 
 #[cfg(feature = "native-geospatial")]

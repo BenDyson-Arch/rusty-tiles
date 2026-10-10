@@ -38,6 +38,7 @@ pub struct Recipe {
 }
 
 const GEO: [&str; 4] = ["--cartographicPositionDegrees", "133.0", "-12.0", "10"];
+const MODEL_ANCHOR: [&str; 4] = ["--anchor", "133.0", "-12.0", "10"];
 
 fn recipe(
     name: &'static str,
@@ -94,7 +95,7 @@ pub fn recipes() -> Vec<Recipe> {
             "glb-to-3tz",
             "glb-to-3tz",
             "glb.3tz",
-            &[&["-i", "{in}/mesh.glb"], &GEO],
+            &[&["-i", "{in}/mesh.glb"], &MODEL_ANCHOR],
             false,
         ),
         recipe(
@@ -103,8 +104,14 @@ pub fn recipes() -> Vec<Recipe> {
             "tileset.json",
             &[
                 &["-i", "{in}/mesh.glb"],
-                &GEO,
-                &["--rotationDegrees", "10", "0", "0"],
+                &MODEL_ANCHOR,
+                &[
+                    "--orientation-xyzw",
+                    "0",
+                    "0",
+                    "0.08715574274765817",
+                    "0.9961946980917455",
+                ],
             ],
             false,
         ),
@@ -207,15 +214,25 @@ pub fn resolved_args(recipe: &Recipe, inputs: &Path) -> Vec<String> {
 /// Run one recipe with an empty PATH (no external tools); `before` options
 /// (e.g. `--json`) go ahead of the subcommand.
 pub fn run(recipe: &Recipe, inputs: &Path, out_dir: &Path, before: &[&str]) -> Output {
-    Command::new(bin())
-        .args(before)
-        .arg(recipe.command)
-        .args(resolved_args(recipe, inputs))
-        .arg("-o")
-        .arg(out_dir.join(recipe.output))
-        .env("PATH", "")
-        .output()
-        .unwrap()
+    let mut command = Command::new(bin());
+    command.args(before).arg(recipe.command);
+    if recipe.command == "createTilesetJson" {
+        // This reference artifact has a fixed sibling output. Give this run
+        // its own admitted source directory rather than passing a removed -o.
+        fs::create_dir_all(out_dir).unwrap();
+        fs::copy(inputs.join("mesh.glb"), out_dir.join("mesh.glb")).unwrap();
+        let args = resolved_args(recipe, inputs);
+        command
+            .arg("-i")
+            .arg(out_dir.join("mesh.glb"))
+            .args(&args[2..]);
+    } else {
+        command
+            .args(resolved_args(recipe, inputs))
+            .arg("-o")
+            .arg(out_dir.join(recipe.output));
+    }
+    command.env("PATH", "").output().unwrap()
 }
 
 /// Write every input the recipes read into `dir`.

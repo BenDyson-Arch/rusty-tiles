@@ -5,6 +5,7 @@ use super::{
     source::{Geometry, Image, Triangle},
 };
 use serde_json::{json, Value};
+mod identity;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
@@ -162,11 +163,20 @@ fn write_attribute<E, const N: usize>(
     Ok(accessor)
 }
 
+pub(super) fn validate_identity_budget(
+    geometry: &Geometry,
+    leaves: &[Leaf],
+    check: impl FnMut() -> Result<(), crate::JobError>,
+) -> Result<(), crate::JobError> {
+    identity::validate_budget(geometry, leaves, check)
+}
+
 pub(super) fn leaf<E>(
     geometry: &Geometry,
     leaf: &Leaf,
     mut check: impl FnMut() -> Result<(), E>,
 ) -> Result<Vec<u8>, EncodeError<E>> {
+    let identity = identity::Plan::new(geometry, leaf, &mut check)?;
     let mut groups: BTreeMap<(Option<usize>, AttributeLayout), Vec<usize>> = BTreeMap::new();
     for &index in &leaf.triangles {
         check().map_err(EncodeError::Checkpoint)?;
@@ -335,13 +345,28 @@ pub(super) fn leaf<E>(
                 &mut check
             )?);
         }
-        let mut primitive = json!({"attributes":attributes,"mode":4});
+        let features = identity.append_attributes(
+            &triangles,
+            &mut buffer,
+            &mut views,
+            &mut accessors,
+            &mut attributes,
+            &mut check,
+        )?;
+        let mut primitive =
+            json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":features}});
         if let Some(material) = material {
             primitive["material"] = json!(material_ids[&material]);
         }
         primitives.push(primitive);
     }
-    let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles F1b3"},
+    let metadata = identity.append_metadata(&mut buffer, &mut views, &mut check)?;
+    // Eight-byte alignment is storage inside buffer zero. GLB chunk padding
+    // beyond the declared buffer length may contain at most three bytes.
+    buffer.resize(buffer.len().next_multiple_of(8), 0);
+    let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles F1c2"},
+        "extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
+        "extensions":{"EXT_structural_metadata":metadata},
         "buffers":[{"byteLength":buffer.len()}],"bufferViews":views,"accessors":accessors,
         "meshes":[{"primitives":primitives}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0});
     if !materials.is_empty() {
@@ -355,7 +380,7 @@ pub(super) fn leaf<E>(
         document["samplers"] = Value::Array(samplers);
     }
     let mut json = serde_json::to_vec(&document).map_err(EncodeError::Json)?;
-    while !json.len().is_multiple_of(4) {
+    while !(20 + json.len()).is_multiple_of(8) {
         json.push(b' ');
     }
     let size = 12usize

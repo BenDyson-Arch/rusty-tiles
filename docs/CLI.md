@@ -22,7 +22,9 @@ Three subcommands also have an alias.
 | `glb-to-3tz` | `glbTo3tz` |
 | `mesh-to-3tz` | `meshTo3tz` |
 
-Every converter takes the same three file options.
+Archive/directory converters share these file options. `createTilesetJson`
+takes `--input` and `--force` and derives a fixed sibling output; it has no
+`--output` option.
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
@@ -163,11 +165,11 @@ These commands package existing content without building spatial level of detail
 
 | Command | Input | Output | Extra options |
 | --- | --- | --- | --- |
-| `glb-to-3tz` | GLB or glTF file, including referenced local resources | `.3tz` archive | `--cartographicPositionDegrees`, `--rotationDegrees` |
-| `createTilesetJson` | GLB or glTF file or directory | `tileset.json` | `--cartographicPositionDegrees`, `--rotationDegrees` |
+| `glb-to-3tz` | Admitted static local metre/Y-up GLB/glTF and confined resources | Exact-byte `.3tz` archive | `--anchor`, `--orientation-xyzw`, `--scene-offset` |
+| `createTilesetJson` | One admitted static local metre/Y-up GLB/glTF | Fixed sibling `tileset.json` | `--anchor`, `--orientation-xyzw`, `--scene-offset`, `--force`; no `-o` |
 | `convert` | Tileset directory or `tileset.json` | `.3tz` archive | none |
 
-`createTilesetJson` and `convert` match the argument style of `3d-tiles-tools@0.5.4`.
+`createTilesetJson -i model.glb` writes beside the source, with an escaped basename URI and full-detail root error zero. Its separate positive top-level visibility error permits ordinary tileset traversal. Keep the source tree unchanged during publication and continued manifest use. Directory discovery and arbitrary output bases are retired. Both model operations use required typed reports (`modelReport` in JSON), fallible precommit progress, and completed-file F0 publication. Wrapping packages captured bytes beneath `model/`; it preserves URI spellings and resource aliases. Legacy HPR flags are replaced with the rigid placement grammar documented below. See the [source limits and capability reductions](architecture/model-wrapping-contract.md). `convert` retains its directory packaging grammar.
 
 `convert` selects every regular file beneath its directory input, or beneath
 the parent of an exact `tileset.json` input. It requires that root member,
@@ -339,8 +341,7 @@ to [-180,180]/[-90,90]. Invalid/nonfinite parameters fail before source I/O;
 the [finite forward-magnitude limit](architecture/f1c1-contract.md#precision-and-limits)
 is Unsupported before source I/O. Placement uses one f64 root transform; leaves
 retain local Y-up geometry and every companion/resource association. Offset is
-not a projected E/N/A shift, source CRS conversion or geoid correction. Picking
-and source identity propagation remain the F1c2 follow-on.
+not a projected E/N/A shift, source CRS conversion or geoid correction. The F1c2 candidate emits primitive identity and exact triangle provenance through standard labeled feature sets; see the [identity/picking contract](architecture/f1c2-contract.md).
 
 Relative local buffers and images are captured before callbacks. Network, data,
 absolute and escaping resource URIs and dependency symlinks are refused.
@@ -354,8 +355,8 @@ is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 
 `--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. Schema 4/profile
-`f1c1-placed-gltf-v1` records `source_coordinates="local-gltf"`, output
+`conversion.json`, plus `cleanupDiagnostics`. Schema 5/profile
+`f1c2-source-identity-gltf-v1` records `source_coordinates="local-gltf"`, output
 `coordinates` (`local-gltf` or `wgs84-ecef`), tagged `placement` with normalized
 parameters, and the exact emitted `root_transform`. It counts the root document
 as `source_bytes`; `external_files` and `external_bytes` count unique captured

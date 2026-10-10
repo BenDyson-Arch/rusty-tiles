@@ -14,10 +14,15 @@ use std::{
 
 mod binding;
 mod encode;
+mod model;
 mod partition;
 mod placement;
 mod source;
 
+pub use model::{
+    model_to_archive, model_to_manifest, ModelManifestRequest, ModelManifestResult, ModelReport,
+    ModelWrapRequest, ModelWrapResult,
+};
 use placement::ResolvedPlacement;
 pub use placement::{MeshPlacement, MeshPlacementReport};
 
@@ -223,6 +228,7 @@ fn prepare(
         source::MAX_LEAVES,
         || attempt.check(),
     )?;
+    encode::validate_identity_budget(&geometry, &leaves, || attempt.check())?;
     let images = encode::used_images(&geometry).map_err(|e| {
         invalid(
             JobErrorKind::InvalidState,
@@ -340,8 +346,8 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 4,
-        profile: "f1c1-placed-gltf-v1",
+        schema_version: 5,
+        profile: "f1c2-source-identity-gltf-v1",
         source_coordinates: "local-gltf",
         coordinates: prepared.placement.coordinates(),
         placement: prepared.placement.report(),

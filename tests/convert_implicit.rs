@@ -1,5 +1,9 @@
 //! Existing archive conversion, audited independently of subtree writing.
-use rusty_tiles::{convert_to_implicit_reported, ConvertToImplicitOptions, Reporter};
+use rusty_tiles::{
+    convert_to_implicit_reported,
+    package::{package, PackageMember, PackageRequest},
+    ConvertToImplicitOptions, Reporter, RunControl,
+};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, fs, io::Read, path::Path, process::Command};
 
@@ -36,7 +40,7 @@ fn document(files: &BTreeMap<String, Vec<u8>>, name: &str) -> Value {
 }
 fn repackage(files: &BTreeMap<String, Vec<u8>>, output: &Path) {
     let tmp = tempfile::tempdir().unwrap();
-    let mut paths = Vec::new();
+    let mut sources = Vec::new();
     for (name, bytes) in files {
         if name == rusty_tiles::TZ_INDEX_NAME {
             continue;
@@ -44,9 +48,15 @@ fn repackage(files: &BTreeMap<String, Vec<u8>>, output: &Path) {
         let target = tmp.path().join(name);
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, bytes).unwrap();
-        paths.push((name.clone(), target));
+        sources.push(PackageMember::new(name, target));
     }
-    rusty_tiles::pack_named_files(&paths, output, &Default::default()).unwrap();
+    // Opaque payload corruption is intentional: F0 admits the member inventory
+    // without certifying the tileset/GLB semantics under test below.
+    package(
+        PackageRequest::members(sources, output),
+        &RunControl::default(),
+    )
+    .unwrap();
 }
 fn convert(
     input: &Path,

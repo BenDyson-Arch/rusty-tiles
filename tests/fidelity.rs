@@ -1,8 +1,8 @@
 use rusty_tiles::{
     glb_write::{write_glb, TilePrimitive},
     mesh_to_3tz,
-    pack::{pack_named_files, PackOptions},
-    validate_3tz, MeshTo3tzOptions,
+    package::{package, PackageMember, PackageRequest},
+    validate_3tz, JobErrorKind, MeshTo3tzOptions, OutputPolicy, RunControl,
 };
 use serde_json::{json, Value};
 use std::{fs, io::Read, path::Path};
@@ -227,15 +227,22 @@ fn invalid_input_and_failed_pack_leave_existing_output_intact() {
     )
     .is_err());
     assert_eq!(fs::read(&output).unwrap(), b"existing");
-    assert!(pack_named_files(
-        &[
-            ("tileset.json".into(), input.clone()),
-            ("../escape".into(), input)
-        ],
-        &output,
-        &PackOptions { force: true }
+    let before = fs::read_dir(dir.path()).unwrap().count();
+    let failure = package(
+        PackageRequest::members(
+            vec![
+                PackageMember::new("tileset.json", &input),
+                PackageMember::new("../escape", &input),
+            ],
+            &output,
+        )
+        .with_policy(OutputPolicy::Replace),
+        &RunControl::default(),
     )
-    .is_err());
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::InvalidRequest);
+    assert!(failure.retained_paths.is_empty());
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), before);
     assert_eq!(fs::read(output).unwrap(), b"existing");
 }
 #[test]
@@ -273,10 +280,16 @@ fn zip64_member_counts_have_complete_random_access_index() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("tileset.json");
     fs::write(&source, b"{}").unwrap();
-    let mut files = vec![("tileset.json".into(), source.clone())];
-    files.extend((0..65535).map(|i| (format!("t/{i}.json"), source.clone())));
+    let mut members = vec![PackageMember::new("tileset.json", &source)];
+    members.extend((0..65535).map(|i| PackageMember::new(format!("t/{i}.json"), &source)));
     let output = dir.path().join("large-index.3tz");
-    pack_named_files(&files, &output, &PackOptions::default()).unwrap();
+    let result = package(
+        PackageRequest::members(members, &output),
+        &RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(result.receipt.member_count, 65536);
+    assert_eq!(result.receipt.source_bytes, 65536 * 2);
     validate_3tz(&output).unwrap();
     let zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
     assert_eq!(zip.len(), 65537);

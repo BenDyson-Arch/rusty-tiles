@@ -1,6 +1,6 @@
 //! rusty-tiles: transform geospatial sources into 3D Tiles packages.
 //!
-//! v0 matches a subset of Cesium `3d-tiles-tools` (createTilesetJson + convert).
+//! Typed foundation producers have explicit bounded source and output contracts.
 //! Raster and elevation source decoding require the native-geospatial build.
 
 mod archive3tz;
@@ -36,7 +36,7 @@ mod runtime;
 pub mod terrain;
 pub mod texture;
 pub mod tile;
-pub mod tileset;
+mod tileset;
 mod tileset_node;
 mod vec3;
 pub mod vector;
@@ -49,9 +49,11 @@ pub use georef::{
     parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
 };
 pub use mesh_archive::{
-    mesh_to_archive, MeshPlacement, MeshPlacementReport, MeshReport, MeshRequest, MeshResult,
+    mesh_to_archive, model_to_archive, model_to_manifest, MeshPlacement, MeshPlacementReport,
+    MeshReport, MeshRequest, MeshResult, ModelManifestRequest, ModelManifestResult, ModelReport,
+    ModelWrapRequest, ModelWrapResult,
 };
-pub use pack::{convert_to_3tz, pack_named_files, validate_3tz, TZ_INDEX_NAME};
+pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{
     raster_to_directory, RasterDirectoryReport, RasterDirectoryRequest, RasterDirectoryResult,
 };
@@ -64,7 +66,6 @@ pub use tile::{
     mesh_to_3tz, MeshTo3tzOptions, DEFAULT_MAX_BYTES, DEFAULT_MAX_TEXEL_DENSITY,
     DEFAULT_MAX_TRIANGLES, DEFAULT_TILE_SIZE,
 };
-pub use tileset::{create_tileset_json, glb_to_3tz, CreateTilesetOptions};
 
 /// npm package pin used as the v0 oracle. Golden tests call this via `npx`.
 pub const ORACLE_NPM: &str = "3d-tiles-tools@0.5.4";

@@ -1,5 +1,10 @@
 //! Conservative, byte-preserving conversion of this crate's explicit archives.
-use crate::{implicit::SubdivisionScheme, output::Job, ConversionResult, Error, Reporter};
+use crate::{
+    implicit::SubdivisionScheme,
+    output::Job,
+    package::{package, PackageMember, PackageRequest},
+    ConversionResult, Error, Reporter, RunControl,
+};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, fs, path::Path};
 
@@ -60,7 +65,7 @@ pub fn convert_to_implicit_reported(
     {
         return Err(invalid("input and output must have the .3tz extension"));
     }
-    crate::pack::validate_3tz(input)?;
+    crate::archive3tz::validate_3tz(input)?;
     let mut zip = zip::ZipArchive::new(fs::File::open(input)?)?;
     let mut manifest = read_json(&mut zip, "tileset.json")?;
     if manifest["root"].get("implicitTiling").is_some() {
@@ -189,7 +194,14 @@ pub fn convert_to_implicit_reported(
     // content bounds and every untouched metadata/resource reference.
     let candidate = job.path().join("candidate.3tz");
     let files = crate::pack::tree_members(&staging, &candidate)?;
-    crate::pack::pack_named_files(&files, &candidate, &crate::pack::PackOptions::default())?;
+    let members = files
+        .into_iter()
+        .map(|(name, source)| PackageMember::new(name, source))
+        .collect();
+    package(
+        PackageRequest::members(members, &candidate),
+        &RunControl::default(),
+    )?;
     crate::validate::inspect(crate::validate::ValidationRequest::new(&candidate))?;
     job.publish_tree_3tz(&staging, Some(report))
 }
