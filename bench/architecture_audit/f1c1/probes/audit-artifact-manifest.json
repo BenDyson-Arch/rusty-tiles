@@ -1,0 +1,50 @@
+{
+  "scope": "Audit cache artifacts, not compiled production manifest",
+  "files": [
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/analytic_prototype.py",
+      "length": 8698,
+      "sha256": "0596fff52eb7893864a72613181e5bf3bea0643b0c77bd9d40157c139c5ee0df"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/browser-inventory.json",
+      "length": 2598,
+      "sha256": "9b1b984f92db1b1290e453625a5f8e8aa37f30abfa567952ecf3df55cf2d4253"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/f1b3-self-test.json",
+      "length": 2667,
+      "sha256": "455fd2b101c1955b5f68aed8f6e4a858b1754181cd8ac761e322af6bc9b36ef0"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/frozen-analytic-fixtures.json",
+      "length": 24960,
+      "sha256": "3381ea43441cc341951b0a3bab1ebe0bdb5b03449824b528cf7867b7db094227"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/nga-wgs84.html",
+      "length": 48657,
+      "sha256": "a057b27276450e25c18f2fce6f60e396442410411f9c3662cc61e94fb6b6c09c"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/prototype-execution.json",
+      "length": 1446,
+      "sha256": "387ec34de515fdeb5218d59ba92493ec89c8b3ac8ea446f2efd7ae0394cb8318"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/reference-provenance.json",
+      "length": 504,
+      "sha256": "bb7dd4bfffc49c967dd435a047ee7508435d78ad19f581e7dd0a5f2dbaae845f"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance/tiles-specification.adoc",
+      "length": 63585,
+      "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1c1-acceptance-audit.md",
+      "length": 27013,
+      "sha256": "c19d85c132b0ab23dae93453fe4c64a2be021220f5282ffcddd42c69957055b5"
+    }
+  ]
+}

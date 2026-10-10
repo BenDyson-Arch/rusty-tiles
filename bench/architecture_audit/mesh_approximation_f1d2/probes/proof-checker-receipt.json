@@ -1,0 +1,330 @@
+{
+  "base_source_commit": "3b5703231bf3991c2e37caef99989214308cc08d",
+  "checker_limits": {
+    "max_depth": 24,
+    "max_patch_target_tests": 100000,
+    "max_seconds": 10,
+    "time_limit_is_cooperative": true
+  },
+  "controls": [
+    {
+      "control": "missing-child",
+      "reason": "incomplete four-child cover",
+      "rejected": true
+    },
+    {
+      "control": "duplicate-child",
+      "reason": "duplicate or overlapping patch",
+      "rejected": true
+    },
+    {
+      "control": "missing-reverse-direction",
+      "reason": "incomplete four-child cover",
+      "rejected": true
+    },
+    {
+      "control": "invalid-witness-sum",
+      "reason": "three nonnegative dyadic simplex witnesses",
+      "rejected": true
+    },
+    {
+      "control": "negative-witness",
+      "reason": "three nonnegative dyadic simplex witnesses",
+      "rejected": true
+    },
+    {
+      "control": "wrong-target",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "support-hash-corruption",
+      "reason": "support binding",
+      "rejected": true
+    },
+    {
+      "control": "forged-source-corners",
+      "reason": "exact leaf fields; never trust supplied source points",
+      "rejected": true
+    },
+    {
+      "control": "invalid-path",
+      "reason": "bounded valid path",
+      "rejected": true
+    },
+    {
+      "control": "parent-descendant-overlap",
+      "reason": "duplicate or overlapping patch",
+      "rejected": true
+    },
+    {
+      "control": "positive-dyadic-offset-forged-zero",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "positive-budget-too-tight",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "spike-forged-zero",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "degenerate-point-forged-zero",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "interior-hole-forged-zero",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    },
+    {
+      "control": "mixed-magnitude-thin-nonzero-forged-zero",
+      "reason": "understated exact dyadic witness distance",
+      "rejected": true
+    }
+  ],
+  "driver_sha256": "4a1375a2d7b3637e119653c4dddd3e693217e6ad45d9a051aa53a75bd384d78e",
+  "elapsed_seconds": 0.289473,
+  "ideal_vs_dyadic_projection": {
+    "dyadic_squared": "14073748835533/140737488355328",
+    "ideal_squared": "1/10",
+    "ideal_weights": [
+      "0",
+      "3/10",
+      "7/10"
+    ]
+  },
+  "independent_scalar_checks": [
+    {
+      "case": "equal-planar-retriangulation",
+      "check": {
+        "ideal_cover_squared": "0",
+        "left_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "max_depth": 1,
+        "patch_target_tests": 24,
+        "proved": true,
+        "right_sha256": "1879a34e43d6bf07695d7067d8a6f5d2adef9ff95fa4d8faee3b58f1128e1072",
+        "terminal_patches": 8
+      }
+    },
+    {
+      "case": "positive-dyadic-offset",
+      "check": {
+        "ideal_cover_squared": "1/64",
+        "left_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "max_depth": 1,
+        "patch_target_tests": 24,
+        "proved": true,
+        "right_sha256": "c9e39576efc369b84f4156d07ed6adc167a82b03cdc0c5b714366a9034a8fbf5",
+        "terminal_patches": 8
+      }
+    },
+    {
+      "case": "reordered-nonzero",
+      "check": {
+        "ideal_cover_squared": "1/64",
+        "left_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "max_depth": 1,
+        "patch_target_tests": 24,
+        "proved": true,
+        "right_sha256": "4080b2fbf3fd2b39ec8ba8ce903402ccebf735058525446deb1ffb56c22541e3",
+        "terminal_patches": 8
+      }
+    },
+    {
+      "case": "spike",
+      "check": {
+        "ideal_cover_squared": "10000",
+        "left_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "max_depth": 0,
+        "patch_target_tests": 2,
+        "proved": true,
+        "right_sha256": "e2cccec1b07942e50b88bbee009d5c8d7e9eeef0281de5dc6491d6201242cc03",
+        "terminal_patches": 2
+      }
+    },
+    {
+      "case": "degenerate-point",
+      "check": {
+        "ideal_cover_squared": "25",
+        "left_sha256": "1af949f978d196360d728afe5cbe939fd17750e5a393197774a2172f84bd74e0",
+        "max_depth": 0,
+        "patch_target_tests": 2,
+        "proved": true,
+        "right_sha256": "2c33d28abf2a677a6542b4fa343b8570807a5e6ed1147dd7b4c6782df4963e86",
+        "terminal_patches": 2
+      }
+    },
+    {
+      "case": "interior-hole",
+      "check": {
+        "ideal_cover_squared": "9",
+        "left_sha256": "2ea116bf16d2cc3dfb260e300e078c9c549eedc9c158ddd69939721aaf77e8cd",
+        "max_depth": 1,
+        "patch_target_tests": 96,
+        "proved": true,
+        "right_sha256": "1f6b3571d841717c0a88d3273efd3e7ab05598501aec05717fb222163dc63e67",
+        "terminal_patches": 16
+      }
+    },
+    {
+      "case": "mixed-magnitude-thin-nonzero",
+      "check": {
+        "ideal_cover_squared": "1/1152921504606846976",
+        "left_sha256": "742871e9f143c7335ffb8a169194ca03ba296b8a4055edbda208daf724654c1d",
+        "max_depth": 0,
+        "patch_target_tests": 2,
+        "proved": true,
+        "right_sha256": "6942641fb05f1bff6748312803a5b49a7e6a7768f5e5f16e51f1c0e814923aab",
+        "terminal_patches": 2
+      }
+    }
+  ],
+  "independent_scalar_controls": [
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "positive-dyadic-offset-forged-zero",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "positive-budget-too-tight",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "spike-forged-zero",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "degenerate-point-forged-zero",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "interior-hole-forged-zero",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "mixed-magnitude-thin-nonzero-forged-zero",
+      "reason": "independent exact cover not established at depth ceiling"
+    },
+    {
+      "accepted": false,
+      "classification": "unproven under independent checker limits",
+      "control": "independent-work-ceiling",
+      "reason": "independent patch-target work ceiling"
+    }
+  ],
+  "passed": true,
+  "positives": [
+    {
+      "case": "equal-planar-retriangulation",
+      "check": {
+        "leaves": 8,
+        "source_faces": 1,
+        "squared_witness_bound": "0",
+        "target_faces": 4
+      },
+      "comparisons": 24,
+      "dyadic_squared": "0",
+      "ideal_squared": "0",
+      "old_squared": "16"
+    },
+    {
+      "case": "positive-dyadic-offset",
+      "check": {
+        "leaves": 8,
+        "source_faces": 1,
+        "squared_witness_bound": "1/64",
+        "target_faces": 4
+      },
+      "comparisons": 24,
+      "dyadic_squared": "1/64",
+      "ideal_squared": "1/64",
+      "old_squared": "1025/64"
+    },
+    {
+      "case": "reordered-nonzero",
+      "check": {
+        "leaves": 8,
+        "source_faces": 1,
+        "squared_witness_bound": "1/64",
+        "target_faces": 4
+      },
+      "dyadic_squared": "1/64",
+      "ideal_squared": "1/64"
+    },
+    {
+      "case": "spike",
+      "check": {
+        "leaves": 2,
+        "source_faces": 1,
+        "squared_witness_bound": "10000",
+        "target_faces": 1
+      },
+      "comparisons": 2,
+      "dyadic_squared": "10000",
+      "ideal_squared": "10000",
+      "old_squared": "10000"
+    },
+    {
+      "case": "degenerate-point",
+      "check": {
+        "leaves": 2,
+        "source_faces": 1,
+        "squared_witness_bound": "25",
+        "target_faces": 1
+      },
+      "comparisons": 2,
+      "dyadic_squared": "25",
+      "ideal_squared": "25",
+      "old_squared": "25"
+    },
+    {
+      "case": "interior-hole",
+      "check": {
+        "leaves": 16,
+        "source_faces": 2,
+        "squared_witness_bound": "9",
+        "target_faces": 8
+      },
+      "comparisons": 96,
+      "dyadic_squared": "9",
+      "ideal_squared": "9",
+      "old_squared": "49"
+    },
+    {
+      "case": "mixed-magnitude-thin-nonzero",
+      "check": {
+        "leaves": 2,
+        "source_faces": 1,
+        "squared_witness_bound": "1/1152921504606846976",
+        "target_faces": 1
+      },
+      "comparisons": 2,
+      "dyadic_squared": "1/1152921504606846976",
+      "ideal_squared": "1/1152921504606846976",
+      "old_squared": "1/1152921504606846976"
+    }
+  ],
+  "python": "3.14.7",
+  "rounding_trap": {
+    "exact_midpoint": "713623846352979940529142984724747568191373313/1427247692705959881058285969449495136382746624",
+    "rounded_midpoint": "1/2"
+  },
+  "scope": "Authored independent exact adaptive scalar re-certifier, exploratory transcript checker and sensitive controls only; no production implementation or emitted archive acceptance"
+}

@@ -1,0 +1,370 @@
+{
+  "status": "STATIC INDEPENDENT EXPECTATIONS ONLY; author never executed model",
+  "primaryPredicates": "Disjoint actual source ledger terms; admission iff required <=configured finite threshold; equality required for correctly counted storage including transfers. Coefficient/default approval absent.",
+  "cases": [
+    {
+      "name": "actual_scratch_realloc_event_exact",
+      "branches": {
+        "realloc": {
+          "oldScratch": 65536,
+          "newScratch": 131072,
+          "previousKeys": 55,
+          "rootPairSlots": 320
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 196983,
+      "configuredLimit": 196983,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "actual_scratch_realloc_event_one_below",
+      "branches": {
+        "realloc": {
+          "oldScratch": 65536,
+          "newScratch": 131072,
+          "previousKeys": 55,
+          "rootPairSlots": 320
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 196983,
+      "configuredLimit": 196982,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "actual_pair_build_peak_exact",
+      "branches": {
+        "build": {
+          "scratch": 131072,
+          "allRootKeys": 65595,
+          "rootPairSlots": 320
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 196987,
+      "configuredLimit": 196987,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "actual_pair_build_peak_one_below",
+      "branches": {
+        "build": {
+          "scratch": 131072,
+          "allRootKeys": 65595,
+          "rootPairSlots": 320
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 196987,
+      "configuredLimit": 196986,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "actual_retained_pair_owners_exact",
+      "branches": {
+        "retained": {
+          "allKeys": 65660,
+          "pairSlotBytes": 800,
+          "viewDescriptorBytes": 24,
+          "bufferRawRefs": 64,
+          "viewRawRefs": 64,
+          "usedDeclarationRawRefs": 64,
+          "requiredDeclarationRawRefs": 0
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 66676,
+      "configuredLimit": 66676,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "actual_retained_pair_owners_one_below",
+      "branches": {
+        "retained": {
+          "allKeys": 65660,
+          "pairSlotBytes": 800,
+          "viewDescriptorBytes": 24,
+          "bufferRawRefs": 64,
+          "viewRawRefs": 64,
+          "usedDeclarationRawRefs": 64,
+          "requiredDeclarationRawRefs": 0
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 66676,
+      "configuredLimit": 66675,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_phase_Ebuild_exact",
+      "branches": {
+        "build": {
+          "payload": 197490,
+          "nodesProvisional": 2688,
+          "descriptorsProvisional": 256
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 200434,
+      "configuredLimit": 200434,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_phase_Ebuild_one_below",
+      "branches": {
+        "build": {
+          "payload": 197490,
+          "nodesProvisional": 2688,
+          "descriptorsProvisional": 256
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 200434,
+      "configuredLimit": 200433,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_phase_Eretain_exact",
+      "branches": {
+        "retained": {
+          "payload": 65830,
+          "nodesProvisional": 2688,
+          "descriptorsProvisional": 256
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 68774,
+      "configuredLimit": 68774,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_phase_Eretain_one_below",
+      "branches": {
+        "retained": {
+          "payload": 65830,
+          "nodesProvisional": 2688,
+          "descriptorsProvisional": 256
+        }
+      },
+      "outsidePhaseBytes": 0,
+      "expectedRequiredBytes": 68774,
+      "configuredLimit": 68773,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_whole_synthetic_parser_dominates_exact",
+      "branches": {
+        "read": {
+          "source": 65830,
+          "fixed": 65536
+        },
+        "json": {
+          "source": 65830,
+          "Ejson": 597552
+        },
+        "build": {
+          "source": 65830,
+          "Ebuild": 200434,
+          "fixed": 65536
+        },
+        "decode_synthetic_no_native": {
+          "source": 65830,
+          "Eretain": 68774,
+          "decoder": 0,
+          "fixed": 65536
+        },
+        "emit_synthetic_raw_fixture": {
+          "source": 65830,
+          "Eretain": 68774,
+          "BIN": 5,
+          "GLBUpper": 67404,
+          "fixed": 65536
+        },
+        "identity": {
+          "source": 65830,
+          "candidateCopy": 65830,
+          "fixed": 65536
+        }
+      },
+      "outsidePhaseBytes": 1024,
+      "expectedRequiredBytes": 664406,
+      "configuredLimit": 664406,
+      "expectedCategory": "admitted",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    },
+    {
+      "name": "proposal_whole_synthetic_parser_dominates_one_below",
+      "branches": {
+        "read": {
+          "source": 65830,
+          "fixed": 65536
+        },
+        "json": {
+          "source": 65830,
+          "Ejson": 597552
+        },
+        "build": {
+          "source": 65830,
+          "Ebuild": 200434,
+          "fixed": 65536
+        },
+        "decode_synthetic_no_native": {
+          "source": 65830,
+          "Eretain": 68774,
+          "decoder": 0,
+          "fixed": 65536
+        },
+        "emit_synthetic_raw_fixture": {
+          "source": 65830,
+          "Eretain": 68774,
+          "BIN": 5,
+          "GLBUpper": 67404,
+          "fixed": 65536
+        },
+        "identity": {
+          "source": 65830,
+          "candidateCopy": 65830,
+          "fixed": 65536
+        }
+      },
+      "outsidePhaseBytes": 1024,
+      "expectedRequiredBytes": 664406,
+      "configuredLimit": 664405,
+      "expectedCategory": "resource_limit",
+      "scope": "MODEL estimated-work admission only; not actual operation/callback refusal"
+    }
+  ],
+  "faultyLedgers": [
+    {
+      "name": "omit_scratch",
+      "terms": {
+        "rootKeys": 65595,
+        "rootSlots": 320
+      },
+      "predictedWrongBytes": 65915,
+      "independentCorrectBytes": 196987,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "omit_owned_keys",
+      "terms": {
+        "scratch": 131072,
+        "rootSlots": 320
+      },
+      "predictedWrongBytes": 131392,
+      "independentCorrectBytes": 196987,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "omit_pair_slots",
+      "terms": {
+        "scratch": 131072,
+        "rootKeys": 65595
+      },
+      "predictedWrongBytes": 196667,
+      "independentCorrectBytes": 196987,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "omit_old_realloc_buffer",
+      "terms": {
+        "newScratch": 131072,
+        "previousKeys": 55,
+        "rootSlots": 320
+      },
+      "predictedWrongBytes": 131447,
+      "independentCorrectBytes": 196983,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "retain_scratch_after_decoder_drop",
+      "terms": {
+        "scratch": 131072,
+        "allKeys": 65660,
+        "pairSlots": 800,
+        "viewDescriptors": 24,
+        "RawRefs": 192
+      },
+      "predictedWrongBytes": 197748,
+      "independentCorrectBytes": 66676,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "duplicate_transferred_root_keys",
+      "terms": {
+        "scratch": 131072,
+        "rootKeysOldOwner": 65595,
+        "rootKeysNewOwner": 65595,
+        "rootSlots": 320
+      },
+      "predictedWrongBytes": 262582,
+      "independentCorrectBytes": 196987,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "omit_RawRef_array_owners",
+      "terms": {
+        "allKeys": 65660,
+        "pairSlots": 800,
+        "viewDescriptors": 24
+      },
+      "predictedWrongBytes": 66484,
+      "independentCorrectBytes": 66676,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "double_count_descriptor_backing",
+      "terms": {
+        "allKeys": 65660,
+        "pairSlots": 800,
+        "viewDescriptors": 24,
+        "RawRefs": 192,
+        "duplicateViewDescriptors": 24
+      },
+      "predictedWrongBytes": 66700,
+      "independentCorrectBytes": 66676,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "single_pair_ignore_min_capacity",
+      "terms": {
+        "onePairSize": 40
+      },
+      "predictedWrongBytes": 40,
+      "independentCorrectBytes": 160,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "old_2J_construction_payload",
+      "terms": {
+        "payload": 131660,
+        "nodes": 2688,
+        "descriptors": 256
+      },
+      "predictedWrongBytes": 134604,
+      "independentCorrectBytes": 200434,
+      "expectedVerdict": "reject_wrong_ledger"
+    },
+    {
+      "name": "omit_parser_whole_phase",
+      "terms": {
+        "nonParserPeak": 331800,
+        "outside": 1024
+      },
+      "predictedWrongBytes": 332824,
+      "independentCorrectBytes": 664406,
+      "expectedVerdict": "reject_wrong_ledger"
+    }
+  ]
+}

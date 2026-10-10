@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/ci-correction-1/bindings-clippy-correction.log.gz",
+      "sha256": "b5df9a39789a8c24f60103401819db9889d5a3f3993f9b8663016da80316e52c",
+      "uncompressed_sha256": "91011d5d45d72d84fb43bebd2597bb995d20586315451aa6c0ed22ba0109cea7",
+      "classification": "Exact local log or GitHub job metadata"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/ci-correction-1/rusty-tiles-archive-read-wheel310-failed.log.gz",
+      "sha256": "4a01e5e37a42704c3966dc32d353110a3a301303708710672c4a49d3b193348c",
+      "uncompressed_sha256": "bee60118e3ef565b4c3b56b8cac35df7e4a784e4ac6da5d4737e678b5a8b0774",
+      "classification": "Downloaded ANSI-stripped job-log transcript"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/ci-correction-1/rusty-tiles-archive-read-ci-jobs.json.gz",
+      "sha256": "c74464e8abcf404ecba8295b5a77eba6046baa6bbc98f0f9c8ae04cac55d1624",
+      "uncompressed_sha256": "56f4b74342aa33d5d83196ead2ad2238b5cf0372d4bb64732a82964d3010df74",
+      "classification": "Exact local log or GitHub job metadata"
+    }
+  ]
+}

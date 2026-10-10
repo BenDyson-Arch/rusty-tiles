@@ -1,7 +1,7 @@
 //! Tile serialization. Meshopt is a byte codec here, never a quantizer.
 use crate::{
     error::Error,
-    glb::{self, FallbackOffsets, MeshoptLayout, MeshoptStream},
+    glb::{self, MeshoptLayout, MeshoptStream},
     glb_write::{self, TilePrimitive},
 };
 use serde_json::{json, Value};
@@ -10,7 +10,6 @@ use serde_json::{json, Value};
 /// `NONE` filter on every compressed view.
 const MESH_MESHOPT: MeshoptLayout = MeshoptLayout {
     align: 4,
-    fallback: FallbackOffsets::Source,
     explicit_filter: true,
 };
 
@@ -19,7 +18,16 @@ pub fn write(
     materials: &[Value],
     compressed: bool,
 ) -> Result<Vec<u8>, Error> {
-    let (root, bin) = glb_write::build(prims)?;
+    write_with_features(prims, materials, compressed, &[])
+}
+
+pub(crate) fn write_with_features(
+    prims: &[TilePrimitive],
+    materials: &[Value],
+    compressed: bool,
+    features: &[(u32, String)],
+) -> Result<Vec<u8>, Error> {
+    let (root, mut bin) = glb_write::build(prims)?;
     // The typed root carries f32 material factors. serde_json::to_value would
     // widen them (0.22 -> 0.2199999988079071), so convert through JSON text to
     // keep the shortest f32 spelling the tiles have always carried. Only the
@@ -58,12 +66,25 @@ pub fn write(
     for extension in required {
         glb::add_extension(&mut doc, extension, true)?;
     }
+    if !features.is_empty() {
+        let mut builder = crate::metadata::MetadataGlb::from_parts(doc, bin);
+        crate::metadata::attach_node_features(&mut builder, features)?;
+        (doc, bin) = builder.into_parts();
+    }
     if !compressed {
         return glb::encode_glb(&doc, &bin);
     }
     let vertex_count = prims.iter().map(|p| p.positions.len()).max().unwrap_or(0);
-    // First accessor per view decides its role: SCALAR views are triangle
-    // indices, everything else is a fixed-stride attribute stream.
+    // Only primitive index views use triangle compression. Scalar feature
+    // IDs are attribute streams and must retain their exact element order.
+    let index_views: std::collections::BTreeSet<_> = doc["meshes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|m| m["primitives"].as_array().into_iter().flatten())
+        .filter_map(|p| p["indices"].as_u64())
+        .filter_map(|i| doc["accessors"][i as usize]["bufferView"].as_u64())
+        .collect();
     let mut roles = vec![None; doc["bufferViews"].as_array().map_or(0, Vec::len)];
     for accessor in doc["accessors"].as_array().into_iter().flatten() {
         let Some(view) = accessor["bufferView"].as_u64() else {
@@ -73,10 +94,16 @@ pub fn write(
             let count = accessor["count"]
                 .as_u64()
                 .ok_or_else(|| Error::msg("missing accessor count"))?;
-            *role = Some((count as usize, accessor["type"] == "SCALAR"));
+            *role = Some((count as usize, index_views.contains(&view)));
         }
     }
-    let packed = glb::meshopt_compress(&mut doc, &bin, MESH_MESHOPT, |view, length| {
+    // Metadata supports 64-bit values. Keep the builder alignment after the
+    // compression rewrite; legacy mesh content retains its four-byte layout.
+    let layout = MeshoptLayout {
+        align: if features.is_empty() { 4 } else { 8 },
+        ..MESH_MESHOPT
+    };
+    let packed = glb::meshopt_compress(&mut doc, &bin, layout, |view, length| {
         let Some((count, indices)) = roles[view] else {
             return Ok(None);
         };

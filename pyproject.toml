@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "rusty-tiles"
+dynamic = ["version"]
+description = "Self-contained mesh, vector, grid-free point cloud and 3D Tiles converters"
+readme = "bindings/python/README.md"
+requires-python = ">=3.10"
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.urls]
+Repository = "https://github.com/BenDyson-Arch/rusty-tiles"
+Issues = "https://github.com/BenDyson-Arch/rusty-tiles/issues"
+
+[tool.maturin]
+manifest-path = "bindings/python/Cargo.toml"
+module-name = "rusty_tiles"
+features = ["pyo3/extension-module"]

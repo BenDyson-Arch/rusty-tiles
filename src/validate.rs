@@ -1,17 +1,63 @@
-//! Read-only validation of explicit, self-contained 3TZ packages.
-use crate::{pack::TZ_INDEX_NAME, Error};
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+//! Read-only validation of self-contained explicit and native implicit 3TZ packages.
+use crate::archive3tz::TZ_INDEX_NAME;
+use crate::content_integrity::{
+    json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
+};
+mod types;
+pub use types::{
+    PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+};
+type Error = ValidationFailure;
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fs::File,
     io::Read,
     path::Path,
 };
 
-type Archive = zip::ZipArchive<File>;
+type Archive = crate::archive3tz::StoredArchive<File>;
 fn invalid(message: impl Into<String>) -> Error {
-    Error::Data(message.into())
+    Error::InvalidInput(message.into())
+}
+// Select and host-admit the six consumed format facts once at the operation boundary.
+fn content_limits(limits: &ValidationLimits) -> Result<PayloadLimits, Error> {
+    let host = |value: u64| {
+        usize::try_from(value).map_err(|_| Error::limit("content limit exceeds host range"))
+    };
+    Ok(PayloadLimits {
+        member_bytes: host(limits.member_bytes)?,
+        decoded_bytes: host(limits.document_decoded_bytes)?,
+        accessor_components: limits.accessor_elements,
+        json: JsonLimits {
+            bytes: host(limits.json_bytes)?,
+            depth: limits.json_depth,
+            value_nodes: host(limits.document_items)?,
+        },
+    })
+}
+fn format_error(error: FormatError) -> Error {
+    match error {
+        FormatError::InvalidInput(message) => Error::InvalidInput(message),
+        FormatError::Unsupported(message) => Error::Unsupported(message),
+        FormatError::ResourceLimit(message) => Error::ResourceLimit(message),
+    }
+}
+fn payload_error(error: PayloadError<Error>) -> Error {
+    match error {
+        PayloadError::Format(error) => format_error(error),
+        PayloadError::Resolver(error) => error,
+    }
+}
+// A real resolver I/O cause bypasses retained generic archive conversions.
+fn implicit_error(error: crate::Error) -> Error {
+    match error {
+        crate::Error::Io(error) => Error::Io(error),
+        crate::Error::Validation(error) => error,
+        other => other.into(),
+    }
 }
 fn number(value: &Value, label: &str) -> Result<f64, Error> {
     value
@@ -33,29 +79,113 @@ fn array(value: &Value, length: usize, label: &str) -> Result<Vec<f64>, Error> {
         })
         .collect()
 }
-fn read_json(zip: &mut Archive, name: &str) -> Result<Value, Error> {
-    let entry = zip.by_name(name)?;
-    if entry.size() > 64 * 1024 * 1024 {
-        return Err(invalid(format!("JSON entry exceeds 64 MiB: {name}")));
+impl From<serde_json::Error> for ValidationFailure {
+    fn from(e: serde_json::Error) -> Self {
+        Self::invalid(format!("invalid JSON: {e}"))
     }
-    serde_json::from_reader(entry).map_err(|e| invalid(format!("{name}: {e}")))
+}
+impl From<zip::result::ZipError> for ValidationFailure {
+    fn from(e: zip::result::ZipError) -> Self {
+        match e {
+            zip::result::ZipError::Io(e) => archive_read_error(e),
+            other => Self::invalid(other.to_string()),
+        }
+    }
+}
+impl From<crate::Error> for ValidationFailure {
+    fn from(e: crate::Error) -> Self {
+        match e {
+            crate::Error::Validation(e) => e,
+            crate::Error::Io(e) => archive_read_error(e),
+            crate::Error::Zip(e) => e.into(),
+            other => Self::invalid(other.to_string()),
+        }
+    }
+}
+fn archive_read_error(e: std::io::Error) -> ValidationFailure {
+    match e.kind() {
+        std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::InvalidData => {
+            ValidationFailure::invalid(format!("malformed archive bytes: {e}"))
+        }
+        _ => ValidationFailure::Io(e),
+    }
+}
+// Native archive reads preserve their typed format/I/O origins before the
+// retained generic crate/ZIP conversions above can reinterpret an I/O kind.
+fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFailure {
+    use crate::archive3tz::ReadError;
+    match error {
+        ReadError::InvalidInput(message) => Error::InvalidInput(message),
+        ReadError::Unsupported(message) => Error::Unsupported(message),
+        ReadError::ResourceLimit(message) => Error::ResourceLimit(message),
+        ReadError::Io(error) => Error::Io(error),
+        ReadError::MissingMember(name) => invalid(format!("missing archive member: {name}")),
+    }
+}
+fn read_member(
+    archive: &mut Archive,
+    name: &str,
+    bytes_read: &mut u64,
+    limits: &ValidationLimits,
+    maximum: u64,
+) -> Result<Vec<u8>, Error> {
+    let size = archive.member(name).map_err(archive_admission_error)?.size;
+    if size > maximum {
+        return Err(Error::limit(format!(
+            "member exceeds admitted byte limit: {name}"
+        )));
+    }
+    *bytes_read = bytes_read
+        .checked_add(size)
+        .filter(|&n| n <= limits.total_bytes_read)
+        .ok_or_else(|| Error::limit("member reads exceed 2 GiB work limit"))?;
+    archive
+        .read_member(name, maximum)
+        .map_err(archive_admission_error)
 }
 fn uri(base: &str, value: &str) -> Result<String, Error> {
-    if value.is_empty() || value.contains(['\\', ':', '?', '#', '%']) || value.starts_with('/') {
-        return Err(invalid(format!("non-local or unsupported URI: {value}")));
+    if value.is_empty() || value.contains('\\') {
+        return Err(invalid(format!("invalid resource URI: {value}")));
     }
-    let mut parts: Vec<&str> = base
-        .rsplit_once('/')
-        .map_or(vec![], |(dir, _)| dir.split('/').collect());
-    for part in value.split('/') {
-        match part {
+    if value.contains([':', '?', '#']) || value.starts_with('/') {
+        return Err(Error::unsupported(format!(
+            "URI outside archive-local profile: {value}"
+        )));
+    }
+    let mut parts: Vec<String> = base.rsplit_once('/').map_or(vec![], |(dir, _)| {
+        dir.split('/').map(str::to_owned).collect()
+    });
+    // Decode each segment once. Encoded separators must never become path
+    // syntax, and a literal percent in a decoded filename stays literal.
+    for raw in value.split('/') {
+        let mut decoded = Vec::with_capacity(raw.len());
+        let mut bytes = raw.bytes();
+        while let Some(byte) = bytes.next() {
+            decoded.push(if byte == b'%' {
+                let digit = |byte: u8| (byte as char).to_digit(16).map(|n| n as u8);
+                let high = bytes.next().and_then(digit);
+                let low = bytes.next().and_then(digit);
+                let (Some(high), Some(low)) = (high, low) else {
+                    return Err(invalid("invalid URI percent escape"));
+                };
+                high * 16 + low
+            } else {
+                byte
+            });
+        }
+        let part =
+            String::from_utf8(decoded).map_err(|_| invalid("URI decoded path must be UTF-8"))?;
+        if part.contains(['/', '\\']) || part.chars().any(char::is_control) {
+            return Err(invalid("URI decoded segment contains a separator/control"));
+        }
+        match part.as_str() {
             "" | "." => (),
             ".." => {
                 if parts.pop().is_none() {
                     return Err(invalid("URI escapes archive"));
                 }
             }
-            other => parts.push(other),
+            _ => parts.push(part),
         }
     }
     Ok(parts.join("/"))
@@ -182,8 +312,8 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
                 && c[4] >= p[4] - 1e-6
                 && c[5] <= p[5] + 1e-6)
         }
-        (Volume::Region(_), _) | (_, Volume::Region(_)) => Err(invalid(
-            "mixed region/Cartesian containment requires the external validator",
+        (Volume::Region(_), _) | (_, Volume::Region(_)) => Err(Error::unsupported(
+            "mixed region/Cartesian containment is outside the admitted profile",
         )),
         (_, Volume::Sphere(s)) => Ok(inside(
             parent,
@@ -206,95 +336,140 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
         })),
     }
 }
-fn u32_at(data: &[u8], offset: usize) -> Result<usize, Error> {
-    Ok(u32::from_le_bytes(
-        data.get(offset..offset + 4)
-            .ok_or_else(|| invalid("truncated tile header"))?
-            .try_into()
-            .unwrap(),
-    ) as usize)
-}
-fn gltf(zip: &mut Archive, name: &str) -> Result<Option<Value>, Error> {
-    if name.ends_with(".gltf") {
-        return Ok(Some(read_json(zip, name)?));
-    }
-    if !name.ends_with(".glb") && !name.ends_with(".b3dm") {
-        return Err(invalid(format!(
-            "unsupported content format: {name}; use external validator for other formats"
-        )));
-    }
-    let mut entry = zip.by_name(name)?;
-    let size = entry.size();
-    let mut head = [0u8; 28];
-    entry.read_exact(&mut head)?;
-    if name.ends_with(".b3dm") {
-        if &head[..4] != b"b3dm" || u32_at(&head, 4)? != 1 || u32_at(&head, 8)? as u64 != size {
-            return Err(invalid("invalid b3dm header"));
-        }
-        let offset = (12..28)
-            .step_by(4)
-            .map(|i| u32_at(&head, i))
-            .collect::<Result<Vec<_>, _>>()?
-            .iter()
-            .sum::<usize>();
-        if offset as u64 > size - 28 {
-            return Err(invalid("b3dm tables exceed payload"));
-        }
-        std::io::copy(
-            &mut entry.by_ref().take(offset as u64),
-            &mut std::io::sink(),
-        )?;
-        entry.read_exact(&mut head[..20])?;
-    }
-    if &head[..4] != b"glTF" || u32_at(&head, 4)? != 2 || &head[16..20] != b"JSON" {
-        return Err(invalid(format!("invalid GLB header: {name}")));
-    }
-    let length = u32_at(&head, 12)?;
-    if length > 64 * 1024 * 1024 || length as u64 + 20 > size {
-        return Err(invalid("invalid/oversized GLB JSON chunk"));
-    }
-    let mut data = vec![0; length];
-    if name.ends_with(".glb") {
-        if length < 8 {
-            return Err(invalid("GLB JSON chunk is too short"));
-        }
-        data[..8].copy_from_slice(&head[20..28]);
-        entry.read_exact(&mut data[8..])?;
-        if u32_at(&head, 8)? as u64 != size {
-            return Err(invalid("GLB length differs from archive member"));
-        }
-    } else {
-        entry.read_exact(&mut data)?;
-    }
-    Ok(Some(serde_json::from_slice(&data)?))
-}
-struct Check<'a> {
-    zip: &'a mut Archive,
+struct ArchiveResources<'a> {
+    archive: &'a mut Archive,
     names: HashSet<String>,
     used: HashSet<String>,
-    reports: Value,
-    tiles: usize,
-    contents: usize,
-    active: HashSet<String>,
-    schema: jsonschema::Validator,
+    limits: ValidationLimits,
+    content_limits: PayloadLimits,
+    bytes_read: u64,
+    reference_visits: u64,
 }
-impl Check<'_> {
+impl ArchiveResources<'_> {
+    fn read_json(&mut self, name: &str) -> Result<Value, Error> {
+        let bytes = read_member(
+            self.archive,
+            name,
+            &mut self.bytes_read,
+            &self.limits,
+            self.limits.json_bytes,
+        )?;
+        json::parse(&bytes, self.content_limits.json).map_err(format_error)
+    }
     fn reference(&mut self, name: String) -> Result<(), Error> {
+        self.reference_visits = self
+            .reference_visits
+            .checked_add(1)
+            .filter(|&n| n <= self.limits.references)
+            .ok_or_else(|| Error::limit("archive exceeds 262,144 reference visits"))?;
         if !self.names.contains(&name) {
             return Err(invalid(format!("missing archive entry: {name}")));
         }
         self.used.insert(name);
         Ok(())
     }
+}
+struct Check<'a> {
+    resources: ArchiveResources<'a>,
+    reports: Value,
+    tiles: usize,
+    contents: usize,
+    active: HashSet<String>,
+    schema: jsonschema::Validator,
+    task_visits: u64,
+    elements: u64,
+    payloads: HashMap<String, PayloadReport>,
+    not_inspected: BTreeSet<String>,
+    expansion_budget: crate::implicit::ExpansionBudget,
+}
+enum ValidationTask {
+    Tileset {
+        name: String,
+        parent: Option<Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+    },
+    Node {
+        node: Value,
+        base: String,
+        parent: Option<Volume>,
+        parent_error: f64,
+        depth: usize,
+    },
+    ExitTileset(String),
+}
+impl Check<'_> {
+    fn payload(&mut self, name: &str) -> Result<PayloadReport, Error> {
+        if let Some(report) = self.payloads.get(name) {
+            return Ok(report.clone());
+        }
+        let bytes = read_member(
+            self.resources.archive,
+            name,
+            &mut self.resources.bytes_read,
+            &self.resources.limits,
+            self.resources.limits.member_bytes,
+        )?;
+        let remaining = self.resources.limits.total_payload_elements - self.elements;
+        let kind = match name.to_ascii_lowercase().rsplit_once('.') {
+            Some((_, "glb")) => payload::PayloadKind::Glb,
+            Some((_, "gltf")) => payload::PayloadKind::LocalGltf,
+            Some((_, "b3dm")) => payload::PayloadKind::B3dm,
+            _ => {
+                return Err(Error::unsupported(
+                    "payload format outside GLB/local glTF 2.0",
+                ))
+            }
+        };
+        let facts = payload::inspect(
+            kind,
+            &bytes,
+            self.resources.content_limits,
+            remaining,
+            |value, maximum| {
+                let resource = uri(name, value)?;
+                self.resources.reference(resource.clone())?;
+                read_member(
+                    self.resources.archive,
+                    &resource,
+                    &mut self.resources.bytes_read,
+                    &self.resources.limits,
+                    maximum as u64,
+                )
+            },
+        )
+        .map_err(payload_error)?;
+        self.elements = self
+            .elements
+            .checked_add(facts.elements_checked)
+            .filter(|&n| n <= self.resources.limits.total_payload_elements)
+            .ok_or_else(|| Error::limit("payload elements exceed 16 million"))?;
+        if let Some(value) = facts.schema_uri.as_deref() {
+            self.schema_uri(name, value)?;
+        }
+        self.not_inspected.extend(facts.not_inspected);
+        let report = PayloadReport {
+            uri: name.into(),
+            accessors_checked: facts.accessors_checked,
+            primitives_checked: facts.primitives_checked,
+            vertices: facts.vertices,
+        };
+        self.payloads.insert(name.into(), report.clone());
+        Ok(report)
+    }
     fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<(), Error> {
         if let Some(value) = doc.get("schemaUri") {
             let value = value
                 .as_str()
                 .ok_or_else(|| invalid("schemaUri must be a string"))?;
-            let name = uri(base, value)?;
-            self.reference(name.clone())?;
-            read_json(self.zip, &name)?;
+            self.schema_uri(base, value)?;
         }
+        Ok(())
+    }
+    fn schema_uri(&mut self, base: &str, value: &str) -> Result<(), Error> {
+        let name = uri(base, value)?;
+        self.resources.reference(name.clone())?;
+        self.resources.read_json(&name)?;
         Ok(())
     }
     fn tileset(
@@ -304,14 +479,68 @@ impl Check<'_> {
         parent_error: Option<f64>,
         depth: usize,
     ) -> Result<(), Error> {
-        if depth > 128 {
-            return Err(invalid("hierarchy exceeds validation depth limit"));
+        let mut pending = vec![ValidationTask::Tileset {
+            name: name.into(),
+            parent: parent.cloned(),
+            parent_error,
+            depth,
+        }];
+        while let Some(task) = pending.pop() {
+            self.task_visits = self
+                .task_visits
+                .checked_add(1)
+                .filter(|&n| n <= self.resources.limits.hierarchy_visits)
+                .ok_or_else(|| Error::limit("hierarchy exceeds 65,536 traversal tasks"))?;
+            match task {
+                ValidationTask::Tileset {
+                    name,
+                    parent,
+                    parent_error,
+                    depth,
+                } => {
+                    if depth > 128 {
+                        return Err(Error::limit("hierarchy exceeds validation depth limit"));
+                    }
+                    if !self.active.insert(name.clone()) {
+                        return Err(invalid("cyclic external tileset reference"));
+                    }
+                    let (mut doc, error) = self.prepare_tileset(&name)?;
+                    pending.push(ValidationTask::ExitTileset(name.clone()));
+                    pending.push(ValidationTask::Node {
+                        node: doc["root"].take(),
+                        base: name,
+                        parent,
+                        parent_error: parent_error.map_or(error, |parent| parent.min(error)),
+                        depth,
+                    });
+                }
+                ValidationTask::Node {
+                    node,
+                    base,
+                    parent,
+                    parent_error,
+                    depth,
+                } => {
+                    self.node(
+                        node,
+                        &base,
+                        parent.as_ref(),
+                        parent_error,
+                        depth,
+                        &mut pending,
+                    )?;
+                }
+                ValidationTask::ExitTileset(name) => {
+                    self.active.remove(&name);
+                }
+            }
         }
-        if !self.active.insert(name.into()) {
-            return Err(invalid("cyclic external tileset reference"));
-        }
-        self.reference(name.into())?;
-        let doc = read_json(self.zip, name)?;
+        Ok(())
+    }
+
+    fn prepare_tileset(&mut self, name: &str) -> Result<(Value, f64), Error> {
+        self.resources.reference(name.into())?;
+        let doc = self.resources.read_json(name)?;
         self.schema
             .validate(&doc)
             .map_err(|error| invalid(format!("tileset schema: {error}")))?;
@@ -320,34 +549,91 @@ impl Check<'_> {
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         self.metadata_schema(name, &doc)?;
-        // Each use has its own placement and constraints, even when the JSON
-        // file was already visited under another referring tile.
-        let result = self.node(
-            &doc["root"],
-            name,
-            parent,
-            parent_error.map_or(error, |parent| parent.min(error)),
-            depth,
-        );
-        self.active.remove(name);
-        result
+        let doc = self.expand_implicit(name, doc)?;
+        Ok((doc, error))
+    }
+
+    fn expand_implicit(&mut self, name: &str, mut doc: Value) -> Result<Value, Error> {
+        if doc["root"].get("implicitTiling").is_some() {
+            // Raw immutable vector payloads remain reachable through the native
+            // reuse state; display content uses implicit URI templates.
+            if let Some(sources) = doc["extras"]["rustyTilesSourceContents"].as_array() {
+                for source in sources {
+                    let source = uri(
+                        name,
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid cached content URI"))?,
+                    )?;
+                    self.resources.reference(source.clone())?;
+                    self.payload(&source)?;
+                }
+            }
+            self.not_inspected
+                .insert("implicitAddressingAndAvailability".into());
+            let resources = &mut self.resources;
+            let schema = &self.schema;
+            let json_limits = resources.content_limits.json;
+            doc = crate::implicit::expand_tileset_bounded(
+                &doc,
+                |value| {
+                    let source = uri(name, value).map_err(crate::Error::from)?;
+                    resources
+                        .reference(source.clone())
+                        .map_err(crate::Error::from)?;
+                    let maximum = if source.ends_with(".json") {
+                        resources.limits.json_bytes
+                    } else {
+                        resources.limits.member_bytes
+                    };
+                    let bytes = read_member(
+                        resources.archive,
+                        &source,
+                        &mut resources.bytes_read,
+                        &resources.limits,
+                        maximum,
+                    )
+                    .map_err(crate::Error::from)?;
+                    if source.ends_with(".json") {
+                        let doc = json::parse(&bytes, json_limits)
+                            .map_err(format_error)
+                            .map_err(crate::Error::from)?;
+                        schema.validate(&doc).map_err(|e| {
+                            crate::Error::from(invalid(format!("tileset schema: {e}")))
+                        })?;
+                    }
+                    Ok(bytes)
+                },
+                &mut self.expansion_budget,
+                &|bytes| {
+                    json::parse(bytes, json_limits)
+                        .map_err(format_error)
+                        .map_err(crate::Error::from)
+                },
+            )
+            .map_err(implicit_error)?;
+        }
+        Ok(doc)
     }
     fn node(
         &mut self,
-        node: &Value,
+        mut node: Value,
         base: &str,
         parent: Option<&Volume>,
         parent_error: f64,
         depth: usize,
+        pending: &mut Vec<ValidationTask>,
     ) -> Result<(), Error> {
-        if depth > 128 {
-            return Err(invalid("hierarchy exceeds validation depth limit"));
+        if depth as u64 > self.resources.limits.hierarchy_depth {
+            return Err(Error::limit("hierarchy exceeds validation depth limit"));
         }
         if !node.is_object() {
             return Err(invalid("tile must be an object"));
         }
         if node.get("implicitTiling").is_some() {
-            return Err(invalid("implicit tiling requires the external validator"));
+            return Err(invalid(
+                "nested implicit roots require an external tileset JSON",
+            ));
         }
         if let Some(refine) = node.get("refine") {
             if !matches!(refine.as_str(), Some("ADD" | "REPLACE")) {
@@ -355,7 +641,7 @@ impl Check<'_> {
             }
         }
         let bounds = volume(&node["boundingVolume"])?;
-        let m = transform(node)?;
+        let m = transform(&node)?;
         if let Some(parent) = parent {
             if !contains(parent, &bounds, &m)? {
                 return Err(invalid(format!(
@@ -372,6 +658,7 @@ impl Check<'_> {
         self.tiles += 1;
         let mut bytes = 0u64;
         let mut vertices = 0u64;
+        let mut descendants = Vec::new();
         if node.get("content").is_some() && node.get("contents").is_some() {
             return Err(invalid("tile has both content and contents"));
         }
@@ -388,7 +675,7 @@ impl Check<'_> {
                 .or_else(|| content["url"].as_str())
                 .ok_or_else(|| invalid("content.uri must be a string"))?;
             let name = uri(base, value)?;
-            self.reference(name.clone())?;
+            self.resources.reference(name.clone())?;
             self.contents += 1;
             if let Some(v) = content.get("boundingVolume") {
                 let cb = volume(v)?;
@@ -396,40 +683,28 @@ impl Check<'_> {
                     return Err(invalid("content bounds escape tile"));
                 }
             }
-            bytes += self.zip.by_name(&name)?.size();
+            bytes = bytes
+                .checked_add(
+                    self.resources
+                        .archive
+                        .member(&name)
+                        .map_err(archive_admission_error)?
+                        .size,
+                )
+                .ok_or_else(|| invalid("tile byte count overflow"))?;
             if name.ends_with(".json") {
-                self.tileset(&name, Some(&bounds), Some(error), depth + 1)?;
+                descendants.push(ValidationTask::Tileset {
+                    name,
+                    parent: Some(bounds.clone()),
+                    parent_error: Some(error),
+                    depth: depth + 1,
+                });
                 continue;
             }
-            if let Some(doc) = gltf(self.zip, &name)? {
-                self.metadata_schema(&name, &doc["extensions"]["EXT_structural_metadata"])?;
-                for primitive in doc["meshes"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .flat_map(|m| m["primitives"].as_array().into_iter().flatten())
-                {
-                    let index = primitive["attributes"]["POSITION"]
-                        .as_u64()
-                        .ok_or_else(|| invalid("primitive has no POSITION accessor"))?
-                        as usize;
-                    let accessor = doc["accessors"]
-                        .get(index)
-                        .ok_or_else(|| invalid("invalid POSITION accessor index"))?;
-                    vertices += accessor["count"]
-                        .as_u64()
-                        .ok_or_else(|| invalid("invalid POSITION count"))?;
-                }
-                for key in ["images", "buffers"] {
-                    for item in doc[key].as_array().into_iter().flatten() {
-                        if let Some(value) = item["uri"].as_str() {
-                            if !value.starts_with("data:") {
-                                self.reference(uri(&name, value)?)?;
-                            }
-                        }
-                    }
-                }
-            }
+            let inspected = self.payload(&name)?;
+            vertices = vertices
+                .checked_add(inspected.vertices)
+                .ok_or_else(|| invalid("tile vertex count overflow"))?;
         }
         if bytes > 0 {
             if let Some(limit) = self.reports["budgets"]["bytes"].as_u64() {
@@ -455,20 +730,27 @@ impl Check<'_> {
                 }
             }
         }
-        if let Some(children) = node.get("children") {
-            for child in children
-                .as_array()
-                .ok_or_else(|| invalid("children must be an array"))?
-            {
-                self.node(child, base, Some(&bounds), error, depth + 1)?;
+        if let Some(children) = node.as_object_mut().unwrap().remove("children") {
+            let Value::Array(children) = children else {
+                return Err(invalid("children must be an array"));
+            };
+            for child in children {
+                descendants.push(ValidationTask::Node {
+                    node: child,
+                    base: base.into(),
+                    parent: Some(bounds.clone()),
+                    parent_error: error,
+                    depth: depth + 1,
+                });
             }
         }
+        pending.extend(descendants.into_iter().rev());
         Ok(())
     }
 }
 /// Reject inputs that are not 3TZ (ZIP) archives before opening them, so a
 /// directory or other file gets an actionable message instead of an OS error.
-fn require_archive(path: &Path) -> Result<(), Error> {
+fn open_archive(path: &Path) -> Result<File, Error> {
     const HINT: &str = "validate currently checks .3tz archives only; raster and terrain \
         output directories are not validated yet. Pass a .3tz written by vector, \
         point-cloud, mesh-to-3tz, glb-to-3tz or convert";
@@ -478,46 +760,88 @@ fn require_archive(path: &Path) -> Result<(), Error> {
             path.display()
         )));
     }
-    if !path.exists() {
-        return Err(Error::InputNotFound(path.into()));
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // Inspect the selected handle's type without waiting for a FIFO writer.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Error::Io(std::io::Error::new(
+                error.kind(),
+                format!("input not found: {}", path.display()),
+            ))
+        } else {
+            Error::Io(error)
+        }
+    })?;
+    if !file.metadata()?.is_file() {
+        return Err(Error::unsupported(
+            "validation requires a regular .3tz file",
+        ));
     }
     let mut magic = [0u8; 4];
-    let read = File::open(path)?.read(&mut magic)?;
+    let read = file.read(&mut magic)?;
     if read < 4 || !matches!(&magic, b"PK\x03\x04" | b"PK\x05\x06") {
         return Err(invalid(format!(
             "{} is not a ZIP/.3tz archive: {HINT}",
             path.display()
         )));
     }
-    Ok(())
+    Ok(file)
 }
 
-pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
-    require_archive(path)?;
-    crate::pack::validate_3tz(path)?;
-    let mut zip = Archive::new(File::open(path)?)?;
+/// Inspect a bounded archive using only declared archive-local resources.
+/// Success certifies the named checks, not uninspected scene/source semantics.
+pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
+    inspect_selected(request, ValidationLimits::default())
+}
+
+// C1 selects its profile above. Explicit limits also permit bounded internal
+// controls to exercise the actual operation and every resource/parser consumer.
+pub(crate) fn inspect_selected(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<ValidationReport, Error> {
+    let path = request.input();
+    let source = open_archive(path)?;
+    let before = source.metadata()?;
+    let identity = same_file::Handle::from_file(source.try_clone()?)?;
+    let content_limits = content_limits(&limits)?;
+    let archive_limits = crate::archive3tz::ReadLimits {
+        source_archive_bytes: limits.source_archive_bytes,
+        central_directory_bytes: limits.central_directory_bytes,
+        archive_entries: limits.archive_entries,
+        member_bytes: limits.member_bytes,
+        archive_stored_bytes: limits.archive_stored_bytes,
+    };
+    let mut archive = Archive::new(source.try_clone()?, before.len(), &archive_limits)
+        .map_err(archive_admission_error)?;
+    // Count the exact index bytes already consumed by the format owner. Later
+    // index/member hashing and repeated content reads consume this same budget.
+    let mut bytes_read = archive.index_read_bytes();
     let mut names = HashSet::new();
     let mut hashes = HashMap::new();
-    for i in 0..zip.len() {
-        let mut entry = zip.by_index(i)?;
-        let name = entry.name().to_owned();
+    for i in 0..archive.len() {
+        let member = archive.member_at(i).map_err(archive_admission_error)?;
+        let name = member.name.clone();
+        let size = member.size;
         if name.split('/').any(|v| matches!(v, "" | "." | ".."))
             || name.starts_with('/')
             || name.contains('\\')
-            || !names.insert(name.clone())
         {
-            return Err(invalid(format!("unsafe or duplicate archive path: {name}")));
+            return Err(invalid(format!("unsafe archive path: {name}")));
         }
-        let mut digest = Sha256::new();
-        let mut buffer = [0u8; 65536];
-        loop {
-            let n = entry.read(&mut buffer)?;
-            if n == 0 {
-                break;
-            }
-            digest.update(&buffer[..n]);
-        }
-        let hash = format!("{:x}", digest.finalize());
+        names.insert(name.clone());
+        bytes_read = bytes_read
+            .checked_add(size)
+            .filter(|&n| n <= limits.total_bytes_read)
+            .ok_or_else(|| Error::limit("archive hash reads exceed work limit"))?;
+        let digest = archive.hash_member(i).map_err(archive_admission_error)?;
+        let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -528,32 +852,76 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
         hashes.insert(name, hash);
     }
     let report = if names.contains("conversion.json") {
-        read_json(&mut zip, "conversion.json")?
+        json::parse(
+            &read_member(
+                &mut archive,
+                "conversion.json",
+                &mut bytes_read,
+                &limits,
+                limits.json_bytes,
+            )?,
+            content_limits.json,
+        )
+        .map_err(format_error)?
     } else {
         Value::Null
     };
     let mut check = Check {
-        zip: &mut zip,
-        names,
-        used: HashSet::from([TZ_INDEX_NAME.into()]),
+        expansion_budget: crate::implicit::ExpansionBudget::new(
+            usize::try_from(limits.hierarchy_visits)
+                .map_err(|_| Error::limit("hierarchy limit exceeds host range"))?,
+            content_limits.decoded_bytes,
+        ),
+        resources: ArchiveResources {
+            archive: &mut archive,
+            names,
+            used: HashSet::from([TZ_INDEX_NAME.into()]),
+            limits,
+            content_limits,
+            bytes_read,
+            reference_visits: 0,
+        },
         reports: report,
         tiles: 0,
         contents: 0,
         active: HashSet::new(),
+        task_visits: 0,
+        elements: 0,
+        payloads: HashMap::new(),
+        not_inspected: BTreeSet::from([
+            "decodedContentBounds".into(),
+            "metadataSemantics".into(),
+            "materialAndImageSemantics".into(),
+            "geometricErrorAccuracy".into(),
+        ]),
         schema: jsonschema::validator_for(&serde_json::from_str(include_str!(
             "../docs/schema/tileset.schema.json"
         ))?)
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
     };
-    if check.names.contains("conversion.json") {
-        check.used.insert("conversion.json".into());
+    if check.resources.names.contains("conversion.json") {
+        check.resources.used.insert("conversion.json".into());
         if let Some(name) = check.reports["geometryReports"].as_str() {
-            check.reference(uri("conversion.json", name)?)?;
+            check.resources.reference(uri("conversion.json", name)?)?;
+        }
+        if check.reports["operation"] == "convert-to-implicit" {
+            if let Some(sources) = check.reports["retainedContentUris"].as_array().cloned() {
+                for source in sources {
+                    let source = uri(
+                        "conversion.json",
+                        source
+                            .as_str()
+                            .ok_or_else(|| invalid("invalid retained content URI"))?,
+                    )?;
+                    check.resources.reference(source.clone())?;
+                    check.payload(&source)?;
+                }
+            }
         }
     }
-    let manifest = read_json(check.zip, "tileset.json")?;
+    let manifest = check.resources.read_json("tileset.json")?;
     if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
-        check.reference("vector-build.json".into())?;
+        check.resources.reference("vector-build.json".into())?;
         if hashes.get("vector-build.json").map(String::as_str) != Some(expected) {
             return Err(invalid("vector build-state checksum mismatch"));
         }
@@ -564,7 +932,12 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
-    let mut unused: Vec<_> = check.names.difference(&check.used).cloned().collect();
+    let mut unused: Vec<_> = check
+        .resources
+        .names
+        .difference(&check.resources.used)
+        .cloned()
+        .collect();
     unused.sort();
     if !unused.is_empty() {
         return Err(invalid(format!(
@@ -572,58 +945,184 @@ pub fn archive(path: &Path, external: Option<&Path>) -> Result<Value, Error> {
             unused.join(", ")
         )));
     }
-    let mut result = json!({"ok":true,"archive":path,"tiles":check.tiles,"contentReferences":check.contents,"entries":check.names.len(),"checks":["index","crc","contentHashes","structure","bounds","geometricError","references","budgets"]});
-    if let Some(executable) = external {
-        let work = tempfile::tempdir()?;
-        let report = work.path().join("report.json");
-        let output = std::process::Command::new(executable)
-            .arg("--tilesetFile")
-            .arg(std::path::absolute(path)?)
-            .arg("--reportFile")
-            .arg(&report)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    Error::Environment(format!(
-                        "external validator not found: {}",
-                        executable.display()
-                    ))
-                } else {
-                    e.into()
-                }
-            })?;
-        if !output.stdout.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&output.stdout));
-        }
-        if !output.stderr.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&output.stderr));
-        }
-        if !output.status.success() {
-            return Err(invalid("external validator failed"));
-        }
-        let report: Value = serde_json::from_reader(
-            File::open(&report)
-                .map_err(|_| invalid("external validator did not write its report"))?,
-        )?;
-        if report["numErrors"].as_u64().unwrap_or(0) > 0
-            || report["issues"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|issue| issue["severity"] == "ERROR")
-        {
-            return Err(invalid(format!(
-                "external validation reported errors: {report}"
-            )));
-        }
-        result["externalValidator"] = report;
+    let after = source.metadata()?;
+    if before.len() != after.len()
+        || before.modified()? != after.modified()?
+        || identity != same_file::Handle::from_path(path)?
+    {
+        return Err(invalid("source archive changed during inspection"));
     }
-    Ok(result)
+    let mut payloads: Vec<_> = check.payloads.into_values().collect();
+    payloads.sort_by(|a, b| a.uri.cmp(&b.uri));
+    Ok(ValidationReport {
+        ok: true,
+        archive: path.into(),
+        tiles: check.tiles as u64,
+        content_references: check.contents as u64,
+        entries: check.resources.names.len() as u64,
+        payloads,
+        limits: check.resources.limits,
+        checks: [
+            "archiveIndex",
+            "archiveCrc",
+            "archiveStoredRecordLayout",
+            "contentHashes",
+            "tilesetSchema",
+            "payloadEnvelope",
+            "bufferRanges",
+            "accessorValues",
+            "primitiveIndices",
+            "hierarchyBounds",
+            "geometricErrorOrder",
+            "resourceReferences",
+            "recordedBudgets",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect(),
+        not_inspected: check.not_inspected.into_iter().collect(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_bridges_preserve_causal_io_and_typed_format_categories() {
+        #[derive(Debug)]
+        struct Cause;
+        impl std::fmt::Display for Cause {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("resource limit: duplicate JSON key; actual resolver cause")
+            }
+        }
+        impl std::error::Error for Cause {}
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            for implicit in [false, true] {
+                let io = std::io::Error::new(kind, Cause);
+                let failure = if implicit {
+                    implicit_error(crate::Error::Io(io))
+                } else {
+                    payload_error(PayloadError::Resolver(Error::Io(io)))
+                };
+                let Error::Io(io) = failure else {
+                    panic!("causal I/O must stay I/O")
+                };
+                assert_eq!(io.kind(), kind);
+                assert!(io.get_ref().unwrap().downcast_ref::<Cause>().is_some());
+                assert_eq!(
+                    io.to_string(),
+                    "resource limit: duplicate JSON key; actual resolver cause"
+                );
+            }
+        }
+        for (format, category) in [
+            (
+                FormatError::InvalidInput("resource limit: lookalike".into()),
+                "invalid_input",
+            ),
+            (
+                FormatError::ResourceLimit("duplicate key lookalike".into()),
+                "resource_limit",
+            ),
+            (
+                FormatError::Unsupported("invalid syntax lookalike".into()),
+                "unsupported",
+            ),
+        ] {
+            assert_eq!(
+                payload_error(PayloadError::Format(format)).category().0,
+                category
+            );
+        }
+    }
+    #[derive(Debug)]
+    struct InjectedReadFailure;
+    impl std::fmt::Display for InjectedReadFailure {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("injected reader failure")
+        }
+    }
+    impl std::error::Error for InjectedReadFailure {}
+
+    fn map_reader_io(error: std::io::Error) -> ValidationFailure {
+        archive_admission_error(crate::archive3tz::ReadError::Io(error))
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_real_os_io_causes() {
+        let work = tempfile::tempdir().unwrap();
+        {
+            let error = File::open(work.path().join("missing.3tz")).unwrap_err();
+            let kind = error.kind();
+            let os_code = error.raw_os_error();
+            let message = error.to_string();
+            assert_eq!(kind, std::io::ErrorKind::NotFound);
+            assert!(os_code.is_some());
+            let failure = map_reader_io(error);
+            assert_eq!(failure.category(), ("io", 1));
+            let Error::Io(error) = failure else {
+                panic!("lost actual I/O origin");
+            };
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.raw_os_error(), os_code);
+            assert_eq!(error.to_string(), message);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_injected_invalid_data_and_eof_io() {
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            {
+                let failure = map_reader_io(std::io::Error::new(kind, InjectedReadFailure));
+                assert_eq!(failure.category(), ("io", 1));
+                let Error::Io(error) = failure else {
+                    panic!("reclassified actual {kind:?} as malformed input");
+                };
+                assert_eq!(error.kind(), kind);
+                assert!(error
+                    .get_ref()
+                    .is_some_and(|cause| cause.is::<InjectedReadFailure>()));
+            }
+        }
+    }
+    #[test]
+    fn archive_admission_mapping_keeps_typed_categories_without_message_matching() {
+        use crate::archive3tz::ReadError;
+        for (error, category) in [
+            (
+                ReadError::InvalidInput("I/O-looking malformed input".into()),
+                ("invalid_input", 3),
+            ),
+            (
+                ReadError::Unsupported("CRC-looking unsupported profile".into()),
+                ("unsupported", 2),
+            ),
+            (
+                ReadError::ResourceLimit("package missing tileset.json".into()),
+                ("resource_limit", 3),
+            ),
+        ] {
+            assert_eq!(archive_admission_error(error).category(), category);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_distinguishes_missing_member_and_detected_crc() {
+        use crate::archive3tz::ReadError;
+        let missing = archive_admission_error(ReadError::MissingMember("tileset.json".into()));
+        assert_eq!(missing.category(), ("invalid_input", 3));
+        assert_eq!(missing.to_string(), "missing archive member: tileset.json");
+        let crc = archive_admission_error(ReadError::InvalidInput(
+            "detected index CRC mismatch".into(),
+        ));
+        assert_eq!(crc.category(), ("invalid_input", 3));
+        assert_eq!(crc.to_string(), "detected index CRC mismatch");
+    }
     fn tile(radius: f64, error: f64) -> Value {
         json!({"boundingVolume":{"sphere":[0.,0.,0.,radius]},"geometricError":error,"refine":"REPLACE"})
     }
@@ -639,8 +1138,12 @@ mod tests {
             std::fs::write(file, serde_json::to_vec(&value).unwrap()).unwrap();
         }
         let output = work.path().join("test.3tz");
-        crate::pack::convert_to_3tz(&data, &output, &Default::default()).unwrap();
-        archive(&output, None)
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        inspect(ValidationRequest::new(&output)).map(|r| serde_json::to_value(r).unwrap())
     }
     #[test]
     fn external_roots_obey_referring_bounds_and_error() {
@@ -695,6 +1198,14 @@ mod tests {
     }
     #[test]
     fn external_cycles_fail_and_depth_continues_across_files() {
+        std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(check_external_cycles_and_depth)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+    fn check_external_cycles_and_depth() {
         let mut root = tile(1., 0.);
         root["content"] = json!({"uri":"nested/external.json"});
         let mut child = tile(1., 0.);
@@ -795,5 +1306,31 @@ mod tests {
             [1., 0., 0.],
             1.
         ));
+    }
+}
+#[test]
+fn archive_uri_decodes_segments_once_and_confines_paths() {
+    assert_eq!(
+        uri("model/source.gltf", "data/a%20b.bin").unwrap(),
+        "model/data/a b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "a%2520b.bin").unwrap(),
+        "model/a%20b.bin"
+    );
+    assert_eq!(
+        uri("model/source.gltf", "%2e%2e/data.bin").unwrap(),
+        "data.bin"
+    );
+    for value in [
+        "%2e%2e/%2e%2e/data.bin",
+        "%2fdata.bin",
+        "a%5cb.bin",
+        "a%00.bin",
+        "%ff.bin",
+        "bad%",
+        "bad%2g",
+    ] {
+        assert!(uri("model/source.gltf", value).is_err(), "{value}");
     }
 }

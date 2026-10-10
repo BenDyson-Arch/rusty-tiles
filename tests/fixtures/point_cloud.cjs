@@ -1,9 +1,11 @@
 // Optional Cesium IIFE acceptance against a converted native point-cloud preview.
 // NODE_PATH exposes Playwright; Cesium/data are served locally, without downloads.
+// Add --slow-refinement to reproduce delayed frame traversal and tile requests.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 
 (async () => {
+  const slowRefinement = process.argv.includes('--slow-refinement');
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM || '/usr/bin/chromium', headless: true,
     args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
@@ -12,33 +14,77 @@ const assert = require('node:assert/strict');
     const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(String(error)));
+    if (slowRefinement) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', {rate: 6});
+      await page.route('**/*.glb', async route => {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        await route.continue();
+      });
+    }
     await page.goto(process.argv[2] || 'http://127.0.0.1:9271');
     const inspect = async () => {
       await page.waitForFunction(() => window.pointCloud || window.failures?.length, null, {timeout: 30000});
-      return page.evaluate(async () => {
+      return page.evaluate(async slowRefinement => {
         const C = Cesium, viewer = window.viewer, cloud = window.pointCloud;
         if (!cloud) throw new Error(window.failures.join('\n'));
         viewer.scene.globe.show = false;
         viewer.scene.skyAtmosphere.show = false;
         viewer.scene.skyBox.show = false;
         cloud.style = new C.Cesium3DTileStyle({color: "color('cyan')", pointSize: 12});
-        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
         const frame = multiplier => {
           viewer.camera.viewBoundingSphere(cloud.boundingSphere, new C.HeadingPitchRange(-.8, -.65, cloud.boundingSphere.radius * multiplier));
           viewer.camera.lookAtTransform(C.Matrix4.IDENTITY);
         };
-        async function settle() {
-          await wait(300);
-          for (let i = 0; i < 100 && !cloud.tilesLoaded; i++) await wait(50);
-          await wait(300);
-          if (!cloud.tilesLoaded) throw new Error('Point cloud did not finish refinement');
-        }
         // Private selection fields are confined to this diagnostic probe.
         const selection = () => (cloud._selectedTiles || []).map(tile => ({
           uri: tile.content.url, features: tile.content.featuresLength,
         }));
-        frame(100); await settle(); const coarse = selection();
-        frame(3); await settle(); const fine = selection();
+        function settle(phase, expectedPoints) {
+          // tilesLoaded describes the last traversal, so immediately after a
+          // camera move it can still be true for the previous view. Inspect
+          // completed frames, and keep waiting if loading starts again.
+          return new Promise((resolve, reject) => {
+            let removeListener = () => {}, previous = '', stableFrames = 0;
+            let latest = {};
+            const finish = (error, selected) => {
+              removeListener();
+              clearTimeout(timeout);
+              if (error) reject(error); else resolve(selected);
+            };
+            const timeout = setTimeout(() => finish(new Error(
+              `Point cloud did not finish ${phase} refinement: ${JSON.stringify(latest)}`,
+            )), 30000);
+            removeListener = viewer.scene.postRender.addEventListener(() => {
+              if (window.failures.length) {
+                finish(new Error(window.failures.join('\n')));
+                return;
+              }
+              const selected = selection();
+              const points = selected.reduce((sum, tile) => sum + tile.features, 0);
+              const signature = JSON.stringify(selected.map(tile => [tile.uri, tile.features]).sort());
+              latest = {loaded: cloud.tilesLoaded, points, selected,
+                pending: cloud._statistics.numberOfPendingRequests,
+                processing: cloud._statistics.numberOfTilesProcessing};
+              const ready = cloud.tilesLoaded && points > 0 &&
+                (expectedPoints === undefined || points === expectedPoints);
+              stableFrames = ready ? (signature === previous ? stableFrames + 1 : 1) : 0;
+              previous = signature;
+              if (stableFrames >= 3) finish(undefined, selected);
+              else viewer.scene.requestRender();
+            });
+            viewer.scene.requestRender();
+          });
+        }
+        frame(100); const coarse = await settle('coarse');
+        frame(3);
+        if (slowRefinement) {
+          // Delay the first traversal of the new view beyond the old 300 ms
+          // readiness check. Its tilesLoaded value still describes coarse LOD.
+          viewer.useDefaultRenderLoop = false;
+          setTimeout(() => {viewer.useDefaultRenderLoop = true; viewer.render();}, 450);
+        }
+        const fine = await settle('fine', 257);
         let picked;
         for (const tile of cloud._selectedTiles || []) {
           if (!tile.content.url) continue;
@@ -48,9 +94,11 @@ const assert = require('node:assert/strict');
           const accessor = doc.accessors[doc.meshes[0].primitives[0].attributes.POSITION];
           const view = doc.bufferViews[accessor.bufferView];
           const positions = new Float32Array(bytes, 28 + length + (view.byteOffset || 0), accessor.count * 3);
+          const node = doc.nodes[doc.scenes[doc.scene || 0].nodes[0]];
+          const translation = node.translation || [0, 0, 0];
           for (let i = 0; i < accessor.count; i++) {
             const world = C.Matrix4.multiplyByPoint(tile.computedTransform,
-              new C.Cartesian3(positions[i*3], -positions[i*3+2], positions[i*3+1]), new C.Cartesian3());
+              new C.Cartesian3(positions[i*3]+translation[0], -positions[i*3+2]-translation[2], positions[i*3+1]+translation[1]), new C.Cartesian3());
             const screen = C.SceneTransforms.worldToWindowCoordinates(viewer.scene, world);
             const feature = screen && viewer.scene.pick(screen, 1, 1);
             if (!feature?.getPropertyIds) continue;
@@ -62,7 +110,7 @@ const assert = require('node:assert/strict');
           if (picked) break;
         }
         return {version: C.VERSION, coarse, fine, picked, failures: window.failures.slice()};
-      });
+      }, slowRefinement);
     };
     const first = await inspect();
     // Bypass browser cache and load the real preview/tileset again.
@@ -74,7 +122,7 @@ const assert = require('node:assert/strict');
     console.log(JSON.stringify(report, null, 2));
     assert.equal(errors.length, 0);
     for (const result of [first, refreshed]) {
-      assert.equal(result.version, '1.143.0');
+      assert.equal(result.version, '1.146.0');
       assert.equal(result.failures.length, 0);
       assert.ok(result.coarse.length > 0);
       const coarse = result.coarse.reduce((sum, tile) => sum + tile.features, 0);

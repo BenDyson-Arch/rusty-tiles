@@ -1,0 +1,108 @@
+{
+  "record": "Completed bounded C1 foundation contract prerequisite dispositions; final frozen-contract nonauthor incorporation confirmation required before coding",
+  "date": "2026-10-10",
+  "author": "/root/payload_integrity_contract",
+  "all_A1_A14_prerequisite_choices_settled": true,
+  "implementation_acceptance": false,
+  "final_freeze_incorporation_decision": "Separate reviewer will bind final contract/freeze identity in a new immutable decision; no production acceptance claimed",
+  "source_head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+  "complete_tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+  "current_production_pins_verified": 93,
+  "accepted_reader_record_sha256": "913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead",
+  "independent_A13_verification_sha256": "bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8",
+  "independent_A14_decision_sha256": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+  "ownership": {
+    "private_module": "content_integrity::{json,payload}; remove old validate-owned copies",
+    "json_owner": "Shared raw admission + owned ordinary adapter + private FormatError/JsonLimits/PayloadLimits surface",
+    "payload_owner": "Borrowed actual presence-aware records + exact unsigned native/Overflow consumption + fixed-profile payload inspection",
+    "coordinator": "C1 once-mapped fixed limits, causal error/resolver/schema/report bridges, crate integration, all implicit parser propagation and scheduled Cargo",
+    "actual_return": "schema_uri Option<String> + existing counters/exclusions; no owned payload Value/future A2 facts"
+  },
+  "dispositions": [
+    {
+      "id": "A1",
+      "settled_disposition": "Nonauthor approves exactly six mapped limit facts; remaining aggregate components separate",
+      "basis_and_final_implementation_obligations": "Checked host conversion at C1 boundary, per-payload/min-remaining admission before resolver/decode; no generic meter/framework"
+    },
+    {
+      "id": "A2",
+      "settled_disposition": "Nonauthor approves three-way format failure plus caller-typed resolver cause",
+      "basis_and_final_implementation_obligations": "C1 implicit bridge handles actual crate::Error::Io causally before generic conversion; injected InvalidData/UnexpectedEof and spoofing messages remain final-owner acceptance obligations"
+    },
+    {
+      "id": "A3",
+      "settled_disposition": "Nonauthor selects explicit borrowed parser through every bounded-expansion context",
+      "basis_and_final_implementation_obligations": "Pass &dyn Fn to expansion/recursive external JSON/subtree/extras; presentation budget owns counters only, producer wrapper passes its parser explicitly; no new low-level validate import"
+    },
+    {
+      "id": "A4",
+      "settled_disposition": "Nonauthor requires all declared buffer sums before first resolver, then remaining actual buffer/image allowance",
+      "basis_and_final_implementation_obligations": "Intentional ResourceLimit-before-callback precedence change; prove compound-error controls, catalog/read-work preflight and defensive returned-length checks, images/repeated declarations included"
+    },
+    {
+      "id": "A5",
+      "settled_disposition": "Nonauthor retains conservative individual upper admission then exact canonical base64 preflight and actual remainder admission",
+      "basis_and_final_implementation_obligations": "Validate alphabet/padding/trailing bits without output allocation; AA== at remainder1 and AAA= at remainder2 stay admitted. Existing decoder temporary request <=actual+2 under separate decoded ceiling; exact-sized decoder alternative requires proof. No buffer/view pool"
+    },
+    {
+      "id": "A6",
+      "settled_disposition": "View sum includes borrowed/overlapping views, meshopt sum includes logical output once",
+      "basis_and_final_implementation_obligations": "Nonauthor source review finds full-word copy can exceed initial byte Vec capacity before truncate. Rework final-word prefix or prove equally bounded strategy; rounded backing plus length-bounded output gives logical `2*n+3`, subject to checked arithmetic and actual capacity proof. Do not describe this as total decoded bytes/RSS or silently pool data buffers and views"
+    },
+    {
+      "id": "A7",
+      "settled_disposition": "Components count all accessor scalar values; vertices count full POSITION per primitive; successful aggregate charge/caching by member URI",
+      "basis_and_final_implementation_obligations": "Independent two-payload/same-URI/distinct-alias/shared-accessor controls; document difference from primitive occurrences and physical work. No deduplication change"
+    },
+    {
+      "id": "A8",
+      "settled_disposition": "Retain root-inclusive nodes/keys excluded/depth0/per parse inclusive ceilings under approved borrowed owner",
+      "basis_and_final_implementation_obligations": "{\"a\":[0]} costs nodes3/depth2. Charge children before raw skip/retention, process charged nodes once; immediate keys/child admission precedes descendants. Duplicate-root/deep-child precedence intentionally changed and controlled; all actual nested invocations remain final-owner proof"
+    },
+    {
+      "id": "A9",
+      "settled_disposition": "Nonauthor closes selected-primary provenance",
+      "basis_and_final_implementation_obligations": "Core source/accessor schema match exact selected pin; fresh five primary texts plus three b3dm dependencies length/hash verified/read independently; golden85/48 literal identity checked. No new codec/full-domain execution claim"
+    },
+    {
+      "id": "A10",
+      "settled_disposition": "Nonauthor requires correction of six executed defects plus inventoried static numeric seams",
+      "basis_and_final_implementation_obligations": "Exact rule covers preflight count/byteStride bypasses and direct target Value comparisons, not just uint. Numeric b3dm BATCH_LENGTH has independent schema integer rule. Viewless exemption retains POSITION shape/finite arrays with no invented min<=max cross constraint; stored-bound negatives/zero integrity stay"
+    },
+    {
+      "id": "A11",
+      "settled_disposition": "Trusted bundled schema and non-C1 expander parser are explicit source exceptions",
+      "basis_and_final_implementation_obligations": "Verify neither creates an untrusted C1 bypass; schemaUri and every implicit nested JSON path still receive mapped limits"
+    },
+    {
+      "id": "A12",
+      "settled_disposition": "Entire current C1 domain/exclusions retained, no A2 facts or geometry narrowing",
+      "basis_and_final_implementation_obligations": "Audit full profile/meaningful existing oracle coverage, including modern b3dm feature/batch framing without semantic claim, optional polygon references and meshopt fallback roles"
+    },
+    {
+      "id": "A13",
+      "settled_disposition": "CLEARED: accepted reader #152 and actual rebased baseline 0eebdeebf013591460e6ac77485ad91b7401aada, tree 58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+      "basis_and_final_implementation_obligations": "Coordinator baseline 913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead; independent verification bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8 verifies 93 production pins / 30 records / 21 successes / 10 wheel + 4 Blender receipts. Bounded prerequisite only; no payload/release acceptance"
+    },
+    {
+      "id": "A14",
+      "settled_disposition": "Approved prerequisite selection: corrected iterative raw_value-only borrowed admission, exact consumed unsigned records",
+      "basis_and_final_implementation_obligations": "Immutable decision SHA85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36, corrected manifest0026d031..., frozen d5c53c7... artifact independently rerun53 rows exit0. Scalar-string Unicode decode required. Overflow/native exact integers remain distinct; no AP/normalization/sidecar/owned payload DOM. Return schemaUri+counters/exclusions. Owned ordinary adapter after shared admission refuses unrepresentable valid numbers as Unsupported without text matching. O(B+N) requested storage and <=(D+1)*B raw substring work bounds require final checked-capacity/lifetime/failure proof"
+    }
+  ],
+  "sensitive_presence_control": "Absent optional offset/default-positive; present null/type-negative; applicable refs/enums/URI/schema fields preserve actual presence/type meaning",
+  "performed_by_contract_author": [
+    "read-only source/receipt/manifest inspection",
+    "verified current93 source hashes and actual Git HEAD/tree",
+    "copied completed foreign inputs into immutable owned snapshots",
+    "verified final frozen proof artifact bytes; did not execute it"
+  ],
+  "not_claimed": [
+    "production implementation acceptance",
+    "broad C1 conformance from14 or53 finite controls",
+    "old overwritten exploratory proof binary identity",
+    "original bytes of two historical mutable foreign inputs",
+    "full A2 external-template conformance",
+    "main/tag/release/#113/#121 closure"
+  ]
+}

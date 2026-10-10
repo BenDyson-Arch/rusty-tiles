@@ -1,0 +1,53 @@
+[
+  {
+    "case": "constant",
+    "returncode": 0,
+    "elapsed": 0.048317247012164444,
+    "stdout": "{\"conversionReport\":{\"path\":\"/home/bend/.cache/terrain-t1-evidence/constant-out/conversion.json\"},\"counts\":{\"tiles\":15},\"ok\":true,\"output\":\"/home/bend/.cache/terrain-t1-evidence/constant-out\",\"reuse\":null,\"settings\":{\"fillHeight\":-999.0,\"finestGridDegrees\":0.0439453125,\"grid\":17,\"heightOffset\":0.0,\"heightQuantizationStep\":0.034257026886806846},\"skippedFeatures\":null}\n",
+    "stderr": "",
+    "gzip_magic": "4021",
+    "header_range": [
+      -999.0,
+      123.5
+    ],
+    "tile": "/home/bend/.cache/terrain-t1-evidence/constant-out/8/272/187.terrain",
+    "vertices": 289,
+    "sidecar_min": 123.5,
+    "sidecar_max": 123.5,
+    "sidecar_nulls": 49
+  },
+  {
+    "case": "mask",
+    "returncode": 0,
+    "elapsed": 0.04188028600765392,
+    "stdout": "{\"conversionReport\":{\"path\":\"/home/bend/.cache/terrain-t1-evidence/mask-out/conversion.json\"},\"counts\":{\"tiles\":15},\"ok\":true,\"output\":\"/home/bend/.cache/terrain-t1-evidence/mask-out\",\"reuse\":null,\"settings\":{\"fillHeight\":-999.0,\"finestGridDegrees\":0.0439453125,\"grid\":17,\"heightOffset\":0.0,\"heightQuantizationStep\":0.034257026886806846},\"skippedFeatures\":null}\n",
+    "stderr": "",
+    "gzip_magic": "4021",
+    "header_range": [
+      -999.0,
+      123.5
+    ],
+    "tile": "/home/bend/.cache/terrain-t1-evidence/mask-out/8/272/187.terrain",
+    "vertices": 289,
+    "sidecar_min": 123.5,
+    "sidecar_max": 123.5,
+    "sidecar_nulls": 113
+  },
+  {
+    "case": "float64",
+    "returncode": 0,
+    "elapsed": 0.04036432699649595,
+    "stdout": "{\"conversionReport\":{\"path\":\"/home/bend/.cache/terrain-t1-evidence/float64-out/conversion.json\"},\"counts\":{\"tiles\":15},\"ok\":true,\"output\":\"/home/bend/.cache/terrain-t1-evidence/float64-out\",\"reuse\":null,\"settings\":{\"fillHeight\":-999.0,\"finestGridDegrees\":0.0439453125,\"grid\":17,\"heightOffset\":0.0,\"heightQuantizationStep\":3051.8814355906857},\"skippedFeatures\":null}\n",
+    "stderr": "",
+    "gzip_magic": "4043",
+    "header_range": [
+      -999.0,
+      100000000.0
+    ],
+    "tile": "/home/bend/.cache/terrain-t1-evidence/float64-out/8/272/187.terrain",
+    "vertices": 289,
+    "sidecar_min": 100000000.0,
+    "sidecar_max": 100000000.0,
+    "sidecar_nulls": 49
+  }
+]

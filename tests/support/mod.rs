@@ -38,6 +38,7 @@ pub struct Recipe {
 }
 
 const GEO: [&str; 4] = ["--cartographicPositionDegrees", "133.0", "-12.0", "10"];
+const MODEL_ANCHOR: [&str; 4] = ["--anchor", "133.0", "-12.0", "10"];
 
 fn recipe(
     name: &'static str,
@@ -50,7 +51,13 @@ fn recipe(
         name,
         command,
         output,
-        args: args.concat(),
+        args: {
+            let mut args = args.concat();
+            if matches!(command, "mesh-to-3tz" | "point-cloud" | "vector") {
+                args.push("--explicit");
+            }
+            args
+        },
         native,
         vector: command == "vector",
     }
@@ -88,7 +95,7 @@ pub fn recipes() -> Vec<Recipe> {
             "glb-to-3tz",
             "glb-to-3tz",
             "glb.3tz",
-            &[&["-i", "{in}/mesh.glb"], &GEO],
+            &[&["-i", "{in}/mesh.glb"], &MODEL_ANCHOR],
             false,
         ),
         recipe(
@@ -97,8 +104,14 @@ pub fn recipes() -> Vec<Recipe> {
             "tileset.json",
             &[
                 &["-i", "{in}/mesh.glb"],
-                &GEO,
-                &["--rotationDegrees", "10", "0", "0"],
+                &MODEL_ANCHOR,
+                &[
+                    "--orientation-xyzw",
+                    "0",
+                    "0",
+                    "0.08715574274765817",
+                    "0.9961946980917455",
+                ],
             ],
             false,
         ),
@@ -140,17 +153,13 @@ pub fn recipes() -> Vec<Recipe> {
             "terrain",
             &[&[
                 "-i",
-                "{in}/dem.asc",
-                "--maxZoom",
-                "11",
-                "--grid",
-                "17",
-                "--heightOffset",
+                "{in}/dem.tif",
+                "--cells-per-leaf",
+                "16",
+                "--height-offset",
                 "10.25",
-                "--fillHeight",
+                "--fill-height",
                 "0",
-                "--maxError",
-                "1",
             ]],
             true,
         ),
@@ -205,15 +214,25 @@ pub fn resolved_args(recipe: &Recipe, inputs: &Path) -> Vec<String> {
 /// Run one recipe with an empty PATH (no external tools); `before` options
 /// (e.g. `--json`) go ahead of the subcommand.
 pub fn run(recipe: &Recipe, inputs: &Path, out_dir: &Path, before: &[&str]) -> Output {
-    Command::new(bin())
-        .args(before)
-        .arg(recipe.command)
-        .args(resolved_args(recipe, inputs))
-        .arg("-o")
-        .arg(out_dir.join(recipe.output))
-        .env("PATH", "")
-        .output()
-        .unwrap()
+    let mut command = Command::new(bin());
+    command.args(before).arg(recipe.command);
+    if recipe.command == "createTilesetJson" {
+        // This reference artifact has a fixed sibling output. Give this run
+        // its own admitted source directory rather than passing a removed -o.
+        fs::create_dir_all(out_dir).unwrap();
+        fs::copy(inputs.join("mesh.glb"), out_dir.join("mesh.glb")).unwrap();
+        let args = resolved_args(recipe, inputs);
+        command
+            .arg("-i")
+            .arg(out_dir.join("mesh.glb"))
+            .args(&args[2..]);
+    } else {
+        command
+            .args(resolved_args(recipe, inputs))
+            .arg("-o")
+            .arg(out_dir.join(recipe.output));
+    }
+    command.env("PATH", "").output().unwrap()
 }
 
 /// Write every input the recipes read into `dir`.
@@ -234,6 +253,11 @@ pub fn write_inputs(dir: &Path) {
     .unwrap();
     write_las(&dir.join("cloud.las"), 3000);
     write_dem(&dir.join("dem.asc"), 48);
+    fs::write(
+        dir.join("dem.tif"),
+        include_bytes!("../fixtures/t1-plane.tif"),
+    )
+    .unwrap();
     #[cfg(feature = "native-geospatial")]
     write_rgb_geotiff(&dir.join("image.tif"), 96);
 }
@@ -513,7 +537,11 @@ pub fn force_replaces_only_successful_output(
     directory: bool,
 ) {
     let root = tempfile::tempdir().unwrap();
-    let out = root.path().join(command);
+    let out = root.path().join(if directory {
+        command.to_owned()
+    } else {
+        format!("{command}.3tz")
+    });
     let previous = if directory {
         fs::create_dir(&out).unwrap();
         out.join("previous")
@@ -535,7 +563,7 @@ pub fn force_replaces_only_successful_output(
     let rejected = run(source, &[]);
     assert_eq!(rejected.status.code(), Some(5), "{command}");
     assert!(
-        String::from_utf8_lossy(&rejected.stderr).contains("--force"),
+        String::from_utf8_lossy(&rejected.stderr).contains("exists"),
         "{command}: {}",
         String::from_utf8_lossy(&rejected.stderr)
     );

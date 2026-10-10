@@ -1,0 +1,1094 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-132-12d98ab-portable",
+  "binary_sha256": "9a63cd41f9a983cb06e73b7bb839682910d6366a7577a2735a2b088fdfd2bc01",
+  "cases": [
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "spread",
+      "chunk_points": 11,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "spread",
+      "chunk_points": 11,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 73,
+      "implicit": true,
+      "max_world_position_difference_metres": 0.0,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "identical",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 41,
+      "implicit": false,
+      "max_world_position_difference_metres": 7.122972932386273e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "outlier",
+      "chunk_points": 1,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 2.2664357089333156e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "reordered",
+      "chunk_points": 17,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 420,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.352591889778662e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 3,
+      "variant": "spread",
+      "chunk_points": 11,
+      "max_points": 1
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 0,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 0,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 1,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 1,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 2,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 2,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 6,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 6,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 7,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 7,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 39,
+      "implicit": false,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 8,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    },
+    {
+      "source_points": 257,
+      "leaf_records": 257,
+      "tiles": 71,
+      "implicit": true,
+      "max_world_position_difference_metres": 1.7587132145414444e-07,
+      "source_multiplicity": "exact",
+      "resource_closure": "exact",
+      "format": 8,
+      "variant": "spread",
+      "chunk_points": 3,
+      "max_points": 16
+    }
+  ],
+  "negative_controls": [
+    {
+      "control": "wrong_position",
+      "rejected": true,
+      "reason": "t/4.glb: rendered POSITION differs (100001.06949999998 > 0.005960464478548546)"
+    },
+    {
+      "control": "missing_field",
+      "rejected": true,
+      "reason": "missing required source field: ['intensity']"
+    },
+    {
+      "control": "duplicate_record",
+      "rejected": true,
+      "reason": "parent first-point voxel representatives"
+    },
+    {
+      "control": "truncated_bin",
+      "rejected": true,
+      "reason": "actual BIN length"
+    },
+    {
+      "control": "accessor_overrun",
+      "rejected": true,
+      "reason": "accessor actual range"
+    },
+    {
+      "control": "orphan_resource",
+      "rejected": true,
+      "reason": "unreachable resource inventory: ['unreachable.bin']"
+    },
+    {
+      "control": "missing_content",
+      "rejected": true,
+      "reason": "reachable content resource"
+    }
+  ],
+  "profile_controls": [
+    {
+      "case": "ExtraBytes schema metadata",
+      "result": "passed",
+      "raw_64_bit_payload": "exact"
+    },
+    {
+      "case": "independent ExtraBytes scale/offset flags",
+      "flags": 8,
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 3,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.2290628405369374e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "independent ExtraBytes scale/offset flags",
+      "flags": 16,
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 3,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.2290628405369374e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "analytic WGS84 ECEF",
+      "explicit": false,
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 5,
+        "implicit": true,
+        "max_world_position_difference_metres": 0.04294772182027729,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "analytic WGS84 ECEF",
+      "explicit": true,
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 3,
+        "implicit": false,
+        "max_world_position_difference_metres": 0.04294772182027729,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "analytic UTM32 false easting/equator ECEF",
+      "explicit": false,
+      "reference": "EPSG32632 false easting500000/northing0 is longitude9deg/latitude0; independent WGS84 ellipsoid formula at h130m",
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 9,
+        "implicit": true,
+        "max_world_position_difference_metres": 0.0,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "analytic UTM32 false easting/equator ECEF",
+      "explicit": true,
+      "reference": "EPSG32632 false easting500000/northing0 is longitude9deg/latitude0; independent WGS84 ellipsoid formula at h130m",
+      "result": {
+        "source_points": 23,
+        "leaf_records": 23,
+        "tiles": 3,
+        "implicit": false,
+        "max_world_position_difference_metres": 0.0,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact"
+      }
+    },
+    {
+      "case": "scaled_u64",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "scaled INT64/UINT64 Extra Bytes are unsupported without lossless scaling semantics: extra_u64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "scaled_i64",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "scaled INT64/UINT64 Extra Bytes are unsupported without lossless scaling semantics: extra_i64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "vector_extra",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "unsupported LAS dimension: array or untyped Extra Bytes",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "nonfinite_extra",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite dimension: extra_f64",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "truncated_source",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "invalid LAS/LAZ: failed to fill whole buffer",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "local_height",
+      "result": "rejected",
+      "error": {
+        "code": "data",
+        "message": "heightOffset applies only to geospatial CRS; local XYZ is in metres"
+      }
+    },
+    {
+      "case": "missing_height",
+      "result": "rejected",
+      "error": {
+        "code": "data",
+        "message": "geospatial input requires explicit --heightOffset to ellipsoidal metres"
+      }
+    },
+    {
+      "case": "source_alias",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "point-cloud output aliases source",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "hardlink_alias",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_request",
+        "kind": "invalid_request",
+        "message": "point-cloud output aliases source",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "zero_scale",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite Extra Bytes scale/offset: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "negative_scale",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite Extra Bytes scale/offset: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "scaled_overflow",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "nonfinite dimension: scaled_i16",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "header_size_zero",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "point_offset_zero",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "point_offset_u32max",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "point_offset_beyond_file",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "LAS header and point-data offsets exceed the declared header or actual source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "evlr_offset_u64max",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "EVLR declaration exceeds source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "evlr_offset_beyond_file",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "EVLR declaration exceeds source extent",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "f32_unrepresentable_nodata",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "FLOAT32 Extra Bytes declaration must equal a widened FLOAT32 value",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "duplicate_projected_geokey",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "duplicate LAS CRS GeoKey 3072 is ambiguous",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "duplicate_geographic_geokey",
+      "result": "rejected",
+      "error": {
+        "code": "invalid_input",
+        "kind": "invalid_input",
+        "message": "duplicate LAS CRS GeoKey 2048 is ambiguous",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "untyped_extra",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "unsupported LAS dimension: array or untyped Extra Bytes",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "waveform_format",
+      "result": "rejected",
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "waveform LAS point formats are unsupported",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    }
+  ],
+  "concurrent_repeated_controls": {
+    "concurrent_jobs": 2,
+    "result": "passed",
+    "decoded_tiles": [
+      71,
+      71
+    ],
+    "repeat_decoded_tiles": [
+      71,
+      71
+    ],
+    "byte_repeatable": [
+      true,
+      true
+    ]
+  },
+  "oracle_sha256": "01e66c0c65c112df248586ca3b831fc296fdfaf6f9aeed8b4a4caf66c345ae4b",
+  "laz_acceptance": {
+    "binary": "/home/bend/.cache/rusty-tiles-132-12d98ab-portable",
+    "binary_sha256": "9a63cd41f9a983cb06e73b7bb839682910d6366a7577a2735a2b088fdfd2bc01",
+    "delivery_encoder": {
+      "laspy": "2.7.0",
+      "lazrs": "0.8.2"
+    },
+    "expected_reader": "independent stdlib original LAS enumeration",
+    "cases": [
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 0,
+        "explicit": false,
+        "source_las_sha256": "7581547efe5feebb6b57e19395c4bdf16d5cf24c57e92fe782378885f6b3721e",
+        "delivery_laz_sha256": "bac838202e127adf86a30970b11be9e9d305d3bd843c52c3b7646e0ac332dd22"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 0,
+        "explicit": true,
+        "source_las_sha256": "7581547efe5feebb6b57e19395c4bdf16d5cf24c57e92fe782378885f6b3721e",
+        "delivery_laz_sha256": "bac838202e127adf86a30970b11be9e9d305d3bd843c52c3b7646e0ac332dd22"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 1,
+        "explicit": false,
+        "source_las_sha256": "4ae005365f082b5417381aac8ff6ba5a9afd5ca0b00095187404bd425c63b4ad",
+        "delivery_laz_sha256": "790ff8e6c0cbd98bfe7e3b712db3e7d63ad43ee825ab453e8292dd9d499d9ade"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 1,
+        "explicit": true,
+        "source_las_sha256": "4ae005365f082b5417381aac8ff6ba5a9afd5ca0b00095187404bd425c63b4ad",
+        "delivery_laz_sha256": "790ff8e6c0cbd98bfe7e3b712db3e7d63ad43ee825ab453e8292dd9d499d9ade"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 2,
+        "explicit": false,
+        "source_las_sha256": "3ddb3dbd52f98c1bcb202d6be9b9cc47b5b45d55f88bc1455bf68c354b653c65",
+        "delivery_laz_sha256": "0e99cb8a38d79ea6e81b781c2f16dd4f8b4fff915d55118bcf9f91b999cbed7b"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 2,
+        "explicit": true,
+        "source_las_sha256": "3ddb3dbd52f98c1bcb202d6be9b9cc47b5b45d55f88bc1455bf68c354b653c65",
+        "delivery_laz_sha256": "0e99cb8a38d79ea6e81b781c2f16dd4f8b4fff915d55118bcf9f91b999cbed7b"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 3,
+        "explicit": false,
+        "source_las_sha256": "6272369c91c9370497fda94b9517ef0ad3810b7bad5d6340f2177ee2da4d9639",
+        "delivery_laz_sha256": "aeca1ec90c3e13d3d1e15ae56aa8b77c33cc26bc34466f5966ae8d7ff986fa92"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 3,
+        "explicit": true,
+        "source_las_sha256": "6272369c91c9370497fda94b9517ef0ad3810b7bad5d6340f2177ee2da4d9639",
+        "delivery_laz_sha256": "aeca1ec90c3e13d3d1e15ae56aa8b77c33cc26bc34466f5966ae8d7ff986fa92"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 6,
+        "explicit": false,
+        "source_las_sha256": "43df3f45cb008ada392a0cc73016e568076be3b01a63702d715fd480d1517dd5",
+        "delivery_laz_sha256": "25ad78412a590805a2c214433be15017fa4450a90985099307b81a19826f9fd9"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 6,
+        "explicit": true,
+        "source_las_sha256": "43df3f45cb008ada392a0cc73016e568076be3b01a63702d715fd480d1517dd5",
+        "delivery_laz_sha256": "25ad78412a590805a2c214433be15017fa4450a90985099307b81a19826f9fd9"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 7,
+        "explicit": false,
+        "source_las_sha256": "76469b4610396d2d6c0f9c2eaa6192577c82a0a44e43d1b174cb6d9ea1ac3101",
+        "delivery_laz_sha256": "d3faaf1bb775356fe97c49aedaaac728eb2ded730c3dd0007f7ccb360236a580"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 7,
+        "explicit": true,
+        "source_las_sha256": "76469b4610396d2d6c0f9c2eaa6192577c82a0a44e43d1b174cb6d9ea1ac3101",
+        "delivery_laz_sha256": "d3faaf1bb775356fe97c49aedaaac728eb2ded730c3dd0007f7ccb360236a580"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 71,
+        "implicit": true,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 8,
+        "explicit": false,
+        "source_las_sha256": "1758a82be543894f468a4d410e017acec49be7f89c4ddb5c476af0995f14aa30",
+        "delivery_laz_sha256": "5a5c912277724c77b1a2d53918b8608841a83fa1f7a2b14027ae1c8ddc88c6ed"
+      },
+      {
+        "source_points": 257,
+        "leaf_records": 257,
+        "tiles": 39,
+        "implicit": false,
+        "max_world_position_difference_metres": 1.7587132145414444e-07,
+        "source_multiplicity": "exact",
+        "resource_closure": "exact",
+        "format": 8,
+        "explicit": true,
+        "source_las_sha256": "1758a82be543894f468a4d410e017acec49be7f89c4ddb5c476af0995f14aa30",
+        "delivery_laz_sha256": "5a5c912277724c77b1a2d53918b8608841a83fa1f7a2b14027ae1c8ddc88c6ed"
+      }
+    ]
+  },
+  "required_fields_by_format": {
+    "3": [
+      "X",
+      "Y",
+      "Z",
+      "blue",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "gps_time",
+      "green",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "point_source_id",
+      "red",
+      "return_number",
+      "scaled_i16",
+      "scan_angle_rank",
+      "scan_direction_flag",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "0": [
+      "X",
+      "Y",
+      "Z",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "point_source_id",
+      "return_number",
+      "scaled_i16",
+      "scan_angle_rank",
+      "scan_direction_flag",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "1": [
+      "X",
+      "Y",
+      "Z",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "gps_time",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "point_source_id",
+      "return_number",
+      "scaled_i16",
+      "scan_angle_rank",
+      "scan_direction_flag",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "2": [
+      "X",
+      "Y",
+      "Z",
+      "blue",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "green",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "point_source_id",
+      "red",
+      "return_number",
+      "scaled_i16",
+      "scan_angle_rank",
+      "scan_direction_flag",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "6": [
+      "X",
+      "Y",
+      "Z",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "gps_time",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "overlap",
+      "point_source_id",
+      "return_number",
+      "scaled_i16",
+      "scan_angle",
+      "scan_direction_flag",
+      "scanner_channel",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "7": [
+      "X",
+      "Y",
+      "Z",
+      "blue",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "gps_time",
+      "green",
+      "intensity",
+      "key_point",
+      "number_of_returns",
+      "overlap",
+      "point_source_id",
+      "red",
+      "return_number",
+      "scaled_i16",
+      "scan_angle",
+      "scan_direction_flag",
+      "scanner_channel",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ],
+    "8": [
+      "X",
+      "Y",
+      "Z",
+      "blue",
+      "classification",
+      "edge_of_flight_line",
+      "extra_f32",
+      "extra_f64",
+      "extra_i16",
+      "extra_i32",
+      "extra_i64",
+      "extra_i8",
+      "extra_u16",
+      "extra_u32",
+      "extra_u64",
+      "extra_u8",
+      "gps_time",
+      "green",
+      "intensity",
+      "key_point",
+      "nir",
+      "number_of_returns",
+      "overlap",
+      "point_source_id",
+      "red",
+      "return_number",
+      "scaled_i16",
+      "scan_angle",
+      "scan_direction_flag",
+      "scanner_channel",
+      "source_index",
+      "source_x",
+      "source_y",
+      "source_z",
+      "synthetic",
+      "user_data",
+      "withheld"
+    ]
+  },
+  "production_source_commit": "12d98ab",
+  "oracle_source_commit": "d92acd2"
+}

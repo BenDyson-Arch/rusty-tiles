@@ -1,0 +1,263 @@
+{
+  "classification": "Actual pinned serde raw_value-only finite first-Value and iterative borrowed structural-admission exploratory mechanisms; no production acceptance",
+  "depth_equality": 64,
+  "no_arbitrary_precision_feature": true,
+  "node_equality": 65536,
+  "opaque_global_map_preserved": true,
+  "raw_rows": [
+    {
+      "borrowed_source": true,
+      "exact": "Value(3)",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "3.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Overflow",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "1e400"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "1e-400"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(0)",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "-0e999"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "3.0000000000000001"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(18446744073709551615)",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "18446744073709551615.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Overflow",
+      "nodes": 6,
+      "pending_peak": 2,
+      "token": "18446744073709551616.0"
+    },
+    {
+      "non_number": "true",
+      "unsigned": "Invalid"
+    },
+    {
+      "non_number": "false",
+      "unsigned": "Invalid"
+    },
+    {
+      "non_number": "null",
+      "unsigned": "Invalid"
+    },
+    {
+      "non_number": "\"3\"",
+      "unsigned": "Invalid"
+    },
+    {
+      "non_number": "[3]",
+      "unsigned": "Invalid"
+    },
+    {
+      "non_number": "{}",
+      "unsigned": "Invalid"
+    },
+    {
+      "error": "InvalidInput duplicate JSON key at line 1 column 10",
+      "negative": "duplicate"
+    },
+    {
+      "error": "InvalidInput duplicate JSON key at line 1 column 15",
+      "negative": "escaped_duplicate"
+    },
+    {
+      "error": "InvalidInput duplicate JSON key at line 1 column 10",
+      "negative": "deepduplicate"
+    },
+    {
+      "error": "InvalidInput duplicate JSON key at line 1 column 140",
+      "negative": "duplicate_before_deep_admission"
+    },
+    {
+      "error": "InvalidInput invalid number at line 1 column 7",
+      "negative": "malformed"
+    },
+    {
+      "error": "InvalidInput trailing characters at line 1 column 4",
+      "negative": "trailing"
+    },
+    {
+      "error": "InvalidInput expected value at line 1 column 1",
+      "negative": "nan"
+    },
+    {
+      "error": "InvalidInput invalid number at line 1 column 3",
+      "negative": "bad_exponent"
+    },
+    {
+      "error": "ResourceLimit JSON depth/items admission at line 1 column 1",
+      "negative": "depth65"
+    },
+    {
+      "error": "ResourceLimit JSON depth/items admission at line 1 column 1",
+      "negative": "deep100000"
+    },
+    {
+      "error": "ResourceLimit JSON depth/items admission at line 1 column 131071",
+      "negative": "nodes65537"
+    },
+    {
+      "owned_adapter": "Unsupported finite owned document representation",
+      "owned_adapter_token": "1e400",
+      "raw_grammar": "valid"
+    },
+    {
+      "owned_adapter": "Unsupported finite owned document representation",
+      "owned_adapter_token": "-1e400",
+      "raw_grammar": "valid"
+    }
+  ],
+  "rows": [
+    {
+      "borrowed_source": true,
+      "exact": "Value(3)",
+      "original_owned_number": 3.0,
+      "token": "3.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(3)",
+      "original_owned_number": 3.0,
+      "token": "3e0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(3)",
+      "original_owned_number": 3.0,
+      "token": "300e-2"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "original_owned_number": 3.0,
+      "token": "3.0000000000000001"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "original_owned_number": 3.0,
+      "token": "30000000000000001e-16"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(9007199254740993)",
+      "original_owned_number": 9007199254740992.0,
+      "token": "9007199254740993.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(18446744073709551615)",
+      "original_owned_number": 1.8446744073709552e+19,
+      "token": "18446744073709551615.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Overflow",
+      "original_owned_number": 1.8446744073709552e+19,
+      "token": "18446744073709551616.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "original_owned_number": 1.8446744073709552e+19,
+      "token": "18446744073709551614.9"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(0)",
+      "original_owned_number": -0.0,
+      "token": "-0e999"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "original_owned_number": -1.0,
+      "token": "-1.0"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Invalid",
+      "original_owned_number": 0.0,
+      "token": "1e-999"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Overflow",
+      "original_owned_number": 1e+100,
+      "token": "1e100"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(0)",
+      "original_owned_number": 0.0,
+      "token": "0.0000"
+    },
+    {
+      "borrowed_source": true,
+      "exact": "Value(34963)",
+      "original_owned_number": 34963.0,
+      "token": "34963e0"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "InvalidInput(\"invalid JSON: duplicate JSON key: a at line 1 column 10\")",
+      "negative": "duplicate"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "InvalidInput(\"invalid JSON: invalid number at line 1 column 7\")",
+      "negative": "malformed"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "InvalidInput(\"invalid JSON: trailing characters at line 1 column 4\")",
+      "negative": "trailing"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "InvalidInput(\"invalid JSON: number out of range at line 1 column 5\")",
+      "negative": "nonfinite"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "ResourceLimit(\"resource limit: JSON depth/items at line 1 column 65\")",
+      "negative": "depth65"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "ResourceLimit(\"resource limit: JSON depth/items at line 1 column 65\")",
+      "negative": "deep100000"
+    },
+    {
+      "borrowed_scan_performed": false,
+      "error": "ResourceLimit(\"resource limit: JSON depth/items at line 1 column 131071\")",
+      "negative": "nodes65537"
+    }
+  ]
+}

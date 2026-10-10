@@ -2,24 +2,46 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.4.0 - Unreleased
+
+### Changed
+
+- Point-cloud conversion now uses one typed request and F0 lifecycle through Rust, CLI and Python. Rust callers migrate from the `point_cloud_to_3tz*` overloads to `point_cloud_to_archive` with explicit coordinate intent and request-owned output policy. Python `point_cloud_to_3tz` requires `source_crs` and returns `PointCloudResult` with cleanup diagnostics. Callback and cancellation failures abort before publication, and source/output aliases are refused.
+- Point-cloud admission requires positive finite LAS/Extra Bytes scales, bounds metadata allocation before decoding, and preserves Extra Bytes no-data/min/max schema declarations. Raw 64-bit scalar integers remain exact; scaled 64-bit integer Extra Bytes are explicitly unsupported rather than silently rounded through binary64.
+- Breaking terrain foundation: bounded EPSG:4326 Float32/Float64 DEMs produce 3D Tiles 1.1 GLB meshes through one typed request and directory publication attempt. Source-footprint cells replace zoom/simplification options and quantized-mesh output. The pinned Cesium preview includes mesh surface queries, clamping and imagery draping.
 
 ### Added
 
+- Self-contained per-converter demo recipes, including an invented LAS generator. Strict release acceptance renders and picks the README example and exercises all five preview layers before and after a cache-disabled reload.
+- Candidate and release wheels are gated on checksum-pinned official Blender 4.5 LTS bundles for Linux x64, Windows x64 and both macOS architectures, in addition to CPython 3.10/3.14 on all five wheel platforms.
+- General mesh horizontal CRS placement through the shared grid-free/native resolver, with explicit `--source-axes` and `--height-offset`, CRS-unit E/N shifts and metre heights. Authored normals retain hard edges through inverse-transpose projection; legacy geographic/Web Mercator placement defaults remain compatible. Python adds `source_axes` and `height_offset` keywords, and `doctor` reports the shared CRS tier.
+- `convert-to-implicit` and Rust/Python APIs migrate eligible explicit point-cloud/vector archives into regular implicit hierarchies while retaining GLB/b3dm payload bytes, placement and metadata. Irregular trees, unsupported content and malformed historical b3dm alignment are refused before publication; converted vector archives require a fresh source conversion before reuse.
+- GeoJSON and GeoPackage vector conversion in the default binary and Python wheel, using streaming Rust readers, bundled SQLite, grid-free CRS transforms and constrained polygon triangulation. Both builds share tiling, metadata, LOD, compression and reuse; `native-geospatial` retains OGR/GEOS/PROJ for all vector inputs. Python adds `vector_to_3tz`, and `doctor` reports supported inputs and CRS limits.
+- Grid-free point-cloud CRS transforms in the default binary and Python wheel using `proj4rs`: WGS84 geographic, UTM, Mercator and supported WKT/PROJ local projections with explicit Helmert datum shifts. Unsupported grids, epochs or unverified datums require strict native GDAL/PROJ; shifts are never silently discarded. `doctor` lists CRS classes and native fallback readiness. Python point-cloud conversion adds `source_crs` and `height_offset` keywords.
+- Shared public `metadata` types and aligned GLB/property-table authoring for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile bounds/error semantics. Vector payloads and default converter output bytes are preserved.
+- `mesh-to-3tz --node-features` keeps source nodes pickable and styleable by `name` and `node_index` through all LODs, including small inputs and instanced meshes. Unnamed nodes use `node_<index>`.
+- `point-cloud --metadata-attributes` also exposes classification, intensity and return number as property attributes, retaining existing lossless property tables.
+- Python bindings via PyO3 and maturin: path-based mesh, glTF/GLB, local LAS/LAZ and tileset conversion, archive validation, progress callbacks and typed exceptions. Tag builds smoke-test CPython stable ABI wheels on the five release platforms and publish to PyPI with trusted publishing.
+- Opt-in native `demodata-suite` acceptance and benchmarks: pinned public inputs, smoke/core/scale profiles, conversion timing and memory, payload repeatability, and geometry/metadata/tile audits. Normal CI runs only the fast harness checks.
+- 3D Tiles 1.1 implicit tiling is the default for point clouds, vectors and meshes. Binary subtrees carry Morton-ordered availability and standard tile bounds/error metadata. Meshes and point clouds use midpoint octrees; vectors preserve padded boxes and reuse. Bounds that exceed regular subtree cells use external implicit tileset roots so Cesium can refine and pick them. `--explicit` preserves the earlier output bytes.
+- Library: `implicit::Subtree`, `TileMetadata` and `expand_tileset` support quadtree/octree availability, multiple contents, child-subtree links, semantic metadata and bounded expansion for audits. Built-in archive validation checks native implicit output.
 - Tag-triggered release binaries for Linux and macOS (x86_64 and ARM64) and Windows x64, a native geospatial GHCR image, a SHA-256-verifying installer and `cargo-binstall` metadata.
 - Fixed converter recipes and committed output digests, cross-commit comparison tooling and a manual release acceptance workflow. CI fails when the Python acceptance binary is missing and checks native Clippy warnings.
 - Every multi-word camelCase option now also accepts a kebab-case alias, such as `--sourceCrs`/`--source-crs` and `--maxPoints`/`--max-points`. camelCase stays the primary spelling. The `create-tileset-json`, `glbTo3tz` and `meshTo3tz` subcommand aliases are now shown in help.
 - `doctor` reports whether a Cesium runtime is present at the README location or at `doctor --cesium DIR`. This check is informational only.
 - `raster --progress json` reports `cog`, `display` and `tiling` phases. `tiling` counts XYZ tiles.
 - Library: new `rusty_tiles::report` module with `Reporter`, `Event` and `ConversionResult { output, archive, report }`. `Reporter` can be silent, human stderr, NDJSON stderr or a custom `EventSink`. `report` is the published `conversion.json` value.
-- Library: new entry points return a `ConversionResult`: `point_cloud::point_cloud_to_3tz_reported`, `vector::vector_to_3tz_reported`, `terrain::dem_to_terrain_reported`, `raster::raster_reported`, `tile::mesh_to_3tz_reported`, `tileset::glb_to_3tz_reported` and `pack::convert_to_3tz_reported`. Existing entry points are unchanged wrappers using `Reporter::default()`, which writes warnings and notes on stderr and no progress.
+- Library: legacy entry points return a `ConversionResult`: `vector::vector_to_3tz_reported`, `terrain::dem_to_terrain_reported`, `raster::raster_reported`, `tile::mesh_to_3tz_reported`, `tileset::glb_to_3tz_reported` and `pack::convert_to_3tz_reported`. Remaining legacy entry points are wrappers using `Reporter::default()`, which writes warnings and notes on stderr and no progress.
 
 ### Changed
 
+- Audited the existing draft vector contract against CesiumJS 1.146.0 and corrected its source references. Output bytes and converter identity are unchanged. Repeatable browser checks document why fragmented fills still need b3dm wrappers, and validation evidence distinguishes unsupported primitive-restart checks from producer errors.
+- JPEG uses the portable Rust encoder by default. System libjpeg-turbo now requires the explicit `native-jpeg` feature; `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` still overrides it for portable builds.
 - README installation starts with prebuilt downloads. A simpler header figure and an invented mesh example make the quick start work with the default build.
 - Doctor, machine protocol, diagnostics, preview, force replacement and archive validation tests now run in Rust. The vector Python oracle loads only in tests that compare it with the native converter.
 - Benchmark harnesses, public-data audits and recorded evidence now live in `bench/`.
 - Converter help lists `-i`, `-o` and `-f` first.
+- Installation and converter guides distinguish development capabilities from published releases, explain build selection, and retain the existing mesh offset options with application-neutral help.
 - `doctor --command` accepts aliased subcommand spellings. It takes its list from the same table as the readiness report.
 - `--json` conversion results add a `settings` object. `counts` now holds only genuine counts, such as `points`, `tiles` and `features`. Settings such as `heightOffset`, `grid` or `lodLevels` moved from `counts` to `settings`.
 - Without `--json`, every converter prints a one-to-three-line stderr summary: output, counts, warnings and next command. It replaces the previous ad hoc point-cloud summary and the per-level terrain lines.
@@ -40,13 +62,31 @@ All notable changes to rusty-tiles are recorded here. The format follows [Keep a
 
 ### Fixed
 
+- Mesh CRS normal sampling now respects longitude/latitude boundaries and declared angular units, uses valid one-sided derivatives at supported coordinate-domain edges, and recomputes a complete batch if sampling selects native fallback. Actual invalid coordinates and singular geographic-pole normals remain refused.
+- Portable GeoJSON filters tolerate case-distinct properties such as `A` and `a` when filtering unrelated fields or constants. Direct references to colliding SQLite identifiers are refused explicitly; source/output property names are preserved. The portable reader fingerprint changes, requiring a fresh vector reuse baseline.
+- Small local `mesh-to-3tz` inputs with external glTF buffers, images or structural metadata schemas now include those resources beside unchanged implicit content. Nested URI bases are preserved, and generated-name collisions or unsafe dependencies fail before replacing the output.
+- Retiling untextured mesh materials without a PBR object preserves that omission instead of inserting an invalid `pbrMetallicRoughness: null` member. Representative textured converter digests remain unchanged.
+- Release acceptance checks the README route on default binaries as well as native builds. Missing optional raster/terrain support is reported separately from required mesh, validation and preview readiness.
+- Georeferenced polygons with constant source height now retain their source XY topology through globe placement, LOD and fragmentation. This restores Sudan and Antarctica fills in country conversions without changing source vertices or relaxing repair safeguards. Polar seam fragments retain original boundaries and conservative bounds. Previous vector archives need a fresh conversion to use the corrected encoder.
+- Native placement normalizes projected horizontal units and projection offsets to metres before adding an explicit metre height axis. This preserves feet, US survey feet and kilometre inputs under PROJ 9.9, including Albers and Helmert definitions, without scaling source Z.
+- Point-cloud WKT parameters retain their declared projection method: original names and EPSG identities are validated before flattening aliases; incomplete or mismatched sets, unverified spellings and colliding native-exported aliases use native interpretation. Albers (spherical or ellipsoidal) refuses source latitudes at or beyond ±80° in both builds because portable and native inverses can share a polar clamp. Native conic conditioning inspects canonical method/parameter identities and angular units, including Michigan and Belgium variants. Polar-point regressions verify native refusal as well as successful fallback across platforms.
+- Point-cloud polar stereographic preserves native hemisphere interpretation for conflicting origins/parallels and rejects opposite-pole scale conflicts. Failed stereographic latitude probes now permit native retry, and nonpolar ordinary stereographic also checks each point’s latitude. Native LCC 1SP variant B conditioning uses its natural origin, including quoted definitions and exported WKT.
+- Point-cloud LCC definitions with omitted origins or second parallels retain native CRS interpretation. Polar stereographic rejects conflicting scale/standard-parallel parameters. Ill-conditioned nearly opposite conic parallels are refused in both builds; near-pole conic parallels use native PROJ. Oblique stereographic checks each point’s source latitude and retries the whole batch through native PROJ when needed.
+- Point-cloud conic projections with distinct parallels less than one degree apart and ordinary stereographic origins from 80 degrees to below 90 degrees latitude use strict native PROJ for accuracy. Exact polar stereographic remains portable. PROJ `+init`, spaced assignments and additional WKT syntax retain native fallback; spaced EPSG codes are normalized.
+- Point-cloud CRS validation rejects invalid latitude parameters and angular projected PROJ units. Oblique stereographic origins at or beyond 80 degrees latitude use strict native PROJ to avoid near-pole numerical instability. EPSG coordinate epochs and quoted PROJ values retain native fallback.
+- Point-cloud CRS validation rejects nonpositive projection scales and missing UTM zones before publishing. DMS prime meridians, spherical transverse Mercator and polar oblique stereographic retain strict native fallback. Lambert azimuthal equal area uses native PROJ to meet the 1 mm accuracy threshold.
+- Point-cloud geographic `+lon_0` offsets use strict native PROJ instead of being silently ignored by the portable tier. Valid DMS angular parameters retain native fallback; default builds name the required feature.
+- `glb-to-3tz` bundles referenced local buffers, images and structural metadata schemas from glTF/GLB inputs without rewriting source bytes. Missing, unsupported or escaping resource URIs fail before publication.
+- `raster --display gray --alphaBand` preserves explicit transparency from numeric alpha bands, intersected with the selected band's mask/NoData before resampling.
+- Default implicit mesh output accepts uppercase and mixed-case glTF/GLB extensions consistently with the mesh loader.
+- Archive validation traverses nested external tilesets with a work queue, retaining cycle/depth checks without recursive stack growth.
 - Published `.3tz` files honor the process umask instead of retaining temporary-file mode 0600.
 - `doctor --command` limits both human and JSON command inventories to the selected commands.
 - Empty triangle grids allocate one cell and return immediately from nearest-surface searches.
 - `glb-to-3tz`, and small `mesh-to-3tz` inputs, no longer stage in a fixed `<output>.tileset-work` folder, which deleted any existing folder of that name.
 - An output created by another process during a conversion is reported as an output conflict, exit 5, instead of an I/O error.
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-07
 
 ### Added
 

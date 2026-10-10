@@ -1,0 +1,21 @@
+{
+  "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "machine": "x86_64",
+  "package_version": "0.4.0",
+  "package_file": "/tmp/rusty-tiles-blender-do7izh9c/packages/rusty_tiles/__init__.py",
+  "wheel_sha256": "2e76b7c67a62b1407aec1c152516cf01c11c9c224af573b6713e26f8d9c5a694",
+  "empty_path": true,
+  "tests_run": 29,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "ok": true,
+  "blender": "5.2.2 LTS",
+  "blender_version": [
+    5,
+    2,
+    2
+  ],
+  "blender_build_hash": "d13f752e3b9c"
+}

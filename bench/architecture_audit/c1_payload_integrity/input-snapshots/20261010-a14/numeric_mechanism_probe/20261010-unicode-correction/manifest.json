@@ -1,0 +1,43 @@
+{
+  "classification": "Dated additional actual serde mechanism proof after independent scalar-string decoding finding; previous22+26records immutable",
+  "files": {
+    "Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "build-unicode-correction.log": "a302af189f9b62cdf2e113d25feeeb4293e81224170dbdb2f2750bdd58fa01dc",
+    "receipt-unicode-correction.json": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+    "src/main.rs": "dbba5adac728dc25aa269d030f976e0aadc0ebf6fbe7e00d1fa5a90d6789dc29",
+    "src/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/raw_admission.rs": "2be33241cc109d80c509ebc2fb40ad70ba3a6bb478892ee8f318c17eb4d6cbc2"
+  },
+  "prior_manifest_sha256": "8981b67ce0f4ab1f15d794b32f2294e900d16a2a99b2e6021eadbddcd2899f0f",
+  "exit_code": 0,
+  "argv": [
+    "cargo",
+    "run",
+    "--offline",
+    "--locked",
+    "--manifest-path",
+    "/tmp/rusty-tiles-payload-serde-proof/Cargo.toml"
+  ],
+  "binary_sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+  "actual_controls": {
+    "finite_value_phase": 22,
+    "raw_phase": 31,
+    "scalar_strings": {
+      "invalid_lone_leading_surrogate": true,
+      "invalid_lone_trailing_surrogate": true,
+      "invalid_pair": true,
+      "valid_surrogate_pair": true,
+      "valid_escaped_string": true
+    }
+  },
+  "scope": "Mechanism precode probe only; no production payload or release acceptance",
+  "cpu_policy": {
+    "nice": 10,
+    "affinity": [
+      0,
+      1
+    ],
+    "cargo_jobs": 2
+  }
+}

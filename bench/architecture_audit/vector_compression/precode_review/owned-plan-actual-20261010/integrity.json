@@ -1,0 +1,25 @@
+{
+  "immutableAdditiveActualReview": true,
+  "files": {
+    "decisions.json": {
+      "bytes": 996,
+      "sha256": "2457328fbc1d53b1cc8c276f345d9f98ca7f9c47d7067f44e9987af76a70a518"
+    },
+    "input-pins.json": {
+      "bytes": 1207,
+      "sha256": "937cd6dee1453d99b75eb1735bf8e7115f3c5b3f1c4729af25fbfb1a5b8ee9bf"
+    },
+    "review.md": {
+      "bytes": 7250,
+      "sha256": "f901d18d359884be858ed21ceed542f070f624bde3d0416509d5cd9845e2646b"
+    },
+    "verification.json": {
+      "bytes": 6316,
+      "sha256": "506c6c74c49e01e43943be0c69c5891250362723191076676bccee25ec6e58ac"
+    },
+    "verify_actual.py": {
+      "bytes": 9812,
+      "sha256": "ae07a1e88da5b8bdef85264129952e82d6b9229120fabce69d44495ad5b1c3c3"
+    }
+  }
+}

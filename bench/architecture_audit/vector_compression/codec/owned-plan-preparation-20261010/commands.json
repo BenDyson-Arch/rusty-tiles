@@ -1,0 +1,588 @@
+{
+  "status": "ROOT_ONLY future execution after source freeze review",
+  "compile": {
+    "rustc": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+    "args": [
+      "--edition=2021",
+      "/tmp/rusty-tiles-codec-owned-plan-preparation/owned_plan_probe.rs",
+      "-o",
+      "<FRESH_OUTPUT>/owned_plan_probe",
+      "-L",
+      "dependency=/tmp/rusty-tiles-codec-p2-executions/artifact-binding-traced-link/deps",
+      "--extern",
+      "serde=/tmp/rusty-tiles-codec-p2-executions/artifact-binding-traced-link/deps/libserde-aa8e5dbbc29a15a8.rlib",
+      "--extern",
+      "serde_json=/tmp/rusty-tiles-codec-p2-executions/artifact-binding-traced-link/deps/libserde_json-60507217a1b3d3c8.rlib"
+    ]
+  },
+  "runPrefix": "nice10, first two currently allowed affinity CPUs, root serial coordinator; no author execution",
+  "commands": [
+    {
+      "label": "opaque-token-and-marker",
+      "case": "opaque-token-and-marker",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "escaped-keys",
+      "case": "escaped-keys",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "high-J-low-K",
+      "case": "high-J-low-K",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "long-root-key-late-escape",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "low-J-high-K",
+      "case": "low-J-high-K",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "escaped-key-cardinality",
+      "case": "escaped-key-cardinality",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "deep-chain-wide-sibling",
+      "case": "deep-chain-wide-sibling",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "high-view-cardinality",
+      "case": "high-view-cardinality",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "declarations-already-present",
+      "case": "declarations-already-present",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "declarations-missing",
+      "case": "declarations-missing",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "declarations-other-required",
+      "case": "declarations-other-required",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "metadata-j0-u0",
+      "case": "metadata-j0-u0",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "metadata-j7-u7",
+      "case": "metadata-j7-u7",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "long-buffer-key-late-escape",
+      "case": "long-buffer-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "long-view-key-late-escape",
+      "case": "long-view-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "tiny-no-views-huge-configured-limit",
+      "case": "tiny-no-views-huge-configured-limit",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "shared-descriptor-four-references",
+      "case": "shared-descriptor-four-references",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "distinct-overlapping-physical-views",
+      "case": "distinct-overlapping-physical-views",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "unknown-declaration-short",
+      "case": "unknown-declaration-short",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "unknown-declaration-long-late-escape",
+      "case": "unknown-declaration-long-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape",
+        "18446744073709551615",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "parser-table-m1-exact-nodes",
+      "case": "parser-table-m1",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "2"
+      ]
+    },
+    {
+      "label": "parser-table-m1-one-below-nodes",
+      "case": "parser-table-m1",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "1"
+      ]
+    },
+    {
+      "label": "parser-table-m3-exact-nodes",
+      "case": "parser-table-m3",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "4"
+      ]
+    },
+    {
+      "label": "parser-table-m3-one-below-nodes",
+      "case": "parser-table-m3",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "3"
+      ]
+    },
+    {
+      "label": "parser-table-m4-exact-nodes",
+      "case": "parser-table-m4",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "5"
+      ]
+    },
+    {
+      "label": "parser-table-m4-one-below-nodes",
+      "case": "parser-table-m4",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "4"
+      ]
+    },
+    {
+      "label": "parser-table-m7-exact-nodes",
+      "case": "parser-table-m7",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "8"
+      ]
+    },
+    {
+      "label": "parser-table-m7-one-below-nodes",
+      "case": "parser-table-m7",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "7"
+      ]
+    },
+    {
+      "label": "parser-table-m8-exact-nodes",
+      "case": "parser-table-m8",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "9"
+      ]
+    },
+    {
+      "label": "parser-table-m8-one-below-nodes",
+      "case": "parser-table-m8",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "8"
+      ]
+    },
+    {
+      "label": "parser-table-m14-exact-nodes",
+      "case": "parser-table-m14",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "15"
+      ]
+    },
+    {
+      "label": "parser-table-m14-one-below-nodes",
+      "case": "parser-table-m14",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "14"
+      ]
+    },
+    {
+      "label": "parser-table-m15-exact-nodes",
+      "case": "parser-table-m15",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "16"
+      ]
+    },
+    {
+      "label": "parser-table-m15-one-below-nodes",
+      "case": "parser-table-m15",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "15"
+      ]
+    },
+    {
+      "label": "long-root-key-late-escape-exact-work",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "200690",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "long-root-key-late-escape-one-below-work",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "200689",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "tiny-no-views-huge-configured-limit-exact-work",
+      "case": "tiny-no-views-huge-configured-limit",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit",
+        "1491",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "tiny-no-views-huge-configured-limit-one-below-work",
+      "case": "tiny-no-views-huge-configured-limit",
+      "args": [
+        "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit",
+        "1490",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "high-view-cardinality-exact-work",
+      "case": "high-view-cardinality",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality",
+        "2823297",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "high-view-cardinality-one-below-work",
+      "case": "high-view-cardinality",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality",
+        "2823296",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "deep-chain-wide-sibling-exact-work",
+      "case": "deep-chain-wide-sibling",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling",
+        "373863",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "deep-chain-wide-sibling-one-below-work",
+      "case": "deep-chain-wide-sibling",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling",
+        "373862",
+        "none",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-arena",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "arena",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-views",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "views",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-refs",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "refs",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-owned_key",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "owned_key",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-edits",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "edits",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "forced-candidate",
+      "case": "long-root-key-late-escape",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape",
+        "18446744073709551615",
+        "candidate",
+        "encode",
+        "65536"
+      ]
+    },
+    {
+      "label": "fixture-selected-raw",
+      "case": "opaque-token-and-marker",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker",
+        "18446744073709551615",
+        "none",
+        "raw",
+        "65536"
+      ]
+    },
+    {
+      "label": "fixture-selected-identity",
+      "case": "opaque-token-and-marker",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker",
+        "18446744073709551615",
+        "none",
+        "identity",
+        "65536"
+      ]
+    },
+    {
+      "label": "pending-overlap-one-below",
+      "case": "deep-chain-wide-sibling",
+      "args": [
+        "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling",
+        "18446744073709551615",
+        "none",
+        "admission",
+        "2311"
+      ]
+    },
+    {
+      "label": "checked-capacity-controls",
+      "args": [
+        "--checked-capacity-controls"
+      ]
+    }
+  ]
+}

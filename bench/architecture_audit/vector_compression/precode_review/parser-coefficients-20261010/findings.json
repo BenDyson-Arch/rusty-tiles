@@ -1,0 +1,21 @@
+{
+  "status": "ACCEPT_NARROW_MATCHED_TARGET_SOURCE_CORE_COEFFICIENTS_ONLY",
+  "formulaUnderInspection": "8J + 256*min(value_node_limit,J) + 65536",
+  "sourceCoreUpper": "4J + 188*min(value_node_limit,J) + 8",
+  "terms": {
+    "slotBacking": 72,
+    "uniqueKeyTableBacking": 116,
+    "scratchAndEscapedKeys": "4J+8"
+  },
+  "actualNewParserOrPrototypeExecutions": 0,
+  "arithmeticOnlyKeysChecked": 65536,
+  "fixedAllowanceStatus": "FINITE_SOURCE_OWNERS_SUPPORTED; OS/TLS/libc/startup/RSS NOT UNIVERSALLY PROVED",
+  "held": [
+    "mutable owned-Plan source review until author freezes",
+    "actual prototype type/capacity/peak evidence",
+    "whole-operation owner ledger",
+    "production implementation",
+    "integrated defaults",
+    "P2-P5 integration"
+  ]
+}

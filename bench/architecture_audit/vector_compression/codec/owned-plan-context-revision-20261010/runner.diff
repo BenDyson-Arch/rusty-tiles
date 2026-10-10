@@ -1,0 +1,21 @@
+--- original/root_runner.py
++++ context-revision/root_runner.py
+@@ -2,7 +2,8 @@
+ """Root coordinator ONLY, after immutable source review. No author execution."""
+ from pathlib import Path
+ import argparse,hashlib,json,runpy,sys
+-HERE=Path(__file__).resolve().parent
++HERE=Path('/tmp/rusty-tiles-codec-owned-plan-preparation')
++REVISION=Path(__file__).resolve().parent
+ OLD=Path('/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010')
+ def sha(p):
+     h=hashlib.sha256()
+@@ -11,7 +12,7 @@
+     return h.hexdigest()
+ def verify():
+     for manifest,local in [('integrity.json',True),('input-pin.json',False)]:
+-        for name,pin in json.loads((HERE/manifest).read_text())['files'].items():
++        for name,pin in json.loads(((HERE if local else REVISION)/manifest).read_text())['files'].items():
+             p=HERE/name if local else Path(name)
+             assert p.stat().st_size==pin['bytes'] and sha(p)==pin['sha256'],str(p)
+     return sha(HERE/'integrity.json')

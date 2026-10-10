@@ -1,0 +1,345 @@
+{
+  "status": "INDEPENDENT STATIC EXPECTATIONS ONLY; no revised script or model executed by author",
+  "method": "Frozen literal input pins plus changed first-byte XOR1 and literal association edits; original checker predicates imply expected rejection. Future root execution must produce these full records.",
+  "expectedOutput": {
+    "evidence": "MODEL_ORACLE_SELFTEST_ONLY; no codec/producer/consumer execution",
+    "cases": [
+      {
+        "name": "positions-f32",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_positions.bin",
+            "mutationSha256": "48fea34279b9d8344fae5e66304ebdd71bc35246a3d661ee753c740376b8ee72",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "positions.bin"
+          },
+          {
+            "name": "semantic_association_componentType",
+            "mutationSha256": "3e87065c4e031f6c8d04eb00ec528b3cfd373235b618d41ab0cbb175f562eb05",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "positions-normalized-u16",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_positions.bin",
+            "mutationSha256": "477f9bc8114f9de72c0ad3479db4b34ff7f5b54db78f5d4443a7feab0c22465a",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "positions.bin"
+          },
+          {
+            "name": "semantic_association_componentType",
+            "mutationSha256": "61f57aad032dc53425586b2f6e7545acf693fae526504213c8c20e3ecb0e2580",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "feature-ids-padded-u16",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_ids.bin",
+            "mutationSha256": "3a48b89f5adb854018c8bad163121cf59f4d6b37ed38d79397868b99cd619936",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "ids.bin"
+          },
+          {
+            "name": "semantic_association_propertyTable",
+            "mutationSha256": "4d86385ec7cd29eb64ddae6e0cbcb813b9097f67fc7e561db19e9b915ea7e3fb",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "feature-ids-f32",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_ids.bin",
+            "mutationSha256": "e23d8617aacbedff8bb6f54ee23c91b9798cc0bab54b1c7e4b61eba0ddd347f9",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "ids.bin"
+          },
+          {
+            "name": "semantic_association_propertyTable",
+            "mutationSha256": "8b3b19366cea43c5a5770fc4dbbde8251e23f5e879457d8d1b2d81504e177ac6",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "line-restart",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_indices.bin",
+            "mutationSha256": "e086203cd6e0808b1f514eea71801866f1ecd363570afe2b9bf8e7e717a0a6e0",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "indices.bin"
+          },
+          {
+            "name": "semantic_association_mode",
+            "mutationSha256": "72bd60ffd7cd078bc35c69a0262ebe597d6d12989ee0ec20452b77b2dee7e290",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "polygon-loops-offsets",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_loops.bin",
+            "mutationSha256": "f40cf4dd30903b018db3cc78ee104d8999ae8375f1b9df1f33d256544e98a047",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "loops.bin"
+          },
+          {
+            "name": "raw_offsets.bin",
+            "mutationSha256": "b971be691b9ff115e895d5b2315d48c2523bbe50650bb18a090cff2de90112ec",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "offsets.bin"
+          },
+          {
+            "name": "semantic_association_featureTable",
+            "mutationSha256": "32fe6719eade8672fb7bc4442d19d3b8c21e042198bb6c6f0a435567ac9da2ef",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "fill-triangles-material",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_indices.bin",
+            "mutationSha256": "d06ad614e97ea6dc7649bce8684c7d42eb20805dfd3097aa0af858d9682f10ba",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "indices.bin"
+          },
+          {
+            "name": "semantic_association_propertyTable",
+            "mutationSha256": "1f1361fb48dd6c1a67f4bb0dbf0ce99517098cc3864fca5a246a767873a4e8b2",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "metadata-boolean-bitset",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "64ff6e1486ae0ff4b9f0be80ffe6f63fa3f61933ca4e1798bf76759dd8015d42",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "bd20ac401746fe246cb47f19caec4e0cb3a61c0d5f0fe71f8b7434618569f913",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "metadata-int64-nodata",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "331dfe7620374bf288d7ab59e1d0aa2032064fe9648409f24e9ca383c3e1ab93",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "04e8583254680ac2f5dec9bb3e3ba3a98d595fe13add427072183eff4090f8ee",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "metadata-float64",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "d9c554a54d6379a2678e1db4587f6cee68c4f0d0c536dc6b22d527bd707cffab",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "97a66bcb656dcf553d03d47853463642471d873b559fd33e34e2cf45714ce310",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "metadata-utf8-array-string",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "38bcc60893ee12d2f5ac3659e385e9192d8770e9aaf8ccc16055042a4b9ddd81",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "raw_stringOffsets.bin",
+            "mutationSha256": "15ffec35cc159e0c296aadb3060238757f480593fa593c1481d82de3c3a9c2d1",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "stringOffsets.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "893cb984017cd6bbcaa12855a0b8eb67187d0b43f5f347be44c6b6b7a4f46a3b",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "external-uint64",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "f86efab63240b6abec24871df60094cb80f47a880ad3eca56c5728185619c9d9",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "3552b0b1183a57d23dc7675e8a12cc35bcb083ae5c81d1f1fbdedfc8398d1d66",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "external-structural-array-shared",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_values.bin",
+            "mutationSha256": "f17035e6e1494a66c5c37a6aa3114631fde569f7f44cc40747cc27574b00b4b5",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "values.bin"
+          },
+          {
+            "name": "raw_arrayOffsets.bin",
+            "mutationSha256": "5c7eed3cacf93747da516a9ac649be9445ac47109aee57e8b6a6eb6741768a25",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "arrayOffsets.bin"
+          },
+          {
+            "name": "semantic_association_valuesView",
+            "mutationSha256": "1921a205f489d7d63e876a9768c71a3dfe05657a090f0c86c8d7ff8723277ba9",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "external-interleaved-matrix-partial",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "raw_interleaved.bin",
+            "mutationSha256": "7c005a78a2ba5d1a3cb2baa72f79474040c1dc396285db1251e37bf4541b02d4",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "interleaved.bin"
+          },
+          {
+            "name": "raw_mat3-u8-occupied11.bin",
+            "mutationSha256": "11ff2cde1a8b21be8517490bcaa3aad8e4166d8e724d1a35d57d8f55a2c1d8dd",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "binary_length_and_sha256",
+            "assertionMessage": "mat3-u8-occupied11.bin"
+          },
+          {
+            "name": "semantic_association_componentType",
+            "mutationSha256": "0b5972fd04c8c40ea775b1400c65b6508cd8c6067c5b6246d53aafc572389e56",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      },
+      {
+        "name": "opaque-source-json",
+        "baseline": "admitted_by_unchanged_checker",
+        "restored": "admitted_by_unchanged_checker",
+        "sensitiveControls": [
+          {
+            "name": "semantic_association_extrasRaw",
+            "mutationSha256": "f65e2e502306190115dc7371a420cd1081d6952f6bb7329259b3530240d52895",
+            "status": "rejected_by_unchanged_checker",
+            "rejectingPredicate": "association_object_equality",
+            "assertionMessage": ""
+          }
+        ]
+      }
+    ]
+  }
+}

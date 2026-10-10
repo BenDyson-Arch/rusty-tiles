@@ -1,0 +1,52 @@
+{
+  "status": "UNEXECUTED_ADDITIVE_MODULE_LAYOUT_ONLY",
+  "originalIntegritySha256": "1eb7a0ef76d7260219a64ad6f4b3cf3acde6f7dd78b988ca6d4023253820b67a",
+  "original37FilesUnchanged": true,
+  "copies": {
+    "isolated/src/runtime/mod.rs": "isolated/src/runtime.rs",
+    "isolated/src/runtime/tests.rs": "isolated/src/runtime/tests.rs",
+    "isolated/src/runtime/directory.rs": "isolated/src/runtime/directory.rs",
+    "isolated/src/runtime/directory_platform.rs": "isolated/src/runtime/directory_platform.rs",
+    "isolated/probes/p5_f0_seams.rs": "isolated/probes/p5_f0_seams.rs"
+  },
+  "newEntrypoint": "#[path=\"src/runtime/mod.rs\"] mod runtime;",
+  "reason": "Actual initial rustc compile E0583: explicit runtime.rs #[path] child lookup selected src/tests.rs and src/directory.rs. Using runtime/mod.rs makes sibling module directory explicit.",
+  "runtimeBodyChanged": false,
+  "probeHelperAndAssertionsChanged": false,
+  "originalFailedExecution": "/tmp/rusty-tiles-vector-f0-execution",
+  "actualExecutionsByPreparer": 0,
+  "inputs": {
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/src/runtime.rs": {
+      "bytes": 21718,
+      "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+    },
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/src/runtime/tests.rs": {
+      "bytes": 292,
+      "sha256": "e29922adbfc3ba44d6e13d7dcb1c5a76f330a05b336caa3e721dc94f5032376d"
+    },
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/src/runtime/directory.rs": {
+      "bytes": 49206,
+      "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc"
+    },
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/src/runtime/directory_platform.rs": {
+      "bytes": 17255,
+      "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64"
+    },
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/probes/p5_f0_seams.rs": {
+      "bytes": 4473,
+      "sha256": "8dc987d0bfd0f2963acf07c3139f425f422e1bb58bcafe4b2a8635ff70a94884"
+    },
+    "/tmp/rusty-tiles-vector-f0-probe-preparation/integrity.json": {
+      "bytes": 5855,
+      "sha256": "1eb7a0ef76d7260219a64ad6f4b3cf3acde6f7dd78b988ca6d4023253820b67a"
+    },
+    "/tmp/rusty-tiles-vector-f0-execution/commands.json": {
+      "bytes": 1223,
+      "sha256": "8e5de831faa34a84d0f66475135d8256e7e97f0d11a0165f952ab6b393e429dd"
+    },
+    "/tmp/rusty-tiles-vector-f0-execution/compile.stderr": {
+      "bytes": 1132,
+      "sha256": "8490f77b910e858128d95b62c83e67e99146f742734ca1b0b6ce52e0ceabef15"
+    }
+  }
+}

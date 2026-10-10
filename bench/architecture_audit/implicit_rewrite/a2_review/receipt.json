@@ -1,0 +1,380 @@
+{
+  "authority_limits": "No Cargo/production execution/production editing/Git mutation/main/tag/publication; final production/consumer/resource/metadata/template gates in review.md remain unresolved.",
+  "classification": "PASS for bounded preparation/evidence record only; production implementation/readiness/removal/release not accepted",
+  "commit_identity_authority": "coordinator-provided; current35reviewed snapshots and93production-manifest entries independently rechecked unchanged after frozen commit",
+  "final_envelope_replay": {
+    "cases": 14,
+    "matches_tracked_bytes": true,
+    "maxima": {
+      "archive_bytes": 96342,
+      "compact_original_header_bytes": 368,
+      "content_references": 25,
+      "directory_bytes": 3224,
+      "distinct_json_bytes": 29740,
+      "distinct_json_values": 1791,
+      "entries": 30,
+      "manifest_bytes": 13516,
+      "max_content_slots": 2,
+      "max_member_bytes": 13516,
+      "member_bytes": 90352,
+      "source_nodes": 25
+    },
+    "originating_receipt_sha256": "a44b4f35f44e375c77474ed523d4d587e241d7ec034239aa3b5c7adf1c5b616c"
+  },
+  "final_real_driver_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+  "final_semantic_paired_replay": {
+    "cases": 11,
+    "exact_cell_sources": 0,
+    "outputs_checked": 6,
+    "status": "pass"
+  },
+  "local_links": [
+    {
+      "document": "AGENTS.md",
+      "target": "docs/architecture/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "foundation-contracts.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "boundary-audit.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "platform-evidence.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "next-foundation-scopes.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1d2-certificate-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1d2-implementation.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "../../bench/architecture_audit/mesh_approximation_f1d2/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "mesh-approximation-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1d1-implementation.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "../../bench/architecture_audit/mesh_approximation/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "implicit-rewrite-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "../../bench/architecture_audit/f1c2/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1c2-implementation.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1c2-evidence.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f1c2-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "model-wrapping-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "pack-api-removal-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "next-foundation-scopes.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f0-implementation.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "f0-evidence.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "vector-acceptance-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "foundation-contracts.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "boundary-audit.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "platform-evidence.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "api-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "runtime-contract.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "evidence-ledger.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "../../bench/architecture_audit/README.md"
+    },
+    {
+      "document": "docs/architecture/README.md",
+      "target": "evidence-ledger.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "README.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/audits/ownership.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/README.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md"
+    },
+    {
+      "document": "docs/architecture/implicit-rewrite-contract.md",
+      "target": "../../bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "../../../docs/architecture/implicit-rewrite-contract.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "audits/ownership.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "a2_semantics/README.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "a2_real_sources/README.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "a2_capture_resources/README.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "probes/baseline-receipt.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "../f1c2/receipts/source-artifacts.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/README.md",
+      "target": "probes/baseline-raw.json.gz"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md",
+      "target": "audit.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md",
+      "target": "probe.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md",
+      "target": "real_probe.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md",
+      "target": "real-results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "sources.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "quadtree.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "octree.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "quadtree-source-order.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "octree-source-order.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md",
+      "target": "real-results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md",
+      "target": "audit.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md",
+      "target": "source-envelopes.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md",
+      "target": "source-identities.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md",
+      "target": "probe.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md",
+      "target": "source-envelopes.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md",
+      "target": "count_source_envelopes.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md",
+      "target": "audit.md"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md",
+      "target": "source-artifacts.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_real_sources/audit.md",
+      "target": "results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_real_sources/audit.md",
+      "target": "source-artifacts.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "target": "probe.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "target": "bind_real.py"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "target": "real-bindings.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "target": "model-results.json"
+    },
+    {
+      "document": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "target": "receipt.json"
+    }
+  ],
+  "local_links_checked": 75,
+  "model_results_sha256": "4dddc83b4fe69bdcaa541a4fb0546c886c57786c6ab42b7e844a26c34067fe12",
+  "postcommit_snapshots_unchanged": true,
+  "production_unchanged_entries": 93,
+  "real_bindings_sha256": "3b96a9d28fe2fee24343cfb56952ddd7f8f9b6934f6b515434e6ca9d727335b1",
+  "reviewed_file_sha256": {
+    "AGENTS.md": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+    "bench/architecture_audit/implicit_rewrite/README.md": "f6d1f0075bdb7d660b3b82c6a021eb13c0f1aaf07ba23ff64b7dcc2e031a16fa",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md": "fa8fdb525f0e171c0ba389d9f887ce8bc653868c8653077be27866a2c3f416b8",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md": "2de2135fd8ae47be7f7200034bbaee2efe9869f646f441644a47508d0f473e89",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/count_source_envelopes.py": "19cdc3fe37df5e1781f36083ff0152b47f8b98879cce68bf930e4fc23a029bee",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/probe.py": "b4282dcab97268bf14200c1b073ec51cc4263911c5a46f52c78b04b947b2c869",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/results.json": "cdd48d4f44a782b7ae6183c2e33e19d5f6969881a8c1fe84bf276ea079706755",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/source-envelopes.json": "f030b61a4bb521ec49dd13e9c7f40b623802ce52e6fc9b5d68291a79c084abf1",
+    "bench/architecture_audit/implicit_rewrite/a2_capture_resources/source-identities.json": "0cf139860fbd302dbf5158c3b398a0dfe9c81d90cdb743c0189e1d009e086278",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md": "a719d7650f77eb7f268544ba29ab210564041622be7deb7121239c69395e0a42",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/audit.md": "36baccb30b980bc7c4c334baa149eb2d9f00dd01229cf6cb69cb8587d26bc6d1",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/meshopt_decode.mjs": "7fbefa7065994cad497912f6e40b4283a6600f57a1bcf2067af978ea01c4761b",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/native-raw.json.gz": "f641e9bfb14ecaa2c03761a068fd1745e1104cb0108848bc72ad5f0dd9a4c2dc",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/portable-raw.json.gz": "7e000490a829be059e77e0e78621d2e3641e068745f7c9f2f63762770b977d7a",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/probe.py": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/results.json": "044e6ac26c84db26ebb61d2ddeb14525214821ecbee08bb062516f3fc9268d97",
+    "bench/architecture_audit/implicit_rewrite/a2_real_sources/source-artifacts.json": "9e751f7fdc5c3c0556d860eb5bb01f30b2e90f53af6e8502ae6f006d302e7685",
+    "bench/architecture_audit/implicit_rewrite/a2_review/bind_real.py": "b059bbb47fa747d3d8d4009cc6efc58e63da7b8c246f21b6db17bd68e9641502",
+    "bench/architecture_audit/implicit_rewrite/a2_review/model-results.json": "4dddc83b4fe69bdcaa541a4fb0546c886c57786c6ab42b7e844a26c34067fe12",
+    "bench/architecture_audit/implicit_rewrite/a2_review/probe.py": "eec49f4c9fab533b1e5bf24ae5dc901dbee266b52e4cd4aa372141fe3760b14f",
+    "bench/architecture_audit/implicit_rewrite/a2_review/real-bindings.json": "3b96a9d28fe2fee24343cfb56952ddd7f8f9b6934f6b515434e6ca9d727335b1",
+    "bench/architecture_audit/implicit_rewrite/a2_review/review.md": "c4a539ea72a7254088b6285dd45a79131935dc52bbc2acd2b852511b91725b94",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/README.md": "f90e69b2b321e7bb0d853122d6df2a787e0f09ca3d84c1ad938a8a21cd3e4a0f",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md": "8ae0f9fbd1cd12b7a4a37c308cbef9144dc3e5b8f8b292c9d93be0369fb0cd4e",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/octree-source-order.json": "be1d8070c71a3e5f077a061a39554f857cbdc307a56f4d17d86d7a731c13cea0",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/octree.json": "ec78244b10efb9ca564e037f51473b334ed4dbf4e4ece36feb918798e7fcee8b",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/probe.py": "db09a92f4bb5b7f8f9627428d0fd55d175b6b024b7b297c612c96d629dbdfaa4",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/quadtree-source-order.json": "76a1b9827c7440eda8a643ea10051947bb17e6d20529e6ccb90d5e21d77f2b1b",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/quadtree.json": "23d26bc05934a203da1505b07cf31a1fd896136bcacc482dd7eaa0dbd9665637",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/real-results.json": "2cff23c5561d39d3e85cab9c90741efa5015eb1931e755405c23a6bae1c7e6f6",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/real_probe.py": "33fa6507f98c00daa16a62275838ef1481efe69128eace5ce48aa3255f2d7fbc",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/results.json": "d194e433a10ae9f79a83819ae8c6f904c343d08be2867681316665f589d40e2e",
+    "bench/architecture_audit/implicit_rewrite/a2_semantics/sources.json": "e84bb07d3031914a87136f18642b7e16ad663fd61289f1c0154466f760393942",
+    "docs/architecture/README.md": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80",
+    "docs/architecture/implicit-rewrite-contract.md": "0f7e6c53b11d9d2d5879f0eaf16995ad2a2a730a6de147f845ed90b17b03e1cc"
+  },
+  "reviewed_preparation_commit": "bca778a67a8062ccdb983f9b2507c10529a604f9",
+  "reviewer_corrections": [
+    "Initial reviewer equality check normalized Python tuple aliases to JSON list aliases before comparison; no product mismatch.",
+    "Earlier reviewer prose inherited historical91-input count; executed final binding counts93 and verifies every entry."
+  ]
+}

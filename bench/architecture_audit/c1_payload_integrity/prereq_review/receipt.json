@@ -1,0 +1,68 @@
+{
+  "record": "Separate NONAUTHOR preimplementation adjudication",
+  "source_head": "c8cbfb187de863ae21fe904275794894aa0a8381",
+  "original_contract_sha256": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+  "status": "A1-A13 dispositions preserved; raw_value-only iterative borrowed admission selected as smallest justified proof contender, replacing global AP suggestion. Actual-source tiny iterative proof, owner/owned-adapter distinctions in revised freeze, and coordinator prerequisite identity remain.",
+  "implementation_acceptance": false,
+  "files": {
+    "AGENTS.md": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+    "src/validate.rs": "9772bfb1f0a14b96db1cfd49818c545635dbc8f83041e224b33e94745baf36ff",
+    "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+    "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+    "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+    "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+    "docs/architecture/c1-payload-integrity-contract.md": "5ad3fb11ad38239a1827b6805ed8b0991dad453702d8151965546790c6e3d130",
+    "bench/architecture_audit/c1_payload_integrity/freeze-20261010-primary-controls.json": "6b299b1355f68d91027aa4d0db42fd2123a157b5ff4f31acdcfab5cf08b5a674",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/review.md": "23be4a58b075912a4bd77422a631bdba9f487d73eef34159886931c59b670b13",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite-models.json": "82a978634150a3e0dd60cd72ed91ef97343a6750420863d68c2500e1d28f3f22",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity-output.txt": "4ae02b459a31702d3cb5cf7b3f7b97c36bffa40e95d9f4ff221be89be1d920cb",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite_models.py": "fa27d35d7428b24c2df5ce55d7255d4933d4ee6d2cb02fde6edd057605c819c2",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity_probe.rs": "66c089936b40014c452e75697f63fc59c836e609622f39af09781445d63a1db2",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/receipt.json": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/adjudication.json": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/fetch-receipt.json": "05bf12891d71ce392cf56ed3ae910c61566a6cda238747355beb86912a0e9e21",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-byte-comparison.json": "9c14e31eda72a4a25d4cff019f3e25ec3ce811e6751107e52a56c0a38411c1f7",
+    "bench/architecture_audit/c1_payload_integrity/history/20261010-initial/c1-payload-integrity-contract.md": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+    "bench/architecture_audit/c1_payload_integrity/history/20261010-initial/freeze.json": "afa9136fab4a143849216de09df37e1862ee476a0fcdcd9515d03513441a6cf0",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification.md": "b49002ba5c41bb59c965b4c0f006f7a46724dbe127a049135c3437f7dceb43d3",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification-manifest.json": "97ad3a4c12c95e176cc4394661254cf2ea57dd8e5a7b589ebeee98aa4625e497",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/raw-only-tradeoff.md": "f6f79871684f4ded5661beb2da0720885256d2020b4b87dedfb93aa9536fce5f"
+  },
+  "local_library_source": {
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/number.rs": "70b83c36286f6c58123f544f27db2b54a1135f928fe33b08b521b2997773f862",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/raw.rs": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/de.rs": "ceda1bf415aafde89caa83bf275811b70d393717d4e1038e0c61822d2da02993",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base64-0.22.1/src/engine/mod.rs": "5e4a6c0e86417f3b62350264ef383f91e9864390f7c315d786ecd8e9c920ee9f",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base64-0.22.1/src/engine/general_purpose/decode.rs": "d865b057e5788e7fefd189cf57ec913df263e6a0742dfa52513f587e14fa1a92"
+  },
+  "executions": [
+    {
+      "command": "/usr/bin/nice -n 10 rustc bench/architecture_audit/c1_payload_integrity/prereq_review/capacity_probe.rs -o /tmp/rusty-tiles-c1-capacity-prereq-probe",
+      "exit_code": 0,
+      "compiler": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+      "artifact_sha256": "b7f54d919c6efd8e41464e7296bd4c05cb92314a6d42a7ebc0ad9ab66a457467",
+      "claim": "std-only requested Vec capacity sensitivity; no codec execution or RSS claim"
+    },
+    {
+      "command": "/usr/bin/nice -n 10 /tmp/rusty-tiles-c1-capacity-prereq-probe",
+      "exit_code": 0,
+      "output": "capacity-output.txt"
+    },
+    {
+      "command": "/usr/bin/nice -n 10 python3 bench/architecture_audit/c1_payload_integrity/prereq_review/finite_models.py",
+      "exit_code": 0,
+      "output": "finite-models.json",
+      "claim": "Finite independent exact numeric/canonical base64 arithmetic model only"
+    }
+  ],
+  "production_edits": false,
+  "cargo_install_producer_browser_runs": false,
+  "remaining_gates": [
+    "Actual serde iterative raw-only proof:1e400 integer resource/domain admission, nonnumeric unsigned fields, opaque magic objects, exact boundary counters, before-retain child admission, one live decoder scratch and slot/work bounds, compound-error order",
+    "Revised freeze chooses validated borrowed owner and actual schemaUri/counter output; ordinary owned Value adapter representation failures classified independently",
+    "Coordinator records accepted archive-reader exact head and rebase identity; final production acceptance remains separate"
+  ],
+  "revised_contract_sha256": "5ad3fb11ad38239a1827b6805ed8b0991dad453702d8151965546790c6e3d130"
+}

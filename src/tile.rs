@@ -4,7 +4,7 @@
 use crate::{
     bbox::aabb_to_box,
     error::Error,
-    georef::{root_transform, Cartographic, RotationDegrees, SourceCrs, SourceOffset},
+    georef::{root_transform, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset},
     glb_write::TilePrimitive,
     mesh::{self, Scene},
     output::Job,
@@ -31,6 +31,10 @@ pub const DEFAULT_MAX_TEXEL_DENSITY: f64 = 0.0;
 
 #[derive(Clone, Debug)]
 pub struct MeshTo3tzOptions {
+    /// Keep the legacy median-split explicit hierarchy and output bytes.
+    pub explicit: bool,
+    /// Preserve each source glTF node as a named pickable feature.
+    pub node_features: bool,
     pub texture_format: TextureFormat,
     pub basisu: std::path::PathBuf,
     pub cartographic: Option<Cartographic>,
@@ -43,6 +47,14 @@ pub struct MeshTo3tzOptions {
     pub max_texel_density: f64,
     pub source_crs: SourceCrs,
     pub source_offset: Option<SourceOffset>,
+    /// General 2D horizontal CRS; uses the shared conservative CRS resolver.
+    /// None retains the original auto/geographic/Web Mercator adapters.
+    pub source_crs_definition: Option<String>,
+    /// Required for a general CRS; no automatic axis inference.
+    pub source_axes: Option<SourceAxes>,
+    /// Metres added after the source height/offset to obtain ellipsoidal Z.
+    /// Required for a general CRS, including an explicit zero.
+    pub height_offset: Option<f64>,
     /// Lossless EXT_meshopt_compression; float32 attributes in either mode.
     pub meshopt: bool,
 }
@@ -50,6 +62,8 @@ pub struct MeshTo3tzOptions {
 impl Default for MeshTo3tzOptions {
     fn default() -> Self {
         Self {
+            explicit: false,
+            node_features: false,
             texture_format: TextureFormat::Lossless,
             basisu: "basisu".into(),
             cartographic: None,
@@ -61,8 +75,38 @@ impl Default for MeshTo3tzOptions {
             max_texel_density: DEFAULT_MAX_TEXEL_DENSITY,
             source_crs: SourceCrs::Auto,
             source_offset: None,
+            source_crs_definition: None,
+            source_axes: None,
+            height_offset: None,
             meshopt: true,
         }
+    }
+}
+
+impl MeshTo3tzOptions {
+    /// Select legacy adapters unless general axes/height are explicitly supplied.
+    /// Other definitions use the shared resolver and require both decisions.
+    pub fn set_source_crs(&mut self, definition: &str) -> Result<(), Error> {
+        match SourceCrs::parse_cli(definition) {
+            Ok(crs) if self.source_axes.is_none() && self.height_offset.is_none() => {
+                self.source_crs = crs;
+                self.source_crs_definition = None;
+            }
+            Ok(SourceCrs::Auto) => {
+                return Err(Error::Data(
+                    "general mesh coordinates require an explicit source CRS, not auto".into(),
+                ))
+            }
+            legacy => {
+                self.source_crs_definition = Some(match legacy {
+                    Ok(SourceCrs::Geographic) => "EPSG:4326".into(),
+                    Ok(SourceCrs::WebMercator) => "EPSG:3857".into(),
+                    _ => definition.to_owned(),
+                });
+                self.source_crs = SourceCrs::Auto;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -84,13 +128,15 @@ pub enum TextureFormat {
     Uastc,
 }
 
-/// Material, textured, has-normals.
-type GroupKey = (usize, bool, bool);
+/// Material, textured, has-normals, optional source node.
+type GroupKey = (usize, bool, bool, Option<u32>);
 struct Planned {
     material: usize,
+    feature: Option<u32>,
     plan: LeafPlan,
 }
 struct Node {
+    slot: usize,
     children: Vec<Node>,
     plans: Vec<Planned>,
     min: [f64; 3],
@@ -101,6 +147,7 @@ struct Node {
 #[derive(Clone)]
 struct Piece {
     material: usize,
+    feature: Option<u32>,
     prim: TilePrimitive,
     delivery_image: Option<Vec<u8>>,
 }
@@ -144,17 +191,46 @@ pub fn mesh_to_3tz_reported(
             crate::jpeg::backend()
         ));
     }
-    let mut scene = mesh::load(input)?;
-    let baked = mesh::bake_to_enu(
-        &mut scene,
-        &mesh::BakeToEnu {
-            prefer: opts.cartographic,
-            crs: opts.source_crs,
-            offset: opts.source_offset,
-        },
-    );
-    if baked.is_none() && scene.under_budget(opts.max_triangles, opts.max_bytes) {
-        return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
+    let mut scene = if opts.node_features {
+        mesh::load_with_node_features(input)?
+    } else {
+        mesh::load(input)?
+    };
+    let baked = if let Some(definition) = &opts.source_crs_definition {
+        Some(crate::mesh_crs::bake(&mut scene, definition, opts)?)
+    } else {
+        if opts.source_axes.is_some() || opts.height_offset.is_some() {
+            return Err(Error::Data(
+                "source axes/height offset require a general source CRS definition".into(),
+            ));
+        }
+        if opts.source_offset.is_some_and(|offset| {
+            ![offset.easting, offset.northing, offset.height]
+                .iter()
+                .all(|value| value.is_finite())
+        }) {
+            return Err(Error::Data(
+                "source offset must contain finite values".into(),
+            ));
+        }
+        mesh::bake_to_enu(
+            &mut scene,
+            &mesh::BakeToEnu {
+                prefer: opts.cartographic,
+                crs: opts.source_crs,
+                offset: opts.source_offset,
+            },
+        )
+        .map(|bake| bake.origin)
+    };
+    if !opts.node_features
+        && baked.is_none()
+        && scene.under_budget(opts.max_triangles, opts.max_bytes)
+    {
+        if opts.explicit {
+            return crate::tileset::glb_job(input, job, &CreateTilesetOptions::from(opts));
+        }
+        return crate::tileset::implicit_glb_job(input, job, &CreateTilesetOptions::from(opts));
     }
     validate_source(input)?;
     if scene.vertices.iter().any(|v| {
@@ -184,8 +260,12 @@ pub fn mesh_to_3tz_reported(
         &material_ids,
         (0..scene.triangles.len()).collect(),
         opts,
+        None,
+        0,
     )?;
-    fold(&mut root);
+    if opts.explicit {
+        fold(&mut root);
+    }
     let mut nodes = Vec::new();
     flatten(&mut root, &mut nodes);
     let leaves = nodes.iter().filter(|n| n.children.is_empty()).count();
@@ -263,6 +343,7 @@ pub fn mesh_to_3tz_reported(
         "mesh-to-3tz: chart extraction {:.2}s",
         start.elapsed().as_secs_f64()
     ));
+    let node_names = std::mem::take(&mut scene.node_names);
     drop(scene);
     nodes
         .par_iter_mut()
@@ -329,12 +410,13 @@ pub fn mesh_to_3tz_reported(
                 }
                 out.push(Piece {
                     material: p.material,
+                    feature: p.feature,
                     prim,
                     delivery_image,
                 });
             }
             if node.children.is_empty() {
-                write_node(work, node.id, out, &materials, opts)?;
+                write_node(work, node.id, out, &materials, &node_names, opts)?;
                 spill_images(work, node.id, out)?;
             }
             Ok(())
@@ -390,7 +472,7 @@ pub fn mesh_to_3tz_reported(
                         }
                         let mut proxy =
                             parent_proxy(children.into_iter().map(|(_, p)| p).collect(), opts)?;
-                        write_node(work, id, &proxy.pieces, &materials, opts)?;
+                        write_node(work, id, &proxy.pieces, &materials, &node_names, opts)?;
                         spill_images(work, id, &mut proxy.pieces)?;
                         Ok((id, proxy))
                     })
@@ -415,9 +497,47 @@ pub fn mesh_to_3tz_reported(
         root_proxy.geometry_error,
         root_proxy.error
     ));
-    let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes)});
-    if let Some(origin) = baked.map(|b| b.origin).or(opts.cartographic) {
+    let mut ts = json!({"asset":{"version":"1.1","generator":"rusty-tiles"},"geometricError":nodes[0].error*2.0,"root":tile_json(0,&nodes,!opts.explicit)});
+    // Cesium skips an entire tileset when its top-level error is below the
+    // viewing SSE. Node-feature output bypasses the small-model wrapper, so
+    // even explicit output needs the bounds-based error to remain visible.
+    if !opts.explicit || opts.node_features {
+        let diagonal = crate::vec3::norm(crate::vec3::sub(nodes[0].max, nodes[0].min));
+        ts["geometricError"] = json!(crate::tileset_node::top_level_error(
+            diagonal,
+            nodes[0].error,
+            2.
+        ));
+    }
+    if let Some(origin) = baked.or(opts.cartographic) {
         ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
+    }
+    if !opts.explicit {
+        crate::implicit::write_tileset(
+            &mut ts,
+            work,
+            crate::implicit::SubdivisionScheme::Octree,
+            false,
+        )?;
+        fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
+        let stage = job.staging("published")?;
+        fs::copy(work.join("tileset.json"), stage.join("tileset.json"))?;
+        for name in ["implicit-content", "subtrees"] {
+            fs::rename(work.join(name), stage.join(name))?;
+        }
+        for entry in fs::read_dir(work)? {
+            let entry = entry?;
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("implicit-tileset-")
+            {
+                fs::rename(entry.path(), stage.join(entry.file_name()))?;
+            }
+        }
+        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":nodes.len(),"leafTiles":leaves});
+        crate::output::write_report(&stage, report.clone(), true)?;
+        return job.publish_tree_3tz(&stage, Some(report));
     }
     fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
     let mut files = vec![("tileset.json".into(), work.join("tileset.json"))];
@@ -486,9 +606,12 @@ fn partition(
     materials: &[usize],
     mut ids: Vec<usize>,
     opts: &MeshTo3tzOptions,
+    cell: Option<([f64; 3], [f64; 3])>,
+    depth: u32,
 ) -> Result<Node, Error> {
     let (lo, hi) = mesh::triangle_aabb_yup(scene, &ids);
     let mut node = Node {
+        slot: 0,
         children: Vec::new(),
         plans: Vec::new(),
         min: lo.map(f64::from),
@@ -497,7 +620,14 @@ fn partition(
         error: 0.0,
     };
     if ids.len() <= opts.max_triangles {
-        node.plans = plan(scene, dims, materials, &ids, opts.tile_size)?;
+        node.plans = plan(
+            scene,
+            dims,
+            materials,
+            &ids,
+            opts.tile_size,
+            opts.node_features,
+        )?;
         if node.plans.iter().all(|p| p.plan.scale == 1.0) {
             return Ok(node);
         }
@@ -516,7 +646,7 @@ fn partition(
                     "a source triangle requires an atlas larger than 32768 pixels",
                 ));
             }
-            node.plans = plan(scene, dims, materials, &ids, edge)?;
+            node.plans = plan(scene, dims, materials, &ids, edge, opts.node_features)?;
             if node.plans.iter().any(|p| p.plan.scale != 1.0) {
                 return Err(Error::msg(
                     "cannot retain source texels for an individual triangle",
@@ -524,6 +654,59 @@ fn partition(
             }
             return Ok(node);
         }
+    }
+    if !opts.explicit {
+        if depth >= 31 {
+            return Err(Error::Data(
+                "mesh octree exceeds 31 levels; raise maxTriangles or inspect coincident geometry"
+                    .into(),
+            ));
+        }
+        let (cell_lo, cell_hi) = cell.unwrap_or((lo.map(f64::from), hi.map(f64::from)));
+        let mid: [f64; 3] = std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
+        let mut groups: [Vec<usize>; 8] = std::array::from_fn(|_| Vec::new());
+        for &id in &ids {
+            let p = mesh::centroid(scene, &scene.triangles[id]);
+            // The source is Y-up. Address octants in the tileset's Z-up frame.
+            let slot = usize::from(p[0] as f64 >= mid[0])
+                | (usize::from(-(p[2] as f64) >= -mid[2]) << 1)
+                | (usize::from(p[1] as f64 >= mid[1]) << 2);
+            groups[slot].push(id);
+        }
+        if groups.iter().filter(|g| !g.is_empty()).count() == 1
+            && ids.iter().all(|&id| {
+                mesh::centroid(scene, &scene.triangles[id])
+                    == mesh::centroid(scene, &scene.triangles[ids[0]])
+            })
+        {
+            // Coincident centroids cannot be separated spatially. Preserve every
+            // triangle in stable buckets; semantic boxes describe the overlap.
+            groups = std::array::from_fn(|_| Vec::new());
+            for (i, id) in ids.into_iter().enumerate() {
+                groups[i % 8].push(id);
+            }
+        }
+        for (slot, ids) in groups
+            .into_iter()
+            .enumerate()
+            .filter(|(_, ids)| !ids.is_empty())
+        {
+            let upper = [slot & 1 != 0, slot & 4 != 0, slot & 2 == 0];
+            let child_lo = std::array::from_fn(|i| if upper[i] { mid[i] } else { cell_lo[i] });
+            let child_hi = std::array::from_fn(|i| if upper[i] { cell_hi[i] } else { mid[i] });
+            let mut child = partition(
+                scene,
+                dims,
+                materials,
+                ids,
+                opts,
+                Some((child_lo, child_hi)),
+                depth + 1,
+            )?;
+            child.slot = slot;
+            node.children.push(child);
+        }
+        return Ok(node);
     }
     let axis = (0..3)
         .max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b])))
@@ -537,13 +720,13 @@ fn partition(
     let right = ids.split_off(mid);
     let (a, b) = if ids.len() > 20000 {
         rayon::join(
-            || partition(scene, dims, materials, ids, opts),
-            || partition(scene, dims, materials, right, opts),
+            || partition(scene, dims, materials, ids, opts, None, depth + 1),
+            || partition(scene, dims, materials, right, opts, None, depth + 1),
         )
     } else {
         (
-            partition(scene, dims, materials, ids, opts),
-            partition(scene, dims, materials, right, opts),
+            partition(scene, dims, materials, ids, opts, None, depth + 1),
+            partition(scene, dims, materials, right, opts, None, depth + 1),
         )
     };
     node.children = vec![a?, b?];
@@ -555,6 +738,7 @@ fn plan(
     materials: &[usize],
     ids: &[usize],
     edge: u32,
+    node_features: bool,
 ) -> Result<Vec<Planned>, Error> {
     let mut groups: BTreeMap<GroupKey, BTreeMap<Option<u32>, Vec<usize>>> = BTreeMap::new();
     for &id in ids {
@@ -564,6 +748,7 @@ fn plan(
                 materials[t.material.map_or(0, |m| m as usize + 1)],
                 t.image.is_some(),
                 scene.vertices[t.verts[0] as usize].nrm != [0.0; 3],
+                node_features.then(|| scene.triangle_nodes[id]),
             ))
             .or_default()
             .entry(t.image)
@@ -572,7 +757,7 @@ fn plan(
     }
     groups
         .into_iter()
-        .map(|((material, _, _), imgs)| {
+        .map(|((material, _, _, feature), imgs)| {
             let mut groups = Vec::new();
             for (image, ids) in imgs {
                 let mut prim = TilePrimitive::default();
@@ -600,6 +785,7 @@ fn plan(
             }
             Ok(Planned {
                 material,
+                feature,
                 plan: texture::plan_leaf_atlas_limit(groups, dims, edge, 0.0)?,
             })
         })
@@ -635,6 +821,7 @@ fn fold(node: &mut Node) {
 fn flatten(node: &mut Node, out: &mut Vec<Node>) {
     node.id = out.len();
     out.push(Node {
+        slot: node.slot,
         children: Vec::new(),
         plans: std::mem::take(&mut node.plans),
         min: node.min,
@@ -649,6 +836,7 @@ fn flatten(node: &mut Node, out: &mut Vec<Node>) {
         .children
         .iter()
         .map(|c| Node {
+            slot: c.slot,
             children: Vec::new(),
             plans: Vec::new(),
             min: c.min,
@@ -658,16 +846,19 @@ fn flatten(node: &mut Node, out: &mut Vec<Node>) {
         })
         .collect();
 }
-fn tile_json(id: usize, nodes: &[Node]) -> Value {
+fn tile_json(id: usize, nodes: &[Node], implicit: bool) -> Value {
     let n = &nodes[id];
     let lo = [n.min[0], -n.max[2], n.min[1]];
     let hi = [n.max[0], -n.min[2], n.max[1]];
     let mut v = json!({"boundingVolume":{"box":aabb_to_box(lo,hi)},"geometricError":n.error,"refine":"REPLACE","content":{"uri":format!("t/{id}.glb")}});
+    if implicit && id != 0 {
+        v["extras"] = json!({"implicitChildIndex":n.slot});
+    }
     if !n.children.is_empty() {
         v["children"] = json!(n
             .children
             .iter()
-            .map(|c| tile_json(c.id, nodes))
+            .map(|c| tile_json(c.id, nodes, implicit))
             .collect::<Vec<_>>());
     }
     v
@@ -677,6 +868,7 @@ fn write_node(
     id: usize,
     pieces: &[Piece],
     materials: &[Value],
+    node_names: &BTreeMap<u32, String>,
     opts: &MeshTo3tzOptions,
 ) -> Result<(), Error> {
     let mut prims: Vec<_> = pieces.iter().map(|p| p.prim.clone()).collect();
@@ -709,7 +901,22 @@ fn write_node(
         .collect();
     fs::write(
         dir.join(format!("t/{id}.glb")),
-        crate::lossless::write(&prims, &mats, opts.meshopt)?,
+        if opts.node_features {
+            crate::lossless::write_with_features(
+                &prims,
+                &mats,
+                opts.meshopt,
+                &pieces
+                    .iter()
+                    .map(|p| {
+                        let id = p.feature.expect("node feature group");
+                        (id, node_names[&id].clone())
+                    })
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            crate::lossless::write(&prims, &mats, opts.meshopt)?
+        },
     )?;
     Ok(())
 }
@@ -772,7 +979,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
     } else {
         opts.tile_size.min(1024)
     };
-    let mut groups: BTreeMap<(usize, bool, bool), Vec<TilePrimitive>> = BTreeMap::new();
+    let mut groups: BTreeMap<GroupKey, Vec<TilePrimitive>> = BTreeMap::new();
     for child in children {
         for p in child.pieces {
             groups
@@ -780,6 +987,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
                     p.material,
                     p.prim.jpeg.is_some(),
                     !p.prim.normals.is_empty(),
+                    p.feature,
                 ))
                 .or_default()
                 .push(p.prim);
@@ -789,7 +997,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
     let mut geometry_error = 0.0f64;
     let mut texture_error = 0.0f64;
     let total_triangles: usize = groups.values().flatten().map(|p| p.indices.len() / 3).sum();
-    for ((material, _, _), prims) in groups {
+    for ((material, _, _, feature), prims) in groups {
         let triangles: usize = prims.iter().map(|p| p.indices.len() / 3).sum();
         let budget = (opts.max_triangles * triangles / total_triangles.max(1)).max(1);
         let parent = crate::hlod::build_parent(&prims, budget, parent_atlas)?;
@@ -797,6 +1005,7 @@ fn parent_proxy(children: Vec<Proxy>, opts: &MeshTo3tzOptions) -> Result<Proxy, 
         texture_error = texture_error.max(parent.texel_m * 16.0);
         pieces.extend(parent.prims.into_iter().map(|prim| Piece {
             material,
+            feature,
             prim,
             delivery_image: None,
         }));
@@ -816,7 +1025,10 @@ fn materials(scene: &Scene) -> Result<(Vec<Value>, Vec<usize>), Error> {
         if let Some(obj) = m.as_object_mut() {
             obj.remove("name");
         }
-        if let Some(pbr) = m["pbrMetallicRoughness"].as_object_mut() {
+        if let Some(pbr) = m
+            .get_mut("pbrMetallicRoughness")
+            .and_then(Value::as_object_mut)
+        {
             pbr.remove("baseColorTexture");
         }
         let id = templates.iter().position(|v| v == &m).unwrap_or_else(|| {
@@ -830,7 +1042,7 @@ fn materials(scene: &Scene) -> Result<(Vec<Value>, Vec<usize>), Error> {
 }
 // Reject features the photogrammetry IR cannot retain, instead of silently
 // turning a rich glTF into a different-looking model. The wrapping command
-// remains available for general glTF assets.
+// accepts only its documented bounded static source profile.
 fn validate_source(path: &Path) -> Result<(), Error> {
     let doc = source_document(path)?;
     if doc
@@ -843,7 +1055,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
             .is_some_and(|a| !a.is_empty())
     {
         return Err(Error::msg(
-            "mesh-to-3tz supports static meshes; use glb-to-3tz to retain animation or skins",
+            "mesh-to-3tz supports static meshes; animation and skins require a separately authored tileset",
         ));
     }
     if doc
@@ -851,7 +1063,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
         .and_then(Value::as_array)
         .is_some_and(|a| !a.is_empty())
     {
-        return Err(Error::msg("mesh-to-3tz cannot yet preserve source glTF extensions; use glb-to-3tz for an unchanged wrap"));
+        return Err(Error::msg("mesh-to-3tz cannot preserve source glTF extensions; extension semantics require a separately authored tileset"));
     }
     for mesh in doc["meshes"].as_array().into_iter().flatten() {
         for p in mesh["primitives"].as_array().into_iter().flatten() {
@@ -864,7 +1076,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
                 a.keys()
                     .any(|k| !matches!(k.as_str(), "POSITION" | "NORMAL" | "TEXCOORD_0"))
             }) {
-                return Err(Error::msg("mesh-to-3tz currently supports POSITION, NORMAL and TEXCOORD_0; additional attributes require glb-to-3tz to retain fidelity"));
+                return Err(Error::msg("mesh-to-3tz currently supports POSITION, NORMAL and TEXCOORD_0; attributes outside the bounded glb-to-3tz profile require a separately authored tileset"));
             }
         }
     }
@@ -1087,6 +1299,7 @@ mod hierarchy_tests {
             let current = *id;
             *id += 1;
             Node {
+                slot: 0,
                 id: current,
                 min: [0.; 3],
                 max: [1.; 3],

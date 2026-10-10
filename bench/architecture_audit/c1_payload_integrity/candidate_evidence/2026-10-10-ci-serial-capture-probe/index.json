@@ -1,0 +1,29 @@
+{
+  "scope": "Actual targeted serial capture probe on production-equivalent worktree with only one-line CI workflow patch. Not a full367 rerun or corrected remote-head acceptance.",
+  "records": [
+    {
+      "file": "ci-serial-context-probe.log.gz",
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/ci-serial-context-probe.log",
+      "rawSha256": "11f040ffc9ffca605ed2939092735e0a9278bb70d02d586fc83f572209857adf",
+      "rawBytes": 51869,
+      "gzipSha256": "f6903ab3aace403b56287a4bd56dbc2ea7e50113f307cec4e844520d7fa9f920",
+      "gzipBytes": 4453
+    },
+    {
+      "file": "ci-serial-context-probe.json.gz",
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/ci-serial-context-probe.json",
+      "rawSha256": "e7dd7c3fa3627e3060c11de0939e1480426e41b1dca869ded65bfbb94b1589f1",
+      "rawBytes": 126695,
+      "gzipSha256": "1ace831765eb1ed76f11774ec76ea564a19419d351336bad657ca5fb2570ef5c",
+      "gzipBytes": 17374
+    },
+    {
+      "file": "ci-serial-context-probe-verification.json.gz",
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/ci-serial-context-probe-verification.json",
+      "rawSha256": "284f54304493e5afdf35bf9346708ddcf25c51ab4089dcd58fd59371054ee082",
+      "rawBytes": 1633,
+      "gzipSha256": "81e2e413be4ea317d90114724febe1a9c37052047e91037717dbe84824b183c8",
+      "gzipBytes": 819
+    }
+  ]
+}

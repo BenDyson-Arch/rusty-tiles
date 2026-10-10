@@ -1,0 +1,9 @@
+{
+  "acceptanceStatus": "TEMPLATE_ONLY_NOT_ACCEPTED",
+  "acceptedMergeCommit": "REQUIRED40HEX_ACCEPTED_DEVELOP_MERGE",
+  "acceptedJsonOwnerSha256": "REQUIRED_HASH_MATCHING_FROZEN_HELPER",
+  "acceptanceReceipt": {
+    "path": "ROOT_ACCEPTED_C1_EVIDENCE",
+    "sha256": "REQUIRED_HASH"
+  }
+}

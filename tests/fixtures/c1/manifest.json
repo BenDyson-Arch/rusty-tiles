@@ -1,0 +1,1086 @@
+{
+  "schemaVersion": 1,
+  "generator": "Independent standard-library glTF/GLB/ZIP/3TZ byte fixtures",
+  "cases": [
+    {
+      "name": "triangle",
+      "path": "triangle.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Three finite positions, indices 0,1,2; position bytes 36 and index bytes 6.",
+      "sha256": "7096fa910ae8516c47d42523c8603884f79d89a2fab5efd815ece0f491f8ecc7"
+    },
+    {
+      "name": "min_version_2_0",
+      "path": "min_version_2_0.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "fc78e44c644631fd5d32154213aa92435f354a614298e0b6d2e80dc8d2763c2d"
+    },
+    {
+      "name": "min_version_2_1",
+      "path": "min_version_2_1.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "f2ccdd8be77c6499f8bb9fc689f2d6bf6d8aeaa14f48d1b3a61a6f3a5452700d"
+    },
+    {
+      "name": "min_version_3_0",
+      "path": "min_version_3_0.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "5e12c855905262a5d22b7d35b69facba3125c83e30e6167492816a2a430389b7"
+    },
+    {
+      "name": "min_version_bad_type",
+      "path": "min_version_bad_type.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Independent asset.minVersion client compatibility gate: supported2.0, future2.1/3.0 Unsupported, nonstring malformed InvalidInput.",
+      "sha256": "9d32e883d8f07c3de5cfce19486c18e9e5b2fe97d4a6cf58d287dfd9b6769513"
+    },
+    {
+      "name": "points",
+      "path": "points.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Core POINTS or LINES topology with valid finite positions and indices.",
+      "sha256": "0ce587236348d9c66fe8367dedb13adef5787318fe56ed4013679fff2201da8c"
+    },
+    {
+      "name": "lines",
+      "path": "lines.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Core POINTS or LINES topology with valid finite positions and indices.",
+      "sha256": "7fcc35e18f22799d7d9cdf4f07c7fa27745596417bd494e9bb3ed02f2f45adcd"
+    },
+    {
+      "name": "primitive_restart_lines",
+      "path": "primitive_restart_lines.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Pinned draft restart LINE_STRIP: U16 maximum splits two independently analytic segments 0-1 and 2-3; root declares used and required.",
+      "sha256": "93dbabce5576e63eb097678726a1578d484938ae44aefefa219f8488f79f10bf"
+    },
+    {
+      "name": "primitive_restart_not_required",
+      "path": "primitive_restart_not_required.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Pinned draft explicitly requires extensionsRequired; extensionsUsed alone supplies no fallback.",
+      "sha256": "387d284938d4f576a5de417342030fc60c43392c4fe6560c819ae1d2130d7863"
+    },
+    {
+      "name": "primitive_restart_ordinary_index_oob",
+      "path": "primitive_restart_ordinary_index_oob.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Restart sentinel is allowed but ordinary vertex index four exceeds four positions.",
+      "sha256": "0447505f3abc8bc4321545086910f2ab3ba356af0837e2f7f5913f12d7289bc8"
+    },
+    {
+      "name": "primitive_restart_empty_segment",
+      "path": "primitive_restart_empty_segment.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Valid draft restart indices outside the admitted bounded LINE_STRIP profile: each segment must contain at least two vertices; no core-spec invalidity claimed.",
+      "sha256": "d3485ea0108e80b01ff73035ab1b183fbfed70b85870389f927d57f3c09081b5"
+    },
+    {
+      "name": "primitive_restart_singleton_segment",
+      "path": "primitive_restart_singleton_segment.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Valid draft restart indices outside the admitted bounded LINE_STRIP profile: each segment must contain at least two vertices; no core-spec invalidity claimed.",
+      "sha256": "a9d6cb435ffa963cb8c5324fb569f6e6d12443619d22040569c272a4b9a47dc0"
+    },
+    {
+      "name": "terrain",
+      "path": "terrain.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Finite negative-height triangle positions; no terrain producer or horizon proxy involved.",
+      "sha256": "4c2a099ded7a8239c7ee6cc45d401ec87d561a518c5a35b8294da689a6226ff4"
+    },
+    {
+      "name": "unknown_chunk",
+      "path": "unknown_chunk.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "A complete aligned unknown GLB chunk follows BIN; glTF clients must ignore unknown chunk types.",
+      "sha256": "c34892de0fb885247bf2b6bf81dd4045508964085acc74b0ed02f591b5a165c8"
+    },
+    {
+      "name": "external_bin",
+      "path": "external_bin.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Local glTF and separately stored 42-byte binary resource.",
+      "sha256": "df083afaadb2f6e2ebd6e17173dc358d3d66f92648f6815ca0b2e042ac621dd2"
+    },
+    {
+      "name": "interleaved_normalized",
+      "path": "interleaved_normalized.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "16-byte records contain 12-byte FLOAT POSITION and 4-byte normalized UBYTE COLOR_0.",
+      "sha256": "2996f08e04bc131d63d0258b6f2e8d7de619b1882e791f9e0fffe88fde578afc"
+    },
+    {
+      "name": "color_set_noninteger",
+      "path": "color_set_noninteger.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "COLOR_foo has a valid color accessor but its set suffix is not a nonnegative integer.",
+      "sha256": "28b074b485d21376cb5536736548e196bcfa003a6aa13023d1ce0fe1713a9192"
+    },
+    {
+      "name": "color_set_01",
+      "path": "color_set_01.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Published core indexed semantics prohibit leading zeroes and require sets to start at zero without gaps.",
+      "sha256": "47a022cb8ffbfa7e764bc198a7f50993950219a9911f4dabb3bf251661cd0b29"
+    },
+    {
+      "name": "color_set_1",
+      "path": "color_set_1.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Published core indexed semantics prohibit leading zeroes and require sets to start at zero without gaps.",
+      "sha256": "2b25866389b120e2b697e609562316b14683f5781e172e35a8bf0e2fc20f9ab2"
+    },
+    {
+      "name": "texcoord_set_noninteger",
+      "path": "texcoord_set_noninteger.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "TEXCOORD_foo has valid VEC2 FLOAT values but an invalid set suffix.",
+      "sha256": "868644ea961afb90672909795c29b519d8d92a74dea75fff4a7af748c36d792d"
+    },
+    {
+      "name": "mixed_index_vertex_view",
+      "path": "mixed_index_vertex_view.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "One 40-byte view contains UBYTE indices at offset zero and FLOAT vertex positions at offset four; view has no target or stride to reveal the illegal mixed roles.",
+      "sha256": "f51488856bf8dfcc5ab9fcc3d6806314581b8bfed5b21416fc82d34b289b1236"
+    },
+    {
+      "name": "custom_attribute_u32",
+      "path": "custom_attribute_u32.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Published glTF core prohibits unsigned-int component types for application-specific vertex attributes.",
+      "sha256": "4a99b4ec4a5befc7590a3559c5b4651af56c73a5e67e01961596fb30125f30fd"
+    },
+    {
+      "name": "matrix_padding",
+      "path": "matrix_padding.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "UBYTE MAT3 columns start every four bytes; storage is 12 bytes, not 9.",
+      "sha256": "358e242401364eeb47dd9ca13ccbccc897a8f321e874f482f1a63dfb5018e216"
+    },
+    {
+      "name": "matrix_final_padding_omitted",
+      "path": "matrix_final_padding_omitted.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Published Khronos glTF 2.0 Data Alignment permits omitted trailing matrix padding when no further data follows; all nine UBYTE components fit in eleven bytes.",
+      "sha256": "01b7b8cf0f0b5fa4b43a4bfb84d554439a9b723302255366e8742abb198383fb"
+    },
+    {
+      "name": "quantized_positions",
+      "path": "quantized_positions.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "KHR_mesh_quantization normalized USHORT positions with separately aligned unsigned indices.",
+      "sha256": "d4782a453750e27a4d20f450031aee6504cdbd2a6eca516143e10a3e8f68c770"
+    },
+    {
+      "name": "b3dm",
+      "path": "b3dm.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Modern 28-byte b3dm v1 header; uint32 BATCH_LENGTH zero; tables and embedded GLB start eight-byte aligned; external tile padding zero.",
+      "sha256": "b9ba0fc518f247466b999482c8ebc7619a034c17c5c2ac614f9000c6d481fb77"
+    },
+    {
+      "name": "b3dm_short_header",
+      "path": "b3dm_short_header.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Four-byte magic without modern 28-byte header.",
+      "sha256": "b3b16aaa1aea48c9b3d354bfe6e5ea4cd87fe818dbb268118e264c0fe6c34386"
+    },
+    {
+      "name": "b3dm_total_length",
+      "path": "b3dm_total_length.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Declared entire tile length exceeds actual bytes.",
+      "sha256": "3268e30d316c4310ee547524000fc465443904a5ec420b67f69d62e635c4363c"
+    },
+    {
+      "name": "b3dm_table_overclaim",
+      "path": "b3dm_table_overclaim.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Feature JSON claims an out-of-resource table range.",
+      "sha256": "a05d7c672ac498c1c0f061c493a3778ecbbc84230c8302c8add0e5f693130f94"
+    },
+    {
+      "name": "b3dm_table_alignment",
+      "path": "b3dm_table_alignment.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Feature JSON boundary moves the embedded GLB start off its eight-byte alignment.",
+      "sha256": "ddb08868cf4236a0bc29f057f4b3bdca8b9d7eb91588be993c39eea876b3d9ca"
+    },
+    {
+      "name": "b3dm_future_version",
+      "path": "b3dm_future_version.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Future b3dm version is not the admitted modern version one.",
+      "sha256": "7a4f01d3e4068b6f78bed687e160cd02317cea83e8f114d91cbf0dd93430847f"
+    },
+    {
+      "name": "b3dm_missing_batch_length",
+      "path": "b3dm_missing_batch_length.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Feature table is a JSON object but required BATCH_LENGTH is absent.",
+      "sha256": "0886dcce0928c6b8c4cee4625e14d7d32a9a8d524520024cca8e265d94a295af"
+    },
+    {
+      "name": "b3dm_duplicate_feature_key",
+      "path": "b3dm_duplicate_feature_key.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Duplicate feature-table JSON keys must not silently overwrite.",
+      "sha256": "dbb4a3223b6cc1af2316c329c1dc62edaa89e0a67a3bb89e5fef1afb8d6323ab"
+    },
+    {
+      "name": "b3dm_batch_binary_without_json",
+      "path": "b3dm_batch_binary_without_json.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Header declares batch binary bytes with zero batch JSON length.",
+      "sha256": "91efb00b8095e1801a65f3b0bc30c5f64884e0b1959a7f3bb4abc666ab7fce9f"
+    },
+    {
+      "name": "b3dm_embedded_glb_overclaim",
+      "path": "b3dm_embedded_glb_overclaim.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Embedded GLB length claims bytes outside its tile.",
+      "sha256": "4d9329a3eeb2404379fad4eaa6089947fd34c021ba6a3376a9bf033592e59d96"
+    },
+    {
+      "name": "b3dm_nonzero_tile_padding",
+      "path": "b3dm_nonzero_tile_padding.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Tile padding outside the embedded GLB length contains a nonzero byte.",
+      "sha256": "24d567feab62642c9437abe4c95650691c392433cfd3094b887000607bfd78a0"
+    },
+    {
+      "name": "meshopt_none_golden",
+      "path": "meshopt_none_golden.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Upstream pinned meshoptimizer golden ATTRIBUTES/NONE stream decodes to independently published 48 bytes (four finite FLOAT VEC3 points).",
+      "sha256": "0bf98053c8d0662acfd04f5be98e8cf94b03977506ad1d20347ad3bd72c120cb"
+    },
+    {
+      "name": "extras_nested_extensions",
+      "path": "extras_nested_extensions.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Application-defined extras keys called extensions have no glTF extension semantics.",
+      "sha256": "3c0c538d44218899c06a8e4d434d293fdcdd462cec8fd358bcfdfd5d94768641"
+    },
+    {
+      "name": "extras_extensions_scalar",
+      "path": "extras_extensions_scalar.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Application-defined extras keys called extensions have no glTF extension semantics.",
+      "sha256": "24beaa7511d63e4c855f657083155b54aa6cd7fb8dfc03c846788c870a656b6a"
+    },
+    {
+      "name": "quantized_uv_required_True",
+      "path": "quantized_uv_required_True.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signed SHORT VEC2 texture coordinates need KHR_mesh_quantization required even alongside ordinary FLOAT POSITION.",
+      "sha256": "789b4ee472d1113ccc0307c7903124b63dca7dfa19660665c9fb44633f8ffe22"
+    },
+    {
+      "name": "quantized_uv_required_False",
+      "path": "quantized_uv_required_False.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Signed SHORT VEC2 texture coordinates need KHR_mesh_quantization required even alongside ordinary FLOAT POSITION.",
+      "sha256": "688eeff91bbe8a1119ecbd03cdf9ab505cc76a973f42b55daa88b6736dfbbdc5"
+    },
+    {
+      "name": "meshopt_external_control",
+      "path": "meshopt_external_control.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Pinned compressed golden bytes supplied as an archive-local resource with exact declared size.",
+      "sha256": "8fb39ea89b5b8de222b8e5e862511303692c210183d4c24b998261c6843a6499"
+    },
+    {
+      "name": "meshopt_compressed_over_declared",
+      "path": "meshopt_compressed_over_declared.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "85 compressed bytes exist physically but range exceeds declared buffer byteLength48.",
+      "sha256": "8613403fdb4efc850eb7a5a4d307071968e31800fe0269868e2e39603b096ade"
+    },
+    {
+      "name": "meshopt_fallback_one_True",
+      "path": "meshopt_fallback_one_True.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "URI-less placeholder buffer1 is covered by a required compressed view; fallback tag is optional.",
+      "sha256": "2967504d47f2933486f16be16ffc9a0337480ae7a0e6c8bedf37eb0d766129e8"
+    },
+    {
+      "name": "meshopt_fallback_one_False",
+      "path": "meshopt_fallback_one_False.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "URI-less placeholder buffer1 is covered by a required compressed view; fallback tag is optional.",
+      "sha256": "6b01434b148bdc3bc64322d5cdc8df99e1f46a260ec5e0380637407c13b6deaa"
+    },
+    {
+      "name": "meshopt_fallback_zero",
+      "path": "meshopt_fallback_zero.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Local glTF placeholder buffer0 is allowed; compressed stream resides in archive-local buffer1.",
+      "sha256": "18a098f5ecdf2b359585eb82fb6f4e5d85e638d1e26a96efabda201d35663413"
+    },
+    {
+      "name": "meshopt_glb_fallback_zero",
+      "path": "meshopt_glb_fallback_zero.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "GLB has JSON-only framing and placeholder buffer0; required compressed stream is external buffer1.",
+      "sha256": "20045144bf2f3f972423f85bbb49cd8ef32bfb99be8084282485c653afa2b87f"
+    },
+    {
+      "name": "meshopt_placeholder_uncovered",
+      "path": "meshopt_placeholder_uncovered.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.",
+      "sha256": "889e590c459c054c67e0c86cb0a4b3294c22eabb35fb39ef192e52f503a37cb9"
+    },
+    {
+      "name": "meshopt_placeholder_not_required",
+      "path": "meshopt_placeholder_not_required.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Unavailable placeholder bytes cannot serve ordinary views or optional-only compressed fallback.",
+      "sha256": "15b2bde39ab0875adfdc56ea7977504b0eab86a6e326d9a733a2c2234c779870"
+    },
+    {
+      "name": "fallback_marker_uncompressed",
+      "path": "fallback_marker_uncompressed.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Fallback-marked actual BIN buffer is referenced by ordinary uncompressed views, violating the marker role constraint.",
+      "sha256": "7439e5718f19d6efdc6760185184a073c993ba359a73d0ef45aa3452263ace7a"
+    },
+    {
+      "name": "fallback_marker_compressed_source",
+      "path": "fallback_marker_compressed_source.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Fallback-marked actual resource is referenced as a compressed source, which the fallback marker forbids.",
+      "sha256": "49c47f4dea360161c13a1bc36ddcdad90cea18061ea9771d22c39c5dbcca204f"
+    },
+    {
+      "name": "fallback_marker_bad_type",
+      "path": "fallback_marker_bad_type.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "EXT_meshopt_compression buffer fallback marker is a string rather than its defined boolean.",
+      "sha256": "c5314fed3613616d1d413863682b0a7e716209d3675c182715d848a6dbc171f5"
+    },
+    {
+      "name": "fallback_marker_actual_resource",
+      "path": "fallback_marker_actual_resource.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Fallback-marked actual decoded resource serves only a compressed view and is never used as a compressed source.",
+      "sha256": "a665d3c4fc5386c8876094f592a7f51b27385907fa1b5098db80c109a90ed95f"
+    },
+    {
+      "name": "meshopt_unused_placeholder",
+      "path": "meshopt_unused_placeholder.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Required meshopt document has a URI-less unused placeholder; no references violate fallback coverage roles.",
+      "sha256": "79421cc514a21bf68bba61f297c44f681d344d107b69f120da2848ac65b714be"
+    },
+    {
+      "name": "empty_bin",
+      "path": "empty_bin.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Declared 42-byte buffer and required POSITION payload absent.",
+      "sha256": "22c18115507eba7d1f13215ac55aa291dc2faabd462567c482d16a06dabda785"
+    },
+    {
+      "name": "stride_one",
+      "path": "stride_one.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "POSITION stride 1 cannot hold a 12-byte element.",
+      "sha256": "fa152811d3d4de16824a6a5d1d18771fcd7fd773e4b55314c9ac147791b43003"
+    },
+    {
+      "name": "offset_overflow",
+      "path": "offset_overflow.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Accessor offset u64MAX cannot identify stored bytes.",
+      "sha256": "1e4373ac92cf0cf3d62fcd1d8014c8f5c8c7423c89caff15138d6e180e5c6c76"
+    },
+    {
+      "name": "index_range",
+      "path": "index_range.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Index 65535 is outside three vertices.",
+      "sha256": "539cca6e4856205991c04448a1779e2c321864dae114a47d9818fb23f2b344fd"
+    },
+    {
+      "name": "buffer_short",
+      "path": "buffer_short.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "36-byte position view exceeds declared one-byte buffer.",
+      "sha256": "521f9a6315f242d6e1f50f8824a4eb5f71db4ccd4a0981631e51660cbc5f85d5"
+    },
+    {
+      "name": "nan_position",
+      "path": "nan_position.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "First position component is IEEE754 NaN.",
+      "sha256": "d7460eee9331d1095c89fe90e9a01fecb41afc6cdc00e39dbec590b16be64736"
+    },
+    {
+      "name": "infinite_position",
+      "path": "infinite_position.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "First position component is IEEE754 infinity.",
+      "sha256": "dcc8856ab63773295ee8f9117c1d538de452c5b1456391b13c30289730646bc2"
+    },
+    {
+      "name": "sparse",
+      "path": "sparse.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Sparse accessors are deliberately outside C1 admission.",
+      "sha256": "968a2cf8d55f4699085e5772705cf66d3015a4a11890897f65d9a65ddd31564b"
+    },
+    {
+      "name": "data_uri",
+      "path": "data_uri.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Non-base64 data URI is outside bounded buffer admission.",
+      "sha256": "6fa2dbd1d72e6588ba582ee3f96be43396ec13f1d22d29fe6d5056992706e4bd"
+    },
+    {
+      "name": "required_unknown",
+      "path": "required_unknown.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Unknown required extension cannot be inspected.",
+      "sha256": "91b0b08060c955ff86d36bcbfc8ef23f40022b1cfe5f850ece2e65ef235545fc"
+    },
+    {
+      "name": "count_limit",
+      "path": "count_limit.3tz",
+      "expectedKind": "resource_limit",
+      "exitCode": 3,
+      "analyticFact": "POSITION count u64MAX exceeds four-million-element ceiling.",
+      "sha256": "3acd47a7f1b0758c0d527109d84c1d953166c2e961c7f7ee19fea337533d8cc3"
+    },
+    {
+      "name": "count_sum_overflow",
+      "path": "count_sum_overflow.3tz",
+      "expectedKind": "resource_limit",
+      "exitCode": 3,
+      "analyticFact": "Two u64MAX counts must return a category instead of panic.",
+      "sha256": "81b4a83d07a337d8af8ea55add676e59ab0a9609699cf6a1526bb6b08a3886ce"
+    },
+    {
+      "name": "buffer_base64_octet-stream",
+      "path": "buffer_base64_octet-stream.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Independent inline base64 contains exactly the analytic 42-byte triangle buffer.",
+      "sha256": "e9a5bd7355354248d40cc355007c0e45736472528a7d088305d32925b4e44fea"
+    },
+    {
+      "name": "buffer_base64_gltf-buffer",
+      "path": "buffer_base64_gltf-buffer.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Independent inline base64 contains exactly the analytic 42-byte triangle buffer.",
+      "sha256": "2c179404ba8fe9b562c88be1a0beccf4cb9e055d92aaf1e98ab47dd045edaeae"
+    },
+    {
+      "name": "buffer_base64_bad_base64",
+      "path": "buffer_base64_bad_base64.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Inline buffer base64 syntax or decoded byte length fails independently known 42-byte buffer requirements.",
+      "sha256": "2d8d2aa5b19136969b32ab113a18584eb1d1819246cbcb868ea0ca147d04c203"
+    },
+    {
+      "name": "buffer_base64_missing_bytes",
+      "path": "buffer_base64_missing_bytes.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Inline buffer base64 syntax or decoded byte length fails independently known 42-byte buffer requirements.",
+      "sha256": "ee4cd3e08265b4193a78d630a0523714d8d75769b5dd05fa7afb1f29fcdb92c3"
+    },
+    {
+      "name": "buffer_base64_length_mismatch",
+      "path": "buffer_base64_length_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Inline buffer base64 syntax or decoded byte length fails independently known 42-byte buffer requirements.",
+      "sha256": "581e55cf6d70572e1ee4413052c564a6369a544e4b415c37f43ec23659063311"
+    },
+    {
+      "name": "buffer_uri_remote",
+      "path": "buffer_uri_remote.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
+      "sha256": "dc158a5fe20ce5128d3743cd935d8c35ee886d265bf9a775d43ff6a167b41984"
+    },
+    {
+      "name": "buffer_uri_absolute",
+      "path": "buffer_uri_absolute.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
+      "sha256": "275e9779ec6fbfbb16b36fe5c862f64472652b6808efc20b89589defa4cf420e"
+    },
+    {
+      "name": "buffer_uri_query",
+      "path": "buffer_uri_query.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
+      "sha256": "6c9e4695907b05805301bf09fbf909571ae82590099db801409ab2023fcb374f"
+    },
+    {
+      "name": "buffer_uri_fragment",
+      "path": "buffer_uri_fragment.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Syntactically meaningful non-local/non-plain URI is outside the archive-local resource profile.",
+      "sha256": "3ef597a3b31a538085d2b847ed056c49bf2c48ee63075149e0362ddb27ab6f19"
+    },
+    {
+      "name": "buffer_uri_percent_dot",
+      "path": "buffer_uri_percent_dot.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "bf1ad86c8de8ee067f33f345b2b8b1bc7001e81188123785e87000c5290e6d88"
+    },
+    {
+      "name": "buffer_uri_percent_space",
+      "path": "buffer_uri_percent_space.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "8350b3f3086bf5831607e36d40b980b53bc4a10883d85ce66094727ca163aed8"
+    },
+    {
+      "name": "buffer_uri_percent_once",
+      "path": "buffer_uri_percent_once.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "eab53b679b4ae7db6d0f7580135af3c0910b28b7adf0f7d73747574a5d4d5a60"
+    },
+    {
+      "name": "buffer_uri_percent_wrong_member",
+      "path": "buffer_uri_percent_wrong_member.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "6edbf0f93ff96698ed23afc3e483f6172688ce2f5f8a746eb5b61951a569bd6b"
+    },
+    {
+      "name": "buffer_uri_percent_separator",
+      "path": "buffer_uri_percent_separator.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "467e325e0c7e0fc2d3cc343840dd129cb2c434b3ca5aacd2d1da9cc8c702804b"
+    },
+    {
+      "name": "buffer_uri_percent_backslash",
+      "path": "buffer_uri_percent_backslash.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "ce2ee0b6168be6274fd71b3d787d2ce9edd7c0ebc5229ffa0eb871dd70e32f5d"
+    },
+    {
+      "name": "buffer_uri_percent_escape",
+      "path": "buffer_uri_percent_escape.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "77f12bd331422ac33cd61da6c57cd6dafe29fded2772fed9e98c1835e0cee2d7"
+    },
+    {
+      "name": "buffer_uri_percent_truncated",
+      "path": "buffer_uri_percent_truncated.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "bfd37dc2548bca029bcef6506cd095e2b171df77902184130e703ff9a292b1c3"
+    },
+    {
+      "name": "buffer_uri_percent_nonhex",
+      "path": "buffer_uri_percent_nonhex.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "54945198bf3a796c2cac4a70f1afbb99a31dffb1211873aa2ed0c26f7f5a0cc7"
+    },
+    {
+      "name": "buffer_uri_percent_utf8",
+      "path": "buffer_uri_percent_utf8.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "ad920ed064a2b3ee22a2f905efd8ee49c7ae56deff839cb9c3d7e44d723d3ef4"
+    },
+    {
+      "name": "buffer_uri_percent_control",
+      "path": "buffer_uri_percent_control.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Archive reader decodes UTF-8 URI segments once and confines decoded paths; actual member bytes independently named.",
+      "sha256": "3c615cff3235401da524bc25404239733a632d38d48fec267afa5bee2f081c12"
+    },
+    {
+      "name": "buffer_uri_empty",
+      "path": "buffer_uri_empty.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Malformed or archive-escaping URI must fail as invalid input.",
+      "sha256": "f6393aefbfa4d1d965097bf71cacdc0dcd0ea48a21d82e11406aad3984ce80f8"
+    },
+    {
+      "name": "buffer_uri_backslash",
+      "path": "buffer_uri_backslash.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Malformed or archive-escaping URI must fail as invalid input.",
+      "sha256": "c56d77fc58f6def6a8d2341c405d9e4c349bf42e686d8dd906f1a07b4b6e70e1"
+    },
+    {
+      "name": "buffer_uri_escape",
+      "path": "buffer_uri_escape.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Malformed or archive-escaping URI must fail as invalid input.",
+      "sha256": "984d31cbe020c205b8ab75e7727f40ca765796c05888a3456bb5ff55655e7c95"
+    },
+    {
+      "name": "tileset_duplicate_key",
+      "path": "tileset_duplicate_key.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Root tileset JSON repeats geometricError; bounded unique parser must reject it.",
+      "sha256": "fb191060149d746b62b5eaa5d5f17052838302e68c90eb5e2075aa7efa172f56"
+    },
+    {
+      "name": "truncated_header",
+      "path": "truncated_header.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "GLB header contains only ten bytes.",
+      "sha256": "dc30e82f42756fb2b26f4b3686f92949bb6e28410738465d06f19d4a938d771c"
+    },
+    {
+      "name": "bin_overclaim",
+      "path": "bin_overclaim.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "BIN chunk claims ~4GiB but contains 44 bytes.",
+      "sha256": "0717f08737e67f71780369e4772ce3e101d7314d3b04d7d7597ba1db2aba50b9"
+    },
+    {
+      "name": "duplicate_bin",
+      "path": "duplicate_bin.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Two BIN chunks are not a permitted GLB layout.",
+      "sha256": "288ae61725ff746d63909d8e56803e844cd691b1691641d2a264855d55c2ba96"
+    },
+    {
+      "name": "bin_nonzero_padding",
+      "path": "bin_nonzero_padding.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The two BIN padding bytes must be zero; final byte is one.",
+      "sha256": "1e0d66b6f597708fd4e7515c23bfef02b1dd4166138a51e93699823817c420fa"
+    },
+    {
+      "name": "matrix_missing_padding",
+      "path": "matrix_missing_padding.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "UBYTE MAT3 requires column padding and twelve-byte storage, but only nine bytes are provided.",
+      "sha256": "bfc1223090e209eda7c86b9dc2c495085436e121983e8455170590e6304e3743"
+    },
+    {
+      "name": "meshopt_count_limit",
+      "path": "meshopt_count_limit.3tz",
+      "expectedKind": "resource_limit",
+      "exitCode": 3,
+      "analyticFact": "Meshopt decoded count exceeds cap before decode allocation.",
+      "sha256": "fcd5e133d65a7db8540340d04359426b449ea0d2f31562c42e62996204bf640a"
+    },
+    {
+      "name": "implicit_no_content",
+      "path": "implicit_no_content.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Independent binary subtree header, one constant-available tile, zero content slots and unavailable child subtrees; duplicate-key variant invalid.",
+      "sha256": "93aab38196f8b2b3927ed5e02cc8419d6fc74522c9a4d185b466b473936de892"
+    },
+    {
+      "name": "implicit_duplicate_subtree_key",
+      "path": "implicit_duplicate_subtree_key.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Independent binary subtree header, one constant-available tile, zero content slots and unavailable child subtrees; duplicate-key variant invalid.",
+      "sha256": "f289f753a8059bb2dfce07a454e0d42e2d3153ec317522c402bafc2f4d6b524e"
+    },
+    {
+      "name": "polygon_optional_tables",
+      "path": "polygon_optional_tables.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Optional polygon metadata references three bounded unsigned SCALAR accessors; full polygon topology is deliberately not inspected.",
+      "sha256": "9912b65722c970ae6aac71e56a143646ba9cf0eaa0b2560588a2228b15e346a4"
+    },
+    {
+      "name": "polygon_accessor_reference_oob",
+      "path": "polygon_accessor_reference_oob.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Optional polygon accessor reference99 exceeds five accessors.",
+      "sha256": "5268bf20c382e416eed53cd139540928724d9363b54911622bd0703d65e01ced"
+    },
+    {
+      "name": "polygon_accessor_wrong_scalar",
+      "path": "polygon_accessor_wrong_scalar.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Polygon offset reference targets FLOAT VEC3 POSITION rather than unsigned SCALAR.",
+      "sha256": "3391aceb112be7f31947ea2a89002afbd3cb0ab3624a2415aacbef87c7c1f986"
+    },
+    {
+      "name": "index_offset_max",
+      "path": "index_offset_max.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Valid stored ZIP and CRC, but every 3TZ index offset is u64MAX outside the file.",
+      "sha256": "184514c0c9819d40d26a87440d8966a1b1450b3d2d9afa19404addae3460edb5"
+    },
+    {
+      "name": "zip_local_offset_sentinel",
+      "path": "zip_local_offset_sentinel.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Central directory local offset is ZIP64 sentinel without required ZIP64 extra field.",
+      "sha256": "757537b21e902f6058b1b3f0af7d0a774e45558b4e7ffd1c722d6c4be2790727"
+    },
+    {
+      "name": "zip64_count_max",
+      "path": "zip64_count_max.3tz",
+      "expectedKind": "resource_limit",
+      "exitCode": 3,
+      "analyticFact": "ZIP64 claims u64MAX entries; admission must reject before directory allocation.",
+      "sha256": "0b57512aacf322db120635818d986e5d06eb6de9f8e25fc71ca6b25c1001cf84"
+    },
+    {
+      "name": "zip_local_crc_mismatch",
+      "path": "zip_local_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local crc differs from central directory while member bytes and index remain correct.",
+      "sha256": "f2e18344ff926c8978cfe7ad918ca30d5a179d84746abec738c73bafcb1420a8"
+    },
+    {
+      "name": "zip_local_compressed_size_mismatch",
+      "path": "zip_local_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local compressed_size differs from central directory while member bytes and index remain correct.",
+      "sha256": "a74baa7fd073b0c57e787093095119a54406caf7ec8689fc84e2c7ee8efdd861"
+    },
+    {
+      "name": "zip_local_uncompressed_size_mismatch",
+      "path": "zip_local_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "No descriptor: local uncompressed_size differs from central directory while member bytes and index remain correct.",
+      "sha256": "3d678e72a006361f5a61ccf5896c6f6761887e3f3db3c5ad08087127602e743b"
+    },
+    {
+      "name": "zip_local_zip64",
+      "path": "zip_local_zip64.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Small stored member elects ZIP64 local and central size fields; local 0x0001 original/compressed sizes match actual bytes.",
+      "sha256": "836556219ca68a1fe05e7c26d5bad00dcbf791066300b6fd2e21b8b36028adcc"
+    },
+    {
+      "name": "zip_local_zip64_compressed_size_mismatch",
+      "path": "zip_local_zip64_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Local ZIP64 compressed_size differs from central size; no descriptor or actual payload corruption.",
+      "sha256": "b5f121dbb4e83657418959ce0e1d14a0d98defc21f9b60e5bd7b11e81546b8db"
+    },
+    {
+      "name": "zip_local_zip64_uncompressed_size_mismatch",
+      "path": "zip_local_zip64_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Local ZIP64 uncompressed_size differs from central size; no descriptor or actual payload corruption.",
+      "sha256": "cde462531e1f114cf42c893c811bcb155909163f3519094d0dc49c0c138b07ee"
+    },
+    {
+      "name": "zip_descriptor_32_signed",
+      "path": "zip_descriptor_32_signed.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate 32-bit data descriptor with optional signature; central/index unchanged in meaning.",
+      "sha256": "e0962a54a3b03b7e57bc8780a4cb27519b31f4a69dfe5e0de8efb9fdebaf9b3b"
+    },
+    {
+      "name": "zip_descriptor_32_signed_crc_mismatch",
+      "path": "zip_descriptor_32_signed_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "df2bcbc6a9c970c527bc6dc792afa63ff4d9a4840354fcae75e103df847a4b9c"
+    },
+    {
+      "name": "zip_descriptor_32_signed_compressed_size_mismatch",
+      "path": "zip_descriptor_32_signed_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "7db412294868d058ae4f908c4bbe4af274de4ff631ff507eda3483081e0dd652"
+    },
+    {
+      "name": "zip_descriptor_32_signed_uncompressed_size_mismatch",
+      "path": "zip_descriptor_32_signed_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "02332261dbb07929a0d17f43053b89ea0d56da32e1a5cde5389ff09eb1695cdd"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned",
+      "path": "zip_descriptor_32_unsigned.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate 32-bit data descriptor without optional signature; central/index unchanged in meaning.",
+      "sha256": "05f48193996c4654df2a7336572d9652a142323fd6e1c54ff5e6490a89ba571e"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_crc_mismatch",
+      "path": "zip_descriptor_32_unsigned_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "55f6ed1a3a0baa992e2478411861553da62f5905c871da84740ef09b2ac13ddd"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_compressed_size_mismatch",
+      "path": "zip_descriptor_32_unsigned_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "8355e67af8ba089e25f6863fd82f4a0936ea1ba446583294f7b501431ef1bc65"
+    },
+    {
+      "name": "zip_descriptor_32_unsigned_uncompressed_size_mismatch",
+      "path": "zip_descriptor_32_unsigned_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "08198a86c375e0150522b5809386140b687337d3e267d83c989d855448c0b735"
+    },
+    {
+      "name": "zip_descriptor_64_signed",
+      "path": "zip_descriptor_64_signed.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate ZIP64 data descriptor with optional signature; central/index unchanged in meaning.",
+      "sha256": "53347b1a20a33fd505e2faf83fa67e575fd1d919e531e93d6f6ceb8bf15f186c"
+    },
+    {
+      "name": "zip_descriptor_64_signed_crc_mismatch",
+      "path": "zip_descriptor_64_signed_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "1b4652e058423243d5cba211c5d020cd9028811fad6630e74a7770d5dca2d6fb"
+    },
+    {
+      "name": "zip_descriptor_64_signed_compressed_size_mismatch",
+      "path": "zip_descriptor_64_signed_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "5b7dd5a2be9e7836d71025557361c9aa303387c31d0ba4dbaa3e61a30970632d"
+    },
+    {
+      "name": "zip_descriptor_64_signed_uncompressed_size_mismatch",
+      "path": "zip_descriptor_64_signed_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "797969b68dd311acc78d7151c514e2ff4c59d8a96ea84dfc856b109705320453"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned",
+      "path": "zip_descriptor_64_unsigned.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Stored bit3 member: zero local CRC/sizes, correct immediate ZIP64 data descriptor without optional signature; central/index unchanged in meaning.",
+      "sha256": "61df55f908c3aecc01b7514f588502d53c53a1c0f82eeec95ddef55225749de4"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_crc_mismatch",
+      "path": "zip_descriptor_64_unsigned_crc_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor crc contradicts actual data and central directory.",
+      "sha256": "81938e01b55e636b5c6827528d3fbc1bd2ac463afba1471bb71b109211b7394f"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_compressed_size_mismatch",
+      "path": "zip_descriptor_64_unsigned_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor compressed_size contradicts actual data and central directory.",
+      "sha256": "85dc9d67db8e3a00d2217fbcec189abdbdeb0e4310d30c4aad8b839f372e79c5"
+    },
+    {
+      "name": "zip_descriptor_64_unsigned_uncompressed_size_mismatch",
+      "path": "zip_descriptor_64_unsigned_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Immediate descriptor uncompressed_size contradicts actual data and central directory.",
+      "sha256": "aa6af4d01072028b64953b4927e75a7744e4da841ebdf21f0e49f8f595d12d32"
+    },
+    {
+      "name": "zip_descriptor_32_local_crc_nonzero",
+      "path": "zip_descriptor_32_local_crc_nonzero.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Bit3 ordinary local crc is nonzero instead of its defined zero placeholder, despite a correct descriptor.",
+      "sha256": "1860a3e8112b46fc87ccf85f0c3cf2b6cbb2b19d91358ced4f1b35712f52f22b"
+    },
+    {
+      "name": "zip_descriptor_32_local_compressed_size_nonzero",
+      "path": "zip_descriptor_32_local_compressed_size_nonzero.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Bit3 ordinary local compressed_size is nonzero instead of its defined zero placeholder, despite a correct descriptor.",
+      "sha256": "03be9e5de63b30e289a4164c8bdcf7e0a82fa771ce9be24c9e031d93e471d459"
+    },
+    {
+      "name": "zip_descriptor_32_local_uncompressed_size_nonzero",
+      "path": "zip_descriptor_32_local_uncompressed_size_nonzero.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Bit3 ordinary local uncompressed_size is nonzero instead of its defined zero placeholder, despite a correct descriptor.",
+      "sha256": "ba5e278f7ae6f245d649e47802c123243ff71f89f630f3e1fccd15dda7838b3a"
+    },
+    {
+      "name": "zip_descriptor_64_local_crc_nonzero",
+      "path": "zip_descriptor_64_local_crc_nonzero.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Bit3 local CRC must be zero even when size fields use ZIP64 sentinels and a correct descriptor follows.",
+      "sha256": "a1494180e5219478695b31a84707d946467084d24091b8b2a40a5e7e8a19d1c0"
+    },
+    {
+      "name": "zip_descriptor_64_known_local_sizes",
+      "path": "zip_descriptor_64_known_local_sizes.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "ZIP64 local extra sizes are known and agree with descriptor/central; ordinary fields retain sentinels and CRC remains zero.",
+      "sha256": "1c2c93ce8858b74c372393fe51f5b34b6ac67677164810c368339583028d6d84"
+    },
+    {
+      "name": "zip_descriptor_64_local_compressed_size_mismatch",
+      "path": "zip_descriptor_64_local_compressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "ZIP64 local extra compressed_size is neither zero nor the correct descriptor/central size.",
+      "sha256": "35df4dbe756b9864a24f6504c75e78037f1cc204ccc24bb034aa9b349ea94c2c"
+    },
+    {
+      "name": "zip_descriptor_64_local_uncompressed_size_mismatch",
+      "path": "zip_descriptor_64_local_uncompressed_size_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "ZIP64 local extra uncompressed_size is neither zero nor the correct descriptor/central size.",
+      "sha256": "a2ea60f5a1e04e7d652c2777e5f4ffdc23aca595ac49d7e1239cc17acb2a1b7d"
+    },
+    {
+      "name": "zip_descriptor_32_crc_equals_signature",
+      "path": "zip_descriptor_32_crc_equals_signature.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.",
+      "sha256": "7d15f388a4a6c7a5662ff7dffc16b8b6a356a953bf70ce22246605f25cfcd23f"
+    },
+    {
+      "name": "zip_descriptor_64_crc_equals_signature",
+      "path": "zip_descriptor_64_crc_equals_signature.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.",
+      "sha256": "1efec1a49ba11a9c7300eb01421830520296ec1822cd510126b3180809f60a60"
+    }
+  ]
+}

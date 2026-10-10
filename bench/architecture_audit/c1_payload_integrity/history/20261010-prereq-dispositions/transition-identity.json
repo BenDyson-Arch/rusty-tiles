@@ -1,0 +1,18 @@
+{
+  "prior_freeze_sha256": "7080e8d28308695782c2058894dad1a823150a5302405f84aaf16af93ff57e34",
+  "own_inputs_preserved_and_verified": true,
+  "foreign_input_identity_exceptions": [
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/raw-only-tradeoff.md",
+      "historical_sha256": "95a6b831c0e1b115b3b518b71b61a20d175e343ed9f42fc14e36f9140fbaddb0",
+      "current_sha256": "f6f79871684f4ded5661beb2da0720885256d2020b4b87dedfb93aa9536fce5f",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    },
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/receipt.json",
+      "historical_sha256": "762360ead2050531c17b54c14978d13ec86619d0f90214ef01492c3eb2b981a5",
+      "current_sha256": "5dbaddfaaa19f2e08f7084530b089a6907b3e9cded796c542506f67fa3f73865",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    }
+  ]
+}

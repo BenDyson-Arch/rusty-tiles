@@ -1,0 +1,89 @@
+{
+  "review_scope": "Read-only independent audit of PR143 CI terrain preview initialization stall; no production edits/Cargo/build/commits. Earlier placement review remains frozen separately.",
+  "source_commit": "f0f4bd048935930e884e4c2a4c899934951a884b",
+  "baseline": "71cd11dcdb226ce7639912dba85adf0b2f35048b",
+  "source_unchanged_vs_baseline": {
+    "src/preview.rs": true,
+    "preview/index.html": true,
+    "tests/t1_terrain_viewer.py": true,
+    "tests/fixtures/terrain.cjs": true
+  },
+  "executed_defect": {
+    "severity": "High: valid simultaneous browser connections can stall preview initialization indefinitely while keep-alive connections remain open.",
+    "artifact_sha256": "bef6518c234783caaa41a1d4c416e22dab2001d8067de379f537864cf61d503e",
+    "case": "Schedule a six-connection HTTP/1.1 keep-alive burst against frozen preview on one CPU after its initial four connection-reader workers are idle.",
+    "observed": {
+      "four_connection_control": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "six_connection_completed": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "six_connection_pending": [
+        4,
+        5
+      ],
+      "release_control": [
+        4
+      ]
+    },
+    "runtime_receipt": "preview-stall-results.json",
+    "probe": "preview_stall_review.py",
+    "limit": "Observed each held-open phase for0.5s; source-level task/ownership inspection explains the unbounded wait rather than interpreting a finite timeout as proof of forever."
+  },
+  "static_root_cause": {
+    "owner": "tiny_http0.12 TaskPool connection-reader admission, not Preview response workers.",
+    "paths": [
+      "tiny_http-0.12.0/src/util/task_pool.rs:84",
+      "tiny_http-0.12.0/src/lib.rs:324",
+      "tiny_http-0.12.0/src/client.rs:166"
+    ],
+    "mechanism": "TaskPool::spawn checks waiting_tasks==0 without accounting for previously queued work consuming those same idle workers. A burst can enqueue more accepted connections than idle readers. Four readers then remain in persistent per-client ClientConnection::next/read loops. Queued accepted connections get no reader until an owning connection closes or a later accept happens to create another reader. Preview cannot receive an HTTP Request from a socket whose connection-reader task remains queued.",
+    "response_owner": "Preview has four response workers, but they wait on a separate parsed-request queue; increasing this count does not repair connection-reader admission.",
+    "failed_header_workaround": "Response::add_header rejects Connection headers, so normal with_header(Connection: close) would be silently ignored."
+  },
+  "cesium_review": {
+    "version": "1.146.0",
+    "paths": [
+      "@cesium/engine/Source/Scene/Cesium3DTileset.js:2285",
+      "@cesium/engine/Source/Core/Resource.js:1359"
+    ],
+    "observation": "Cesium3DTileset.fromUrl awaits loadJson/resource.fetchJson XHR before assigning window.terrain. An unserved socket leaves its promise pending without page/HTTP failure and therefore prevents terrainSurface/loaded initialization."
+  },
+  "CI_inference": {
+    "log": "/home/bend/.cache/rusty-tiles-f1c1-evidence/ci-python-failure-f0f4bd0.log",
+    "status": "The captured hasViewer=true/terrain=false/Loading/no errors and final tileset XHR after a burst of images is consistent with the reproduced reader starvation. CI did not record socket completion/connection traces, so exact CI socket mapping is inferred, not directly executed here."
+  },
+  "fix_acceptance_requirements": [
+    "Repair queue-aware connection-reader admission at its owner, or replace transport with one whose connection ownership is independently established.",
+    "Retain old frozen-artifact four-versus-six burst/release control as a sensitive reproducer.",
+    "Fixed artifact must serve all six burst requests while every keep-alive remains open; no timeout increase, response-worker increase or browser retry is evidence of that property.",
+    "Replay route/path/MIME/GET/HEAD/security behavior and actual unchanged terrain browser consumer after the transport fix.",
+    "Keep fixed source/artifact identities distinct from this baseline frozen defect."
+  ],
+  "source_sha256": {
+    "src/preview.rs": "97b0c196e09d653e9113bb04a04ea529194387b73066ce9aa0fd8207ac07214e",
+    "preview/index.html": "aa1789945559f9ca4708f734148e84072d70e668d1f5de7b9f156433915e74e0",
+    "tests/t1_terrain_viewer.py": "974d785b471b0ccd080792b8b2686bd761f5bd8a2afdd74c9a28bb6c9173ed35",
+    "tests/fixtures/terrain.cjs": "6f745b399298cb8c869947390307bb149b8fd6aba2e0334239f4b9d43e260327"
+  },
+  "dependency_sha256": {
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/util/task_pool.rs": "08e3cc8139d1512bb751f828e9838579d8848607e7172ae41b4033d8ecc46fdb",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/lib.rs": "5545e94107ab9b4474ad8253d6367f0a20a696ad3f647c97136e21c2824b4a90",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/client.rs": "8fcc6344c2259e91677c267cd9e022a316463a1b03bb805c0a2ec692ef94c898",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/response.rs": "946c4aa551b7a16cc2ea5f86f8ae2ce9b9bda3faecb2f9d1057d5bc17cb2dbdc",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/request.rs": "ef8fcf8d36706a0e1a146f3262917b4631ecf8db925408d4b6959a0d7423695a",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tiny_http-0.12.0/src/util/sequential.rs": "5ad84c87bd412edec8b289639d6d21486201e84f25a7edc1be4284be59c5570c"
+  },
+  "cesium_source_sha256": {
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/engine/Source/Scene/Cesium3DTileset.js": "04d08416e3ad721f6fea557853eec861f06eee299a845d61657dec1cbfacb48d",
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/engine/Source/Core/Resource.js": "d14711c65c7ecf8579a5160faa83245eeb4121bddd0e8118d587e19ca830cdbd",
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/package.json": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11"
+  }
+}

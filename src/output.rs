@@ -1,8 +1,9 @@
 //! Conversion job lifecycle: input/output preflight, a private work directory
 //! beside the output, no-clobber publication and cleanup of failed jobs.
-use crate::{report::ConversionResult, Error};
+use crate::{archive3tz::TZ_INDEX_NAME, report::ConversionResult, Error};
 use serde_json::Value;
 use std::{
+    collections::HashSet,
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
@@ -113,9 +114,9 @@ impl Job {
         files: &[(String, PathBuf)],
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
-        crate::pack::check_members(files, &self.output)?;
-        let mut temp = crate::pack::temp_archive(self.work.path())?;
-        crate::pack::write_archive(files, temp.as_file_mut())?;
+        check_members(files, &self.output)?;
+        let mut temp = temp_archive(self.work.path())?;
+        crate::archive3tz::write_archive(files, temp.as_file_mut())?;
         temp.as_file().sync_all()?;
         let persisted = if self.force {
             temp.persist(&self.output)
@@ -138,9 +139,93 @@ impl Job {
         root: &Path,
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
-        let files = crate::pack::tree_members(root, &self.output)?;
+        self.publish_tree_with_resources_3tz(root, &[], report)
+    }
+
+    /// Include source dependencies alongside staged files. The common publisher
+    /// rejects duplicate archive names before writing or replacing the output.
+    pub(crate) fn publish_tree_with_resources_3tz(
+        self,
+        root: &Path,
+        resources: &[(String, PathBuf)],
+        report: Option<Value>,
+    ) -> Result<ConversionResult, Error> {
+        let mut files = tree_members(root, &self.output)?;
+        files.extend_from_slice(resources);
         self.publish_3tz(&files, report)
     }
+}
+
+// Legacy converter selection/staging policy; not used by the F0 package request.
+/// Every file below `root` as `(archive name, path)`, `tileset.json` first,
+/// skipping the archive being written and any stale 3TZ index.
+pub(crate) fn tree_members(root: &Path, output: &Path) -> Result<Vec<(String, PathBuf)>, Error> {
+    let absolute_output = std::path::absolute(output)?;
+    let mut files = Vec::new();
+    for entry in walkdir::WalkDir::new(root) {
+        let entry = entry.map_err(|e| Error::msg(e.to_string()))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if std::path::absolute(entry.path())? == absolute_output {
+            continue;
+        }
+        let name = entry
+            .path()
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if name != TZ_INDEX_NAME {
+            files.push((name, entry.into_path()));
+        }
+    }
+    files.sort_by(|a, b| (a.0 != "tileset.json", &a.0).cmp(&(b.0 != "tileset.json", &b.0)));
+    Ok(files)
+}
+/// Reject archives without a root manifest and unsafe, duplicate or missing
+/// member paths before any bytes are written.
+pub(crate) fn check_members(files: &[(String, PathBuf)], output: &Path) -> Result<(), Error> {
+    if !files.iter().any(|(n, _)| n == "tileset.json") {
+        return Err(Error::MissingTilesetJson);
+    }
+    let absolute_output = std::path::absolute(output)?;
+    let mut seen = HashSet::new();
+    for (name, path) in files {
+        if name.is_empty()
+            || name == TZ_INDEX_NAME
+            || name.contains('\\')
+            || name.starts_with('/')
+            || name
+                .split('/')
+                .any(|s| s == ".." || s == "." || s.is_empty())
+            || !seen.insert(name)
+        {
+            return Err(Error::msg(format!(
+                "invalid or duplicate archive path: {name}"
+            )));
+        }
+        if !path.is_file() {
+            return Err(Error::InputNotFound(path.clone()));
+        }
+        if std::path::absolute(path)? == absolute_output {
+            return Err(Error::msg("archive output cannot be an input member"));
+        }
+    }
+    Ok(())
+}
+
+/// Create the temporary archive inside `dir`. tempfile creates files with
+/// mode 0600 and `persist` keeps that mode. Ask for 0666 instead so the
+/// process umask decides, as it does for any other new file.
+pub(crate) fn temp_archive(dir: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    builder.tempfile_in(dir)
 }
 
 /// Rename `staging` to `output`. An existing output is moved aside first and

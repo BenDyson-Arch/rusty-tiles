@@ -1,0 +1,81 @@
+{
+  "stage": "S2 before Clippy representation cleanup",
+  "scope": "Independent exact frozen-artifact execution; refreshed finalS3artifact replay remains required.",
+  "source_identity": {
+    "production_sha256": "8598d166ceb88796f02553cacfd28debc783d0b65131b2003145d794875ff7b0",
+    "inputs": 91,
+    "validated_before_after_W1_execution": true,
+    "receipt_sha256": "c8a165f18a3347930f70c0d5df5db5363854ab0a2e8e858e43d847e4e364108f"
+  },
+  "binary_sha256": "92815505d581b8df3aa2a53bd388ca84b9cab394fb35cd6c925524d6e7fa6d79",
+  "receipts": {
+    "unchanged-model-browser-final.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/unchanged-model-browser-final-s2.json",
+      "receipt_sha256": "79f507d1a7a7f408ff341a6a29bbf0bb1392cb77a0866f46f54c648ab3d7b363",
+      "driver_pins_match": {
+        "unchanged_model_browser.py": true,
+        "unchanged_model_browser.cjs": true
+      },
+      "accepted_finite_execution": true
+    },
+    "picking-final.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/picking-final-s2.json",
+      "receipt_sha256": "a797a8549bf5b2936f9ac7c381c4a355f14e88ea74458def99460d1e08b6b77e",
+      "driver_pins_match": {
+        "f1c2_viewer.py": true,
+        "f1c2_oracle.py": true,
+        "f1c2_viewer.cjs": true
+      },
+      "accepted_finite_execution": true
+    },
+    "empty-names-picking-final.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/empty-names-picking-final-s2.json",
+      "receipt_sha256": "4dfad684def4278192f6536287e2a37aec6171c22ca69f1b90cf2a035235ab03",
+      "driver_pins_match": {
+        "f1c2_viewer.py": true,
+        "f1c2_oracle.py": true,
+        "f1c2_viewer.cjs": true
+      },
+      "accepted_finite_execution": true
+    },
+    "khronos-final.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-slice/bench/architecture_audit/f1c2/probes/khronos-final-s2.json",
+      "receipt_sha256": "fc34ca98372aea5ca8f53343290d32eec51fd3185679ffcefe8876fed2d90ede",
+      "driver_pins_match": {
+        "f1c2_khronos.py": true,
+        "f1c2_validate.cjs": true,
+        "f1c2_oracle.py": true
+      },
+      "accepted_finite_execution": true
+    },
+    "final-f1c1-browser.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/final-f1c1-browser-s2.json",
+      "receipt_sha256": "5e386150bb491384149dae87ac4463c26d2181832cbf157904ab99d4b81a7dd8",
+      "driver_pins_match": {
+        "f1c1_viewer.py": true,
+        "f1c1_viewer.cjs": true,
+        "f1c1_oracle.py": true
+      },
+      "accepted_finite_execution": true
+    },
+    "final-f1b3-browser.json": {
+      "preserved_path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/final-f1b3-browser-s2.json",
+      "receipt_sha256": "109dc75e6438357298deab07d51556b44e2edae21dfa14363cf3be135559d901",
+      "driver_pins_match": {
+        "f1b3_viewer.py": true,
+        "fixtures/f1b3_viewer.cjs": true,
+        "f1b3_oracle.py": true,
+        "f1b_oracle.py": true,
+        "f1b2_oracle.py": true
+      },
+      "accepted_finite_execution": true
+    }
+  },
+  "proof_limits": [
+    "W1 finite unchanged static two-triangle textured fixture with exact resource closure and Local/Wgs84 target picks; no broad photometric or GPU bounds precision claim.",
+    "F1c2 finite local picking camera; coincident surface ownership not uniquely observable.",
+    "Khronos does not validate extension semantics;23zero-error/warning positives plus2negative controls,25total.",
+    "F1b3 source/output lit PBR agreement in one pinned Three renderer; F1c1 depth samples include raster error, separate high-precision oracle owns placement numeric accuracy.",
+    "Native/wheel/lifecycle/platform and whole-slice final review remain coordinator/reviewer ownership."
+  ]
+}

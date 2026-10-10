@@ -1,0 +1,170 @@
+{
+  "phase": "New post-local-review stride question; expected outcomes subject to independent primary/profile adjudication",
+  "source_commit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "binary_sha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+  "golden_decoded_float_oracle": {
+    "method": "Independent struct.unpack_from little-endian component/column offsets",
+    "rawValues": [
+      [
+        0.0
+      ],
+      [
+        0.0
+      ],
+      [
+        0.0
+      ],
+      [
+        4.203895392974451e-43
+      ],
+      [
+        0.0
+      ],
+      [
+        7.006492321624085e-43
+      ],
+      [
+        3.1591410678348977e-38
+      ],
+      [
+        0.0
+      ],
+      [
+        8.963144425019942e-38
+      ],
+      [
+        3.159225145742757e-38
+      ],
+      [
+        0.0
+      ],
+      [
+        8.963424684712807e-38
+      ]
+    ],
+    "normalizedValues": [
+      [
+        0.0
+      ],
+      [
+        0.0
+      ],
+      [
+        0.0
+      ],
+      [
+        4.203895392974451e-43
+      ],
+      [
+        0.0
+      ],
+      [
+        7.006492321624085e-43
+      ],
+      [
+        3.1591410678348977e-38
+      ],
+      [
+        0.0
+      ],
+      [
+        8.963144425019942e-38
+      ],
+      [
+        3.159225145742757e-38
+      ],
+      [
+        0.0
+      ],
+      [
+        8.963424684712807e-38
+      ]
+    ],
+    "rawMin": [
+      0.0
+    ],
+    "rawMax": [
+      8.963424684712807e-38
+    ],
+    "occupiedBytes": 4,
+    "scalarComponents": 12
+  },
+  "cases": [
+    {
+      "name": "absent-parent-baseline",
+      "expected": "admitted",
+      "exit_code": 0,
+      "archive_sha256": "b6ac6e9d12242d52bcc4ac6453d4edda52336a22f23af0191cd37e357ba67348",
+      "argv": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+        "validate",
+        "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-baseline.3tz",
+        "--json"
+      ],
+      "stdout_base64": "eyJhcmNoaXZlIjoiL3RtcC9ydXN0eS10aWxlcy1wYXlsb2FkLWZpbmFsLWV2aWRlbmNlL21lc2hvcHQtc3RyaWRlLWFkanVkaWNhdGlvbi9hYnNlbnQtcGFyZW50LWJhc2VsaW5lLjN0eiIsImNoZWNrcyI6WyJhcmNoaXZlSW5kZXgiLCJhcmNoaXZlQ3JjIiwiYXJjaGl2ZVN0b3JlZFJlY29yZExheW91dCIsImNvbnRlbnRIYXNoZXMiLCJ0aWxlc2V0U2NoZW1hIiwicGF5bG9hZEVudmVsb3BlIiwiYnVmZmVyUmFuZ2VzIiwiYWNjZXNzb3JWYWx1ZXMiLCJwcmltaXRpdmVJbmRpY2VzIiwiaGllcmFyY2h5Qm91bmRzIiwiZ2VvbWV0cmljRXJyb3JPcmRlciIsInJlc291cmNlUmVmZXJlbmNlcyIsInJlY29yZGVkQnVkZ2V0cyJdLCJjb250ZW50UmVmZXJlbmNlcyI6MSwiZW50cmllcyI6NCwibGltaXRzIjp7ImFjY2Vzc29yRWxlbWVudHMiOjQwMDAwMDAsImFyY2hpdmVFbnRyaWVzIjo2NTUzNiwiYXJjaGl2ZVN0b3JlZEJ5dGVzIjoxMDczNzQxODI0LCJjZW50cmFsRGlyZWN0b3J5Qnl0ZXMiOjE2Nzc3MjE2LCJkb2N1bWVudERlY29kZWRCeXRlcyI6NjcxMDg4NjQsImRvY3VtZW50SXRlbXMiOjY1NTM2LCJoaWVyYXJjaHlEZXB0aCI6MTI4LCJoaWVyYXJjaHlWaXNpdHMiOjY1NTM2LCJqc29uQnl0ZXMiOjgzODg2MDgsImpzb25EZXB0aCI6NjQsIm1lbWJlckJ5dGVzIjo2NzEwODg2NCwicmVmZXJlbmNlcyI6MjYyMTQ0LCJzb3VyY2VBcmNoaXZlQnl0ZXMiOjEwNzM3NDE4MjQsInRvdGFsQnl0ZXNSZWFkIjoyMTQ3NDgzNjQ4LCJ0b3RhbFBheWxvYWRFbGVtZW50cyI6MTYwMDAwMDB9LCJub3RJbnNwZWN0ZWQiOlsiZGVjb2RlZENvbnRlbnRCb3VuZHMiLCJnZW9tZXRyaWNFcnJvckFjY3VyYWN5IiwibWF0ZXJpYWxBbmRJbWFnZVNlbWFudGljcyIsIm1ldGFkYXRhIGFuZCBmZWF0dXJlIHNlbWFudGljcyIsIm1ldGFkYXRhU2VtYW50aWNzIiwic2NlbmUgdHJhbnNmb3Jtcywgc2tpbnMsIGFuaW1hdGlvbnMsIG1vcnBoIHRhcmdldHMgYW5kIHJlbmRlcmVkIGJvdW5kcyJdLCJvayI6dHJ1ZSwicGF5bG9hZHMiOlt7ImFjY2Vzc29yc0NoZWNrZWQiOjEsInByaW1pdGl2ZXNDaGVja2VkIjoxLCJ1cmkiOiJ0aWxlLmdsdGYiLCJ2ZXJ0aWNlcyI6NH1dLCJ0aWxlcyI6MX0K",
+      "stderr_base64": ""
+    },
+    {
+      "name": "absent-parent-unused-packed-scalar",
+      "expected": "admitted",
+      "exit_code": 3,
+      "archive_sha256": "f22ec53911153a00c1b6a4c383c523a5e1a217d0474c0da8c36cf41e414c6c9c",
+      "argv": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+        "validate",
+        "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-unused-packed-scalar.3tz",
+        "--json"
+      ],
+      "stdout_base64": "eyJlcnJvciI6eyJjb2RlIjoiaW52YWxpZF9pbnB1dCIsIm1lc3NhZ2UiOiJhY2Nlc3NvciBzdHJpZGUgZGlmZmVycyBmcm9tIG1lc2hvcHQgZGVjb2RlZCBzdHJpZGUifSwiZXhpdENvZGUiOjMsIm9rIjpmYWxzZX0K",
+      "stderr_base64": ""
+    },
+    {
+      "name": "explicit-parent-unused-scalar",
+      "expected": "admitted",
+      "exit_code": 0,
+      "archive_sha256": "cde8b4db7ed169a2d665f282a5a584e3cbeef493e111a1efe828ec37ae39b358",
+      "argv": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+        "validate",
+        "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/explicit-parent-unused-scalar.3tz",
+        "--json"
+      ],
+      "stdout_base64": "eyJhcmNoaXZlIjoiL3RtcC9ydXN0eS10aWxlcy1wYXlsb2FkLWZpbmFsLWV2aWRlbmNlL21lc2hvcHQtc3RyaWRlLWFkanVkaWNhdGlvbi9leHBsaWNpdC1wYXJlbnQtdW51c2VkLXNjYWxhci4zdHoiLCJjaGVja3MiOlsiYXJjaGl2ZUluZGV4IiwiYXJjaGl2ZUNyYyIsImFyY2hpdmVTdG9yZWRSZWNvcmRMYXlvdXQiLCJjb250ZW50SGFzaGVzIiwidGlsZXNldFNjaGVtYSIsInBheWxvYWRFbnZlbG9wZSIsImJ1ZmZlclJhbmdlcyIsImFjY2Vzc29yVmFsdWVzIiwicHJpbWl0aXZlSW5kaWNlcyIsImhpZXJhcmNoeUJvdW5kcyIsImdlb21ldHJpY0Vycm9yT3JkZXIiLCJyZXNvdXJjZVJlZmVyZW5jZXMiLCJyZWNvcmRlZEJ1ZGdldHMiXSwiY29udGVudFJlZmVyZW5jZXMiOjEsImVudHJpZXMiOjQsImxpbWl0cyI6eyJhY2Nlc3NvckVsZW1lbnRzIjo0MDAwMDAwLCJhcmNoaXZlRW50cmllcyI6NjU1MzYsImFyY2hpdmVTdG9yZWRCeXRlcyI6MTA3Mzc0MTgyNCwiY2VudHJhbERpcmVjdG9yeUJ5dGVzIjoxNjc3NzIxNiwiZG9jdW1lbnREZWNvZGVkQnl0ZXMiOjY3MTA4ODY0LCJkb2N1bWVudEl0ZW1zIjo2NTUzNiwiaGllcmFyY2h5RGVwdGgiOjEyOCwiaGllcmFyY2h5VmlzaXRzIjo2NTUzNiwianNvbkJ5dGVzIjo4Mzg4NjA4LCJqc29uRGVwdGgiOjY0LCJtZW1iZXJCeXRlcyI6NjcxMDg4NjQsInJlZmVyZW5jZXMiOjI2MjE0NCwic291cmNlQXJjaGl2ZUJ5dGVzIjoxMDczNzQxODI0LCJ0b3RhbEJ5dGVzUmVhZCI6MjE0NzQ4MzY0OCwidG90YWxQYXlsb2FkRWxlbWVudHMiOjE2MDAwMDAwfSwibm90SW5zcGVjdGVkIjpbImRlY29kZWRDb250ZW50Qm91bmRzIiwiZ2VvbWV0cmljRXJyb3JBY2N1cmFjeSIsIm1hdGVyaWFsQW5kSW1hZ2VTZW1hbnRpY3MiLCJtZXRhZGF0YSBhbmQgZmVhdHVyZSBzZW1hbnRpY3MiLCJtZXRhZGF0YVNlbWFudGljcyIsInNjZW5lIHRyYW5zZm9ybXMsIHNraW5zLCBhbmltYXRpb25zLCBtb3JwaCB0YXJnZXRzIGFuZCByZW5kZXJlZCBib3VuZHMiXSwib2siOnRydWUsInBheWxvYWRzIjpbeyJhY2Nlc3NvcnNDaGVja2VkIjoyLCJwcmltaXRpdmVzQ2hlY2tlZCI6MSwidXJpIjoidGlsZS5nbHRmIiwidmVydGljZXMiOjR9XSwidGlsZXMiOjF9Cg==",
+      "stderr_base64": ""
+    },
+    {
+      "name": "absent-parent-scalar-range-over",
+      "expected": "invalid_input",
+      "exit_code": 3,
+      "archive_sha256": "7aea20fd8e601a6a466678fee806b2b0cd15ee907245a06ce3b00b09326f7f54",
+      "argv": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+        "validate",
+        "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-scalar-range-over.3tz",
+        "--json"
+      ],
+      "stdout_base64": "eyJlcnJvciI6eyJjb2RlIjoiaW52YWxpZF9pbnB1dCIsIm1lc3NhZ2UiOiJieXRlIHJhbmdlIG91dHNpZGUgYWN0dWFsIHJlc291cmNlIn0sImV4aXRDb2RlIjozLCJvayI6ZmFsc2V9Cg==",
+      "stderr_base64": ""
+    }
+  ]
+}

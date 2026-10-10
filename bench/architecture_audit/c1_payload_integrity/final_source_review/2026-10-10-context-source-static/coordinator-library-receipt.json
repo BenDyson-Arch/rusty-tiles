@@ -1,0 +1,16 @@
+{
+  "source_commit": "ca9b4a1ee2f55a3d4cd26e2b0ab720301d85dd37",
+  "source_pin_sha256": "f4e404df68513ad5d929ce73c933a14c0eed209142291bb404c8b5d216849b91",
+  "frozen_unit_artifact": "/tmp/rusty-tiles-payload-final-evidence/context-build/unit-ca9b4a1-1effbbd51ab5ef4044ecdb4c4cb47e1b88c8fae9a23c791df30282de6f4954aa",
+  "sha256": "1effbbd51ab5ef4044ecdb4c4cb47e1b88c8fae9a23c791df30282de6f4954aa",
+  "bytes": 26943544,
+  "library_result": {
+    "passed": 365,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 0
+  },
+  "context_executions": 82,
+  "context_execution_receipt_sha256": "922b446784a1586542e0bb7a8cff9b3a83562235adee6ebde62cef118596d2b7",
+  "log_sha256": "c8027c53c384b020b48c44846f6f14b670d7124121c95c0c1ad8b23ad88c47c7"
+}

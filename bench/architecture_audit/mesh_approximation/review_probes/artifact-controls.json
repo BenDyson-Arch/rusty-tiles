@@ -1,0 +1,45 @@
+{
+  "production_binary_sha256": "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+  "driver_sha256": "99120dd0bb2d8f9a3bfabbf78e29d85e588b2f014c8b399f1ef87cbf014d82b9",
+  "oracle_sha256": "31b5a401cb25cf8c1fa39eb5e288ab8e9901ffe44a0e314c5f4245b380357798",
+  "cases": [
+    {
+      "case": "materialless",
+      "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+      "exit_code": 0,
+      "output_parent_exists": true,
+      "archive_sha256": "d7a9776c76cc208c37437640434549340027a8ac540f8a625b635693526a8db2",
+      "checked": {
+        "source_triangles": 32,
+        "proxy_triangles": 7,
+        "ideal_certificate_squared": "4"
+      }
+    },
+    {
+      "case": "coincident-key-floor",
+      "source_sha256": "e52fabdd24dad01346adfba0d66a8f6b5e37d90439e5e1752206a09c30ccc2b6",
+      "exit_code": 2,
+      "output_parent_exists": false,
+      "error": {
+        "code": "unsupported",
+        "kind": "unsupported",
+        "message": "root proxy limit cannot represent every authored component",
+        "recovery": null,
+        "retainedPaths": [],
+        "secondaryDiagnostics": []
+      }
+    },
+    {
+      "case": "coincident-key-reduction",
+      "source_sha256": "e52fabdd24dad01346adfba0d66a8f6b5e37d90439e5e1752206a09c30ccc2b6",
+      "exit_code": 0,
+      "output_parent_exists": true,
+      "archive_sha256": "6a5185416bed8fb4590d621c234fb7cfb1b9ba9e440fff77d7b61bb467c111f4",
+      "checked": {
+        "source_triangles": 16,
+        "proxy_triangles": 8,
+        "ideal_certificate_squared": "1"
+      }
+    }
+  ]
+}

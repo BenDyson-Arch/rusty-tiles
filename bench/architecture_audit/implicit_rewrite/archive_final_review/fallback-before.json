@@ -1,0 +1,95 @@
+{
+  "classification": "independent actual CLI selected-final-directory fallback control; no generic ZIP or allocation claim",
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+  "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+  "driver_sha256": "0fddb0ecb31a9b2a0f1e55ae4d4044032605759317ee4fd45958b17952ef5452",
+  "records": [
+    {
+      "label": "opaque-nested-ZIP-selected-outer",
+      "archive_bytes": 514,
+      "archive_sha256": "5d6dcab7fa577abcb5683f73c55d0a6930c5b0a49fe4321b7fb1ed334d83d871",
+      "facts": {
+        "selected_final_central_records": 1,
+        "selected_final_names": [
+          "opaque.bin"
+        ],
+        "final_directory_offset": 436,
+        "nested_start": 40,
+        "nested_central_records": 2,
+        "outer_extra_hex": "",
+        "extra_TLV_framing_valid": true,
+        "outer_stored_extent_disjoint": true
+      },
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "--json",
+        "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/opaque-nested-ZIP-selected-outer.3tz"
+      ],
+      "returncode": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"message\":\"3TZ must contain tileset.json and an index\"},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    },
+    {
+      "label": "opaque-nested-ZIP-invalid-NTFS-fallback",
+      "archive_bytes": 518,
+      "archive_sha256": "c3e904a07d6abbb0c0fed4327efea9a081dd380fac2ca43382d606496fe7bb90",
+      "facts": {
+        "selected_final_central_records": 1,
+        "selected_final_names": [
+          "opaque.bin"
+        ],
+        "final_directory_offset": 436,
+        "nested_start": 40,
+        "nested_central_records": 2,
+        "outer_extra_hex": "0a000000",
+        "extra_TLV_framing_valid": true,
+        "outer_stored_extent_disjoint": true
+      },
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "--json",
+        "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/opaque-nested-ZIP-invalid-NTFS-fallback.3tz"
+      ],
+      "returncode": 0,
+      "stdout": "{\"archive\":\"/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/opaque-nested-ZIP-invalid-NTFS-fallback.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":0,\"entries\":2,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyDepth\":128,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"jsonDepth\":64,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadataSemantics\"],\"ok\":true,\"payloads\":[],\"tiles\":1}\n",
+      "stderr": ""
+    },
+    {
+      "label": "opaque-nested-ZIP-invalid-timestamp-fallback",
+      "archive_bytes": 518,
+      "archive_sha256": "50b50cc5df7f79f47ccc82abd61aaebd7a557bcd9f30cbf36c936e304b62ae21",
+      "facts": {
+        "selected_final_central_records": 1,
+        "selected_final_names": [
+          "opaque.bin"
+        ],
+        "final_directory_offset": 436,
+        "nested_start": 40,
+        "nested_central_records": 2,
+        "outer_extra_hex": "55540000",
+        "extra_TLV_framing_valid": true,
+        "outer_stored_extent_disjoint": true
+      },
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "--json",
+        "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/opaque-nested-ZIP-invalid-timestamp-fallback.3tz"
+      ],
+      "returncode": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"message\":\"3TZ must contain tileset.json and an index\"},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    }
+  ]
+}

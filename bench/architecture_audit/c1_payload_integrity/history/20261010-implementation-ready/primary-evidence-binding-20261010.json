@@ -1,0 +1,80 @@
+{
+  "record": "Contract-author binding of separately authored selected-primary evidence",
+  "date": "2026-10-10",
+  "authorship": "Primary reference/control owner authored/fetched/executed lane; contract author read receipts, verified hashes and recorded contract implications only",
+  "implementation_acceptance_claim": false,
+  "source_commit": "5c68f7b52b72e2f6e72096e930f85d27f2897448",
+  "source_manifest_sha256": "913e15540cfe4b387905fdaf00aff270614285ba88d9e12acfe4ffccaa18aa13",
+  "binary_sha256": "3328487c2920e07b291eebec8072954f11b0d20a39181ccbc0c4287e2f765524",
+  "selected_primary": {
+    "accessorSchema": {
+      "bytes": 6517,
+      "sha256": "86f9aacb0b616e1f6a1d5b8ff81e92294602e9e3c98c7f13d2cefdf987c87e35",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/schema/accessor.schema.json"
+    },
+    "freshDownloadedBytesMatchCached": true,
+    "registryFullRawDownload": "Separate urllib attempt received HTTP 403; no raw registry HTML snapshot claimed.",
+    "registryHeaderObservedThroughWebTool": {
+      "commit": "8e798b02d254cea97659a333cfcb20875b62bdd4",
+      "publishedTimestamp": "2021-10-11 23:01:57Z",
+      "version": "2.0.1"
+    },
+    "registryUrl": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
+    "sourceBytes": 148064,
+    "sourceSha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+    "sourceUrl": "https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc"
+  },
+  "evidence_sha256": {
+    "receipt.json": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174",
+    "adjudication.json": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64",
+    "raw-evidence.tar.gz": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead",
+    "evidence-manifest.json": "a17658126c251f71a3a050d1ee984d71f3e4582f4751d1225a382412c9fc7f85"
+  },
+  "raw_bundle_manifest_files_sha_verified": 108,
+  "executions": 14,
+  "all_inputs_unchanged": true,
+  "demonstrated_valid_input_rejections": [
+    {
+      "label": "count-decimal",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "180e74e41fce0ac62450899b901adf32b28db442a6058d98de5f3407e92d5ea3"
+    },
+    {
+      "label": "component-exponent",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "b0cac28741de7c67634f8b8f60c1b5aad2ef3c2e78be902af26541408e6d05ac"
+    },
+    {
+      "label": "position-reference-exponent",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "013568b8005d76e16d208a0179ba85239aef07b6eb8a513171d2d42eb590ec28"
+    },
+    {
+      "label": "buffer-length-decimal",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "2ed174d9b2954dd8fd3179f38880757ba71518dfb95701f8d5abbf016e33b18b"
+    },
+    {
+      "label": "local-gltf-integer-representations",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "09aff1ed29529ae25459ae9e5f15dede445a01c3923468ccb788eafb73510c3f"
+    },
+    {
+      "label": "viewless-arbitrary-bounds",
+      "expected": "admitted",
+      "observed": "invalid_input",
+      "archive_sha256": "f5a115a89a63de018cf4ab0e9f3766a617861d37df6ca137cda75c4d9c0db00a"
+    }
+  ],
+  "correction_gates": [
+    "A10 integer-notation acceptance and viewless bounds exemption",
+    "A14 exact numeric integrality before rounding with minimal owned representation"
+  ],
+  "remaining": "Other A1-A14 adjudication and final implementation/corpus/artifact acceptance remain open",
+  "prior_freeze_sha256": "afa9136fab4a143849216de09df37e1862ee476a0fcdcd9515d03513441a6cf0"
+}

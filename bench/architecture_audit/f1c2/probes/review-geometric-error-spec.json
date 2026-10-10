@@ -1,0 +1,26 @@
+{
+  "repository": "CesiumGS/3d-tiles",
+  "commit": "4d781014b52294759834018a931223b98ac1ce47",
+  "files": [
+    {
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/tileset.schema.json",
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/review-tileset.schema.json",
+      "sha256": "706bef0b73ee5f130c1533b3902d3e4a05c15d45c28651818277e74620d7d09f",
+      "geometricError": {
+        "type": "number",
+        "description": "The error, in meters, introduced if this tileset is not rendered. At runtime, the geometric error is used to compute screen space error (SSE), i.e., the error measured in pixels.",
+        "minimum": 0
+      }
+    },
+    {
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/tile.schema.json",
+      "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/review-tile.schema.json",
+      "sha256": "d53e19fde5a3fc198a57bcdbc625363eadedde9b8113c816961536480dd161eb",
+      "geometricError": {
+        "type": "number",
+        "description": "The error, in meters, introduced if this tile is rendered and its children are not. At runtime, the geometric error is used to compute screen space error (SSE), i.e., the error measured in pixels.",
+        "minimum": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "phase": "separate corrected-source static review",
+  "reviewer": "/root/payload_final_source_review",
+  "source_commit": "6c0216c353a55afef6ebca7c929ceea1651832ba",
+  "source_tree": "52c90d805acbcd3fbbbcad83afccf744ddc4a201",
+  "source_pin_sha256": "d1b391b64d511556e6d7fc24ab5cc655837b6d2d1c369c03b5447fd6f51e4400",
+  "production_pins_verified": 97,
+  "selected_acceptance_pins_verified": 14,
+  "mismatches": [],
+  "reviewed_input_sha256": {
+    "AGENTS.md": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+    "docs/architecture/README.md": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80",
+    "docs/VALIDATION.md": "3b5f542dd2db09b6954aa621c1433c346c11e1b4a5040ab3827a1c3016758c0e",
+    "docs/architecture/c1-payload-integrity-contract.md": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-whole-slice-implementation-ready.md": "d94d50b8f53fc81da6532053e1ba29258e7846ca421e62791f0592cbd42bc15f",
+    "bench/architecture_audit/c1_payload_integrity/production_controls/2026-10-10-component-bounds-decision.md": "735d3621f41cf10aebc6b1bf16b145615d430ccd6f4c752b14f9263f4c95e1d4"
+  },
+  "retained_phase_sha256": {
+    "coordinator-library-receipt.json": "a8769ed80d323aea91f521177900406a45ee075a3c8ead1c9d83072c3cbdff06",
+    "coordinator-library.log": "0690b5a8c1d35ff3d9455a141c6cbf1457c5ed22956c2db8c2965e7a1d244e14",
+    "review.md": "dd9170b4361e7d1cb2881e288281dd37b4fd455ebf40d928e4e8b52e1fac5e93",
+    "source-pin.json": "d1b391b64d511556e6d7fc24ab5cc655837b6d2d1c369c03b5447fd6f51e4400"
+  },
+  "frozen_unit_artifact_verified": {
+    "sha256": "41d262330c620539e09ce39a34e27dd11692aef180768a57a1235eb03b89c4dd",
+    "bytes": 26781312
+  },
+  "formatter_body_comparison": {
+    "matches": true,
+    "compiled_sha256": "403c05f33da985f6e9c165d95a480f0b77d171f342f5a371311f72b8f194dbc7",
+    "command": [
+      "rustfmt",
+      "--edition",
+      "2021",
+      "--emit",
+      "stdout",
+      "bench/architecture_audit/c1_payload_integrity/production_controls/private_controls.rs"
+    ],
+    "banner_removed": true
+  },
+  "coordinator_execution_verified": {
+    "library_passed": 352,
+    "library_failed": 0,
+    "ignored": 0,
+    "filtered": 0,
+    "independent_private_controls": 11
+  },
+  "reviewer_target_executions": 0,
+  "production_edits": false,
+  "acceptance": "conditional; per-context JSON and actual C1 aggregate boundaries plus remaining exact-source integration evidence pending",
+  "scope": "bounded C1 payload/JSON only; no full A2 or release authorization"
+}

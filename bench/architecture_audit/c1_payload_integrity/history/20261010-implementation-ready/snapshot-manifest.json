@@ -1,0 +1,72 @@
+{
+  "record": "Immutable final own contract/preparation snapshot",
+  "date": "2026-10-10",
+  "files": [
+    {
+      "current_path": "docs/architecture/c1-payload-integrity-contract.md",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/c1-payload-integrity-contract.md",
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3",
+      "bytes": 35453
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/README.md",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/README.md",
+      "sha256": "eefb5cc7ced2ff2dc2e8bd4f97468f237b0524f6ecf1dc0f597621bab7981ab0",
+      "bytes": 3847
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/adjudication.md",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/adjudication.md",
+      "sha256": "80bd47fc958f3246d138c8aa98fd6938eca9e41bbacb48670c837edd6941a3c2",
+      "bytes": 7290
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/reference-plan.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/reference-plan.json",
+      "sha256": "7603be0c75c8de90b6dfeb127729ed04c86e8daadfad55625e472f6abdd27273",
+      "bytes": 11219
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/source-inventory.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/source-inventory.json",
+      "sha256": "2928bf989771af6a000b94b6b4aab86bd562e3fb09d53485a1c7ca310676dbdf",
+      "bytes": 5517
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/next-foundation-audit-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/next-foundation-audit-20261010.json",
+      "sha256": "07428a3642dc3c68683d2e5dcc054c6d4a4fb4c790e5db7f744c204433b67a50",
+      "bytes": 17931
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/primary-evidence-binding-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/primary-evidence-binding-20261010.json",
+      "sha256": "25c87c16c84b1a0af5b608cafee9f5c394e998ff8e8dff0af5d5359546733b25",
+      "bytes": 3789
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/prereq-disposition-binding-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/prereq-disposition-binding-20261010.json",
+      "sha256": "cafa6fc988952698ab5b95f88e214c30c9eaadbbbafdb955139bd166aeece350",
+      "bytes": 5769
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/unsigned-consumer-inventory-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/unsigned-consumer-inventory-20261010.json",
+      "sha256": "fd6cfee561e0d723c8448f260355bbe5343456ae83d7eaa3400823b9bc07dce1",
+      "bytes": 2200
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/a14-mechanism-binding-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/a14-mechanism-binding-20261010.json",
+      "sha256": "a5f2209d5dfb6af7525d3fb3f8459c5f410a8996def91f53447ca763e4ec447c",
+      "bytes": 5376
+    },
+    {
+      "current_path": "bench/architecture_audit/c1_payload_integrity/precode-settlement-20261010.json",
+      "immutable_snapshot_path": "bench/architecture_audit/c1_payload_integrity/history/20261010-implementation-ready/precode-settlement-20261010.json",
+      "sha256": "61bd202687ea288fb89d799a47d743a59e4238b44ad8122795cb9e18f9df72b9",
+      "bytes": 9050
+    }
+  ]
+}

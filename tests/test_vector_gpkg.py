@@ -14,6 +14,7 @@ import numpy as np
 from osgeo import ogr, osr
 from test_vector_lod import vector, read, parts
 from cli_bin import requires_bin
+from vector_test_support import portable_vectors
 
 
 
@@ -52,6 +53,11 @@ class GeoPackageTests(unittest.TestCase):
                     p=root/f'{epsg}.gpkg';coordinates=[12.,50.,120.] if epsg==4937 else [153.,-27.,120.]
                     gpkg(p,[('sites',epsg,[(1,dict(type='Point',coordinates=coordinates),None)])])
                     args=types.SimpleNamespace(input=str(p),output=str(root/f'out-{epsg}'),max_features=1)
+                    if portable_vectors():
+                        with self.assertRaisesRegex(ValueError, '2D horizontal CRS'):
+                            vector.run(args)
+                        self.assertFalse(pathlib.Path(args.output).exists())
+                        continue
                     vector.run(args)
                     decoded=details(args.output)
                     self.assertEqual(len(decoded),1)

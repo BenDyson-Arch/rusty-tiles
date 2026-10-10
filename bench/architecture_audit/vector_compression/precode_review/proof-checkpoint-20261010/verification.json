@@ -1,0 +1,47 @@
+{
+  "status": "PASS_EXACT_CANDIDATE_DOCS_EVIDENCE_RETENTION_ONLY",
+  "candidateSha256": "80c3a25ccd65d2528520225b26b30a40ac8d8f13dcba9ebc49559f93c30f8420",
+  "candidateFiles": 402,
+  "candidateBytes": 14005927,
+  "productionFilesMatchAcceptedMerge": 97,
+  "historicalBaseHead": "899611c5b827ab339279e9668b514a7b9513b7d7",
+  "allExistingHistoricalFilesUnchangedExceptAuthoredCheckpoint": true,
+  "originalPackageByteExactCopies": {
+    "codec/allocation-adjudication-20261010": 9,
+    "codec/p2-domain-oracle-revision-20261010": 8,
+    "codec/p3-generated-preparation-20261010": 6,
+    "codec/p3-sensitive-preparation-20261010": 8,
+    "lifecycle/f0-module-path-revision-20261010": 10,
+    "lifecycle/f0-probe-preparation-20261010": 38,
+    "lifecycle/proof-inputs-20261010-4dc": 11,
+    "precode_review/actual-p2-20261010": 6,
+    "precode_review/allocation-20261010": 7,
+    "precode_review/f0-actual-20261010": 6,
+    "precode_review/p3-actual-20261010": 6,
+    "precode_review/p3-preexecution-20261010": 4,
+    "precode_review/parser-coefficients-20261010": 6
+  },
+  "originalPackageFiles": 125,
+  "gzipRecords": {
+    "p2": 250,
+    "f0OriginalFailure": 6,
+    "f0Actual": 15
+  },
+  "p3Retention": {
+    "indexSha256": "7da201fc5d2e95785a76899b20dc18e199bed4aff26fadab437290a40573ef1e",
+    "bundleSha256": "f1396f4a0bd870e1ec8d40cdf1e7c4ef79df66f29800189fd5cdf1004702a924",
+    "records": 2603,
+    "blobs": 687,
+    "everyBlobAndSourceByteIndependentlyVerified": true
+  },
+  "p3ReviewCrosschecks": {
+    "pairs": 8,
+    "slots": 38,
+    "views": 402,
+    "fillAbsolute8JsonEndBinStartFailuresConfirmed": true
+  },
+  "compilerCargoNativeProducerDecoderOrAuthorCheckerInvocations": 0,
+  "gitMutations": 0,
+  "repositoryEdits": 0,
+  "scope": "read/hash/decompress/static documentation comparison and reused bounded prior independent review; no broad semantic execution or final future commit acceptance"
+}

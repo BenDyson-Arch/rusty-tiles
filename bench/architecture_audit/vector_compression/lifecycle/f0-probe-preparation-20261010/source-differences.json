@@ -1,0 +1,22 @@
+{
+  "acceptedMerge": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "unchangedRuntimeAndDirectory": [
+    "isolated/src/runtime.rs",
+    "isolated/src/runtime/directory.rs",
+    "isolated/src/runtime/directory_platform.rs"
+  ],
+  "originalTestsRetained": "inputs/accepted/src/runtime/tests.rs",
+  "isolatedTests": "only accepted candidate helper + imports + original3 P5 prepared tests with explicit reached/precondition assertions; accepted inline directory tests compile but are filtered out of actual run",
+  "probeAdaptations": [
+    "Cell reached flag + read competing bytes inside install and assert seam reached after publication",
+    "Unix candidate initially no group/other bits then copied0640 assertion before seal",
+    "Windows candidate readonly assertion before seal; original target remains writable"
+  ],
+  "candidateHelperSourceByteStart": 546,
+  "candidateHelperSourceByteEnd": 760,
+  "candidateHelperSha256": "ec04579944ab17324195f9624e387769bbfc00a981dcf61432a4bdddd2a1e8f9",
+  "p5InputSha256": "0473246a099e3da246ea338cbc06d57d33b3f4fdd6b6eb7ee4c69e9b5db1b4be",
+  "preparedProbeSha256": "8dc987d0bfd0f2963acf07c3139f425f422e1bb58bcafe4b2a8635ff70a94884",
+  "productionEdits": false,
+  "targetExecutions": 0
+}

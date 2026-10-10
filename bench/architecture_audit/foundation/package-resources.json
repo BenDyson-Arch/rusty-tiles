@@ -1,0 +1,63 @@
+{
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "binary_sha256": "287049ef780e1250603f39a0c3a9a1d25a818dc3b68c914bc4de410c97989b20",
+  "checkout_commit": "36db8b2941db8d93a66c81c49efdd917711e6e41",
+  "measurements": [
+    {
+      "case": "payload_8MiB",
+      "receipt": {
+        "archiveBytes": 8389012,
+        "memberCount": 2,
+        "sourceBytes": 8388624
+      },
+      "max_rss_kib": 20072,
+      "elapsed_seconds": 0.0289
+    },
+    {
+      "case": "payload_128MiB",
+      "receipt": {
+        "archiveBytes": 134218132,
+        "memberCount": 2,
+        "sourceBytes": 134217744
+      },
+      "max_rss_kib": 20136,
+      "elapsed_seconds": 0.2425
+    },
+    {
+      "case": "payload_512MiB",
+      "receipt": {
+        "archiveBytes": 536871316,
+        "memberCount": 2,
+        "sourceBytes": 536870928
+      },
+      "max_rss_kib": 20336,
+      "elapsed_seconds": 0.8909
+    },
+    {
+      "case": "inventory_128",
+      "receipt": {
+        "archiveBytes": 25868,
+        "memberCount": 129,
+        "sourceBytes": 8208
+      },
+      "max_rss_kib": 20808,
+      "elapsed_seconds": 0.0081
+    },
+    {
+      "case": "inventory_4096",
+      "receipt": {
+        "archiveBytes": 819468,
+        "memberCount": 4097,
+        "sourceBytes": 262160
+      },
+      "max_rss_kib": 22000,
+      "elapsed_seconds": 0.0886
+    }
+  ],
+  "limits": [
+    "One Linux process per case; resource RUSAGE_CHILDREN maximum RSS and monotonic elapsed time.",
+    "Sparse zero-filled source payloads; no claim about other filesystems or concurrency.",
+    "Inventory/index memory grows with member count; payload buffer is 64 KiB.",
+    "Does not establish an upper memory bound or measure OS page cache."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "source_commit": "2ef8db1a329a675f578ced11fa1c19e02f8b7ba6",
+  "source_tree": "c8633703eda9a1bd258df8c1bb748fa65a054e4d",
+  "unchanged_local_execution_source": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "source_pin_sha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "argv": [
+    "nice",
+    "-n",
+    "10",
+    "python3",
+    "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+    "cargo",
+    "package",
+    "--locked",
+    "-p",
+    "rusty-tiles"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 78.38139367103577,
+  "log_sha256": "71da8c51baf412ee668b1d3bb844c7a52ff8c7fdfac6cde4502ba9dd91948a0a",
+  "archive_sha256": "97c9d8c1635c3f5db5874fdae7624c2d6773318a9c9327e0bb3b4fa276539d69",
+  "archive_bytes": 5527107,
+  "scope": "Actual cargo package with default verification, compiling extracted root crate; no publication or installed artifact claim"
+}

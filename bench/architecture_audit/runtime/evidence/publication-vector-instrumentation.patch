@@ -1,0 +1,39 @@
+--- a/src/output.rs
++++ b/src/output.rs
+@@ -162,0 +163,6 @@
++        // AUDIT ONLY: deterministically insert a competing writer in the race window.
++        if let Some(record) = std::env::var_os("RT_AUDIT_DIRECTORY_RACE") {
++            use std::os::unix::fs::MetadataExt;
++            std::fs::create_dir(output)?;
++            std::fs::write(record, std::fs::metadata(output)?.ino().to_string())?;
++        }
+--- a/src/vector/pipeline/store.rs
++++ b/src/vector/pipeline/store.rs
+@@ -626,0 +627,3 @@
++            // AUDIT ONLY: an infrastructure error returned by the accept callback.
++            let inject_io = std::env::var_os("RT_AUDIT_ACCEPT_IO").is_some()
++                && feature.properties.get("audit_storage_failure") == Some(&json!(true));
+@@ -627,0 +631,3 @@
++                if inject_io {
++                    return Err(Error::Io(std::io::Error::from_raw_os_error(28)));
++                }
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -64,0 +65,10 @@
++
++// AUDIT ONLY: expose private publishers to this isolated executable.
++pub fn audit_directory(staging: &std::path::Path, output: &std::path::Path) -> Result<(), Error> {
++    output::publish_directory(staging, output, false)
++}
++pub fn audit_archive(staging: &std::path::Path, output: &std::path::Path) -> Result<(), Error> {
++    let job = output::Job::begin(output, false)?;
++    std::fs::write(output, b"competing archive writer")?;
++    job.publish_tree_3tz(staging, None).map(drop)
++}
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -86,0 +87,4 @@
++
++[[example]]
++name = "audit-publication"
++path = "audit-publication.rs"

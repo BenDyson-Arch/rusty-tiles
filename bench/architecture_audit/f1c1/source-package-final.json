@@ -1,0 +1,376 @@
+{
+  "command": "cargo package --locked (including verification build)",
+  "status": "passed",
+  "executed_by": "root",
+  "package_snapshot_commit": "5846f4d62cd64236b4186c38017ea563a473dd02",
+  "compiled_production_pin": "3bd86c352c0a430731528040379ce1765fc11e67",
+  "archive_sha256": "1f045eae318a5c442fcaabaff4122c7d819fffe0c5fa6e5eecf42f82b26869cc",
+  "log_sha256": "7d192dd3136a0695a402644716670cf5d929a5850a45f01c37c7544074c84bf9",
+  "compiled_root_inputs": {
+    "Cargo.lock": {
+      "sha256": "12699d36793919b168199c58a5c7767ca12e136e2785892ef89fc9b0b8aba02f",
+      "matches_production_pin": false,
+      "normalization": "Only unused Python workspace packages removed; every retained package table remains identical.",
+      "removed_workspace_packages": [
+        "portable-atomic",
+        "pyo3",
+        "pyo3-build-config",
+        "pyo3-ffi",
+        "pyo3-macros",
+        "pyo3-macros-backend",
+        "rusty-tiles-python",
+        "target-lexicon"
+      ]
+    },
+    "Cargo.toml": {
+      "sha256": "24fce92568e943403d420137d75bdfe0345eeb5a9b25683c16f169fbdb862679",
+      "matches_production_pin": true
+    },
+    "build.rs": {
+      "sha256": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+      "matches_production_pin": true
+    },
+    "docs/schema/LICENSE.adoc": {
+      "sha256": "2540743fc24d9d099e0b69358cf816ff5fe2fb9ddfb12f7fd6abf4dde74384aa",
+      "matches_production_pin": true
+    },
+    "docs/schema/tileset.schema.json": {
+      "sha256": "3609542d2d0754f308eaa7115638a2a2e05d7fbc22bc644f06bdd02443f7598e",
+      "matches_production_pin": true
+    },
+    "preview/index.html": {
+      "sha256": "aa1789945559f9ca4708f734148e84072d70e668d1f5de7b9f156433915e74e0",
+      "matches_production_pin": true
+    },
+    "src/archive3tz.rs": {
+      "sha256": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+      "matches_production_pin": true
+    },
+    "src/bbox.rs": {
+      "sha256": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+      "matches_production_pin": true
+    },
+    "src/convert_implicit.rs": {
+      "sha256": "e820b32b48489f20678bed717a25363a2f0f82bcc9b34ccb687110f139ec5d0c",
+      "matches_production_pin": true
+    },
+    "src/crs.rs": {
+      "sha256": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+      "matches_production_pin": true
+    },
+    "src/doctor.rs": {
+      "sha256": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+      "matches_production_pin": true
+    },
+    "src/error.rs": {
+      "sha256": "3809b45aa492d6fa33a3e8ad31c1627bcf8acd9e18ff998087bd219c8b3d10cf",
+      "matches_production_pin": true
+    },
+    "src/fixtures.rs": {
+      "sha256": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+      "matches_production_pin": true
+    },
+    "src/georef.rs": {
+      "sha256": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+      "matches_production_pin": true
+    },
+    "src/geospatial.rs": {
+      "sha256": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+      "matches_production_pin": true
+    },
+    "src/geospatial/native.rs": {
+      "sha256": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+      "matches_production_pin": true
+    },
+    "src/glb.rs": {
+      "sha256": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+      "matches_production_pin": true
+    },
+    "src/glb_write.rs": {
+      "sha256": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+      "matches_production_pin": true
+    },
+    "src/gpu_texture.rs": {
+      "sha256": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+      "matches_production_pin": true
+    },
+    "src/grid.rs": {
+      "sha256": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+      "matches_production_pin": true
+    },
+    "src/hlod.rs": {
+      "sha256": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+      "matches_production_pin": true
+    },
+    "src/implicit.rs": {
+      "sha256": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+      "matches_production_pin": true
+    },
+    "src/implicit/tileset.rs": {
+      "sha256": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+      "matches_production_pin": true
+    },
+    "src/jpeg.rs": {
+      "sha256": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+      "matches_production_pin": true
+    },
+    "src/lib.rs": {
+      "sha256": "5a1e09a838c9d893c664dae053cb31947bd479387d7fed1309a853356bf3751c",
+      "matches_production_pin": true
+    },
+    "src/lossless.rs": {
+      "sha256": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+      "matches_production_pin": true
+    },
+    "src/main.rs": {
+      "sha256": "d8f04486048869202c94ffec28b734c59cf021b37255e046c2d542f6ec8e2ea7",
+      "matches_production_pin": true
+    },
+    "src/mesh.rs": {
+      "sha256": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive.rs": {
+      "sha256": "047b33338b5e3608cd4a00551e41c082665db66bc27d5a2f6075d45edb12f28e",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/binding.rs": {
+      "sha256": "83ecb73fd0451a4c9447672c931d5a759801495c5fde91a3fef725a0ffb2293c",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/encode.rs": {
+      "sha256": "6ed9c69f4392bbaab9e29628fbf007cf08a8338f04373112f12aafe0d1b75b61",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/partition.rs": {
+      "sha256": "bfab1931c251b10a2a4442345535524091a92230c4d72bb07f0f1459b25e5594",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/placement.rs": {
+      "sha256": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/source.rs": {
+      "sha256": "70f94bb53716db13e11e16735533e95fc79c326f0321514a879a2d66803fe058",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/source/json.rs": {
+      "sha256": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/source/material.rs": {
+      "sha256": "26e3837dce44dc39e3bd2f4ef3bb8f9c4917041707e4eba229dad1491b156ceb",
+      "matches_production_pin": true
+    },
+    "src/mesh_archive/source/texture.rs": {
+      "sha256": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+      "matches_production_pin": true
+    },
+    "src/mesh_crs.rs": {
+      "sha256": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+      "matches_production_pin": true
+    },
+    "src/metadata.rs": {
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+      "matches_production_pin": true
+    },
+    "src/output.rs": {
+      "sha256": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+      "matches_production_pin": true
+    },
+    "src/output_path.rs": {
+      "sha256": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+      "matches_production_pin": true
+    },
+    "src/pack.rs": {
+      "sha256": "c58929ead65639cefcfd7e5b0fbb46b3fac52fa03deeba6e6e68787055d537b3",
+      "matches_production_pin": true
+    },
+    "src/package.rs": {
+      "sha256": "05783279182dc883ab6b27f0b5c5c4ae280200b0d6fa78c0f039ef4b1ac1946f",
+      "matches_production_pin": true
+    },
+    "src/point_cloud.rs": {
+      "sha256": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+      "matches_production_pin": true
+    },
+    "src/point_cloud/source.rs": {
+      "sha256": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+      "matches_production_pin": true
+    },
+    "src/point_cloud/tiles.rs": {
+      "sha256": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+      "matches_production_pin": true
+    },
+    "src/point_sampling.rs": {
+      "sha256": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+      "matches_production_pin": true
+    },
+    "src/preview.rs": {
+      "sha256": "97b0c196e09d653e9113bb04a04ea529194387b73066ce9aa0fd8207ac07214e",
+      "matches_production_pin": true
+    },
+    "src/raster.rs": {
+      "sha256": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+      "matches_production_pin": true
+    },
+    "src/raster/native.rs": {
+      "sha256": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+      "matches_production_pin": true
+    },
+    "src/raster_directory.rs": {
+      "sha256": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+      "matches_production_pin": true
+    },
+    "src/raster_directory/native.rs": {
+      "sha256": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+      "matches_production_pin": true
+    },
+    "src/report.rs": {
+      "sha256": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+      "matches_production_pin": true
+    },
+    "src/runtime.rs": {
+      "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+      "matches_production_pin": true
+    },
+    "src/runtime/directory.rs": {
+      "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+      "matches_production_pin": true
+    },
+    "src/runtime/directory_platform.rs": {
+      "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+      "matches_production_pin": true
+    },
+    "src/runtime/tests.rs": {
+      "sha256": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+      "matches_production_pin": true
+    },
+    "src/terrain.rs": {
+      "sha256": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+      "matches_production_pin": true
+    },
+    "src/terrain/glb.rs": {
+      "sha256": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+      "matches_production_pin": true
+    },
+    "src/terrain/raster.rs": {
+      "sha256": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+      "matches_production_pin": true
+    },
+    "src/texture.rs": {
+      "sha256": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+      "matches_production_pin": true
+    },
+    "src/tile.rs": {
+      "sha256": "59debe1ff4bd1452d1fd6da8173e5bd49e40f1208f36d7c9332b124648290efd",
+      "matches_production_pin": true
+    },
+    "src/tileset.rs": {
+      "sha256": "f208012cf248259984ab67f5edb226dc09dac6ee72ecc268ba7ae78a29e5cb6f",
+      "matches_production_pin": true
+    },
+    "src/tileset/resources.rs": {
+      "sha256": "8bd254212a61d8b0c8c1ff2a9212bb448bfab7b8d79f403169c8960b6bc30607",
+      "matches_production_pin": true
+    },
+    "src/tileset_node.rs": {
+      "sha256": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+      "matches_production_pin": true
+    },
+    "src/validate.rs": {
+      "sha256": "54c033dadb572fd34d7a667d407bc224d3f062b6aa312eaa356b8d94d5536a35",
+      "matches_production_pin": true
+    },
+    "src/validate/admission.rs": {
+      "sha256": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+      "matches_production_pin": true
+    },
+    "src/validate/json.rs": {
+      "sha256": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+      "matches_production_pin": true
+    },
+    "src/validate/payload.rs": {
+      "sha256": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+      "matches_production_pin": true
+    },
+    "src/validate/types.rs": {
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+      "matches_production_pin": true
+    },
+    "src/vec3.rs": {
+      "sha256": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+      "matches_production_pin": true
+    },
+    "src/vector.rs": {
+      "sha256": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+      "matches_production_pin": true
+    },
+    "src/vector/model.rs": {
+      "sha256": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline.rs": {
+      "sha256": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/acceptance.rs": {
+      "sha256": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/aggregation.rs": {
+      "sha256": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/encoding.rs": {
+      "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/geometry.rs": {
+      "sha256": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/geometry/countries_tests.rs": {
+      "sha256": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/geometry/native.rs": {
+      "sha256": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/geometry/portable.rs": {
+      "sha256": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/reuse.rs": {
+      "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/source.rs": {
+      "sha256": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/source_native.rs": {
+      "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+      "matches_production_pin": true
+    },
+    "src/vector/pipeline/store.rs": {
+      "sha256": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+      "matches_production_pin": true
+    },
+    "src/vector/portable.rs": {
+      "sha256": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+      "matches_production_pin": true
+    },
+    "src/vector/source_fields.rs": {
+      "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+      "matches_production_pin": true
+    },
+    "src/vector_encoding.rs": {
+      "sha256": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a",
+      "matches_production_pin": true
+    }
+  },
+  "new_acceptance_paths_present": true,
+  "limits": "Root Rust source package verified; separate installed wheel evidence covers Python binding."
+}

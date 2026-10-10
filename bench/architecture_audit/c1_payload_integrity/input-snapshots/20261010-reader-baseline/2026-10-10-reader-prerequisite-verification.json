@@ -1,0 +1,37 @@
+{
+  "classification": "Separate nonauthor A13 identity/retained evidence verification; prerequisite only, not payload implementation acceptance",
+  "date": "2026-10-10",
+  "reviewer": "/root/payload_prereq_review",
+  "actual_head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+  "reviewed_reader_head": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+  "accepted_develop_merge": "0eebdeebf013591460e6ac77485ad91b7401aada",
+  "complete_tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+  "verified_production_hashes": 93,
+  "verified_lossless_compressed_records": 30,
+  "exact_head_runs_completed_success": [
+    38040463690,
+    38040463666
+  ],
+  "applicable_success_jobs": 21,
+  "skipped_jobs": [
+    "Release acceptance",
+    "Distribution Blender (Linux x86_64)"
+  ],
+  "installed_wheel_receipts": 10,
+  "distinct_wheel_receipt_hashes": 5,
+  "official_blender_receipts": 4,
+  "installed_test_count_each": 44,
+  "method": "Read retained files, verify compressed/expanded digests+lengths and 93 actual production hashes, compare actual Git tree identities and completed metadata/receipts. No Cargo/build/network/install/producer or new wheel/Blender execution. Actual wheels were hashed by separate archive reviewer; remote CLI/bundles remain executed receipt assertions as that review states.",
+  "pins": {
+    "bench/architecture_audit/c1_payload_integrity/prerequisite/20261010-reader-baseline.json": "913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead",
+    "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/index.json": "f6ba29667b4f08036f130479b43ebb3e02f5b7e2d914b1634e53b04938cb3aa0",
+    "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/2026-10-10-remote-head-review/review.md": "a648f00eede426416a6826d8aca3ddd55035b1b0e73bd9bcf48a56ebcb788bfe",
+    "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/2026-10-10-remote-head-review/final-artifact-pins.json": "da3d91aec0d68decd1b0269c9d3769658e79258db870ffe5f8ff35717e6cba18"
+  },
+  "limits": [
+    "Bounded accepted archive prerequisite only",
+    "Full A2 literal-template hold unchanged",
+    "No release/main/tag/publish/#113/#121 closure",
+    "Whole-slice precode disposition requires final frozen payload contract; later production source acceptance distinct"
+  ]
+}

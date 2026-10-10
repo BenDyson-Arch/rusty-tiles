@@ -1,0 +1,53 @@
+{
+  "status": "BOUNDED_BASELINE_AND_SENSITIVE_CONTROL_EXECUTION_MAY_PROCEED_FINAL_P3_ACCEPTANCE_HELD",
+  "review_kind": "fresh separate nonauthor static preexecution review",
+  "allowed_root_scope": [
+    "Materialize and execute authored five positive/nine negative finite topology controls serially in fresh external epoch",
+    "Execute seven actual-input typed metadata sensitivity controls with frozen extractor in fresh external epoch; verify intended rejection reason and changed bytes",
+    "Execute corrected four portable/native raw/meshopt 65537-ID producer argv serially under coordinator two-core nice10 limits; verify actual one-leaf branch and independent source identities",
+    "Run frozen address comparator for literal finite explicit hierarchy/raw-meshopt pairs; preserve every logical view byte, padding and covered association lexemes",
+    "Read actual results in later fresh nonauthor epoch, with independent artifact inspection and sensitivity causes"
+  ],
+  "dispositions": {
+    "original_preparation": "RETAIN immutable as authored baseline preparation, not specification",
+    "original_association_selector": "REPLACE for ambiguous fill pairing by additive authored topology-address comparator; retain executed original failure",
+    "address_comparator": "RETAIN for declared finite explicit hierarchy/content-slot exact-view/association scope only",
+    "topology_oracle": "RETAIN for finite source cardinality/partition/ownership/edge metrics and planar area association; profile restrictions need independent artifact checks",
+    "typed_sensitivity": "RETAIN selected mutation sensitivity against authored literal states; not codec reject/repair semantics",
+    "large_id_original_recipe": "REWORK argv-only as additive revision; original failures remain original",
+    "existing_writer_selected_metadata8": "REWORK at writer boundary before selected metadata8 codec admission; no input repair/retrospective C1 claim",
+    "upstream_consumer": "RETAIN exact CommonJS artifact identity for upstream consumption and byte preservation; whole Git revision and independent kernel proof unproved"
+  },
+  "held": [
+    "Final executed P3 acceptance",
+    "Production codec",
+    "P2-P5/full A2 completion",
+    "Default selection",
+    "Universal geometry/format/resource acceptance",
+    "Release/main/tag/publication"
+  ],
+  "proof_limits": [
+    "Topology source points are counted, not coordinate-verified; ring/line signatures compare squared edge lengths rather than complete coordinates",
+    "No winding, triangle union/no-overlap/coverage, arbitrary scenes/transforms, CRS/world accuracy or quantization error bound",
+    "topology.py rejects explicit matrix/rotation but does not enforce positive finite diagonal scale, sparse absence, scene/node mesh linkage or duplicate source IDs; prove finite input profile independently",
+    "extract.py supports only generated scalar INT64/FLOAT64 BOOLEAN STRING metadata here; external UINT64/variable arrays remain preservation fixture only",
+    "Address comparator compares wrapper kind; exact b3dm wrapper/header/raw feature JSON preservation requires separate actual-byte inspection",
+    "Typed controls reuse frozen extractor and need baseline PASS plus intended causes; acceptance cannot rely on control label or generic failure alone",
+    "CommonJS meshoptimizer1.3.0 exact bytehash/NPM lock lineage proved separately from whole decoder Git revision; Rust/upstream share algorithm lineage",
+    "128MiB maxBytes correction is producer partition estimate only, never codec default/source/working budget or global RAM/time acceptance"
+  ],
+  "static_arithmetic": {
+    "point_rows": 65537,
+    "max_features": 70000,
+    "max_vertices": 70000,
+    "source_estimate_lower": 134219776,
+    "source_estimate_upper": 155191616,
+    "original_partition_guard": 67108864,
+    "revised_partition_guard": 268435456,
+    "f32_exact_ids": "all integers0..65536 exactly representable in binary32; no broader f32 ID domain approved"
+  },
+  "executed_defects_read_from_retained_receipts": [
+    "Original fill compare rejected nonunique association match2, does not show codec bytes defect",
+    "Original65537 recipe producer completed but extractor f32 expectation rejected U16 partitioned leaves; revised one-leaf results belong to new epoch"
+  ]
+}

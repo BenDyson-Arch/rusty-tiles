@@ -1,0 +1,36 @@
+{
+  "production_source_commit": "12d98ab",
+  "oracle_source_commit": "d92acd2",
+  "oracle_sha256": "01e66c0c65c112df248586ca3b831fc296fdfaf6f9aeed8b4a4caf66c345ae4b",
+  "required_runs_no_skips": true,
+  "per_adapter": {
+    "LAS_format_variant_cases": 18,
+    "profile_reference_cases": 30,
+    "LAZ_cases": 14,
+    "archive_mutations": 7,
+    "concurrent_jobs": 2,
+    "repeated_jobs": 2
+  },
+  "portable": {
+    "binary_sha256": "9a63cd41f9a983cb06e73b7bb839682910d6366a7577a2735a2b088fdfd2bc01",
+    "result": "passed",
+    "artifact": "portable.json"
+  },
+  "native": {
+    "binary_sha256": "b38d6726bb4271b725b3a08292b8b45fb9be977ac6368f70e465814d5146b334",
+    "result": "passed",
+    "artifact": "native.json"
+  },
+  "baseline": {
+    "source_commit": "12ce4c6b93625f309877a249a5406aae5a1d4e7c",
+    "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+    "artifact": "baseline-portable.json",
+    "finding": "Raw64 point rows preserve exact integer bits. Source noData/min/max declarations are dropped. Source-identical/hardlink .3tz outputs are replaced. Header_size0 and repeated relevant GeoKeys are admitted. Scaled64/zero/negative scales/unrepresentable F32 declarations are now explicitly refused by the declared P1 profile.",
+    "point_modules_match_issue_baseline": "5df15e7d21f502fc931e33e89b84ee2a20a16ee1"
+  },
+  "resource_artifacts": [
+    "resources-portable.json",
+    "resources-native-geographic.json"
+  ],
+  "bounded_validation_gap": "Production validate checks GLB JSON but not actual BIN/views/accessors. Independent point decoding does not close #133 or prove full glTF/metadata/material/CRS breadth."
+}

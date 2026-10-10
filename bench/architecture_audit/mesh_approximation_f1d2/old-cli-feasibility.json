@@ -1,0 +1,189 @@
+{
+  "scope": "Frozen F1d1 optimizer-candidate feasibility only; no F1d2 producer/profile/certificate acceptance",
+  "binary_sha256": "81fca6a80c1e64cfe6cec953838eba8cce6b39cadcd45a193e4a1096c8e44965",
+  "cases": [
+    {
+      "variant": "grid",
+      "triangle_limit": 16,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-native-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/grid-16/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/grid-16/result.3tz",
+        "--force",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "16",
+        "--max-proxy-error-metres",
+        "8"
+      ],
+      "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+      "exit_code": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/grid-16/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":2,\"triangles\":32},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certified_error_metres\":2.000000000000002,\"comparison_pairs\":960,\"geometric_error_metres\":8.0,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":16,\"triangles\":15},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":2,\"leaf_triangles\":16,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d1-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1448,\"source_coordinates\":\"local-gltf\",\"triangles\":32},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/grid-16/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":16,\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1448},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "archive_sha256": "88b696f00cb5d7ebef77d1c1381df20fec54881f3e5efa0ea81c8511f48d3c56",
+      "proxy_triangles": 15,
+      "historical_squared": "4",
+      "source_vertex_gap_squared": "0",
+      "independent_prospective_half_metre_cover": {
+        "proved": true,
+        "base_patch_face_tests": 960,
+        "root_patches": 47,
+        "patch_face_tests": 4792,
+        "accepted_patches": 140,
+        "max_depth": 2,
+        "ideal_cover_squared": "1/4",
+        "regions": [
+          {
+            "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+            "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+            "source_faces": 32,
+            "proxy_faces": 15
+          }
+        ],
+        "checker_limits": {
+          "max_depth": 24,
+          "max_patch_face_tests": 100000,
+          "max_seconds": 10,
+          "time_limit_is_cooperative": true
+        }
+      }
+    },
+    {
+      "variant": "bump",
+      "triangle_limit": 8,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-native-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-8/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-8/result.3tz",
+        "--force",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "8",
+        "--max-proxy-error-metres",
+        "8"
+      ],
+      "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+      "exit_code": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-8/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":2,\"triangles\":32},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certified_error_metres\":2.000000000000002,\"comparison_pairs\":512,\"geometric_error_metres\":8.0,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":8,\"triangles\":8},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":2,\"leaf_triangles\":16,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d1-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1456,\"source_coordinates\":\"local-gltf\",\"triangles\":32},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-8/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":16,\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1456},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "archive_sha256": "c345e97593ed36cc1136d19044194e7f26a9fbd866626af786ac0e9b67fb160c",
+      "proxy_triangles": 8,
+      "historical_squared": "4",
+      "source_vertex_gap_squared": "0",
+      "independent_prospective_half_metre_cover": {
+        "proved": true,
+        "base_patch_face_tests": 512,
+        "root_patches": 40,
+        "patch_face_tests": 4864,
+        "accepted_patches": 160,
+        "max_depth": 2,
+        "ideal_cover_squared": "1/4",
+        "regions": [
+          {
+            "source_sha256": "48fbd2882be13602d49bb850bae287db58595c0e1f2712a4586c81bc6d5370b4",
+            "proxy_sha256": "f4cf8b149e311147da2781a1213e6b7685b40f7c344d1084abb5b1520a3e93ba",
+            "source_faces": 32,
+            "proxy_faces": 8
+          }
+        ],
+        "checker_limits": {
+          "max_depth": 24,
+          "max_patch_face_tests": 100000,
+          "max_seconds": 10,
+          "time_limit_is_cooperative": true
+        }
+      }
+    },
+    {
+      "variant": "bump",
+      "triangle_limit": 2,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-native-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-2/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-2/result.3tz",
+        "--force",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "2",
+        "--max-proxy-error-metres",
+        "8"
+      ],
+      "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+      "exit_code": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-2/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":2,\"triangles\":32},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certified_error_metres\":2.236067977499793,\"comparison_pairs\":128,\"geometric_error_metres\":8.0,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":2,\"triangles\":2},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":2,\"leaf_triangles\":16,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d1-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1456,\"source_coordinates\":\"local-gltf\",\"triangles\":32},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/bump-2/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":16,\"routing_geometric_error_metres\":8.0,\"schema_version\":6,\"source_bytes\":1456},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "archive_sha256": "4f44e8e51e6dc1872fa563136f4f7eec3566920540f5cea5e0c7afd3f6778f92",
+      "proxy_triangles": 2,
+      "historical_squared": "5",
+      "source_vertex_gap_squared": "1/16",
+      "independent_prospective_half_metre_cover": {
+        "proved": true,
+        "base_patch_face_tests": 128,
+        "root_patches": 34,
+        "patch_face_tests": 1408,
+        "accepted_patches": 64,
+        "max_depth": 2,
+        "ideal_cover_squared": "1/16",
+        "regions": [
+          {
+            "source_sha256": "48fbd2882be13602d49bb850bae287db58595c0e1f2712a4586c81bc6d5370b4",
+            "proxy_sha256": "da2a7f44436504455e5f0c36b03c28569e9252cd8d17f18cf9a8ef1a15b72b04",
+            "source_faces": 32,
+            "proxy_faces": 2
+          }
+        ],
+        "checker_limits": {
+          "max_depth": 24,
+          "max_patch_face_tests": 100000,
+          "max_seconds": 10,
+          "time_limit_is_cooperative": true
+        }
+      }
+    },
+    {
+      "variant": "boundary-ring",
+      "triangle_limit": 2,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-native-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/boundary-ring-2/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence-feasibility/boundary-ring-2/result.3tz",
+        "--force",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "2",
+        "--max-proxy-error-metres",
+        "8"
+      ],
+      "source_sha256": "dfc6f8620fd2c3a2c4a24b7de20c7e39cf79c00833d13aa4a7b385fd0c6d491d",
+      "exit_code": 3,
+      "stdout": "{\"error\":{\"code\":\"invalid_input\",\"kind\":\"invalid_input\",\"message\":\"u32 accessor must be referenced by primitive indices\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":3,\"ok\":false}\n",
+      "stderr": ""
+    }
+  ],
+  "driver_hashes": {
+    "old_cli_feasibility.py": "c78174833944da953ed7da6181f9adfeca7b3b6fd616fc9597edd3f602542c00",
+    "f1d1_oracle.py": "ef45889f352717a0dd3ea0c8b2233a6c33796ebcd1b28c7a19506131128ed8bb",
+    "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+  }
+}

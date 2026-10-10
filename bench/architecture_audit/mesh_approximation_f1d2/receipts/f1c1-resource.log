@@ -1,0 +1,10 @@
+{"case": "core-pbr-single-leaf", "placed": false, "passed": true, "rss_kib": 112272}
+{"case": "core-pbr-single-leaf", "placed": true, "passed": true, "rss_kib": 111576}
+{"case": "core-pbr-many-leaves", "placed": false, "passed": true, "rss_kib": 57532}
+{"case": "core-pbr-many-leaves", "placed": true, "passed": true, "rss_kib": 57392}
+{"case": "shared-six-attrs-4096-primitives", "placed": false, "passed": true, "rss_kib": 35608}
+{"case": "shared-six-attrs-4096-primitives", "placed": true, "passed": true, "rss_kib": 35608}
+{"case": "triangles-100001-refused", "placed": false, "passed": true, "rss_kib": 22064}
+{"case": "triangles-100001-refused", "placed": true, "passed": true, "rss_kib": 22780}
+{"case": "placement-budget-before-missing-source", "placed": true, "passed": true, "rss_kib": 20672}
+{"case": "invalid-quaternion-before-missing-source", "placed": true, "passed": true, "rss_kib": 20904}

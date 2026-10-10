@@ -13,7 +13,7 @@ const MANIFESTS: [(&str, &str); 5] = [
     ("mesh", "tileset.json"),
     ("annotations", "tileset.json"),
     ("imagery", "tilejson.json"),
-    ("terrain", "layer.json"),
+    ("terrain", "tileset.json"),
 ];
 
 struct Server {
@@ -110,6 +110,41 @@ fn get(address: &str, path: &str) -> Response {
     request(address, path, "GET")
 }
 
+fn send_persistent(socket: &mut TcpStream, address: &str, path: &str, method: &str) {
+    write!(
+        socket,
+        "{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: keep-alive\r\n\r\n"
+    )
+    .unwrap();
+}
+
+/// Read exactly one response, retaining buffered bytes and the open connection.
+/// EOF cannot stand in for response framing when another request follows.
+fn persistent_response(socket: &mut BufReader<TcpStream>, head: bool) -> Response {
+    let mut line = String::new();
+    socket.read_line(&mut line).unwrap();
+    assert!(line.starts_with("HTTP/1.1 "), "{line:?}");
+    let status = line.split_whitespace().nth(1).unwrap().parse().unwrap();
+    let mut headers = HashMap::new();
+    loop {
+        line.clear();
+        assert!(socket.read_line(&mut line).unwrap() > 0);
+        if line == "\r\n" {
+            break;
+        }
+        let (name, value) = line.trim_end().split_once(':').unwrap();
+        headers.insert(name.to_ascii_lowercase(), value.trim().to_owned());
+    }
+    let length = headers["content-length"].parse::<usize>().unwrap();
+    let mut body = vec![0; if head { 0 } else { length }];
+    socket.read_exact(&mut body).unwrap();
+    Response {
+        status,
+        headers,
+        body,
+    }
+}
+
 /// An invented Cesium runtime and one directory per layer with its manifest.
 fn fixture(root: &Path) -> (PathBuf, Vec<(&'static str, PathBuf)>) {
     let cesium = root.join("runtime");
@@ -151,7 +186,7 @@ fn embedded_preview_runs_without_python_and_serves_only_selected_files() {
         ("/mesh/tileset.json", 200, "fixture"),
         ("/mesh/", 404, ""),
         ("/mesh/%2e%2e/private.txt", 404, ""),
-        ("/terrain/layer.json", 404, ""),
+        ("/terrain/tileset.json", 404, ""),
     ] {
         let response = get(address, path);
         let body = String::from_utf8_lossy(&response.body);
@@ -167,7 +202,7 @@ fn all_five_routes_serve_mime_types_head_and_no_cache() {
     let root = tempfile::tempdir().unwrap();
     let (cesium, layers) = fixture(root.path());
     std::fs::write(layer(&layers, "mesh").join("tile.glb"), b"glTF").unwrap();
-    std::fs::write(layer(&layers, "terrain").join("0.terrain"), b"terrain").unwrap();
+    std::fs::write(layer(&layers, "terrain").join("0.glb"), b"terrain").unwrap();
     let selected: Vec<_> = layers
         .iter()
         .map(|(name, path)| (*name, path.as_path()))
@@ -191,7 +226,7 @@ fn all_five_routes_serve_mime_types_head_and_no_cache() {
         ("/cesium/Cesium.js", "text/javascript"),
         ("/cesium/worker.wasm", "application/wasm"),
         ("/mesh/tile.glb", "model/gltf-binary"),
-        ("/terrain/0.terrain", "application/vnd.quantized-mesh"),
+        ("/terrain/0.glb", "model/gltf-binary"),
     ] {
         let response = get(address, path);
         assert_eq!(response.status, 200, "{path}");
@@ -228,6 +263,188 @@ fn all_five_routes_serve_mime_types_head_and_no_cache() {
     });
 }
 
+#[test]
+fn persistent_bursts_and_reuse_progress_with_idle_and_partial_connections() {
+    const CLIENTS: usize = 16;
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let mesh = layer(&layers, "mesh");
+    // Larger than a small HTTP/file buffer, with literal independently known bytes.
+    let payload: Vec<u8> = (0..196_608).map(|i| (i % 251) as u8).collect();
+    std::fs::write(mesh.join("streamed.glb"), &payload).unwrap();
+    std::fs::File::create(mesh.join("backpressure.glb"))
+        .unwrap()
+        .set_len(64 * 1024 * 1024)
+        .unwrap();
+    let server = serve(&cesium, &[("mesh", mesh)], root.path());
+    let address = server.address.as_str();
+    let connect = || {
+        let socket = TcpStream::connect(address).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        socket
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        socket.set_nodelay(true).unwrap();
+        socket
+    };
+    // Neither an idle socket nor incomplete headers own an OS worker needed by
+    // another connection. Keep these open until every active response completes.
+    let idle: Vec<_> = (0..CLIENTS).map(|_| connect()).collect();
+    let mut partial: Vec<_> = (0..CLIENTS).map(|_| connect()).collect();
+    for socket in &mut partial {
+        socket
+            .write_all(b"GET /config.json HTTP/1.1\r\nHost:")
+            .unwrap();
+    }
+    let mut blocked: Vec<_> = (0..4).map(|_| connect()).collect();
+    for socket in &mut blocked {
+        send_persistent(socket, address, "/mesh/backpressure.glb", "GET");
+    }
+    for socket in &blocked {
+        // Observe that each stream started, then leave its large body unread.
+        // These receivers stay open while all active clients finish and reuse.
+        assert!(socket.peek(&mut [0; 1]).unwrap() > 0);
+    }
+    let active: Vec<_> = (0..CLIENTS).map(|_| connect()).collect();
+    let start = std::sync::Barrier::new(CLIENTS);
+    let completed = std::thread::scope(|scope| {
+        let workers: Vec<_> = active
+            .into_iter()
+            .map(|socket| {
+                let payload = &payload;
+                let start = &start;
+                scope.spawn(move || {
+                    let mut socket = BufReader::new(socket);
+                    start.wait();
+                    // All clients issue the first request together. Later requests
+                    // reuse that same socket while peers may already be idle.
+                    send_persistent(socket.get_mut(), address, "/config.json", "GET");
+                    let config = persistent_response(&mut socket, false);
+                    assert_eq!(config.status, 200);
+                    assert_eq!(config.headers["cache-control"], "no-cache");
+                    assert_eq!(
+                        serde_json::from_slice::<Value>(&config.body).unwrap(),
+                        json!({"mesh":"/mesh/tileset.json"})
+                    );
+                    // Pipeline a streamed GET, HEAD and another GET. The reader
+                    // must honor framing and order without waiting for EOF.
+                    for method in ["GET", "HEAD", "GET"] {
+                        send_persistent(socket.get_mut(), address, "/mesh/streamed.glb", method);
+                    }
+                    for method in ["GET", "HEAD", "GET"] {
+                        let response = persistent_response(&mut socket, method == "HEAD");
+                        assert_eq!(response.status, 200);
+                        assert_eq!(response.headers["content-type"], "model/gltf-binary");
+                        assert_eq!(response.headers["cache-control"], "no-cache");
+                        assert_eq!(
+                            response.headers["content-length"].parse::<usize>().unwrap(),
+                            payload.len()
+                        );
+                        if method == "HEAD" {
+                            assert!(response.body.is_empty());
+                        } else {
+                            assert_eq!(response.body, *payload);
+                        }
+                    }
+                    // Return ownership rather than closing early and accidentally
+                    // freeing a shared reader for a peer's pending response.
+                    socket
+                })
+            })
+            .collect();
+        let results: Vec<_> = workers.into_iter().map(|worker| worker.join()).collect();
+        results
+            .into_iter()
+            .map(|result| result.unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(completed.len(), CLIENTS);
+    assert_eq!(idle.len(), CLIENTS);
+    assert_eq!(partial.len(), CLIENTS);
+    assert_eq!(blocked.len(), 4);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn stopped_single_cpu_keepalive_burst_completes_without_releasing_any_client() {
+    struct Resume(libc::pid_t);
+    impl Drop for Resume {
+        fn drop(&mut self) {
+            // Even setup failure must resume before unwinding to assertions.
+            unsafe { libc::kill(self.0, libc::SIGCONT) };
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let server = serve(&cesium, &[("mesh", layer(&layers, "mesh"))], root.path());
+    let address: std::net::SocketAddr = server.address.parse().unwrap();
+    let pid = server.child.id() as libc::pid_t;
+    let mut allowed: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    assert_eq!(
+        unsafe { libc::sched_getaffinity(0, std::mem::size_of_val(&allowed), &mut allowed) },
+        0
+    );
+    let cpu = (0..libc::CPU_SETSIZE as usize)
+        .find(|cpu| unsafe { libc::CPU_ISSET(*cpu, &allowed) })
+        .unwrap();
+    let mut selected: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    unsafe { libc::CPU_SET(cpu, &mut selected) };
+    // Establish the old transport's initially idle connection readers. This is
+    // a scheduling control, not a retry or an acceptance deadline extension.
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(unsafe { libc::kill(pid, libc::SIGSTOP) }, 0);
+    let resume = Resume(pid);
+    let setup = (|| -> std::io::Result<Vec<BufReader<TcpStream>>> {
+        let mut status = 0;
+        if unsafe { libc::waitpid(pid, &mut status, libc::WUNTRACED) } != pid {
+            return Err(std::io::Error::last_os_error());
+        }
+        // Restrict existing readers/acceptor as well as the main thread; new
+        // tasks/threads inherit this mask. One accept burst can now queue all
+        // sockets before the old idle reader workers are scheduled.
+        for entry in std::fs::read_dir(format!("/proc/{pid}/task"))? {
+            let entry = entry?;
+            let tid = entry
+                .file_name()
+                .to_string_lossy()
+                .parse::<libc::pid_t>()
+                .map_err(std::io::Error::other)?;
+            if unsafe { libc::sched_setaffinity(tid, std::mem::size_of_val(&selected), &selected) }
+                != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        let mut clients = Vec::new();
+        for _ in 0..6 {
+            let mut socket = TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
+            socket.set_read_timeout(Some(Duration::from_secs(10)))?;
+            socket.set_write_timeout(Some(Duration::from_secs(10)))?;
+            write!(
+                socket,
+                "GET /config.json HTTP/1.1\r\nHost: {address}\r\nConnection: keep-alive\r\n\r\n"
+            )?;
+            clients.push(BufReader::new(socket));
+        }
+        Ok(clients)
+    })();
+    drop(resume); // SIGCONT precedes all assertions and response reads.
+    let mut clients = setup.unwrap();
+    for client in &mut clients {
+        let response = persistent_response(client, false);
+        assert_eq!(response.status, 200);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&response.body).unwrap(),
+            json!({"mesh":"/mesh/tileset.json"})
+        );
+    }
+    // Keeping the entire vector alive prevents early-close release from hiding
+    // the two stranded sockets observed on the frozen tiny_http artifact.
+    assert_eq!(clients.len(), 6);
+}
+
 #[cfg(unix)]
 #[test]
 fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
@@ -244,7 +461,7 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
     for path in [
         "/mesh/",
         "/cesium/",
-        "/terrain/layer.json",
+        "/terrain/tileset.json",
         "/data/private.txt",
         "/private.txt",
         "/mesh/../private.txt",
@@ -354,6 +571,6 @@ fn json_startup_line_reports_url_and_layers() {
     );
     assert_eq!(
         server.ready["layers"],
-        json!({"imagery":"/imagery/tilejson.json","terrain":"/terrain/layer.json"})
+        json!({"imagery":"/imagery/tilejson.json","terrain":"/terrain/tileset.json"})
     );
 }

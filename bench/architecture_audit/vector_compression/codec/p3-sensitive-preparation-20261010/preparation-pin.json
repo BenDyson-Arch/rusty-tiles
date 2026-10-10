@@ -1,0 +1,26 @@
+{
+  "files_sha256": {
+    "README.md": "8de1c17ae402ffed4264520d34ccd7cd00c831c0c7358d8a1c3dd1c33e231508",
+    "author_controls.py": "b245b3951e450f80bda36fd46329ec827d0e98200bb4a8972e387ca74949f72f",
+    "decoder-location.json": "c76b89c07e3bd0c143d9ee557c12e7cb6ebd61dc95571a79e5ade77fa24dc04f",
+    "large_ids_revision.py": "a1285c8ce477b5baaed81adc0f8c8e686cc8d30458a40d56ec4502a312a72522",
+    "pair_by_address.py": "6009de84ed3c3d53efab26e7c47a903e23e6c7a4ba1c46c2b56f1d744fbe84fd",
+    "topology.py": "6783693e91e6b2b31fc626e6ee5ffb2af84ad8a0426c7002c078a1bc4ba29065",
+    "typed_sensitivity.py": "af6c1ab6ac390b7d688bda27e5a9de766b6a4ff536676f5e0bab55db879f40c4"
+  },
+  "original_frozen_preparation_pin_sha256": "b2990c02787ab5eec4fece845b03b8ef7fee3ac07ef8d0e9cc34bbab32062beb",
+  "original_package_all_files_unchanged": true,
+  "root_reported_executions_not_author_replayed": {
+    "address_comparator_model_controls": 7,
+    "filled_portable_address_slots": 16,
+    "filled_portable_logical_views": 160,
+    "original_large_id_f32_expectation": "failed; original run retained",
+    "original_large_id_leaf_counts": [
+      16385,
+      16384,
+      16384,
+      16384
+    ]
+  },
+  "status": "STATIC_PREPARATION_ONLY_AUTHOR_AST_AND_IDENTITY_CHECKS_NO_ORACLE_TARGET_EXECUTIONS"
+}

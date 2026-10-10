@@ -1,0 +1,84 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "date": "2026-10-10",
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourceTree": "1881bb5a90cf94f261925a44fd80720bf16084fb",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "productionFilesVerified": 97,
+  "selectedAcceptanceFilesVerified": 179,
+  "boundedLocalDecision": "accepted",
+  "mergeDecision": "conditional pending remote and package/platform gates",
+  "definiteProductionDefectIdentified": false,
+  "historicalOriginalOracleFailurePreserved": "204 pass / one failed malformed polygon positive; dated correction independently adjudicated",
+  "libraryTests": {
+    "passed": 365,
+    "failed": 0,
+    "ignored": 0,
+    "filtered": 0
+  },
+  "actualC1ContextCalls": {
+    "total": 82,
+    "admitted": 41,
+    "resourceLimit": 41
+  },
+  "publicControlsPerFlavor": {
+    "corrected": 205,
+    "supplemental": 5,
+    "failed": 0,
+    "completeReportsVerified": 78,
+    "losslessRawStreamsVerified": 420
+  },
+  "eightIntegrationsVerified": true,
+  "nativeAllTargetsAndBindingsClippyVerified": true,
+  "retainedEvidenceIndexSha256": "9e2e1c3858e23465896e0eaa4d23ca7ce47c161d5ed12b893e1132355a6d97cb",
+  "losslessEvidenceRecordsVerified": 45,
+  "retainedHistoricalOriginalRawStreams": 410,
+  "artifacts": {
+    "unit": {
+      "path": "/tmp/rusty-tiles-payload-final-evidence/final-build/unit-2ebfb74-ab0260138191af5c503a42431b81ab9690e3231d10aa32a9113869d463d5d414",
+      "sha256": "ab0260138191af5c503a42431b81ab9690e3231d10aa32a9113869d463d5d414",
+      "bytes": 26943744,
+      "receiptSha256": "1eeb520bf1b39ce6c308053f8399fb67892812882f3ccc2b830aa9f996f22589"
+    },
+    "portable": {
+      "path": "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-2ebfb74-104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+      "sha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+      "bytes": 21195480,
+      "receiptSha256": "e6154001de0d1046197c98bc8624807219a21b5fb6651fbd74a478032be4ce96"
+    },
+    "native": {
+      "path": "/tmp/rusty-tiles-payload-final-evidence/final-build/native-cli-2ebfb74-be597bbca0bd4faf3355040f51de07a5e03edb5be559f6307ae7041101119efe",
+      "sha256": "be597bbca0bd4faf3355040f51de07a5e03edb5be559f6307ae7041101119efe",
+      "bytes": 18807896,
+      "receiptSha256": "b3006141bec73d5ba5c8aac3b8fb00b042d45e13a543c61d9d5742310c8d1f42"
+    }
+  },
+  "pendingMergeGates": [
+    "exact-head remote CI and uploaded receipts",
+    "source package compilation",
+    "five wheel builds",
+    "ten installed-wheel lanes",
+    "four official Blender/platform lanes"
+  ],
+  "reviewerExecutedTarget": false,
+  "reviewerUsedCargo": false,
+  "acceptsA2OrReleaseOrIssueClosure": false,
+  "phaseFilesSha256": {
+    "checkpoint-retention-verification.json": "bdf0ff4d702204289b122d118ff7b5e5938c161718b035c89f71efbfceed11c5",
+    "context-execution-verification.json": "949dc3e09fce7bb92643738ec5ca4477bb9a402a98e13728547a9dbae3dd4197",
+    "coordinator-library-receipt.json": "1eeb520bf1b39ce6c308053f8399fb67892812882f3ccc2b830aa9f996f22589",
+    "integration-verification.json": "b8cdb540922c8ebbe8b6f399f21a2c5ae26685dc5471399a110a59dff63a8bc2",
+    "native-public-execution-verification.json": "2b0b651a5a9df31493746de435f884c5b45704fa0220c5378f9909222ad37278",
+    "polygon-input-verification.json": "f271225bd892ca8f153a04218283b2f2034e5e2cf35a20c5cc6a3975a28a27fe",
+    "portable-public-execution-verification.json": "79601e51968663de17b7ededdcdbc4089008e9df9a898dd0e0d5c838c9fccf65",
+    "review.md": "255305f26c62595281a03815243ca595ea48c455ad599b68bbe0b4527a0c2af3",
+    "source-package-inventory-verification.json": "9dd6272cd89d269e45b1bd5f1a0e78d6bbebbd5df811291bbfbfb119eecc1364",
+    "source-pin.json": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+    "verify_checkpoint.py": "33ecc3a6dc954e76da51d3af954a9a7fd3a888d4ed24718990c23fadd6efab94",
+    "verify_execution.py": "1a3cae467d5f20f166aa64f893fc19919f6fbaa14a4bd484ea87a083c66297ba",
+    "verify_integration.py": "fe2a3ef28c81b6e9f2e3bd46e7b52aba8c524b00be96c506c82fb8e56db59a94",
+    "verify_polygon_inputs.py": "a95d28aea626849d88dabff5ef1418a7029eebfd0118e712680e891d3c273d20",
+    "verify_public_execution.py": "da865dc7bbf47a7d9fb1b9f2266d44d0a6a76b639e07c7de222b470bc34e2ed9"
+  },
+  "scope": "Separate bounded local nonauthor review; historical phases immutable; no source/artifact rebinding"
+}

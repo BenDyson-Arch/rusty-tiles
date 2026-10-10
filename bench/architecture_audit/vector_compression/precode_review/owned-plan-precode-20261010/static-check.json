@@ -1,0 +1,15 @@
+{
+  "evidenceClass": "independent read/hash/AST/lexical integer analysis only",
+  "originalPackageFilesVerified": 72,
+  "contextRevisionFilesVerified": 6,
+  "externalInputPinsVerified": 140,
+  "unchangedExternalPinRecords": 139,
+  "fixtureNodeAndSourceByteFactsReconciled": 28,
+  "targetedArenaBorrowedOwnedKeyViewCapacityAndEstimateFactsReconciled": 20,
+  "authorPythonFilesASTParsed": 3,
+  "authorGeneratorsOrEvaluatorExecuted": false,
+  "reviewerCompilerNativeTargetCargoGitCommands": 0,
+  "expectedFutureCommands": 52,
+  "expectedChangedRecordFaultRejections": 18,
+  "originalMutableContextPinDisposition": "retained as historical mismatch; replaced only by additive byte snapshot pin"
+}

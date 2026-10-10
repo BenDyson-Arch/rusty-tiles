@@ -1,0 +1,2128 @@
+{
+  "head": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+  "tree": "57095507d251e4f2fcb826cee367fa72bd306158",
+  "actualC1ExecutionCommit": "2a13c3268233d20218e867a4436d3e6b84770c7b",
+  "mainRun": 38050915453,
+  "wheelRun": 38050915448,
+  "jobsPassed": 21,
+  "expectedSkippedJobs": [
+    "Release acceptance",
+    "Distribution Blender (Linux x86_64)"
+  ],
+  "selectedProductionHashesVerified": 97,
+  "selectedAcceptanceHashesVerified": 237,
+  "artifactArchivesPublisherDigestsAndAllMembersVerified": 15,
+  "wheels": {
+    "x86_64-unknown-linux-gnu": {
+      "sha256": "6838bcdb6a6d6f12774b337b9adcd1992ced24b80f698de55740259c02c5a2cf",
+      "bytes": 7198391,
+      "filename": "rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+      "artifact": 11669453038,
+      "installedEvidenceArtifact": 11669258250,
+      "job": 114209692063,
+      "recordMembersVerified": 7,
+      "nativeExtension": "rusty_tiles/rusty_tiles.abi3.so",
+      "installedReports": [
+        {
+          "python": "3.10.22 (main, Oct  1 2026, 14:31:30) [GCC 11.4.0]",
+          "platform": "Linux-6.8.0-1064-azure-x86_64-with-glibc2.35",
+          "machine": "x86_64",
+          "package_version": "0.4.0",
+          "package_file": "/tmp/rusty-tiles-wheel-06s1ne9d/venv/lib/python3.10/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "6838bcdb6a6d6f12774b337b9adcd1992ced24b80f698de55740259c02c5a2cf",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        {
+          "python": "3.14.8 (main, Oct  1 2026, 02:39:17) [GCC 11.4.0]",
+          "platform": "Linux-6.8.0-1064-azure-x86_64-with-glibc2.35",
+          "machine": "x86_64",
+          "package_version": "0.4.0",
+          "package_file": "/tmp/rusty-tiles-wheel-udqk1tq6/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "6838bcdb6a6d6f12774b337b9adcd1992ced24b80f698de55740259c02c5a2cf",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        }
+      ]
+    },
+    "aarch64-unknown-linux-gnu": {
+      "sha256": "1031f05e4152cbebe93c267c9bf334add5d9ea62c2946aa1b460003ede50a53f",
+      "bytes": 7077463,
+      "filename": "rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+      "artifact": 11669755119,
+      "installedEvidenceArtifact": 11668794751,
+      "job": 114209692058,
+      "recordMembersVerified": 7,
+      "nativeExtension": "rusty_tiles/rusty_tiles.abi3.so",
+      "installedReports": [
+        {
+          "python": "3.10.22 (main, Oct  1 2026, 14:32:36) [GCC 11.4.0]",
+          "platform": "Linux-6.8.0-1064-azure-aarch64-with-glibc2.35",
+          "machine": "aarch64",
+          "package_version": "0.4.0",
+          "package_file": "/tmp/rusty-tiles-wheel-62e4hrmd/venv/lib/python3.10/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "1031f05e4152cbebe93c267c9bf334add5d9ea62c2946aa1b460003ede50a53f",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        {
+          "python": "3.14.8 (main, Oct  1 2026, 02:40:03) [GCC 11.4.0]",
+          "platform": "Linux-6.8.0-1064-azure-aarch64-with-glibc2.35",
+          "machine": "aarch64",
+          "package_version": "0.4.0",
+          "package_file": "/tmp/rusty-tiles-wheel-zalsgooe/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "1031f05e4152cbebe93c267c9bf334add5d9ea62c2946aa1b460003ede50a53f",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        }
+      ]
+    },
+    "x86_64-apple-darwin": {
+      "sha256": "d27bdb1166898ad8deafc30d70fd43aad22afd54731d1c3fbbc88099584b55e9",
+      "bytes": 6673596,
+      "filename": "rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_x86_64.whl",
+      "artifact": 11669840176,
+      "installedEvidenceArtifact": 11669870148,
+      "job": 114209691999,
+      "recordMembersVerified": 7,
+      "nativeExtension": "rusty_tiles/rusty_tiles.abi3.so",
+      "installedReports": [
+        {
+          "python": "3.10.21 (main, Aug 13 2026, 02:42:10) [Clang 17.0.0 (clang-1700.0.13.5)]",
+          "platform": "macOS-15.7.9-x86_64-64bit",
+          "machine": "x86_64",
+          "package_version": "0.4.0",
+          "package_file": "/var/folders/20/jp1_0n3n7kndh6rnbqb5344m0000gn/T/rusty-tiles-wheel-cqsbbbqi/venv/lib/python3.10/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "d27bdb1166898ad8deafc30d70fd43aad22afd54731d1c3fbbc88099584b55e9",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        {
+          "python": "3.14.7 (v3.14.7:823f0323ee6, Aug  5 2026, 07:07:01) [Clang 21.0.0 (clang-2100.1.1.101)]",
+          "platform": "macOS-15.7.9-x86_64-64bit",
+          "machine": "x86_64",
+          "package_version": "0.4.0",
+          "package_file": "/private/var/folders/20/jp1_0n3n7kndh6rnbqb5344m0000gn/T/rusty-tiles-wheel-pa_8wddx/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "d27bdb1166898ad8deafc30d70fd43aad22afd54731d1c3fbbc88099584b55e9",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        }
+      ]
+    },
+    "aarch64-apple-darwin": {
+      "sha256": "44cb41ec25f761380faf6fae3a9624ec6ea01657e43c68dd4e02bd49a256e938",
+      "bytes": 6424219,
+      "filename": "rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_arm64.whl",
+      "artifact": 11669063493,
+      "installedEvidenceArtifact": 11668998600,
+      "job": 114209692104,
+      "recordMembersVerified": 7,
+      "nativeExtension": "rusty_tiles/rusty_tiles.abi3.so",
+      "installedReports": [
+        {
+          "python": "3.10.11 (v3.10.11:7d4cc5aa85, Apr  4 2023, 19:05:19) [Clang 13.0.0 (clang-1300.0.29.30)]",
+          "platform": "macOS-15.7.9-arm64-64bit",
+          "machine": "arm64",
+          "package_version": "0.4.0",
+          "package_file": "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/rusty-tiles-wheel-t_jaz6j7/venv/lib/python3.10/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "44cb41ec25f761380faf6fae3a9624ec6ea01657e43c68dd4e02bd49a256e938",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        {
+          "python": "3.14.7 (v3.14.7:823f0323ee6, Aug  5 2026, 07:07:01) [Clang 21.0.0 (clang-2100.1.1.101)]",
+          "platform": "macOS-15.7.9-arm64-64bit",
+          "machine": "arm64",
+          "package_version": "0.4.0",
+          "package_file": "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/rusty-tiles-wheel-ldz0535t/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+          "wheel_sha256": "44cb41ec25f761380faf6fae3a9624ec6ea01657e43c68dd4e02bd49a256e938",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        }
+      ]
+    },
+    "x86_64-pc-windows-msvc": {
+      "sha256": "1065e108eb7d08de6a6b904d6ad48d5e9111b2ffac4f3add1b12fc85d6d2da6e",
+      "bytes": 6390320,
+      "filename": "rusty_tiles-0.4.0-cp310-abi3-win_amd64.whl",
+      "artifact": 11669443087,
+      "installedEvidenceArtifact": 11669488118,
+      "job": 114209692109,
+      "recordMembersVerified": 7,
+      "nativeExtension": "rusty_tiles/rusty_tiles.pyd",
+      "installedReports": [
+        {
+          "python": "3.10.11 (tags/v3.10.11:7d4cc5a, Apr  5 2023, 00:38:17) [MSC v.1929 64 bit (AMD64)]",
+          "platform": "Windows-10-10.0.20348-SP0",
+          "machine": "AMD64",
+          "package_version": "0.4.0",
+          "package_file": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\rusty-tiles-wheel-x1gbmw29\\venv\\lib\\site-packages\\rusty_tiles\\__init__.py",
+          "wheel_sha256": "1065e108eb7d08de6a6b904d6ad48d5e9111b2ffac4f3add1b12fc85d6d2da6e",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        {
+          "python": "3.14.8 (tags/v3.14.8:8e6e75d, Sep 30 2026, 18:19:33) [MSC v.1944 64 bit (AMD64)]",
+          "platform": "Windows-2022Server-10.0.20348-SP0",
+          "machine": "AMD64",
+          "package_version": "0.4.0",
+          "package_file": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\rusty-tiles-wheel-qfdcm789\\venv\\Lib\\site-packages\\rusty_tiles\\__init__.py",
+          "wheel_sha256": "1065e108eb7d08de6a6b904d6ad48d5e9111b2ffac4f3add1b12fc85d6d2da6e",
+          "empty_path": true,
+          "tests_run": 44,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "ok": true
+        }
+      ]
+    }
+  },
+  "installedPythonReportsVerified": 10,
+  "officialBlender": {
+    "linux-x64": {
+      "job": 114210896994,
+      "artifact": 11669930214,
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "linux-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-linux-x64.tar.xz",
+        "archive_sha256": "9ba871ff2ecd36526b77432745980b7e6664ecd0c7ca11c48849073dcfe06da3",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/home/runner/work/_temp/official-blender/blender-4.5.14-linux-x64/blender",
+        "executable_sha256": "050c02562f81fe80ba616a80198fa02d381e60f8b61b8d39add881f4bca0d7d8"
+      },
+      "acceptance": {
+        "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [GCC 11.2.1 20220127 (Red Hat 11.2.1-9)]",
+        "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+        "machine": "x86_64",
+        "package_version": "0.4.0",
+        "package_file": "/tmp/rusty-tiles-blender-dupazwt_/packages/rusty_tiles/__init__.py",
+        "wheel_sha256": "6838bcdb6a6d6f12774b337b9adcd1992ced24b80f698de55740259c02c5a2cf",
+        "empty_path": true,
+        "tests_run": 44,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "ok": true,
+        "blender": "4.5.14 LTS",
+        "blender_version": [
+          4,
+          5,
+          14
+        ],
+        "blender_build_hash": "62c1db4208e8",
+        "blender_distribution": {
+          "distribution": "official-blender.org",
+          "distribution_platform": "linux-x64",
+          "version": "4.5.14",
+          "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-linux-x64.tar.xz",
+          "archive_sha256": "9ba871ff2ecd36526b77432745980b7e6664ecd0c7ca11c48849073dcfe06da3",
+          "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+          "executable": "/home/runner/work/_temp/official-blender/blender-4.5.14-linux-x64/blender",
+          "executable_sha256": "050c02562f81fe80ba616a80198fa02d381e60f8b61b8d39add881f4bca0d7d8"
+        }
+      },
+      "distributionAndExecutableBytesUploaded": false
+    },
+    "windows-x64": {
+      "job": 114210897026,
+      "artifact": 11669153674,
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "windows-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-windows-x64.zip",
+        "archive_sha256": "b9533d2397ac1984db4466fb23a7a4649391cca93f6e84209f9bcc60d071c8b9",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "D:\\a\\_temp\\official-blender\\blender-4.5.14-windows-x64\\blender.exe",
+        "executable_sha256": "57fa1d294ea76448c3bec84ca758caf4629611330abba7dcf55bb0c56a0a15ab"
+      },
+      "acceptance": {
+        "python": "3.11.15 (main, Aug 12 2026, 16:53:25) [MSC v.1929 64 bit (AMD64)]",
+        "platform": "Windows-10-10.0.20348-SP0",
+        "machine": "AMD64",
+        "package_version": "0.4.0",
+        "package_file": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\rusty-tiles-blender-lekf0m9g\\packages\\rusty_tiles\\__init__.py",
+        "wheel_sha256": "1065e108eb7d08de6a6b904d6ad48d5e9111b2ffac4f3add1b12fc85d6d2da6e",
+        "empty_path": true,
+        "tests_run": 44,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "ok": true,
+        "blender": "4.5.14 LTS",
+        "blender_version": [
+          4,
+          5,
+          14
+        ],
+        "blender_build_hash": "62c1db4208e8",
+        "blender_distribution": {
+          "distribution": "official-blender.org",
+          "distribution_platform": "windows-x64",
+          "version": "4.5.14",
+          "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-windows-x64.zip",
+          "archive_sha256": "b9533d2397ac1984db4466fb23a7a4649391cca93f6e84209f9bcc60d071c8b9",
+          "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+          "executable": "D:\\a\\_temp\\official-blender\\blender-4.5.14-windows-x64\\blender.exe",
+          "executable_sha256": "57fa1d294ea76448c3bec84ca758caf4629611330abba7dcf55bb0c56a0a15ab"
+        }
+      },
+      "distributionAndExecutableBytesUploaded": false
+    },
+    "macos-x64": {
+      "job": 114210897014,
+      "artifact": 11669248649,
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "macos-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-x64.dmg",
+        "archive_sha256": "613e73339e97bd113adeeb28d9155beeacf2df7119ee4dbd6bdce234843645f6",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+        "executable_sha256": "7b3f5f63c8b0f1fa4cf964bed710e1888e88f341161807451be13401bb980ea8"
+      },
+      "acceptance": {
+        "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [Clang 15.0.0 (clang-1500.0.40.1)]",
+        "platform": "macOS-15.7.9-x86_64-64bit",
+        "machine": "x86_64",
+        "package_version": "0.4.0",
+        "package_file": "/var/folders/20/jp1_0n3n7kndh6rnbqb5344m0000gn/T/rusty-tiles-blender-4nmezix0/packages/rusty_tiles/__init__.py",
+        "wheel_sha256": "d27bdb1166898ad8deafc30d70fd43aad22afd54731d1c3fbbc88099584b55e9",
+        "empty_path": true,
+        "tests_run": 44,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "ok": true,
+        "blender": "4.5.14 LTS",
+        "blender_version": [
+          4,
+          5,
+          14
+        ],
+        "blender_build_hash": "62c1db4208e8",
+        "blender_distribution": {
+          "distribution": "official-blender.org",
+          "distribution_platform": "macos-x64",
+          "version": "4.5.14",
+          "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-x64.dmg",
+          "archive_sha256": "613e73339e97bd113adeeb28d9155beeacf2df7119ee4dbd6bdce234843645f6",
+          "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+          "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+          "executable_sha256": "7b3f5f63c8b0f1fa4cf964bed710e1888e88f341161807451be13401bb980ea8"
+        }
+      },
+      "distributionAndExecutableBytesUploaded": false
+    },
+    "macos-arm64": {
+      "job": 114210896999,
+      "artifact": 11669920198,
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "macos-arm64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-arm64.dmg",
+        "archive_sha256": "65134d9b07b20e2fa8d3c9e44f6f44ffb5c9774dd521b95f50387310241ca170",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+        "executable_sha256": "4708959c3d9a59e549a4ee94c7aaeddd96019bf4dccfe5e4335de6a7c8d04a47"
+      },
+      "acceptance": {
+        "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [Clang 15.0.0 (clang-1500.0.40.1)]",
+        "platform": "macOS-15.7.9-arm64-64bit",
+        "machine": "arm64",
+        "package_version": "0.4.0",
+        "package_file": "/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/rusty-tiles-blender-_t7s8b8j/packages/rusty_tiles/__init__.py",
+        "wheel_sha256": "44cb41ec25f761380faf6fae3a9624ec6ea01657e43c68dd4e02bd49a256e938",
+        "empty_path": true,
+        "tests_run": 44,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "ok": true,
+        "blender": "4.5.14 LTS",
+        "blender_version": [
+          4,
+          5,
+          14
+        ],
+        "blender_build_hash": "62c1db4208e8",
+        "blender_distribution": {
+          "distribution": "official-blender.org",
+          "distribution_platform": "macos-arm64",
+          "version": "4.5.14",
+          "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-arm64.dmg",
+          "archive_sha256": "65134d9b07b20e2fa8d3c9e44f6f44ffb5c9774dd521b95f50387310241ca170",
+          "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+          "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+          "executable_sha256": "4708959c3d9a59e549a4ee94c7aaeddd96019bf4dccfe5e4335de6a7c8d04a47"
+        }
+      },
+      "distributionAndExecutableBytesUploaded": false
+    }
+  },
+  "officialBlenderReportsVerified": 4,
+  "c1CheckpointReverifiedWithoutRebinding": {
+    "head": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+    "tree": "57095507d251e4f2fcb826cee367fa72bd306158",
+    "actualExecutionCommit": "2a13c3268233d20218e867a4436d3e6b84770c7b",
+    "executionTreeEqualsHeadTree": true,
+    "run": 38050915453,
+    "artifact": 11669407866,
+    "publisherDigestVerified": true,
+    "archiveSha256": "d1486068b93ce56146473507f92fc335a068ae918b52a42beca37338e2d0d6c9",
+    "allEightUploadedMembersHashChecked": true,
+    "actualLibraryPassed": 367,
+    "failed": 0,
+    "ignored": 0,
+    "filtered": 0,
+    "ownedConcurrencyTestsPresent": true,
+    "actualContextCalls": 82,
+    "admittedReportHashesVerified": 41,
+    "resourceLimitRows": 41,
+    "contextInputHashesVerified": 327,
+    "publicCases": 217,
+    "completePublicPositiveReports": 82,
+    "originalPublicStreamsVerified": 434,
+    "unitHashReportedByPinnedJobParser": "0b988e0e96bb4bc1267497ad448a8b492bb2bc3e034a272e5bd827b26c424000",
+    "cliHashReportedByPinnedJobHarnesses": "151169080bcafdc05cfecef4a0cea5cc57d9752a0033de9b0b6c2afe6943c12d",
+    "cliFeatures": "native-jpeg, default features empty, debug profile",
+    "binariesIncludedInC1Upload": false,
+    "reviewerIndependentlyRehashedRemoteBinaries": false,
+    "originalC1ReportShapes": 135,
+    "independentlyReclassifiedArchiveCases": 45,
+    "resourceRuns": 20,
+    "rssKiBRange": [
+      78248,
+      86324
+    ],
+    "descriptorSamples": 2675,
+    "sampledPeakDescriptors": 6,
+    "descriptorPermissionDenials": 19,
+    "maximumWallSeconds": 0.5850829390000172,
+    "producerReportedFramingMembers": 8,
+    "producerArchiveIncludedInUpload": false,
+    "reviewerDecodedRemoteProducerArchive": false,
+    "boundedRemoteC1CheckpointVerified": true,
+    "entireCiAccepted": false,
+    "wheelsAndBlenderAccepted": false,
+    "mergeAccepted": false,
+    "reviewerUsedCargo": false,
+    "reviewerExecutedTarget": false,
+    "reviewerMutatedRepository": false,
+    "limits": [
+      "Unit/CLI hashes were computed by pinned actual job harnesses; those binary bytes are not in this upload",
+      "Remote descriptor observations include19 permission-denial events; sampled peak is partial, no universal ceiling",
+      "Producer raw output archive is not in this upload; framing assertions belong to the pinned job runner",
+      "Whole-run/job completion and all wheel/Blender gates remain separate"
+    ]
+  },
+  "boundedC1FoundationRemoteMergeGatesMet": true,
+  "mergeExecuted": false,
+  "mergeAcceptedAsAlreadyCompleted": false,
+  "A2ReleaseMainTagPublishingAcceptance": false,
+  "reviewerRanCargoOrTarget": false,
+  "reviewerChangedRepository": false,
+  "inputPins": {
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/correction-source-pin.json": {
+      "bytes": 58932,
+      "sha256": "dcf64a9efe05556ca517c14a01d5cb10b14b1f29485622a5fe4e5f70836dc56d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/Cargo.lock": {
+      "bytes": 70262,
+      "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/Cargo.toml": {
+      "bytes": 3540,
+      "sha256": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bindings/python/Cargo.toml": {
+      "bytes": 460,
+      "sha256": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bindings/python/src/lib.rs": {
+      "bytes": 38243,
+      "sha256": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/build.rs": {
+      "bytes": 3213,
+      "sha256": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/archive3tz.rs": {
+      "bytes": 27278,
+      "sha256": "02cf420d342057ac106e7f1bac9f4b891e361fa969b54ce788ad9584b74d84ef"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/archive3tz/read.rs": {
+      "bytes": 58673,
+      "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/bbox.rs": {
+      "bytes": 18705,
+      "sha256": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity.rs": {
+      "bytes": 1139,
+      "sha256": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/json.rs": {
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload.rs": {
+      "bytes": 66755,
+      "sha256": "9eb4d4eba8e8adf435500cecba2fe10869333b3d65cddbff2d488c1a13fd310c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload/controls.rs": {
+      "bytes": 12934,
+      "sha256": "6d2dc903ded25b409c6c1e731f3a8ace179c80bd3d9a99af8367234c37539dc1"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload/numbers.rs": {
+      "bytes": 4191,
+      "sha256": "dba564337acc64201b187d569b9a1191baed7fbb3088ba63e52b4aef42b9c509"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload/records.rs": {
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/convert_implicit.rs": {
+      "bytes": 19547,
+      "sha256": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/crs.rs": {
+      "bytes": 135270,
+      "sha256": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/doctor.rs": {
+      "bytes": 15928,
+      "sha256": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/error.rs": {
+      "bytes": 2688,
+      "sha256": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/fixtures.rs": {
+      "bytes": 2362,
+      "sha256": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/georef.rs": {
+      "bytes": 26943,
+      "sha256": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/geospatial.rs": {
+      "bytes": 33840,
+      "sha256": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/geospatial/native.rs": {
+      "bytes": 13115,
+      "sha256": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/glb.rs": {
+      "bytes": 18129,
+      "sha256": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/glb_write.rs": {
+      "bytes": 14114,
+      "sha256": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/gpu_texture.rs": {
+      "bytes": 3464,
+      "sha256": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/grid.rs": {
+      "bytes": 15438,
+      "sha256": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/hlod.rs": {
+      "bytes": 21867,
+      "sha256": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/implicit.rs": {
+      "bytes": 13370,
+      "sha256": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/implicit/tileset.rs": {
+      "bytes": 50914,
+      "sha256": "a2e07f0f920787035329859e086b164b68fc71f27b33bf5824a4838f2da9270c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/jpeg.rs": {
+      "bytes": 7888,
+      "sha256": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/lib.rs": {
+      "bytes": 2762,
+      "sha256": "eb497d330f426da48b54a05cefbb09a9d128eb6353d7437588173ba8fbca837a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/lossless.rs": {
+      "bytes": 8294,
+      "sha256": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/main.rs": {
+      "bytes": 62090,
+      "sha256": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh.rs": {
+      "bytes": 18951,
+      "sha256": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive.rs": {
+      "bytes": 36944,
+      "sha256": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/approximation.rs": {
+      "bytes": 14194,
+      "sha256": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/approximation/certificate.rs": {
+      "bytes": 25165,
+      "sha256": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/binding.rs": {
+      "bytes": 37954,
+      "sha256": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/encode.rs": {
+      "bytes": 20154,
+      "sha256": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/encode/identity.rs": {
+      "bytes": 13145,
+      "sha256": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/encode/proxy_identity.rs": {
+      "bytes": 9173,
+      "sha256": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/model.rs": {
+      "bytes": 22687,
+      "sha256": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/partition.rs": {
+      "bytes": 8377,
+      "sha256": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/placement.rs": {
+      "bytes": 13322,
+      "sha256": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/source.rs": {
+      "bytes": 59421,
+      "sha256": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/source/json.rs": {
+      "bytes": 3594,
+      "sha256": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/source/material.rs": {
+      "bytes": 12899,
+      "sha256": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/source/original_bounds.rs": {
+      "bytes": 10961,
+      "sha256": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_archive/source/texture.rs": {
+      "bytes": 13879,
+      "sha256": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/mesh_crs.rs": {
+      "bytes": 20137,
+      "sha256": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/metadata.rs": {
+      "bytes": 17642,
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/output.rs": {
+      "bytes": 15382,
+      "sha256": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/output_path.rs": {
+      "bytes": 1199,
+      "sha256": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/pack.rs": {
+      "bytes": 971,
+      "sha256": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/package.rs": {
+      "bytes": 19619,
+      "sha256": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/point_cloud.rs": {
+      "bytes": 34946,
+      "sha256": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/point_cloud/source.rs": {
+      "bytes": 26907,
+      "sha256": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/point_cloud/tiles.rs": {
+      "bytes": 17484,
+      "sha256": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/point_sampling.rs": {
+      "bytes": 1067,
+      "sha256": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/preview.rs": {
+      "bytes": 8190,
+      "sha256": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/raster.rs": {
+      "bytes": 3670,
+      "sha256": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/raster/native.rs": {
+      "bytes": 24600,
+      "sha256": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/raster_directory.rs": {
+      "bytes": 20954,
+      "sha256": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/raster_directory/native.rs": {
+      "bytes": 11134,
+      "sha256": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/report.rs": {
+      "bytes": 6618,
+      "sha256": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/runtime.rs": {
+      "bytes": 21718,
+      "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/runtime/directory.rs": {
+      "bytes": 49206,
+      "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/runtime/directory_platform.rs": {
+      "bytes": 17255,
+      "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/runtime/tests.rs": {
+      "bytes": 19333,
+      "sha256": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/terrain.rs": {
+      "bytes": 33779,
+      "sha256": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/terrain/glb.rs": {
+      "bytes": 3305,
+      "sha256": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/terrain/raster.rs": {
+      "bytes": 25663,
+      "sha256": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/texture.rs": {
+      "bytes": 73246,
+      "sha256": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/tile.rs": {
+      "bytes": 49308,
+      "sha256": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/tileset.rs": {
+      "bytes": 7047,
+      "sha256": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/tileset/resources.rs": {
+      "bytes": 4021,
+      "sha256": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/tileset_node.rs": {
+      "bytes": 4212,
+      "sha256": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/validate.rs": {
+      "bytes": 50701,
+      "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/validate/types.rs": {
+      "bytes": 3219,
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vec3.rs": {
+      "bytes": 1915,
+      "sha256": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector.rs": {
+      "bytes": 27327,
+      "sha256": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/model.rs": {
+      "bytes": 9709,
+      "sha256": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline.rs": {
+      "bytes": 3556,
+      "sha256": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/acceptance.rs": {
+      "bytes": 2218,
+      "sha256": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/aggregation.rs": {
+      "bytes": 4613,
+      "sha256": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/encoding.rs": {
+      "bytes": 28074,
+      "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/geometry.rs": {
+      "bytes": 35536,
+      "sha256": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/geometry/countries_tests.rs": {
+      "bytes": 8244,
+      "sha256": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/geometry/native.rs": {
+      "bytes": 8339,
+      "sha256": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/geometry/portable.rs": {
+      "bytes": 31103,
+      "sha256": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/reuse.rs": {
+      "bytes": 19055,
+      "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/source.rs": {
+      "bytes": 7157,
+      "sha256": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/source_native.rs": {
+      "bytes": 36697,
+      "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/store.rs": {
+      "bytes": 56277,
+      "sha256": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/portable.rs": {
+      "bytes": 102675,
+      "sha256": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector/source_fields.rs": {
+      "bytes": 8870,
+      "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/src/vector_encoding.rs": {
+      "bytes": 6397,
+      "sha256": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/.github/workflows/ci.yml": {
+      "bytes": 28684,
+      "sha256": "c4dc1d436c4f9369c5c1c6bfaead6acc68ce983a215acab5552a61bfad326960"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/2026-10-10-compiled-clippy-binding.json": {
+      "bytes": 678,
+      "sha256": "97063f619a99946ee80c192af4420f4281a7aa53c974178a797093e9264ee327"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/2026-10-10-component-bounds-decision.md": {
+      "bytes": 2894,
+      "sha256": "735d3621f41cf10aebc6b1bf16b145615d430ccd6f4c752b14f9263f4c95e1d4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/README.md": {
+      "bytes": 6227,
+      "sha256": "9aa9d755e85a90978b2568f0b0c9ebbb46d501c2baabbc2d4acc5be626a59280"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/compiled-private-binding.json": {
+      "bytes": 509,
+      "sha256": "39475cb4d31690a105fdcf8c3bff706ea30a0165fa0320a6b2aaf295aff000fc"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls.rs": {
+      "bytes": 16773,
+      "sha256": "403c05f33da985f6e9c165d95a480f0b77d171f342f5a371311f72b8f194dbc7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls_clippy.rs": {
+      "bytes": 16720,
+      "sha256": "dfa9ce48083905b4058710925f11a4690125381fc1e20836145b4b33400da227"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/README.md": {
+      "bytes": 4505,
+      "sha256": "0079719caa79f051ca395aa177f3cf06d0199f4abb3e477f1f99ec3e2f8b49fd"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled-context-binding.json": {
+      "bytes": 460,
+      "sha256": "4c33a722b6f4c782aa44b8bed623294c961431b87302025fded8554d9a69afa3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled_context_controls.rs": {
+      "bytes": 7457,
+      "sha256": "327dee099efab3f4ff66906a08b738cac408bad309a9e28bc8b5b2ff990a65e9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/context_controls.rs": {
+      "bytes": 7113,
+      "sha256": "3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/input.3tz": {
+      "bytes": 4406,
+      "sha256": "2b5a8bf891e35031e4ba78c00f697cdc8be433c3290005d4be12024e3d0ec30a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/interpreted-b3dm-batch-table.json": {
+      "bytes": 3144,
+      "sha256": "9d7ba99167ea82e2570f442c607357474d6278c1277b73339db8c8661c0ced2b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/interpreted-b3dm-feature-table.json": {
+      "bytes": 20,
+      "sha256": "8444e5bb865c6cdbe25c55ef3ef43b514328838291700e96f4117f04d7fdf89f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/interpreted-glb-json.json": {
+      "bytes": 452,
+      "sha256": "613850903089b8807195f0d2bb05c8d94410053d883529788e53cb43fcf0d35a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/point.b3dm": {
+      "bytes": 3688,
+      "sha256": "d47e8de43c3564236f87af0e928d391fb405c518abf24e2771ccd6b2f530f02f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-batch-table/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/input.3tz": {
+      "bytes": 4334,
+      "sha256": "cf16bff34af499c10a141240a0bc6e7cb2c9a5aa69c35da3db2cb13ad847666f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/interpreted-b3dm-embedded-glb.json": {
+      "bytes": 3528,
+      "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/interpreted-b3dm-feature-table.json": {
+      "bytes": 20,
+      "sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/point.b3dm": {
+      "bytes": 3616,
+      "sha256": "0440cf5d9e0730b5b83e6678e68e309f99046a55db2f56921f9f9139f312bd56"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-embedded-glb/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/input.3tz": {
+      "bytes": 4342,
+      "sha256": "782bc10758152cefda98029d04084f0a7b89a695b9eca445bfee762c929be38f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/interpreted-b3dm-feature-table.json": {
+      "bytes": 3164,
+      "sha256": "ad64b1f3789fd07f4c368e2aa93701324ba3d077eb10a221fb9e1ff69f67ac63"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/point.b3dm": {
+      "bytes": 3624,
+      "sha256": "4ec5cbd7496017988db84c1276b286725287821b94ed5019036eb10becb9b909"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/b3dm-feature-table/tileset.json": {
+      "bytes": 185,
+      "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/conversion.json": {
+      "bytes": 3142,
+      "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/input.3tz": {
+      "bytes": 4415,
+      "sha256": "09cf3099dff01a1fc0b9f80abab7c80940e4e112a43f2249d7282b9dc60a437f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/interpreted-conversion-report.json": {
+      "bytes": 3142,
+      "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/conversion-report/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/alias.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/input.3tz": {
+      "bytes": 1807,
+      "sha256": "903bf1adc338c2d967e22700fb38e02e9f95ad0b6e1e9cb7c2965667f711c5cb"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/interpreted-root.json": {
+      "bytes": 302,
+      "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/distinct-byte-identical-members/tileset.json": {
+      "bytes": 302,
+      "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/external.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/input.3tz": {
+      "bytes": 4598,
+      "sha256": "20c9065440985368f3c6039beb40594577d9bfdabc0bc83dd8b9d329264608a2"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/interpreted-external-tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/interpreted-root-tileset.json": {
+      "bytes": 188,
+      "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/external-tileset/tileset.json": {
+      "bytes": 188,
+      "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/input.3tz": {
+      "bytes": 4283,
+      "sha256": "eebb69abaea9db237cd7de5eefe45a48f1cb8a5af8ef38205ae506ed18962040"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/interpreted-glb-json.json": {
+      "bytes": 3528,
+      "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/point.glb": {
+      "bytes": 3568,
+      "sha256": "3f3c32ad2434a38809a6f56ff0ad5fb9123406bc5aa6a04f43884ac31da293a0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/glb-json/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/input.3tz": {
+      "bytes": 4391,
+      "sha256": "6b3385c32fc16c7947131080af935148ae9b2978ba88e8b37f33b214a361cdaf"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/interpreted-local-gltf.json": {
+      "bytes": 3545,
+      "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/interpreted-root-tileset.json": {
+      "bytes": 185,
+      "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/point.gltf": {
+      "bytes": 3545,
+      "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/tileset.json": {
+      "bytes": 185,
+      "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/local-gltf/zero.bin": {
+      "bytes": 12,
+      "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/manifest.json": {
+      "bytes": 52375,
+      "sha256": "22d3f83568de464d7227da273d1419f9dca5390dbf38f665b40b16e819b6f51d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/input.3tz": {
+      "bytes": 4258,
+      "sha256": "9474d0853c149f6ef2fe865cf2b6576cf859b94c20cad79e4da5d6ad1ef48887"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/interpreted-metadata-schema-payload.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/interpreted-root-tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/schema.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-payload/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/input.3tz": {
+      "bytes": 4260,
+      "sha256": "103ae0a8c092b3d2a64b138af0918521315a91e5f5b36ad8331809312b257b82"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/interpreted-glb-json.json": {
+      "bytes": 364,
+      "sha256": "33245e3855da6f0583b97b5e10f09863eeba57278841a5e2f0b43e1e60524833"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/interpreted-metadata-schema-root.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/interpreted-root-tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/point.glb": {
+      "bytes": 404,
+      "sha256": "b2302dc14f2f5eaed47c8db951c24e5414bef2f7adb5883299ad655a00a060f4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/schema.json": {
+      "bytes": 3180,
+      "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/metadata-schema-root/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/0-0-0.subtree": {
+      "bytes": 3832,
+      "sha256": "2260060f33b105cfcbfc4d4dd68a2805a55bb8f0e8c73273df763013c8c205fa"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/input.3tz": {
+      "bytes": 5550,
+      "sha256": "c17bad1fbcab3cb8b17f7a7794f9ae61210ab7a0e435d49bfec865ad20ce9f55"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/interpreted-nested-metadata-extras.json": {
+      "bytes": 3131,
+      "sha256": "5af37d232c5054fc14b1fefd3145a00cee57616fd6e79a8ea94ed2c6d0a7b84b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/interpreted-root-tileset.json": {
+      "bytes": 621,
+      "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/interpreted-subtree-json.json": {
+      "bytes": 560,
+      "sha256": "21734d44b6c1a3add15c03f1dc69434edce7a5ab74d2caa56bf6e599d5a2c41d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/point-0-0-0.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/nested-metadata-extras/tileset.json": {
+      "bytes": 621,
+      "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/input.3tz": {
+      "bytes": 1263,
+      "sha256": "2fee5ae155fdd2ea6ae9f62078cac8d17bd194431ebcf81fdd8f159b1a40275a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/interpreted-root.json": {
+      "bytes": 304,
+      "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/resolved-alias-cache/tileset.json": {
+      "bytes": 304,
+      "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/input.3tz": {
+      "bytes": 4284,
+      "sha256": "6d1ccd3303c9f999cc2c0cac64be6e3721d224a5a0897548e8d38073f2d170aa"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/interpreted-root-tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/root-tileset/tileset.json": {
+      "bytes": 3325,
+      "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/input.3tz": {
+      "bytes": 1261,
+      "sha256": "de9e51602dedf23f488f45935b759827430fec6077a9c99de693ab97864523d9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/interpreted-glb.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/interpreted-root.json": {
+      "bytes": 302,
+      "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/point.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/same-uri-cache/tileset.json": {
+      "bytes": 302,
+      "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/input.3tz": {
+      "bytes": 1183,
+      "sha256": "b68a252c72f16e2625c5339155f22b8aa49aded41764b07294d21a0d2de1cf24"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/interpreted-glb.json": {
+      "bytes": 428,
+      "sha256": "adb073d3f319dd9455c5c1e5665e4b7b47fe38bd80fe96219736857913c9aaaa"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/interpreted-root.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/point.glb": {
+      "bytes": 468,
+      "sha256": "c100157eb20f50724c2141875b9982fc3a630d97fc051f2edaba67d199ba0362"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/shared-position-primitives/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/0-0-0.subtree": {
+      "bytes": 3288,
+      "sha256": "f7fbd2fe2f13d891b34705e62713c981a0dace1d30bdf3ac40a15302d66807c4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/input.3tz": {
+      "bytes": 4718,
+      "sha256": "eeeacdc497e16f2e8935c9e2400e1ba52dd4462f99e99372a95737f570c3ab3d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/interpreted-glb-json.json": {
+      "bytes": 388,
+      "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/interpreted-root-tileset.json": {
+      "bytes": 333,
+      "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/interpreted-subtree-json.json": {
+      "bytes": 3264,
+      "sha256": "e4f248460ce05b241ed8e908a59c940bc8a54e8b2005076cd8476ab2ea6aad2c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/point-0-0-0.glb": {
+      "bytes": 428,
+      "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/subtree-json/tileset.json": {
+      "bytes": 333,
+      "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/input.3tz": {
+      "bytes": 1191,
+      "sha256": "1b8a57d97596b33eb6f94d940e7bf0981417f83b9db6197d050e6e7ae60e7f86"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/interpreted-glb.json": {
+      "bytes": 436,
+      "sha256": "b8b8cc7bc8652822d57b46f3528fdc98333b0690e4c8d075dc0df3438ec28279"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/interpreted-root.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/interpreted-schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/point.glb": {
+      "bytes": 476,
+      "sha256": "b8838da02df68bc8eb1b4550d18e3044fe90d8c0b636a5c318dcf72caf7e6aab"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/schema.json": {
+      "bytes": 39,
+      "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/fixtures/unused-viewless-accessor/tileset.json": {
+      "bytes": 184,
+      "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/generate.py": {
+      "bytes": 18509,
+      "sha256": "8734c2017b00d64967644203b1de0669e5e4894c5d6dfb06a074cb68557af429"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/preparation-manifest.json": {
+      "bytes": 24350,
+      "sha256": "ffeac52001d016e030d0cbdf49d59b682f72a39cd780dd56e169d3a28d879fa7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/references/implicit-tiling.adoc": {
+      "bytes": 32526,
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/references/metadata-semantics.adoc": {
+      "bytes": 15134,
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/references/metadata.adoc": {
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/references/receipt.json": {
+      "bytes": 1314,
+      "sha256": "716e2d24719413b20f2d8a7d44dead67f45d8c653fdf75cce6aeb964079a0780"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/driver.py": {
+      "bytes": 51003,
+      "sha256": "5bcd8e1e0a34e86fa39339eb1d499e95851a871a2841d142145dc8cbb911f5d7"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/fixture-bundle.json": {
+      "bytes": 1468,
+      "sha256": "37ac87283ed2aedc8687e1e1017e922bd648ce22906845704700362827cf29ea"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/fixture-members.json.gz": {
+      "bytes": 29380,
+      "sha256": "73b2ba265d6c11c799e44dc56221fcf7fdca0f0c05c09a34928ff9c3927fc4e0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/fixtures.tar.gz": {
+      "bytes": 65419,
+      "sha256": "4cf05918b328821893fb63198d730ec76cec790cac8aa8e580051c33efc38c79"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/fixtures/meshopt-none-placeholder-gltf/tile.gltf": {
+      "bytes": 675,
+      "sha256": "d5b099c77f10034328f9ec06800e0ff3e342fd3b4230156874b9f323ef9d4a68"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/README.md": {
+      "bytes": 1696,
+      "sha256": "4230c279088c1351d6168206b5d2f4edd0c6f3cb12df731d84aec53bc1e11942"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/adjudication.md": {
+      "bytes": 3414,
+      "sha256": "3ce5c65bbd70a20e04c09af991fee5430d52362ac1cb1d0c95fbf336cf272c79"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/corrected-205-fixtures.tar.gz": {
+      "bytes": 66058,
+      "sha256": "c05406cdb264e386d1ad209abfded1ecc0b2b97da8c8b32ad8ff911263aa46a4"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/corrected-205-members.json.gz": {
+      "bytes": 29387,
+      "sha256": "217c82f122bef8429cdc46517dff6eba3f062f992d000dc7561c4be8053fb79d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/corrected-binary.bin": {
+      "bytes": 60,
+      "sha256": "17e0445139888640a7456caeefe14a16cfc8c950f273c3b1e85d9e8dcc4161c0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/corrected-indexed-triangle.json": {
+      "bytes": 949,
+      "sha256": "f16d2bd2dab37b95bd81f60310e46e069ab3c775e08d3b9990296c3882ac20c9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/corrected-reference-oob.json": {
+      "bytes": 951,
+      "sha256": "6b382fee6198eefdf6e2ced5eb6ab2aadd602d22d2c14dadffdaafa6fe486806"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/generate.py": {
+      "bytes": 11247,
+      "sha256": "b0ae15309533d11707956748dd0e1425004d75a6a86140bd7dff8038bae3f924"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/original-failed-205.json.gz": {
+      "bytes": 60627,
+      "sha256": "e7bcef98c04f5512da867cd7eb02b0352286b866ef1cbe679811bcfd98ae3889"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/original-failure.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/original-failure.stdout": {
+      "bytes": 116,
+      "sha256": "73b57724195edc2030285dd1c5a5d93c58e419ae4f61fa8f6f9efec77fc553cb"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/polygon-sensitive-5-fixtures.tar.gz": {
+      "bytes": 5780,
+      "sha256": "add990418822a1118c9c3be2faff04fa0722ae926c2d97769353f90c928a6f2c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/polygon-sensitive-5-members.json.gz": {
+      "bytes": 992,
+      "sha256": "dce55ea9d74f9968b21e3dc839df88013ddc5c1d5987f7fbd0669b11dcbe2bd9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/preparation-manifest.json": {
+      "bytes": 4473,
+      "sha256": "cb6c7d49149d4cc64c0788f54bf91329c08e522922105e624a1d51bc7afaf45d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/references/EXT_mesh_polygon.md": {
+      "bytes": 7129,
+      "sha256": "777c13228de2de5838a8f0eed5c4f653674a5278c30306124bb8ccbe2fe1016d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/references/retrieval-receipt.json": {
+      "bytes": 425,
+      "sha256": "e3863206de71d82a5929569bf3b07c8c2e747903a0a80ba98a090381b38b67cf"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/private_controls.rs": {
+      "bytes": 14019,
+      "sha256": "99d5b29c96b84ede9050d3e2a7977f40614e23c2733fd0e34cae336ae0faec74"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/README.md": {
+      "bytes": 2450,
+      "sha256": "dfd97be8a638d28e54d8666536afe3b5dacc8bee26105253f7acd15657817d23"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled-clippy-binding.json": {
+      "bytes": 603,
+      "sha256": "e245b7e82ec436c46ee85ab866b2241560aa00f6507e308dd92f645eab201211"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled-format-binding.json": {
+      "bytes": 363,
+      "sha256": "3daf4b47e5fb4755f5031d8419d264ec47122f3152b6da3affcf625e180c7d25"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls.rs": {
+      "bytes": 8024,
+      "sha256": "64fd2e6c8660c064daa7496c85dc4e71af69f09c42075c5df2637265c593dd10"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls_clippy.rs": {
+      "bytes": 8607,
+      "sha256": "bc7ac12a5a9022e826e9bbd04af01567971185da9b8471969a0c02a161b8fa8f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls_formatted.rs": {
+      "bytes": 8587,
+      "sha256": "9f71a4c34353771e95c73b7c9904643da368cea21f7e7581c247688dcfe4b188"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/absent-parent-baseline/input.3tz": {
+      "bytes": 1353,
+      "sha256": "85455ffdad040df62ab2793b368caac51502ca11f802537ac9edfb6eb9e2d8e8"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/absent-parent-baseline/literal-payload.json": {
+      "bytes": 710,
+      "sha256": "78cf61592ecb8d700bb6e2a42dd65d7e319ba401c5688ba1aec5e4598eff8b3a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/absent-parent-baseline/tile.glb": {
+      "bytes": 828,
+      "sha256": "d9a9fe830cc1c532de7f231bfdd70002c557f87347efb4c421e65ff194acc536"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/absent-parent-baseline/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/explicit-parent-stride/input.3tz": {
+      "bytes": 1449,
+      "sha256": "63cf622a628588b467f07bdb4a18a6edf8fc5aa6b81c4898adaa381e3dce452e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/explicit-parent-stride/literal-payload.json": {
+      "bytes": 805,
+      "sha256": "7fa380662314938d25fb2cd3b8486b06012b7a21149d97b002a1100ec0dc2b15"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/explicit-parent-stride/tile.glb": {
+      "bytes": 924,
+      "sha256": "82aba43e613291cee2871e17c549a42dbe3985aef9352df377293e5497355a42"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/explicit-parent-stride/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/golden-compressed.bin": {
+      "bytes": 85,
+      "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/golden-expected.bin": {
+      "bytes": 48,
+      "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/manifest.json": {
+      "bytes": 16149,
+      "sha256": "a3c07122e5fc902272bcf668a85e694601551a66556a7be3806132febd592aee"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/scalar-real-range/input.3tz": {
+      "bytes": 1433,
+      "sha256": "22281b168a95a319c5cfc3c31846403b26da34d73c071cc155b8519a6086ddb3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/scalar-real-range/literal-payload.json": {
+      "bytes": 790,
+      "sha256": "d3233e3191a5f3e05dcabf18c79e6829bdeb21c09974d9ad900f0f18b5975be0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/scalar-real-range/tile.glb": {
+      "bytes": 908,
+      "sha256": "e2b52457d52ba95f4d035712b80a3f1b77d79dd3fabff316f2fd3da4bca628f2"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/scalar-real-range/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar-offset/input.3tz": {
+      "bytes": 1433,
+      "sha256": "95ad08c4ba4879969e68f80f424089ba3d0c84dfb9bb1a4f418bab7cfa565f69"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar-offset/literal-payload.json": {
+      "bytes": 790,
+      "sha256": "9e026c636b95d58f3de8e2d5c88cdd30b310da97801767eeac2c3461f3cab64d"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar-offset/tile.glb": {
+      "bytes": 908,
+      "sha256": "40165da8535a1c906f82e7e8dd318ded508d299de3c9e4d3fc315371a31a30d3"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar-offset/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar/input.3tz": {
+      "bytes": 1433,
+      "sha256": "2f797738be8bcbf3e22bfd4062bc4b6171e11717ac2453ec37bfc4bf3cfd5f51"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar/literal-payload.json": {
+      "bytes": 790,
+      "sha256": "f50332a20ebaecdefca5ae18dba3123fdbe037570b5023345112ade97a415f4e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar/tile.glb": {
+      "bytes": 908,
+      "sha256": "7350ef451cbd3a5a58b85c76f057acc4f7c5c1177f6b1fc35db76a38ad926223"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/unused-packed-scalar/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/wrong-parent-stride/input.3tz": {
+      "bytes": 1369,
+      "sha256": "a305ef7b3cceb975e4a1bf47f0128116ab1cb02c5d2a79cbba4ff425bbcfe72b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/wrong-parent-stride/literal-payload.json": {
+      "bytes": 725,
+      "sha256": "3493a525c3d99a3c51c0d74f19f8138486746ea3e505460cdd91f3f552a91a0c"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/wrong-parent-stride/tile.glb": {
+      "bytes": 844,
+      "sha256": "0af0999a01aa831aebc2eb2b60f9e140fc06f79a780c107bc20f092bbb835014"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/fixtures/wrong-parent-stride/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/generator.py": {
+      "bytes": 11458,
+      "sha256": "0c3a0983eaa7426b5a13d75767a9e6f1639d7269a5b2410f45f70277f69cf81e"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/integrity.json": {
+      "bytes": 6044,
+      "sha256": "3662f04fc170af1d3869b6167ab22ba0ab5451c66edc0ff9ebd2ee2616c03b53"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/primary/EXT_meshopt_compression.md": {
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/primary/glTF-core.adoc": {
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/primary/meshopt_decoder.test.js": {
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/primary/pins.json": {
+      "bytes": 1067,
+      "sha256": "718ca2301e0596da730ca01d361a4f38d041a5049e86107af5a9edeb5366d585"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/runner.py": {
+      "bytes": 4199,
+      "sha256": "2879dd9332871d29147ccad34f55efd5174e77a00879b03502ef8d1ec5397558"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/supplied-frozen-target.json": {
+      "bytes": 818,
+      "sha256": "f3318af6e6a56fbff0901991dab430b5916ec642fc71c11a6f97781c0d1038e2"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/README.md": {
+      "bytes": 3354,
+      "sha256": "6a13773de8199ed3e803b0bf511ea2dfb6f404badd3d7cf7241fe881249902b9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/golden-compressed.bin": {
+      "bytes": 85,
+      "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/golden-expected.bin": {
+      "bytes": 48,
+      "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/manifest.json": {
+      "bytes": 5587,
+      "sha256": "9a049a589538aef1e0d5d566460b4200966063f6eda7b7007f08f3b0fdd063f0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/unmasked-parent-stride-disagreement/input.3tz": {
+      "bytes": 1385,
+      "sha256": "d531e9121633f31af896b836b86685e66843397d650a1f0a14f450a0d8acc40b"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/unmasked-parent-stride-disagreement/literal-payload.json": {
+      "bytes": 741,
+      "sha256": "1151c70125fc2eeca80659b4755ec87bfb0489c48515de2265104a8e56adfd45"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/unmasked-parent-stride-disagreement/tile.glb": {
+      "bytes": 860,
+      "sha256": "373cba739c81ac96464a910a0ef0a1a2e28ba87ccc5ca5809ffed863b1196038"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/fixtures/unmasked-parent-stride-disagreement/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/generator.py": {
+      "bytes": 7035,
+      "sha256": "72e150566c2ad2445301e2abc96b3248f49c3a4a22be54a5d2feda11e7ad977f"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/integrity.json": {
+      "bytes": 2367,
+      "sha256": "a340097a9da325ef9840294b9cdc20289983c36b9a2aec44bbfc453daba153d9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/primary/EXT_meshopt_compression.md": {
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/primary/glTF-core.adoc": {
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/primary/meshopt_decoder.test.js": {
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/primary/pins.json": {
+      "bytes": 1067,
+      "sha256": "718ca2301e0596da730ca01d361a4f38d041a5049e86107af5a9edeb5366d585"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/runner.py": {
+      "bytes": 4272,
+      "sha256": "e410c293748e3c0e2eacb3b5f7e84201109cebe0c4a7cc2493e6e943eb95efd0"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bench/architecture_audit/c1_payload_integrity/production_controls/stride_parent_control/2026-10-10/static-validation.json": {
+      "bytes": 1829,
+      "sha256": "40401ab71b75b279869c0e158068b8fcc25b46fb26e7411157b0d41047627459"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/c1_producer_alignment.py": {
+      "bytes": 3005,
+      "sha256": "a05c45dfddb517c905d26b0d6909fe631462f009d245a53d9ce0c8646cd7acdb"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/c1_validation_oracle.py": {
+      "bytes": 42380,
+      "sha256": "7be014c5041ec0a5a69ae4c5a3f26379e45b31c5a049db2668112e731059ec32"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/payload_context_receipt.py": {
+      "bytes": 2621,
+      "sha256": "d981ccd2880c0b06c4056f782cbc00848371103a21803c5f5ab35eba016a664a"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/payload_integrity_oracle.py": {
+      "bytes": 5109,
+      "sha256": "6e327c44f5bff8e24a1ea9b8be4dae04e645a9624e9cde1a3b49ee20a141bb23"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/payload_meshopt_stride_oracle.py": {
+      "bytes": 3743,
+      "sha256": "987c483c2a8f546a8cb9e5da20ed028a5c62b0d930efde61b2b9e4069f785457"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/tests/test_c1_resource_probe.py": {
+      "bytes": 2588,
+      "sha256": "9de546341c387cab83dbabc5dd9f23ee4ac110db6ba634a3a9f1ca50fa67bfbf"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/.github/workflows/wheel-acceptance.yml": {
+      "bytes": 6770,
+      "sha256": "4d155fa798b546c7285850437fd26b1948d74d91a831b04de4f764db290e70a5"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/scripts/blender_official.json": {
+      "bytes": 1426,
+      "sha256": "cba2afc77b71cb36991430a429e9b2d93acbff127f76d5538bb103c4b1c77858"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/scripts/download_blender.py": {
+      "bytes": 5763,
+      "sha256": "d2b2ac5a17aa9b9fdd424d0b4bce2417502a3e83665bfcd406cc2d370b712d14"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/scripts/test_python_wheel.py": {
+      "bytes": 2479,
+      "sha256": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/scripts/test_blender_wheel.py": {
+      "bytes": 4345,
+      "sha256": "10b2fb7d84f212300b15f49599efddb9a8b5445ddf178927e25345e2766db253"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/scripts/wheel_acceptance.py": {
+      "bytes": 2151,
+      "sha256": "2a7170529cf44ad8081c64ef569057c7bdddc5eca18395c32902c340ba86dda1"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bindings/python/tests/test_api.py": {
+      "bytes": 68231,
+      "sha256": "2fcb701ca9c899cd9da2ef633865409b1d0f0013a89833c3229c49606c84bdd8"
+    },
+    "/tmp/rusty-tiles-c1-payload-foundation/bindings/python/tests/blender_acceptance.py": {
+      "bytes": 1380,
+      "sha256": "58046bde9d4d7c763af3741643b571b99d3ac749d91f52e96f89e1a3214ba666"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/snapshot-20261010T122055Z/main-run.json": {
+      "bytes": 13632,
+      "sha256": "feb9278cd95e8085017f9b3d11e50aed184743ad152ff868bdf5d06ad813c70e"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/snapshot-20261010T122055Z/wheel-run.json": {
+      "bytes": 13659,
+      "sha256": "6b40cd13478cab47cecacd0600893f5747ae3b1d7677b54e540fb3b5cc925c22"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/final-jobs-20261010T122131Z/main.json": {
+      "bytes": 41185,
+      "sha256": "da7c7ebd393c9bb7db26bb8e6b50c0a73ae04371ad987f5e424770210c142061"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/final-jobs-20261010T122131Z/wheel.json": {
+      "bytes": 30609,
+      "sha256": "75ca292403d6153c9e6111d6ca95824af47f27b78064192733ef4c06de0eb3d1"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/snapshot-20261010T122055Z/pr.json": {
+      "bytes": 7355,
+      "sha256": "a1fbfecaf049da93d898032ccd6886c8dd8566ba9e9d88bbb58e283ef8b31fb2"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/main-artifacts-20261010T122102Z.json": {
+      "bytes": 7981,
+      "sha256": "092dd1668779188320f32a6af0a2a4d807d1034200d5f69063b95845ce1aa284"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/wheel-artifacts-20261010T122102Z.json": {
+      "bytes": 10284,
+      "sha256": "8181767078a7179e35712c72225d03c2e79c7923f075c6b92beffefecf279e10"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668794751-evidence-wheel-aarch64-unknown-linux-gnu/receipt.json": {
+      "bytes": 1600,
+      "sha256": "aa1c8d16a6a485f15bc9fc98c4b7896d1bb4a720194941d7eb67449407d107a3"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668794751-evidence-wheel-aarch64-unknown-linux-gnu/artifact.zip": {
+      "bytes": 904,
+      "sha256": "a83b400647518ff08eaea9a24ec98a12f421d40a9a9cb0bd9966346fdd796ab0"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668794751-evidence-wheel-aarch64-unknown-linux-gnu/files/python-3.10.json": {
+      "bytes": 486,
+      "sha256": "7112edca5736771c976529c31972e015ba641b6e11994766f04ebc48cbd241e9"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668794751-evidence-wheel-aarch64-unknown-linux-gnu/files/python-3.14.json": {
+      "bytes": 485,
+      "sha256": "c873a59a3ae969b60d970fb635fa8785076b4cb84a50b091f73fe6c42b8b2604"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668998600-evidence-wheel-aarch64-apple-darwin/receipt.json": {
+      "bytes": 1590,
+      "sha256": "4159280d1d35dbf2892e517a7372b87de2c9d1509b62039c9f70569572437a34"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668998600-evidence-wheel-aarch64-apple-darwin/artifact.zip": {
+      "bytes": 996,
+      "sha256": "11bade788cd12d1d78722033aba6ff6b4986bd1987b10196594e5f4727fd3247"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668998600-evidence-wheel-aarch64-apple-darwin/files/python-3.10.json": {
+      "bytes": 553,
+      "sha256": "84d7a865d6a4abf5b1b764e0f82eeabf9252944f34daf15abff2e1e0ce0aab24"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11668998600-evidence-wheel-aarch64-apple-darwin/files/python-3.14.json": {
+      "bytes": 552,
+      "sha256": "49afa26551968b09a948036faadce97cb95f0e8638761e75ec2a043abb60aeb0"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669063493-wheel-aarch64-apple-darwin/receipt.json": {
+      "bytes": 1468,
+      "sha256": "80d25e8216a6dff9320d55bb0399ec675e4d17dbb33003e6cbaa687789fa098c"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669063493-wheel-aarch64-apple-darwin/artifact.zip": {
+      "bytes": 6412075,
+      "sha256": "942be66f809364eb2836ba67191d78c7e4f3c2910aea43188b194382405b1385"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669063493-wheel-aarch64-apple-darwin/files/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_arm64.whl": {
+      "bytes": 6424219,
+      "sha256": "44cb41ec25f761380faf6fae3a9624ec6ea01657e43c68dd4e02bd49a256e938"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669153674-evidence-official-blender-windows-x64/receipt.json": {
+      "bytes": 1613,
+      "sha256": "01d0d253ad398fba4d6a7dd58b0bb0aedfbb8bb89477d0439afc36bbe3f56cd3"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669153674-evidence-official-blender-windows-x64/artifact.zip": {
+      "bytes": 1241,
+      "sha256": "6c8cae28501daa11f98fef5ba7a3a0a88c9129f00c04d876e6d0bc19646effaf"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669153674-evidence-official-blender-windows-x64/files/blender-acceptance.json": {
+      "bytes": 1259,
+      "sha256": "1f70878ae8577ca42a3056778fcb02e7400f51fa1a1b687e26e2c57cd1eff1a8"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669153674-evidence-official-blender-windows-x64/files/blender-distribution.json": {
+      "bytes": 580,
+      "sha256": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669248649-evidence-official-blender-macos-x64/receipt.json": {
+      "bytes": 1609,
+      "sha256": "3a055bd6599e349598adbf8e508a25fadec50569f168d1ddbf690cabbe09612f"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669248649-evidence-official-blender-macos-x64/artifact.zip": {
+      "bytes": 1254,
+      "sha256": "35dc3a0881a1433c8f7d1b3eca4da83b6937f53ec23470e270dc74bb1ed37030"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669248649-evidence-official-blender-macos-x64/files/blender-acceptance.json": {
+      "bytes": 1240,
+      "sha256": "db00c52736922b2fcfabcd99015c3c09761cc16fe744201be8e32d904c86d4f9"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669248649-evidence-official-blender-macos-x64/files/blender-distribution.json": {
+      "bytes": 571,
+      "sha256": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669258250-evidence-wheel-x86_64-unknown-linux-gnu/receipt.json": {
+      "bytes": 1598,
+      "sha256": "2e0e8137b1a49a42a3459b901e6f76622e3f434edeebbbd45d9ff07090d0031c"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669258250-evidence-wheel-x86_64-unknown-linux-gnu/artifact.zip": {
+      "bytes": 910,
+      "sha256": "364435ce402207d8c0975ab8534f9c504b294e03da52f72ea2b5151358095492"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669258250-evidence-wheel-x86_64-unknown-linux-gnu/files/python-3.10.json": {
+      "bytes": 484,
+      "sha256": "c7e62a822770db8ca5bba7006e413d46eb40cbe4a1bdc5f11dcf1d28c846ab7b"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669258250-evidence-wheel-x86_64-unknown-linux-gnu/files/python-3.14.json": {
+      "bytes": 483,
+      "sha256": "eded7d1bca202a281a2b72e8b63e1ef4790a42e85e7d032fde7ef8cdf12c7b87"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/receipt.json": {
+      "bytes": 2516,
+      "sha256": "381abc169658d1708b8d6c8c043c1648fc38eee1bfc1e68e3e7c72f1efc7d8c4"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/artifact.zip": {
+      "bytes": 148706,
+      "sha256": "d1486068b93ce56146473507f92fc335a068ae918b52a42beca37338e2d0d6c9"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-archive-read.json": {
+      "bytes": 44851,
+      "sha256": "55f9f5728e4d7c740aabe12b003f3619d19e69a59fd956015de3ba9e0f370a6b"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-payload-contexts.json": {
+      "bytes": 126707,
+      "sha256": "6643421c2dde933ddd1cea05e454b5da53a48db3179ad80ae033c16083b7d9c2"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-payload-integrity.json": {
+      "bytes": 811558,
+      "sha256": "7e3a3440df12b547ed6f97ed57e5ee8da3d057a6c51e7f66a287addf00496cb2"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-library.log": {
+      "bytes": 133158,
+      "sha256": "d0ca13d85cc0e5f34b8e3f1a4770de960fee9b746cc92a50330fb568e63beed2"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-payload-stride.json": {
+      "bytes": 57346,
+      "sha256": "ed62a91ca7a451072038ccdf27370bc5c63dbbe1f046df03a6b3f34d9e73c5f6"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-producer.json": {
+      "bytes": 2844,
+      "sha256": "549c6370cad2f690e3a08cf422300e77c38965621ae6455506d73ad4ac47d96f"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-resources.json": {
+      "bytes": 17099,
+      "sha256": "fbf41d5ccd360ac57a8157d4a368c2cd927c26ee2fdcb8ef34f2f92643f62230"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669407866-c1-validation-evidence/files/c1-validation.json": {
+      "bytes": 95540,
+      "sha256": "1387b2f98b29ea16f3c6890d2d82e93baef135895980d5a4de648f994b780e7a"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669443087-wheel-x86_64-pc-windows-msvc/receipt.json": {
+      "bytes": 1464,
+      "sha256": "52096b3f3b832144d6a33faf215d97d9e1daaa9c1825d61ecb84aa629700b228"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669443087-wheel-x86_64-pc-windows-msvc/artifact.zip": {
+      "bytes": 6386009,
+      "sha256": "5fc36efa8880761568ed94f8773dd1bd25a20260d3e4ca305ce4f29227af9316"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669443087-wheel-x86_64-pc-windows-msvc/files/rusty_tiles-0.4.0-cp310-abi3-win_amd64.whl": {
+      "bytes": 6390320,
+      "sha256": "1065e108eb7d08de6a6b904d6ad48d5e9111b2ffac4f3add1b12fc85d6d2da6e"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669453038-wheel-x86_64-unknown-linux-gnu/receipt.json": {
+      "bytes": 1480,
+      "sha256": "5c8fccd4e2b93757063f888be378be637d10cc149f445105dbca6cce57a321a2"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669453038-wheel-x86_64-unknown-linux-gnu/artifact.zip": {
+      "bytes": 7170837,
+      "sha256": "f94b6a45d8bebd1baad8f9d7820d4b92cc7684023262a55a3ecc63c547920917"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669453038-wheel-x86_64-unknown-linux-gnu/files/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_x86_64.whl": {
+      "bytes": 7198391,
+      "sha256": "6838bcdb6a6d6f12774b337b9adcd1992ced24b80f698de55740259c02c5a2cf"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669488118-evidence-wheel-x86_64-pc-windows-msvc/receipt.json": {
+      "bytes": 1596,
+      "sha256": "ef1c706485077913864d64d538150de4065ca0ee14056931079eea8a90c105e3"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669488118-evidence-wheel-x86_64-pc-windows-msvc/artifact.zip": {
+      "bytes": 1011,
+      "sha256": "4df69772b9b910158fe1a8662a7929e3725042a35371583b568927be9922f931"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669488118-evidence-wheel-x86_64-pc-windows-msvc/files/python-3.10.json": {
+      "bytes": 542,
+      "sha256": "4fff4ad762184b2e1bc11c1186f5fb078f6735b02f8669df9a9414550f285441"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669488118-evidence-wheel-x86_64-pc-windows-msvc/files/python-3.14.json": {
+      "bytes": 548,
+      "sha256": "8d31a946e9f31905a9c5cc6cc1a449868b45d88181612ee3b2b33c5fcb87f371"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669755119-wheel-aarch64-unknown-linux-gnu/receipt.json": {
+      "bytes": 1483,
+      "sha256": "4d3b725b6f15860949471d4ed1afbe9009070fc0253774c78637e74cb4952a5a"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669755119-wheel-aarch64-unknown-linux-gnu/artifact.zip": {
+      "bytes": 7045343,
+      "sha256": "6b537e039ba6e92d89dd3bb37bee22d5f6f8c657267a4e84c6a036d33e2e245f"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669755119-wheel-aarch64-unknown-linux-gnu/files/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_aarch64.whl": {
+      "bytes": 7077463,
+      "sha256": "1031f05e4152cbebe93c267c9bf334add5d9ea62c2946aa1b460003ede50a53f"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669840176-wheel-x86_64-apple-darwin/receipt.json": {
+      "bytes": 1467,
+      "sha256": "8e35dfbb0adcea2059b020e98e67e37fd0b47dba385337e24afc0e7c8b58e12e"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669840176-wheel-x86_64-apple-darwin/artifact.zip": {
+      "bytes": 6661463,
+      "sha256": "a9a1c40dafa9e205debf250816458a316c75f880a8444cb1926393f41b473d06"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669840176-wheel-x86_64-apple-darwin/files/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_x86_64.whl": {
+      "bytes": 6673596,
+      "sha256": "d27bdb1166898ad8deafc30d70fd43aad22afd54731d1c3fbbc88099584b55e9"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669870148-evidence-wheel-x86_64-apple-darwin/receipt.json": {
+      "bytes": 1588,
+      "sha256": "1402a65f2181a6fa95a00d43efccf04d5219dc6ad5e6e01a90294b3cf7b57788"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669870148-evidence-wheel-x86_64-apple-darwin/artifact.zip": {
+      "bytes": 993,
+      "sha256": "ec43b589dcf5495e281575bf1b03fa4aa9ef0c4759608f6737de0d0223bf3b78"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669870148-evidence-wheel-x86_64-apple-darwin/files/python-3.10.json": {
+      "bytes": 531,
+      "sha256": "64fc8a6c4aa8a29e28d60a78db62eba59aaed3d9d6a87ccfbbccae68e939055e"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669870148-evidence-wheel-x86_64-apple-darwin/files/python-3.14.json": {
+      "bytes": 554,
+      "sha256": "64ec628c4f7d5626994a641ff937fa04c30d701f08929757c6aaac0248ef4f8b"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669920198-evidence-official-blender-macos-arm64/receipt.json": {
+      "bytes": 1613,
+      "sha256": "5cb6e6b8ac3a49cd0a125fd2fc11682e0fa2a5c852eff72cd5b4720619771300"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669920198-evidence-official-blender-macos-arm64/artifact.zip": {
+      "bytes": 1251,
+      "sha256": "d136a249ed053b31db3e9d7c3ad3ba25cd53d758b44721e1db6ddc7109e4dcb4"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669920198-evidence-official-blender-macos-arm64/files/blender-acceptance.json": {
+      "bytes": 1242,
+      "sha256": "dbb262316b36faf11167280a433994ae3b2f4c96bb978867d5d2df433c856236"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669920198-evidence-official-blender-macos-arm64/files/blender-distribution.json": {
+      "bytes": 575,
+      "sha256": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669930214-evidence-official-blender-linux-x64/receipt.json": {
+      "bytes": 1609,
+      "sha256": "98a51a6b314769d877a53c87ff0cfecd27effd0f848fcc93e6ece52155b50067"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669930214-evidence-official-blender-linux-x64/artifact.zip": {
+      "bytes": 1218,
+      "sha256": "35e18b6a65a94c8201ac7aba743dfc4d77b65b24d8b5a30f3b92c6b0a7cd78ab"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669930214-evidence-official-blender-linux-x64/files/blender-acceptance.json": {
+      "bytes": 1222,
+      "sha256": "9fce3bb3ed6860b3ef8e79d93a7dee60de5fcb6054794224b718e33d626e2ffa"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/artifacts/11669930214-evidence-official-blender-linux-x64/files/blender-distribution.json": {
+      "bytes": 571,
+      "sha256": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/2026-10-10-c1-upload-checkpoint/verification.json": {
+      "bytes": 2263,
+      "sha256": "ececc3990a6fa60a993d7c6f7e79ce557935e72afc61f4e3fc3ab37e0caf5544"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/2026-10-10-c1-upload-checkpoint/verify_uploaded.py": {
+      "bytes": 16419,
+      "sha256": "cec4411c518e2bf55440df71d8321ff196e658863b0c5dcde9ab663054408fa0"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/2026-10-10-c1-upload-checkpoint/review.md": {
+      "bytes": 5449,
+      "sha256": "3c5587edd1e907898c089931fd11757d19b08726bc914d76d2a09379a7520579"
+    },
+    "/tmp/rusty-tiles-payload-final-evidence/remote-4dc8f0c/2026-10-10-c1-upload-checkpoint/review-receipt.json": {
+      "bytes": 1123,
+      "sha256": "443633fc2c549176bd2b4416aeb2b58aa7222e43de997e58c758d4efd6c0d97a"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "selectedRootCratePathsPresent": 273,
+  "removedValidatorPathsAbsent": true,
+  "inventoryIndexSha256": "a71f59fa4c470265dcb7724d2e2250cea666e418bcb5d39a5a1e7026580261f9",
+  "inventoryLogSha256": "b5e200668901ea25e066621b04fb3419230a8f858cfa94ec474fbb2181a8ef94",
+  "losslessInventoryRecordsVerified": 2,
+  "sourceArchiveCompiled": false,
+  "scope": "Package inventory only; bindings separate package; no installed artifact acceptance"
+}

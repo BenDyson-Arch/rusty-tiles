@@ -38,7 +38,7 @@ class VectorFieldTests(unittest.TestCase):
     def test_selection_precedes_unsupported_schema_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);p=self.source(root)
-            with self.assertRaisesRegex(ValueError,'unsupported field type'):
+            with self.assertRaisesRegex(ValueError,'unsupported (field type|complex property)'):
                 vector.run(self.args(p,root/'strict'))
             for label,opts in [('include',dict(fields=['name'])),('exclude',dict(drop_fields=['tags','numbers']))]:
                 out=root/label;vector.run(self.args(p,out,**opts))

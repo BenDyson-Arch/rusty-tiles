@@ -1,0 +1,71 @@
+{
+  "status": "HELD authored preparation inputs only; no authored script/probe execution or implementation approval",
+  "created_at_utc": "2026-10-10T12:34:58.315760+00:00",
+  "actual_source": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+  "files": {
+    "README.md": {
+      "sha256": "e92b3ef283e20838a3123a15c1f3552c3e9d73f5340617eeafe85851069a1ec8",
+      "bytes": 11661
+    },
+    "source-pin.json": {
+      "sha256": "68e56af40dd70f2cc376c508effec1b3880cf0414dfe79fb783ed207b411784a",
+      "bytes": 8658
+    },
+    "p3_inputs.py": {
+      "sha256": "419fdabb46e6f5abe07a4590cfc16a231e074c30f32468889ed2e3c4e8c19987",
+      "bytes": 7837
+    },
+    "independent_assertions.py": {
+      "sha256": "441681aa2d389d46a8fba1ffb0d6e2610160f91929633b42b9384db2e9b870e5",
+      "bytes": 4973
+    },
+    "p5_f0_seams.rs.in": {
+      "sha256": "0473246a099e3da246ea338cbc06d57d33b3f4fdd6b6eb7ee4c69e9b5db1b4be",
+      "bytes": 3924
+    },
+    "p5_permission_observer.rs.in": {
+      "sha256": "8d58564531ef0d1b7b33dfa89be13c906aa9b2eee7ee40569b747792c1abdb40",
+      "bytes": 2233
+    },
+    "p4_cases.json": {
+      "sha256": "ad4505b1834c39e2140226b525322ef81eb6dd600c91aed8f6558ad44817b053",
+      "bytes": 5334
+    },
+    "p5_cases.json": {
+      "sha256": "64904b6d4523d637e8fca33e0eb7a488dfe899b8f4b12cf847b511051967efd7",
+      "bytes": 5125
+    },
+    "p4-producer.geojson": {
+      "sha256": "b1c1506c0e5561a5a3fd0e9b370f447523273de62a165b2cc956fcef3a104547",
+      "bytes": 447
+    },
+    "p4-producer-expected.json": {
+      "sha256": "76ef17f2656e9e4513eb00ebc9591ad31a301d0a7f79e129cb8fd6e5d0b02450",
+      "bytes": 1334
+    }
+  },
+  "prior_freezes_preserved_exact": {
+    "lifecycle/contract-draft.md": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0",
+    "lifecycle/decisions.json": "237fc0232a8faf9b29b20311602284bec3265b18783bc3fc6d167eadae559ece",
+    "lifecycle/draft-integrity.json": "e7147c7e8b848a606a3e3033db6f3cc69bf905dd26b9508309e3d47375273afb",
+    "lifecycle/revision-20261010/contract-draft.md": "637bac2fb0c85c11abc43eb370880aea7daa9aadf54953cbcded87a201a93789",
+    "lifecycle/revision-20261010/decisions.json": "ee25201087f277b56051ae0a36806893856f36c7822a6c7b8a306909f4939173",
+    "lifecycle/revision-20261010/integrity.json": "b5a78824f207db04a124c7af0c6d5415c52153c19be89dc9f0c4c3cfe5af1ceb"
+  },
+  "checked": [
+    "actual read source hashes remain pinned4dc",
+    "old lifecycle and additive revision hashes unchanged",
+    "caseJSON parsed",
+    "retained nine primary and three locked dependency hashes matched source-pin",
+    "tiny authored producer GeoJSON/expected JSON parsed without target execution"
+  ],
+  "not_run": [
+    "authored Python generator or assertions",
+    "Rust templates compiled",
+    "target/platform/FFI/producer/serializer/resource probes",
+    "Cargo/builds",
+    "fixture materialization",
+    "remote review/CI/merge"
+  ],
+  "only_writes": "lifecycle/proof-inputs-20261010-4dc"
+}

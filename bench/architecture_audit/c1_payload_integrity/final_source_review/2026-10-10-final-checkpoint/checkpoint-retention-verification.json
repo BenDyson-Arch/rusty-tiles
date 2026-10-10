@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourceTree": "1881bb5a90cf94f261925a44fd80720bf16084fb",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "onlyProductionChangeFromCa9": "test cfg include",
+  "compiledControlEquivalentBranchCollapse": true,
+  "contextHarnessActualUnitLogAnd82RowsMatch": true,
+  "contextHarness270InputsVerified": true,
+  "retainedIndexSha256": "9e2e1c3858e23465896e0eaa4d23ca7ce47c161d5ed12b893e1132355a6d97cb",
+  "losslessRecordsVerified": 45,
+  "gzipTotalBytes": 275919,
+  "historicalRawStreamsVerified": 410,
+  "portableAndNativeBuildArtifactsVerified": true,
+  "scope": "Local exact checkpoint and retention verification; no remote/platform acceptance or historical artifact rebinding"
+}

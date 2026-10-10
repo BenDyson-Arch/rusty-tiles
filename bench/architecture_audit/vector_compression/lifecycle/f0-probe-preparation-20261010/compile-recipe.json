@@ -1,0 +1,12 @@
+{
+  "status": "ROOT_ONLY_TEMPLATE_NOT_EXECUTED",
+  "preconditions": ["accepted source/package integrity matches", "root freezes/hashes10 recommended libraries and actual compiler/std/native loader/linker closure before compile", "root retains independent source review and selected domain/expected proof limits", "new external output directory; no original or production overwrite"],
+  "rustcTemplate": ["ABSOLUTE_MATCHED_RUSTC", "--edition=2021", "--test", "--crate-name", "vector_f0_probe", "-C", "opt-level=1", "-L", "dependency=NEW_FROZEN_DEPS_DIRECTORY", "--extern", "tempfile=NEW_FROZEN_DEPS_DIRECTORY/libtempfile-e49357780c076028.rlib", "--extern", "libc=NEW_FROZEN_DEPS_DIRECTORY/liblibc-6a1ca5ce17f02622.rlib", "/tmp/rusty-tiles-vector-f0-probe-preparation/isolated/f0_probe.rs", "-o", "NEW_OUTPUT_DIRECTORY/vector_f0_probe"],
+  "linuxRunTemplate": ["NEW_OUTPUT_DIRECTORY/vector_f0_probe", "runtime::tests::compression_preparation_", "--nocapture", "--test-threads=1"],
+  "linuxExpectedTests": ["runtime::tests::compression_preparation_replace_window_is_unconditional_named_entry", "runtime::tests::compression_preparation_unix_candidate_mode_copy_before_seal"],
+  "linuxExpectedCount": 2,
+  "windowsOnlyUnexecuted": "runtime::tests::compression_preparation_windows_persist_clears_candidate_readonly",
+  "sameFileScope": "Matched1.0.6 closure retained for future captured-source identity work. Current F0 file tests do not call same_file; no execution acceptance follows from copying/passing its artifact.",
+  "resourceControl": "Root-controlled nice10, two-CPU affinity, CARGO_BUILD_JOBS/RAYON_NUM_THREADS/RUST_TEST_THREADS2; actual focused libtest thread1. No Cargo needed for this isolated compile.",
+  "resultScope": "Existing F0 non-CAS named-entry Replace and exercised Unix preseal candidate-mode copy only. Windows requires actual native CI. No new captured-source/ResourceLimit/codec/producer acceptance."
+}

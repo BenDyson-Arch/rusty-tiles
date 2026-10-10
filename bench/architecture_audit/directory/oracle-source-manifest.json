@@ -1,0 +1,29 @@
+{
+  "tested_source_state": "Native CLI rebuilt and independent oracle rerun from verified_source_commit, including the supported-filesystem test-fixture correction.",
+  "date": "2026-10-09",
+  "git_head": "129001c8c3389157ced3bc58fe867afa119ba6dd",
+  "files": {
+    "Cargo.toml": "87ed5021f9f38865d213511ae148d8ff00299f6d3dd46046df7ec21e8a0db97c",
+    "Cargo.lock": "1c1490f2db7cc1141a638262d74485346d4820bbc1cabe16e245e1a35c1142b4",
+    "src/main.rs": "3160e294c09731425b6fe1738b13a0221f05a92a1b6d87a3c678eae8d36953d6",
+    "src/lib.rs": "19486072b2d088a35f57fbdbaec0b2be5401aa6fc99166938d8bdbb100507b9d",
+    "src/runtime.rs": "96ac0722f3e3ec07d0a31267b004c4da76051c8c90d32c0b1caea75ed8d9fe2c",
+    "src/raster_directory.rs": "7b140579bb3278b14436f23412446567d34efacdb3259e036e1fdfa2d8ab88da",
+    "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+    "tests/d1_raster_oracle.py": "3bc89c781c5cdfb4ffbdb08a06907ec4ec2625e5ea54b71b205402d23945fb80",
+    "bench/architecture_audit/f1a/measure_child.c": "21f606df11aa7cdad03924e422a21623d22f032314a2b4292c16f904144a5f53",
+    "src/runtime/directory.rs": "ab6a3baaef20da34cb7f8b0fab6e411efff22cdee0e6e15ed629d340a75323f5",
+    "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+    "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4"
+  },
+  "verified_source_commit": "08d56a6fcb07bf9318b9a21111d8534db215e81f",
+  "binary": {
+    "sha256": "04a1e75309d5dd317c015433c53735c4e5fe58bc303787bb01de5c9204c18ac7",
+    "features": [
+      "native-geospatial",
+      "native-jpeg"
+    ],
+    "profile": "dev, debug=0, incremental=false",
+    "rust": "1.98.0"
+  }
+}

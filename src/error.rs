@@ -5,6 +5,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Validation(#[from] crate::validate::ValidationFailure),
+
+    #[error(transparent)]
+    Job(#[from] crate::JobFailure),
+
     #[error("{0}")]
     Message(String),
 
@@ -55,6 +61,10 @@ impl Error {
     /// Stable CLI failure categories: usage=2, data=3, environment=4, conflict=5.
     pub fn category(&self) -> (&'static str, u8) {
         match self {
+            Self::Validation(failure) => failure.category(),
+            Self::Job(failure) if failure.error.kind() == crate::JobErrorKind::ResourceLimit => {
+                ("resource_limit", 1)
+            }
             Self::Environment(_) => ("environment", 4),
             Self::OutputExists(_) => ("output_conflict", 5),
             Self::Io(_) => ("io", 1),
@@ -65,5 +75,23 @@ impl Error {
 
     pub fn msg(s: impl Into<String>) -> Self {
         Error::Message(s.into())
+    }
+}
+
+// Adapt the private codec for remaining legacy operation/tool callers. The
+// codec owns ordinary format errors and never depends on jobs or publication.
+impl From<crate::archive3tz::CodecError> for Error {
+    fn from(error: crate::archive3tz::CodecError) -> Self {
+        use crate::archive3tz::CodecError;
+        match error {
+            CodecError::Io(error) => Self::Io(error),
+            CodecError::SourceIo { source, .. } => Self::Io(source),
+            CodecError::Zip(error) => Self::Zip(error),
+            CodecError::Invalid(message) => Self::Message(message),
+            CodecError::MissingManifest => Self::MissingTilesetJson,
+            CodecError::SourceChanged(path) => {
+                Self::Data(format!("source changed while packing: {}", path.display()))
+            }
+        }
     }
 }

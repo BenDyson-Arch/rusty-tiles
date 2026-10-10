@@ -1,0 +1,125 @@
+{
+  "date": "2026-10-10",
+  "sources": [
+    {
+      "repo": "3d-tiles-validator",
+      "commit": "7fa62c5f792069b077f174b477aab85dd7fecf22",
+      "path": "package.json",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-validator/7fa62c5f792069b077f174b477aab85dd7fecf22/package.json",
+      "bytes": 4477,
+      "sha256": "1dbf0bb15f06b9233b7a18cf2b29038f17b38ceec0288844a3b472a482faedf6"
+    },
+    {
+      "repo": "3d-tiles-validator",
+      "commit": "7fa62c5f792069b077f174b477aab85dd7fecf22",
+      "path": "src/validation/TileValidator.ts",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-validator/7fa62c5f792069b077f174b477aab85dd7fecf22/src/validation/TileValidator.ts",
+      "bytes": 17419,
+      "sha256": "f49902ad78ffcac93a71cfd2e2b0d963e7f159bef78e2cf2e3dfd39cc5b01406"
+    },
+    {
+      "repo": "3d-tiles-validator",
+      "commit": "7fa62c5f792069b077f174b477aab85dd7fecf22",
+      "path": "src/validation/TileContentValidator.ts",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-validator/7fa62c5f792069b077f174b477aab85dd7fecf22/src/validation/TileContentValidator.ts",
+      "bytes": 3621,
+      "sha256": "ea1af6bbfcd4d48c45ff459938c54d97d60f196040d92fc1302c5198e67c00d8"
+    },
+    {
+      "repo": "3d-tiles-tools",
+      "commit": "4ca692eb16a9c7db21ec99e2aacc32645ce92f28",
+      "path": "package.json",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-tools/4ca692eb16a9c7db21ec99e2aacc32645ce92f28/package.json",
+      "bytes": 4967,
+      "sha256": "96eeef23741ad4083921b842d942dabef642dce477f77870cbdeb7242a1c82b2"
+    },
+    {
+      "repo": "3d-tiles-tools",
+      "commit": "4ca692eb16a9c7db21ec99e2aacc32645ce92f28",
+      "path": "src/tilesets/traversal/ImplicitTraversedTile.ts",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-tools/4ca692eb16a9c7db21ec99e2aacc32645ce92f28/src/tilesets/traversal/ImplicitTraversedTile.ts",
+      "bytes": 13708,
+      "sha256": "0031dd81bd56314a1596b9f6a9f56593bc105bf8fbf756d7ff9b632c1ffb140f"
+    },
+    {
+      "repo": "3d-tiles-tools",
+      "commit": "4ca692eb16a9c7db21ec99e2aacc32645ce92f28",
+      "path": "src/tilesets/traversal/MetadataSemanticOverrides.ts",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-tools/4ca692eb16a9c7db21ec99e2aacc32645ce92f28/src/tilesets/traversal/MetadataSemanticOverrides.ts",
+      "bytes": 9436,
+      "sha256": "d1fc6ff8762bc92d48aedd73ccb3394a0ec924f8d6b7af89c31747ddcfef9974"
+    },
+    {
+      "repo": "3d-tiles-tools",
+      "commit": "4ca692eb16a9c7db21ec99e2aacc32645ce92f28",
+      "path": "src/tilesets/traversal/TilesetTraverser.ts",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-tools/4ca692eb16a9c7db21ec99e2aacc32645ce92f28/src/tilesets/traversal/TilesetTraverser.ts",
+      "bytes": 6962,
+      "sha256": "b5262ec673b416c935de4e2e712633eb9a165cd42a33f4c90d3a3ab3cdbc959d"
+    },
+    {
+      "repo": "cesium",
+      "commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "path": "package.json",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/package.json",
+      "bytes": 5943,
+      "sha256": "c6b63c39e9d47e0e99c41c750d1deb96c0b26fb045835f26b1b4ba0e37ce8401"
+    },
+    {
+      "repo": "cesium",
+      "commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "path": "packages/engine/Source/Scene/Implicit3DTileContent.js",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Implicit3DTileContent.js",
+      "bytes": 35078,
+      "sha256": "86109c4b82bc0ab209d82df1eb0d6e72e362c3d348fb212b1d0963388f620311"
+    },
+    {
+      "repo": "cesium",
+      "commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "path": "packages/engine/Source/Scene/Multiple3DTileContent.js",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Multiple3DTileContent.js",
+      "bytes": 20364,
+      "sha256": "848dc85a73d819ec2573891cc7a670828eab9ddc8a8db22db683f702ccf40b9a"
+    },
+    {
+      "repo": "cesium",
+      "commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "path": "packages/engine/Source/Scene/Cesium3DTile.js",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Cesium3DTile.js",
+      "bytes": 80549,
+      "sha256": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c"
+    },
+    {
+      "repo": "cesium",
+      "commit": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "path": "packages/engine/Source/Scene/MetadataSemantic.js",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/MetadataSemantic.js",
+      "bytes": 5881,
+      "sha256": "fc751f9230160aaa5f4d1f36d4ca2ec728ba7ceb656c8ee3753ffd3fcc6c55e7"
+    },
+    {
+      "repo": "3d-tiles",
+      "commit": "4d781014b52294759834018a931223b98ac1ce47",
+      "path": "specification/ImplicitTiling/README.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/ImplicitTiling/README.adoc",
+      "bytes": 32526,
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672"
+    },
+    {
+      "repo": "3d-tiles",
+      "commit": "4d781014b52294759834018a931223b98ac1ce47",
+      "path": "specification/Metadata/Semantics/README.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/Semantics/README.adoc",
+      "bytes": 15134,
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2"
+    },
+    {
+      "repo": "3d-tiles",
+      "commit": "4d781014b52294759834018a931223b98ac1ce47",
+      "path": "specification/README.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/README.adoc",
+      "bytes": 63585,
+      "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87"
+    }
+  ]
+}

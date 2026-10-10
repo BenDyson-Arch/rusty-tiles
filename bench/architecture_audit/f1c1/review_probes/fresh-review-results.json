@@ -1,0 +1,5681 @@
+{
+  "source_commit": "3bd86c352c0a430731528040379ce1765fc11e67",
+  "binary_sha256": "b0f2031f3f951018f6e19e682d62e86e1699dd15e382ca2d275300d30c7f99e5",
+  "compiled_inputs_verified": 90,
+  "executions": [
+    {
+      "name": "local",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/local.3tz",
+        "--leaf-triangles",
+        "1"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/local.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "kind": "local"
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/local.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-equator",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-equator.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "0",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-equator.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            6378137.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-equator.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-northpole",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-northpole.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "37",
+        "90",
+        "12345",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "7",
+        "-11",
+        "13"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-northpole.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              37.0,
+              90.0,
+              12345.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              7.0,
+              -11.0,
+              13.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.7986355100472928,
+            -0.6018150231520483,
+            6.123233995736766e-17,
+            0.0,
+            4.8902321053241553e-17,
+            3.685054208909731e-17,
+            1.0,
+            0.0,
+            -0.6018150231520483,
+            0.7986355100472928,
+            0.0,
+            0.0,
+            1.0295166846550383,
+            -12.997695772348276,
+            6369084.314245179,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-northpole.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-southpole",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-southpole.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-123",
+        "-90",
+        "-6000000",
+        "--orientation-xyzw",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "-3",
+        "8",
+        "-17"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-southpole.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -123.0,
+              -90.0,
+              -6000000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              -0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              -3.0,
+              8.0,
+              -17.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            3.3349522546092805e-17,
+            5.1353761328672814e-17,
+            1.0,
+            0.0,
+            -0.8386705679454239,
+            0.5446390350150271,
+            0.0,
+            0.0,
+            -0.5446390350150271,
+            -0.8386705679454239,
+            6.123233995736766e-17,
+            0.0,
+            -18.61451193520575,
+            2.5494990516715488,
+            -356755.3142451793,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-southpole.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-eastanti",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-eastanti.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "180",
+        "17",
+        "58000000",
+        "--orientation-xyzw",
+        "0.5",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "1",
+        "-2",
+        "3"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-eastanti.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              180.0,
+              17.0,
+              58000000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              -0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              1.0,
+              -2.0,
+              3.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.9563047559630354,
+            1.1711355583995222e-16,
+            0.29237170472273677,
+            0.0,
+            1.2246467991473532e-16,
+            1.0,
+            0.0,
+            0.0,
+            -0.29237170472273677,
+            3.580520723499547e-17,
+            -0.9563047559630354,
+            0.0,
+            -61566864.89798566,
+            -2.999999992460234,
+            18810394.487198737,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-eastanti.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-westanti",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-westanti.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-180",
+        "-31",
+        "-6378137",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1",
+        "--scene-offset",
+        "2",
+        "3",
+        "5"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-westanti.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -180.0,
+              -31.0,
+              -6378137.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              2.0,
+              3.0,
+              5.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            1.2246467991473532e-16,
+            -1.0,
+            0.0,
+            0.0,
+            -0.5150380749100542,
+            -6.307397298776126e-17,
+            0.8571673007021123,
+            0.0,
+            -0.8571673007021123,
+            -1.0497271911386187e-16,
+            -0.5150380749100542,
+            0.0,
+            -4860.679945933207,
+            -2.000000000000595,
+            19084.054387916793,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-westanti.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-center",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-center.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-6378137",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-center.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              0.0,
+              0.0,
+              -6378137.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-center.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-oblique",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-oblique.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "153.02",
+        "-27.48",
+        "57200000",
+        "--orientation-xyzw",
+        "0.18257418583505536",
+        "0.3651483716701107",
+        "0.5477225575051661",
+        "0.7302967433402214",
+        "--scene-offset",
+        "300",
+        "-200",
+        "100"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-oblique.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              153.02,
+              -27.48,
+              57200000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.18257418583505539,
+              0.36514837167011077,
+              0.5477225575051662,
+              0.7302967433402215
+            ],
+            "scene_offset_metres": [
+              300.0,
+              -200.0,
+              100.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.18075542000406952,
+            -0.05759687232773239,
+            0.9818401491267383,
+            0.0,
+            -0.3616974723225579,
+            0.9322195456160605,
+            -0.011901986676958465,
+            0.0,
+            -0.9146050604794536,
+            -0.3572804487646211,
+            -0.18933637863845984,
+            0.0,
+            -50269360.14149812,
+            25591464.25213371,
+            -29319479.192320462,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-oblique.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "zip-placed",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/zip-placed.3dtiles.zip",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "153.02",
+        "-27.48",
+        "57200000",
+        "--orientation-xyzw",
+        "0.18257418583505536",
+        "0.3651483716701107",
+        "0.5477225575051661",
+        "0.7302967433402214",
+        "--scene-offset",
+        "300",
+        "-200",
+        "100"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/zip-placed.3dtiles.zip",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              153.02,
+              -27.48,
+              57200000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.18257418583505539,
+              0.36514837167011077,
+              0.5477225575051662,
+              0.7302967433402215
+            ],
+            "scene_offset_metres": [
+              300.0,
+              -200.0,
+              100.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.18075542000406952,
+            -0.05759687232773239,
+            0.9818401491267383,
+            0.0,
+            -0.3616974723225579,
+            0.9322195456160605,
+            -0.011901986676958465,
+            0.0,
+            -0.9146050604794536,
+            -0.3572804487646211,
+            -0.18933637863845984,
+            0.0,
+            -50269360.14149812,
+            25591464.25213371,
+            -29319479.192320462,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/zip-placed.3dtiles.zip",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-nearunit",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-nearunit.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "12.75",
+        "71.5",
+        "-1234",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1.0000000000005",
+        "--scene-offset",
+        "17",
+        "19",
+        "-23"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-nearunit.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              12.75,
+              71.5,
+              -1234.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              17.0,
+              19.0,
+              -23.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.2206974350215011,
+            0.9753423205085127,
+            0.0,
+            0.0,
+            -0.9249401944619291,
+            -0.20929259827422259,
+            0.3173046564050921,
+            0.0,
+            0.3094806598862988,
+            0.07002832378898255,
+            0.9483236552061993,
+            0.0,
+            1979477.806648547,
+            447927.528030922,
+            6025069.4845168805,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-nearunit.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-height-cap",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-height-cap.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "37.1",
+        "-55.4",
+        "58998676.19243112",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-height-cap.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              37.1,
+              -55.4,
+              58998676.19243112
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.6565203387746313,
+            0.49652243250361994,
+            0.5678437450531013,
+            0.0,
+            0.452903045138284,
+            0.34252788280722646,
+            -0.8231363685344418,
+            0.0,
+            -0.6032079877452825,
+            0.7975839288252285,
+            0.0,
+            0.0,
+            29615931.379937667,
+            22398352.984879617,
+            -53790753.918630145,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-height-cap.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-offset-cap",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-offset-cap.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-161.2",
+        "83.7",
+        "0",
+        "--orientation-xyzw",
+        "0.5",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "-58998676.19243112",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-offset-cap.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -161.2,
+              83.7,
+              0.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              -0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              -58998676.19243112,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.10387990440364353,
+            -0.035363604054396855,
+            0.9939609554551797,
+            0.0,
+            -0.3222656952305112,
+            0.9466492601156963,
+            0.0,
+            0.0,
+            -0.9409324030655364,
+            -0.32031951834174666,
+            -0.10973431109104514,
+            0.0,
+            54849003.967022575,
+            18672124.028252345,
+            12792286.325054344,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-offset-cap.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "hierarchy-negative-q",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/hierarchical.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-negative-q.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "153.02",
+        "-27.48",
+        "57200000",
+        "--orientation-xyzw",
+        "-0.18257418583505536",
+        "-0.3651483716701107",
+        "-0.5477225575051661",
+        "-0.7302967433402214",
+        "--scene-offset",
+        "300",
+        "-200",
+        "100"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-negative-q.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 4,
+          "triangles": 4
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 4,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              153.02,
+              -27.48,
+              57200000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              -0.18257418583505539,
+              -0.36514837167011077,
+              -0.5477225575051662,
+              -0.7302967433402215
+            ],
+            "scene_offset_metres": [
+              300.0,
+              -200.0,
+              100.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.18075542000406952,
+            -0.05759687232773239,
+            0.9818401491267383,
+            0.0,
+            -0.3616974723225579,
+            0.9322195456160605,
+            -0.011901986676958465,
+            0.0,
+            -0.9146050604794536,
+            -0.3572804487646211,
+            -0.18933637863845984,
+            0.0,
+            -50269360.14149812,
+            25591464.25213371,
+            -29319479.192320462,
+            1.0
+          ],
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648,
+          "source_coordinates": "local-gltf",
+          "triangles": 4
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/hierarchy-negative-q.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 622257.1175665652,
+          "schema_version": 4,
+          "source_bytes": 648
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "line-local",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/line-local.3tz",
+        "--leaf-triangles",
+        "1"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/line-local.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "kind": "local"
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/line-local.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-equator",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-equator.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "0",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-equator.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            6378137.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-equator.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-northpole",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-northpole.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "37",
+        "90",
+        "12345",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "7",
+        "-11",
+        "13"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-northpole.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              37.0,
+              90.0,
+              12345.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              7.0,
+              -11.0,
+              13.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.7986355100472928,
+            -0.6018150231520483,
+            6.123233995736766e-17,
+            0.0,
+            4.8902321053241553e-17,
+            3.685054208909731e-17,
+            1.0,
+            0.0,
+            -0.6018150231520483,
+            0.7986355100472928,
+            0.0,
+            0.0,
+            1.0295166846550383,
+            -12.997695772348276,
+            6369084.314245179,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-northpole.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-southpole",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-southpole.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-123",
+        "-90",
+        "-6000000",
+        "--orientation-xyzw",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "-3",
+        "8",
+        "-17"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-southpole.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -123.0,
+              -90.0,
+              -6000000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              -0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              -3.0,
+              8.0,
+              -17.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            3.3349522546092805e-17,
+            5.1353761328672814e-17,
+            1.0,
+            0.0,
+            -0.8386705679454239,
+            0.5446390350150271,
+            0.0,
+            0.0,
+            -0.5446390350150271,
+            -0.8386705679454239,
+            6.123233995736766e-17,
+            0.0,
+            -18.61451193520575,
+            2.5494990516715488,
+            -356755.3142451793,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-southpole.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-eastanti",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-eastanti.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "180",
+        "17",
+        "58000000",
+        "--orientation-xyzw",
+        "0.5",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "1",
+        "-2",
+        "3"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-eastanti.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              180.0,
+              17.0,
+              58000000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              -0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              1.0,
+              -2.0,
+              3.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.9563047559630354,
+            1.1711355583995222e-16,
+            0.29237170472273677,
+            0.0,
+            1.2246467991473532e-16,
+            1.0,
+            0.0,
+            0.0,
+            -0.29237170472273677,
+            3.580520723499547e-17,
+            -0.9563047559630354,
+            0.0,
+            -61566864.89798566,
+            -2.999999992460234,
+            18810394.487198737,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-eastanti.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-westanti",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-westanti.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-180",
+        "-31",
+        "-6378137",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1",
+        "--scene-offset",
+        "2",
+        "3",
+        "5"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-westanti.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -180.0,
+              -31.0,
+              -6378137.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              2.0,
+              3.0,
+              5.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            1.2246467991473532e-16,
+            -1.0,
+            0.0,
+            0.0,
+            -0.5150380749100542,
+            -6.307397298776126e-17,
+            0.8571673007021123,
+            0.0,
+            -0.8571673007021123,
+            -1.0497271911386187e-16,
+            -0.5150380749100542,
+            0.0,
+            -4860.679945933207,
+            -2.000000000000595,
+            19084.054387916793,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-westanti.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-center",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-center.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-6378137",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-center.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              0.0,
+              0.0,
+              -6378137.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-center.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-oblique",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-oblique.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "153.02",
+        "-27.48",
+        "57200000",
+        "--orientation-xyzw",
+        "0.18257418583505536",
+        "0.3651483716701107",
+        "0.5477225575051661",
+        "0.7302967433402214",
+        "--scene-offset",
+        "300",
+        "-200",
+        "100"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-oblique.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              153.02,
+              -27.48,
+              57200000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.18257418583505539,
+              0.36514837167011077,
+              0.5477225575051662,
+              0.7302967433402215
+            ],
+            "scene_offset_metres": [
+              300.0,
+              -200.0,
+              100.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.18075542000406952,
+            -0.05759687232773239,
+            0.9818401491267383,
+            0.0,
+            -0.3616974723225579,
+            0.9322195456160605,
+            -0.011901986676958465,
+            0.0,
+            -0.9146050604794536,
+            -0.3572804487646211,
+            -0.18933637863845984,
+            0.0,
+            -50269360.14149812,
+            25591464.25213371,
+            -29319479.192320462,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-oblique.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-nearunit",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-nearunit.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "12.75",
+        "71.5",
+        "-1234",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1.0000000000005",
+        "--scene-offset",
+        "17",
+        "19",
+        "-23"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-nearunit.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              12.75,
+              71.5,
+              -1234.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scene_offset_metres": [
+              17.0,
+              19.0,
+              -23.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.2206974350215011,
+            0.9753423205085127,
+            0.0,
+            0.0,
+            -0.9249401944619291,
+            -0.20929259827422259,
+            0.3173046564050921,
+            0.0,
+            0.3094806598862988,
+            0.07002832378898255,
+            0.9483236552061993,
+            0.0,
+            1979477.806648547,
+            447927.528030922,
+            6025069.4845168805,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-nearunit.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-height-cap",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-height-cap.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "37.1",
+        "-55.4",
+        "58998676.19243112",
+        "--orientation-xyzw",
+        "0.5",
+        "0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-height-cap.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              37.1,
+              -55.4,
+              58998676.19243112
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            0.6565203387746313,
+            0.49652243250361994,
+            0.5678437450531013,
+            0.0,
+            0.452903045138284,
+            0.34252788280722646,
+            -0.8231363685344418,
+            0.0,
+            -0.6032079877452825,
+            0.7975839288252285,
+            0.0,
+            0.0,
+            29615931.379937667,
+            22398352.984879617,
+            -53790753.918630145,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-height-cap.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-offset-cap",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-offset-cap.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "-161.2",
+        "83.7",
+        "0",
+        "--orientation-xyzw",
+        "0.5",
+        "-0.5",
+        "0.5",
+        "0.5",
+        "--scene-offset",
+        "0",
+        "-58998676.19243112",
+        "0"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-offset-cap.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              -161.2,
+              83.7,
+              0.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              0.5,
+              -0.5,
+              0.5,
+              0.5
+            ],
+            "scene_offset_metres": [
+              0.0,
+              -58998676.19243112,
+              0.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.10387990440364353,
+            -0.035363604054396855,
+            0.9939609554551797,
+            0.0,
+            -0.3222656952305112,
+            0.9466492601156963,
+            0.0,
+            0.0,
+            -0.9409324030655364,
+            -0.32031951834174666,
+            -0.10973431109104514,
+            0.0,
+            54849003.967022575,
+            18672124.028252345,
+            12792286.325054344,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-offset-cap.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "degenerate-negative-q",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/fixtures/line.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-negative-q.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "153.02",
+        "-27.48",
+        "57200000",
+        "--orientation-xyzw",
+        "-0.18257418583505536",
+        "-0.3651483716701107",
+        "-0.5477225575051661",
+        "-0.7302967433402214",
+        "--scene-offset",
+        "300",
+        "-200",
+        "100"
+      ],
+      "exit": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-negative-q.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 3,
+          "triangles": 3
+        },
+        "meshReport": {
+          "coordinates": "wgs84-ecef",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_tiles": 3,
+          "leaf_triangles": 1,
+          "placement": {
+            "anchor_degrees_metres": [
+              153.02,
+              -27.48,
+              57200000.0
+            ],
+            "kind": "wgs84",
+            "orientation_xyzw": [
+              -0.18257418583505539,
+              -0.36514837167011077,
+              -0.5477225575051662,
+              -0.7302967433402215
+            ],
+            "scene_offset_metres": [
+              300.0,
+              -200.0,
+              100.0
+            ]
+          },
+          "profile": "f1c1-placed-gltf-v1",
+          "root_transform": [
+            -0.18075542000406952,
+            -0.05759687232773239,
+            0.9818401491267383,
+            0.0,
+            -0.3616974723225579,
+            0.9322195456160605,
+            -0.011901986676958465,
+            0.0,
+            -0.9146050604794536,
+            -0.3572804487646211,
+            -0.18933637863845984,
+            0.0,
+            -50269360.14149812,
+            25591464.25213371,
+            -29319479.192320462,
+            1.0
+          ],
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524,
+          "source_coordinates": "local-gltf",
+          "triangles": 3
+        },
+        "ok": true,
+        "output": "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/degenerate-negative-q.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "images": 0,
+          "leaf_triangles": 1,
+          "routing_geometric_error_metres": 1000000.0000000002,
+          "schema_version": 4,
+          "source_bytes": 524
+        },
+        "skippedFeatures": null
+      }
+    },
+    {
+      "name": "budget-0",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-0.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-1",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-1.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "5e-324",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-2",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-2.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-5e-324",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-3",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-3.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-10",
+        "1e-10",
+        "1e-10"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-4",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-4.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-08",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-5",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-5.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "0",
+        "--scene-offset",
+        "58998676.19243112",
+        "0",
+        "5e-324"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-6",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-6.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-08",
+        "1e-08",
+        "3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-7",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-7.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-1e-09",
+        "5e-324",
+        "-1e-100"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-8",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-8.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "0",
+        "-1e-12",
+        "3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-9",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-9.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-5e-324",
+        "-1e-08",
+        "-1e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-10",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-10.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "0",
+        "-7e-09",
+        "3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-11",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-11.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "5e-324",
+        "1e-09",
+        "0"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-12",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-12.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-12",
+        "-3e-09",
+        "-3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-13",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-13.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-100",
+        "-1e-09",
+        "-1e-100"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-14",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-14.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-12",
+        "-1e-09",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-15",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-15.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-12",
+        "-1e-100",
+        "5e-324"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-16",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-16.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-3e-09",
+        "-3e-09",
+        "-1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-17",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-17.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "0",
+        "7e-09",
+        "1e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-18",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-18.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "0",
+        "-5e-324",
+        "-1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-19",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-19.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "0",
+        "-1e-08",
+        "1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-20",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-20.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "1e-12",
+        "1e-08",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-21",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-21.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-12",
+        "1e-12",
+        "1e-09"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-22",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-22.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-12",
+        "1e-09",
+        "1e-12"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-23",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-23.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-09",
+        "0",
+        "1e-12"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-24",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-24.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-08",
+        "3e-09",
+        "-1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-25",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-25.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-1e-09",
+        "7e-09",
+        "1e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-26",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-26.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "7e-09",
+        "-1e-12",
+        "-1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-27",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-27.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-5e-324",
+        "-1e-08",
+        "-1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-28",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-28.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "3e-09",
+        "-1e-08",
+        "1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-29",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-29.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-3e-09",
+        "3e-09",
+        "0"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-30",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-30.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "7e-09",
+        "1e-09",
+        "-1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-31",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-31.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "7e-09",
+        "0",
+        "-1e-100"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-32",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-32.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-09",
+        "-7e-09",
+        "1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-33",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-33.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-12",
+        "-1e-09",
+        "1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-34",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-34.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-1e-100",
+        "3e-09",
+        "3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-35",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-35.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "1e-12",
+        "-7e-09",
+        "-1e-100"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-36",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-36.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "-5e-324",
+        "1e-08",
+        "3e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-37",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-37.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "3e-09",
+        "1e-100",
+        "5e-324"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-38",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-38.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "0",
+        "-3e-09",
+        "-1e-12"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-39",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-39.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.192431115",
+        "--scene-offset",
+        "-1e-08",
+        "-1e-12",
+        "1e-09"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-40",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-40.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "58998676.19243112",
+        "--scene-offset",
+        "1e-12",
+        "0",
+        "-1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-41",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-41.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "4130949.4415578796",
+        "--scene-offset",
+        "-1e-08",
+        "37820959.11405613",
+        "-17046767.636817098"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-42",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-42.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-1e-100",
+        "--scene-offset",
+        "5141061.137174826",
+        "3029885.1963520055",
+        "50827729.858904295"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-43",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-43.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "15547156.888217568",
+        "--scene-offset",
+        "-32099070.74531326",
+        "5e-324",
+        "11352448.55890029"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-44",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-44.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-2715066.717552629",
+        "--scene-offset",
+        "17555242.4977385",
+        "-38728365.97714",
+        "-1"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-45",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-45.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "11625376.297748119",
+        "--scene-offset",
+        "5e-324",
+        "10005615.9049853",
+        "-37367683.989697695"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-46",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-46.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-34807783.02161822",
+        "--scene-offset",
+        "19067572.039796382",
+        "-1e-08",
+        "5123321.131016524"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-47",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-47.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-7470878.903998494",
+        "--scene-offset",
+        "-16367940.202678798",
+        "-1e-08",
+        "-35159857.08575381"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-48",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-48.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-5e-324",
+        "--scene-offset",
+        "41024209.89567434",
+        "-17829581.386046745",
+        "-144884.91071004717"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-49",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-49.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-1081252.9159943329",
+        "--scene-offset",
+        "-1",
+        "-18848597.619099434",
+        "-39068824.657337345"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-50",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-50.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-54427250.81101534",
+        "--scene-offset",
+        "2504920.4801343614",
+        "2066504.901281427",
+        "-1e-08"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-51",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-51.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-18863774.49422909",
+        "--scene-offset",
+        "-1",
+        "18042289.34745021",
+        "-22092611.350751814"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-52",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-52.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "39197697.004446",
+        "--scene-offset",
+        "-1470143.9849382986",
+        "-1000000.0",
+        "17330835.203046825"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-53",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-53.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "10148315.649347104",
+        "--scene-offset",
+        "-48681673.139853485",
+        "-168687.40323052232",
+        "-5e-324"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-54",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-54.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "13551311.59504141",
+        "--scene-offset",
+        "-7839686.234892825",
+        "-1000000.0",
+        "36607678.3624969"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-55",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-55.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "5e-324",
+        "--scene-offset",
+        "3949660.323535193",
+        "13676918.018026797",
+        "41372097.85086912"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-56",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-56.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "3018991.977362187",
+        "--scene-offset",
+        "5e-324",
+        "1061325.501797306",
+        "54918358.71327164"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-57",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-57.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-32060593.660609115",
+        "--scene-offset",
+        "16691982.809945524",
+        "10246099.72187648",
+        "-5e-324"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-58",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-58.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "10052830.272298643",
+        "--scene-offset",
+        "-520180.49896726146",
+        "48425665.42116523",
+        "-1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-59",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-59.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-341790.7881583304",
+        "--scene-offset",
+        "-40938417.43724715",
+        "-1e-100",
+        "17718467.96702564"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-60",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-60.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-1",
+        "--scene-offset",
+        "-10185631.346692491",
+        "13152312.982411688",
+        "-35660730.863326944"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-61",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-61.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-15551509.35259457",
+        "--scene-offset",
+        "-1",
+        "999006.6494535351",
+        "42448159.19038301"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-62",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-62.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-15646126.839678083",
+        "--scene-offset",
+        "25521556.30065456",
+        "-17830992.052098487",
+        "1"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-63",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-63.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-37633104.58059112",
+        "--scene-offset",
+        "-1",
+        "3398317.5749657676",
+        "-17967253.03687423"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-64",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-64.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "10726923.8167225",
+        "--scene-offset",
+        "16151349.508470355",
+        "1e-08",
+        "-32120402.86723826"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-65",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-65.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-50673854.70915234",
+        "--scene-offset",
+        "-1",
+        "-6027264.395037681",
+        "-2297556.0882410947"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-66",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-66.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "9093002.40674234",
+        "--scene-offset",
+        "18620173.034453407",
+        "-31285500.751235377",
+        "1e-100"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-67",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-67.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-8784441.494714784",
+        "--scene-offset",
+        "15225539.51705153",
+        "5e-324",
+        "34988695.1806648"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-68",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-68.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1",
+        "--scene-offset",
+        "-11888742.399922717",
+        "30906758.33726281",
+        "16203174.455245595"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-69",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-69.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-8763401.273783304",
+        "--scene-offset",
+        "37932939.499772795",
+        "-11302335.418875016",
+        "-1000000.0"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-70",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-70.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-18869213.556130353",
+        "--scene-offset",
+        "20826212.075737514",
+        "18303250.560563263",
+        "-1000000.0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-71",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-71.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1e-100",
+        "--scene-offset",
+        "11091815.401871655",
+        "44746159.58838766",
+        "-3160701.2021717937"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-72",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-72.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "-1e-100",
+        "--scene-offset",
+        "2167369.631488959",
+        "-10908960.062014438",
+        "45922346.498927735"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-73",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-73.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1622088.1683203648",
+        "--scene-offset",
+        "1e-08",
+        "-1607800.0776396398",
+        "-55768787.9464711"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-74",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-74.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1000000.0",
+        "--scene-offset",
+        "-5116565.039710267",
+        "-585307.2826045763",
+        "52296803.870116286"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "budget-75",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/budget-75.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "3521003.145952383",
+        "--scene-offset",
+        "-54727022.72855766",
+        "1",
+        "-750649.3179210728"
+      ],
+      "exit": 1,
+      "result": {
+        "error": {
+          "code": "io",
+          "kind": "io",
+          "message": "inspect mesh source entry: No such file or directory (os error 2) (/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb)",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 1,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-0",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-0.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "181",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh anchor longitude must be in [-180,180] and latitude in [-90,90] degrees",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-1",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-1.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "-91",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh anchor longitude must be in [-180,180] and latitude in [-90,90] degrees",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-2",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-2.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "NaN"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh placement parameters must be finite",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-3",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-3.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "0",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh ENU orientation quaternion must have unit norm within 1e-12",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-4",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-4.3tz",
+        "--leaf-triangles",
+        "1",
+        "--orientation-xyzw",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh orientation and scene offset require an anchor",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-5",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-5.3tz",
+        "--leaf-triangles",
+        "1",
+        "--scene-offset",
+        "0",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh orientation and scene offset require an anchor",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-6",
+      "argv": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/never-created-source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1c1-placement/bench/architecture_audit/f1c1/review_probes/runs/invalid-6.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "0",
+        "--scene-offset",
+        "inf",
+        "0",
+        "0"
+      ],
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh placement parameters must be finite",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "name": "same-file-alias",
+      "exit": 2,
+      "result": {
+        "error": {
+          "code": "invalid_request",
+          "kind": "invalid_request",
+          "message": "mesh output overlaps or aliases a source file",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    }
+  ],
+  "findings": [],
+  "limits": [
+    "Portable CLI artifact only; no native, installed Python, browser, Blender or non-Unix execution here.",
+    "Own fixture has POSITION only; authored PBR/resource truth requires separate evidence."
+  ],
+  "fixtures": [
+    {
+      "name": "hierarchical",
+      "path": "fixtures/hierarchical.glb",
+      "sha256": "12dfac211cbd77ea94287c3b48ebcce73c7294aa7fec9a21dd77fdad318d8ca5",
+      "expected_baked_positions": [
+        [
+          107.0,
+          -211.0,
+          313.0
+        ],
+        [
+          103.0,
+          -208.0,
+          314.5
+        ],
+        [
+          97.0,
+          -223.0,
+          310.0
+        ],
+        [
+          469241.0,
+          370157.0,
+          173152.0
+        ],
+        [
+          125.0,
+          -196.0,
+          328.5
+        ],
+        [
+          99.0,
+          -184.0,
+          311.5
+        ],
+        [
+          93.0,
+          -151.0,
+          317.0
+        ],
+        [
+          117.0,
+          -208.0,
+          314.5
+        ],
+        [
+          79.0,
+          -247.0,
+          317.5
+        ],
+        [
+          65.0,
+          -160.0,
+          297.5
+        ],
+        [
+          93.0,
+          -223.0,
+          317.5
+        ],
+        [
+          103.0,
+          -208.0,
+          314.5
+        ]
+      ]
+    },
+    {
+      "name": "line",
+      "path": "fixtures/line.glb",
+      "sha256": "dcd4622ea19a48a024cb27aac9b1172b18e2c84916629c5fcb460cead017ac7b",
+      "expected_baked_positions": [
+        [
+          -9.999999350456404e-39,
+          7.0,
+          -9.0
+        ],
+        [
+          1000000.0,
+          7.0,
+          -9.0
+        ],
+        [
+          0.0,
+          7.0,
+          -9.0
+        ],
+        [
+          9.999999350456404e-39,
+          7.0,
+          -9.0
+        ],
+        [
+          33.0,
+          7.0,
+          -9.0
+        ],
+        [
+          1.0,
+          7.0,
+          -9.0
+        ],
+        [
+          0.0,
+          7.0,
+          -9.0
+        ],
+        [
+          0.0,
+          7.0,
+          -9.0
+        ],
+        [
+          0.0,
+          7.0,
+          -9.0
+        ]
+      ]
+    }
+  ],
+  "cap_floor_verification": {
+    "real_budget_decimal90": "58998676.1924311227064725536584941276330571947461896193719441930205480669830911999629188538",
+    "operative_cap_exact_decimal": "58998676.1924311220645904541015625",
+    "next_f64_exact_decimal": "58998676.192431129515171051025390625"
+  },
+  "maximum_decimal_world_coordinate_error_metres": "7.8043173974891358747805088429992984660144925843644627436449522462027765546E-9",
+  "maximum_f64_world_evaluation_error_metres": "1.13234000894053890996979634880369495280262113343644627436449522462027765546E-8",
+  "boundary_cases": 76,
+  "sensitivity_controls": [
+    {
+      "control": "translation",
+      "detected_error_metres": "0.9999999974310206299894986124466614401691392482598977007077678949696191775602190440"
+    },
+    {
+      "control": "transpose",
+      "detected_error_metres": "830086.8751334141336628514066497489600829317091043374202061208663340615430256949929453617"
+    },
+    {
+      "control": "double-B",
+      "detected_error_metres": "568169.3713389343809413359883052372945913648956254543145852007077678949696191775602190440"
+    },
+    {
+      "control": "undersized-local-box",
+      "detected": true
+    }
+  ],
+  "status": "passed",
+  "probe_sha256": "74784dd4d46c6788fb5cc01396db8177c7253d622ba453e67b37e1861c1f0a82"
+}

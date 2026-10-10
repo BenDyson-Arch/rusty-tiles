@@ -1,0 +1,250 @@
+{
+  "scope": "Reviewer-authored planar GLB through a frozen CLI and independent reader.\n\nThe literal fixture is separate from the producer/evidence owners' fixtures.\nArtifacts are temporary; the receipt retains source/archive/member identities.",
+  "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "driver_sha256": "cfc09a7311a560e3df074cbf24591e9d8771b93a3b7bc6e0ab23fc4aa32eac3d",
+  "oracle_sha256": {
+    "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+    "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+  },
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+  "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+  "source_sha256": "c6aa4fa6ff7482f692ffa6ca06f4caaa1a672644d6529b17d673185515ab83a8",
+  "source_bytes": 1176,
+  "archive_sha256": "20f122a9c5f697cdbd70e4f5249129fe1d83e61d8c8789b63470a514e5c46872",
+  "exit_code": 0,
+  "stderr": "",
+  "artifact": {
+    "source_sha256": "c6aa4fa6ff7482f692ffa6ca06f4caaa1a672644d6529b17d673185515ab83a8",
+    "source_triangles": 32,
+    "proxy_triangles": 16,
+    "regions": 1,
+    "authored_components": [
+      {
+        "region": [
+          0,
+          0,
+          0
+        ],
+        "count": 1
+      }
+    ],
+    "base_patch_face_tests": 1024,
+    "historical_whole_face_squared": "4",
+    "independent_certificate": {
+      "proved": true,
+      "base_patch_face_tests": 1024,
+      "root_patches": 48,
+      "patch_face_tests": 10624,
+      "accepted_patches": 285,
+      "max_depth": 3,
+      "ideal_cover_squared": "1/5",
+      "regions": [
+        {
+          "source_sha256": "8bf38fa1719b8165cbed8dceb5591128dc8dd72f315d69be84a8bc9959177634",
+          "proxy_sha256": "d6b910ecfb8337e7e5ec9b287d11c31852b6cb632abff90e9ec075d701786e76",
+          "source_faces": 32,
+          "proxy_faces": 16
+        }
+      ],
+      "checker_limits": {
+        "max_depth": 24,
+        "max_patch_face_tests": 100000,
+        "max_seconds": 10,
+        "time_limit_is_cooperative": true
+      }
+    },
+    "leaves": 2,
+    "emitted_name_bytes": 0,
+    "report": {
+      "schema_version": 7,
+      "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+      "source_coordinates": "local-gltf",
+      "coordinates": "local-gltf",
+      "placement": {
+        "kind": "local"
+      },
+      "root_transform": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source_bytes": 1176,
+      "external_files": 0,
+      "external_bytes": 0,
+      "triangles": 32,
+      "leaf_tiles": 2,
+      "leaf_triangles": 16,
+      "images": 0,
+      "image_bytes": 0,
+      "image_pixels": 0,
+      "routing_geometric_error_metres": 5.656854249492387,
+      "approximation": {
+        "kind": "root_proxy",
+        "triangle_limit": 16,
+        "triangles": 16,
+        "regions": 1,
+        "certificate": {
+          "error_metres": 0.4472135954999625,
+          "patch_face_tests": 10624,
+          "accepted_patches": 285,
+          "max_depth": 3
+        },
+        "geometric_error_metres": 0.5,
+        "appearance": "opaque-untextured-factors"
+      }
+    },
+    "proxy_member": "t/root.glb",
+    "member_sha256": {
+      "tileset.json": "96dfc803536f74a1a8f45cde89a415bf23ceb80af3b484e19ee76238c3cd4d3b",
+      "conversion.json": "a7dce3d23f7644efcd11d4186f8640ad5676f3d581d5fd065e4353614a1cc52c",
+      "t/0.glb": "bab6970f5d23b50963ce1adefabcfe3cbb10c46b95ce1143200016313f1c4f25",
+      "t/1.glb": "f1b00ba5696bdcc502a14a4d3366ef5bae68c391be0f2c6209131f26267e95f3",
+      "t/root.glb": "3ac17a0bd765e60fc59e76d550f30e6771db7de7a1d280adfe64f729de3b53fb"
+    }
+  },
+  "controls": [
+    {
+      "name": "false-source-triangle-label",
+      "rejected": true,
+      "reason": "sole proxy_region feature label"
+    },
+    {
+      "name": "invented-default-material",
+      "rejected": true,
+      "reason": "exact proxy region PBR factors/omissions"
+    },
+    {
+      "name": "proxy-vertex-not-original",
+      "rejected": true,
+      "reason": "candidate only original decoded positions of its region"
+    },
+    {
+      "name": "invented-original-membership",
+      "rejected": true,
+      "reason": "unique tuple-sorted proxy membership"
+    },
+    {
+      "name": "unequal-proxy-arrays",
+      "rejected": true,
+      "reason": "array storage lengths"
+    },
+    {
+      "name": "wrong-proxy-count",
+      "rejected": true,
+      "reason": "report independently decoded proxy count"
+    },
+    {
+      "name": "wrong-region-count",
+      "rejected": true,
+      "reason": "report region count independently decoded"
+    },
+    {
+      "name": "false-appearance-profile",
+      "rejected": true,
+      "reason": "exact admitted appearance report"
+    },
+    {
+      "name": "removed-pair-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "removed-certificate-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "negative-certificate",
+      "rejected": true,
+      "reason": "finite admitted certificate"
+    },
+    {
+      "name": "wrong-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "excess-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "wrong-proof-leaves",
+      "rejected": true,
+      "reason": "reported accepted patches cover independent proof"
+    },
+    {
+      "name": "excess-proof-depth",
+      "rejected": true,
+      "reason": "reported depth covers independent proof"
+    },
+    {
+      "name": "nonintegral-proof-depth",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "boolean-proof-work",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "wrong-profile",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "wrong-schema",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "understated-proof-depth",
+      "rejected": true,
+      "reason": "reported depth covers independent proof"
+    },
+    {
+      "name": "zero-root-refinement-budget",
+      "rejected": true,
+      "reason": "root declared positive budget/refinement"
+    },
+    {
+      "name": "child-box-outside-root",
+      "rejected": true,
+      "reason": "root box contains complete child boxes"
+    },
+    {
+      "name": "leaf-winding-reversed",
+      "rejected": true,
+      "reason": "oriented source geometry/key association (0, 0, 0, 1)"
+    },
+    {
+      "name": "leaf-invented-source-ordinal",
+      "rejected": true,
+      "reason": "dense unique sorted source keys"
+    }
+  ],
+  "cli_report_corruptions_rejected": [
+    "stale-certificate",
+    "missing-report",
+    "false-success",
+    "wrong-profile",
+    "synthetic-boolean-one-collision"
+  ],
+  "cli_report_equals_published_report": true,
+  "passed": true
+}

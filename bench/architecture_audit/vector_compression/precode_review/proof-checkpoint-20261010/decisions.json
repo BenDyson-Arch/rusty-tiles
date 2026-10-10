@@ -1,0 +1,26 @@
+{
+  "decision": "ACCEPT_EXACT_DOCS_EVIDENCE_RETENTION_CHECKPOINT_ONLY",
+  "candidate_pin_sha256": "80c3a25ccd65d2528520225b26b30a40ac8d8f13dcba9ebc49559f93c30f8420",
+  "blocking_findings": [],
+  "required_additional_execution_for_this_checkpoint": [],
+  "accepted": [
+    "402 exact pinned documentation/evidence files",
+    "125 byte-identical original package/review copies",
+    "250 P2, 6 original F0 failure, 15 actual F0 lossless source-exact records",
+    "2603 P3 records represented by 687 full independently source-exact blobs",
+    "97 production files unchanged against accepted develop merge",
+    "historical frozen evidence unchanged; only intended current checkpoint document updated",
+    "authored checkpoint faithfully limits P2/P3/F0/parser observations and preserves failed phases and writer rework"
+  ],
+  "held": [
+    "production codec or implementation acceptance",
+    "whole P2-P5 and complete generated/external supported-domain admission",
+    "actual owned Plan representation/capacity/overflow/owner integration",
+    "universal 3J, other production allocation coefficients, defaults, whole-operation envelope and RSS",
+    "new producer bridge/Attempt/ResourceLimit and frontend transport integration",
+    "new captured-source/path/handle/permission/cancellation and supported-platform publication evidence",
+    "Windows execution, full A2, main promotion, tag, publication, release and issue closure"
+  ],
+  "reused_prior_independent_review_scope": "Finite P2 scaffold, allocation model/owner, matched parser source, P3 semantic/control and F0 primitive findings; checkpoint reviewer independently verifies retention identity and documentation claims, but does not repeat prior semantic reconstruction or large artifact inventory rehash.",
+  "future_commit_binding": "Verify all reviewed path hashes and unchanged production/historical scope before attaching acceptance to a later commit. This receipt binds current candidate bytes only."
+}

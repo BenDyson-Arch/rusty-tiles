@@ -77,11 +77,6 @@ pub fn raster_reported(
     }
     match options.display.as_str() {
         "gray" => {
-            if options.alpha_band != 0 {
-                return Err(Error::Data(
-                    "--alphaBand applies only to --display image; gray display uses the selected band's mask/NoData".into(),
-                ));
-            }
             let (Some(low), Some(high)) = (options.display_min, options.display_max) else {
                 return Err(Error::Data(
                     "--display gray requires both --displayMin and --displayMax".into(),

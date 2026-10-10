@@ -1,8 +1,8 @@
 use rusty_tiles::{
     glb_write::{write_glb, TilePrimitive},
     mesh_to_3tz,
-    pack::{pack_named_files, PackOptions},
-    validate_3tz, MeshTo3tzOptions,
+    package::{package, PackageMember, PackageRequest},
+    validate_3tz, JobErrorKind, MeshTo3tzOptions, OutputPolicy, RunControl,
 };
 use serde_json::{json, Value};
 use std::{fs, io::Read, path::Path};
@@ -139,6 +139,7 @@ fn leaves_preserve_triangles_float_attributes_rgba_and_materials() {
         fs::copy(&output, Path::new(&path).join("lossless.3tz")).unwrap();
     }
     let ts: Value = serde_json::from_slice(&entry(&output, "tileset.json")).unwrap();
+    let ts = rusty_tiles::implicit::expand_tileset(&ts, |name| Ok(entry(&output, name))).unwrap();
     let mut uris = Vec::new();
     leaves(&ts["root"], &mut uris);
     let mut count = 0;
@@ -226,15 +227,22 @@ fn invalid_input_and_failed_pack_leave_existing_output_intact() {
     )
     .is_err());
     assert_eq!(fs::read(&output).unwrap(), b"existing");
-    assert!(pack_named_files(
-        &[
-            ("tileset.json".into(), input.clone()),
-            ("../escape".into(), input)
-        ],
-        &output,
-        &PackOptions { force: true }
+    let before = fs::read_dir(dir.path()).unwrap().count();
+    let failure = package(
+        PackageRequest::members(
+            vec![
+                PackageMember::new("tileset.json", &input),
+                PackageMember::new("../escape", &input),
+            ],
+            &output,
+        )
+        .with_policy(OutputPolicy::Replace),
+        &RunControl::default(),
     )
-    .is_err());
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::InvalidRequest);
+    assert!(failure.retained_paths.is_empty());
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), before);
     assert_eq!(fs::read(output).unwrap(), b"existing");
 }
 #[test]
@@ -272,10 +280,16 @@ fn zip64_member_counts_have_complete_random_access_index() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("tileset.json");
     fs::write(&source, b"{}").unwrap();
-    let mut files = vec![("tileset.json".into(), source.clone())];
-    files.extend((0..65535).map(|i| (format!("t/{i}.json"), source.clone())));
+    let mut members = vec![PackageMember::new("tileset.json", &source)];
+    members.extend((0..65535).map(|i| PackageMember::new(format!("t/{i}.json"), &source)));
     let output = dir.path().join("large-index.3tz");
-    pack_named_files(&files, &output, &PackOptions::default()).unwrap();
+    let result = package(
+        PackageRequest::members(members, &output),
+        &RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(result.receipt.member_count, 65536);
+    assert_eq!(result.receipt.source_bytes, 65536 * 2);
     validate_3tz(&output).unwrap();
     let zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
     assert_eq!(zip.len(), 65537);
@@ -410,6 +424,12 @@ fn full_model_leaf_triangle_audit() {
     drop(scene);
     let mut z = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
     let manifest: Value = serde_json::from_reader(z.by_name("tileset.json").unwrap()).unwrap();
+    let manifest = rusty_tiles::implicit::expand_tileset(&manifest, |name| {
+        let mut bytes = Vec::new();
+        z.by_name(name)?.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })
+    .unwrap();
     let mut uris = Vec::new();
     leaves(&manifest["root"], &mut uris);
     let mut actual = Vec::with_capacity(expected.len());
@@ -490,7 +510,13 @@ fn opaque_parent_keeps_colour_even_when_source_alpha_is_zero() {
         },
     )
     .unwrap();
-    let expanded = expand(&entry(&output, "t/0.glb"));
+    let manifest: Value = serde_json::from_slice(&entry(&output, "tileset.json")).unwrap();
+    let manifest =
+        rusty_tiles::implicit::expand_tileset(&manifest, |name| Ok(entry(&output, name))).unwrap();
+    let expanded = expand(&entry(
+        &output,
+        manifest["root"]["content"]["uri"].as_str().unwrap(),
+    ));
     let (_, _, images) = gltf::import_slice(&expanded).unwrap();
     assert!(!images.is_empty());
     for image in images {

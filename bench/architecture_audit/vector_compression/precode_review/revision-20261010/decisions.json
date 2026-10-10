@@ -1,0 +1,42 @@
+{
+  "gate": "HELD_PRECODE",
+  "implementation_ready": false,
+  "revision": "Additive independent prerequisite/probe checklist; prior HELD freeze unchanged",
+  "reviewed_inputs": {
+    "codec_contract": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e",
+    "lifecycle_contract": "637bac2fb0c85c11abc43eb370880aea7daa9aadf54953cbcded87a201a93789",
+    "lifecycle_decisions": "ee25201087f277b56051ae0a36806893856f36c7822a6c7b8a306909f4939173",
+    "lifecycle_integrity": "b5a78824f207db04a124c7af0c6d5415c52153c19be89dc9f0c4c3cfe5af1ceb"
+  },
+  "previous_holds": {
+    "P0": "Await accepted corrected C1 merge; passing checks reported by coordinator only",
+    "P1": "DRAFT_AGREEMENT_CORRECTED, not execution acceptance",
+    "P2": "HELD actual representation/capacity/coefficient/default/raw rewrite proof",
+    "P3": "HELD actual FFI/generated domain/framing/identity/consumer proof",
+    "P4": "HELD actual bridge lifetimes/control/typed fatal causes/inventory/reuse",
+    "P5": "HELD actual Linux/macOS/Windows source/permission/open-handle/recheck/publication faults"
+  },
+  "preparation_author": "next_dependency_selection may author isolated sources/scripts/inputs in codec/p2-proof-preparation; no production edits or Cargo/target execution",
+  "probe_executor": "Root after accepted P0; one shared heavy coordinator, two-worker nice10 policy",
+  "specific_sensitivity_requirements": [
+    "Independent requested-capacity ledger captures before allocations and old+new realloc overlap; actual pinned std HashSet/serde scratch, no Cargo-hashbrown inference",
+    "Each omitted source/parser/key/hash/slot/BIN-tail/final-GLB/identity-copy/producer-bridge category fails independent accounting; omit-realloc and duplicate-transfer models detected",
+    "Vary longJ/lowK, highK/smallJ, escaped keys, deep+wide siblings and V/A independently",
+    "CountWriter exact emitted bytes/length, opaque raw lexemes and complete J+512V+1024 edit/key growth; Value-roundtrip control detected",
+    "Both identity branches retain source+owned candidate; drop per-view decode scratch before copy or charge overlap",
+    "Small chosen-cap max/max+1 isolates each of nine limits; proposed default boundary/generated/raised-cap cases adjudicated separately; combined-cap refusal documented",
+    "Actual native block/stride bounds with aligned decoder and sentinel guards; literal upstream golden and independent nonzero-padding bytes; N0 rejected before native",
+    "Old absent-parent accessor/codec-stride equality negative control; natural noncodec stride and partial matrix padding remain raw",
+    "Selected metadata/core framing residues, absolute offsets and exact slack controls; primary/consumer semantics beyond modular proof",
+    "Full generated scalar/feature/topology/metadata/list corpus; authored external arrays/UINT64 evidence stays distinct",
+    "Actual fitting/final bridge uses same profile and existing Attempt; fatal typed ResourceLimit/callback/native/authored failure route, no skip/fallback",
+    "Windows readonly refusal before observation/staging/no original attribute mutation; real writable Windows/Unix mode and handle controls",
+    "Source mutation/CWD/identity/exact bytes/fault/cleanup/reoccupation controls; explicit nonCAS competition result and committed outcome preservation"
+  ],
+  "proof_limits": [
+    "No new arithmetic or target execution here",
+    "Scaffold layout/resource results prove scaffold only until concrete chosen representation is reconciled",
+    "Prior source observations remain historical2ebfb749; corrected C1 evidence not re-reviewed or transferred",
+    "No implementation approval/main/tag/release/parent issue closure"
+  ]
+}

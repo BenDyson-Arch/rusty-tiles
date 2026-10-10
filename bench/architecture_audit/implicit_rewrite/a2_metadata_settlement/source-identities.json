@@ -1,0 +1,56 @@
+{
+  "coordinator_declared_baseline": "e4d90897518d2b569fb5e99b876581523e4c418c",
+  "evidence": "read-only source identities; no Git operation",
+  "files": [
+    {
+      "path": "src/convert_implicit.rs",
+      "bytes": 19547,
+      "sha256": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee"
+    },
+    {
+      "path": "src/vector/pipeline.rs",
+      "bytes": 3556,
+      "sha256": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9"
+    },
+    {
+      "path": "src/vector/pipeline/reuse.rs",
+      "bytes": 19055,
+      "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21"
+    },
+    {
+      "path": "src/metadata.rs",
+      "bytes": 17642,
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b"
+    },
+    {
+      "path": "src/implicit.rs",
+      "bytes": 13370,
+      "sha256": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b"
+    },
+    {
+      "path": "src/implicit/tileset.rs",
+      "bytes": 45137,
+      "sha256": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7"
+    },
+    {
+      "path": "src/point_cloud.rs",
+      "bytes": 34946,
+      "sha256": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9"
+    },
+    {
+      "path": "src/vector/pipeline/encoding.rs",
+      "bytes": 28074,
+      "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_review/review.md",
+      "bytes": 11159,
+      "sha256": "c4a539ea72a7254088b6285dd45a79131935dc52bbc2acd2b852511b91725b94"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_semantics/sources.json",
+      "bytes": 5669,
+      "sha256": "e84bb07d3031914a87136f18642b7e16ad663fd61289f1c0154466f760393942"
+    }
+  ]
+}

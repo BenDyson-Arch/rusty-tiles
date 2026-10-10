@@ -1,0 +1,122 @@
+{
+  "mesh": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/mesh.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "0b003069c59a8476880100bfa2f24a681f657a81c349b670910aaec4604bb301"
+  },
+  "point": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/point.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "814ea27621d0a0110a6ba132e296145494424f54afd2da27f4336544b539e3dd"
+  },
+  "line": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/line.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "f308d038484c3a3a8b83414df163dda5c47f6bfe7c8c182f567665a136a53079"
+  },
+  "terrain": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/terrain.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "06216063cff525241ba1ca3926cc0135c8e0a1a5b688b97e351bf0854c57d5db"
+  },
+  "empty_bin": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/empty_bin.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "d9ba03a404d69db24e4cb40da03b7f50ed43604474601e4f4cbe43d696b7d133"
+  },
+  "bad_stride": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/bad_stride.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "94befbb17e2207dfe09f3e53771d826e48548aa44beca556860637e6147a208d"
+  },
+  "accessor_overflow": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/accessor_overflow.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "2faa43fb0e67da84071a0949ce22300451fec100244ecdcfdd174b834d1dc22e"
+  },
+  "invalid_index": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/invalid_index.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "bfeba78c4f1b447541426cfac30e0fd46cd1a9993581c2767dd20a8b7f2f2239"
+  },
+  "required_unknown": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/required_unknown.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "5063d685d4955b7e4c2672a863154b7c4286677510807aad5e64268e4d3beca0"
+  },
+  "buffer_short": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/buffer_short.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "ec5cc8907e4e0327762c68431058b0432f2386adedfff6cc4746d2054511bef5"
+  },
+  "nan_position": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/nan_position.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "d1f97d13ebc38f41bffe309eac944e98aec7fd488eebd62f22e589a0dfbb9d50"
+  },
+  "sparse_overflow": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/sparse_overflow.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "f162ea222070ba94206e613160aae72947ea1c2d4bd1e121f99f792ff5214516"
+  },
+  "vertices_overflow": {
+    "packExit": 0,
+    "validateExit": 101,
+    "stdout": "",
+    "stderr": "\nthread 'main' (932057) panicked at src/validate.rs:521:21:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "unchanged": true,
+    "fixtureSha256": "6a93175a64c841808a7f04f7cc3c610aa2c0617de23d06833be995ef138628d7"
+  },
+  "unknown_chunk": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/unknown_chunk.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "5d0fda0b558064a27740eeaaa23a120fd8e5f060e955234b231c62e2e27d879d"
+  },
+  "bin_chunk_overclaim": {
+    "packExit": 0,
+    "validateExit": 0,
+    "stdout": "{\"archive\":\"<work>/bin_chunk_overclaim.3tz\",\"checks\":[\"index\",\"crc\",\"contentHashes\",\"structure\",\"bounds\",\"geometricError\",\"references\",\"budgets\"],\"contentReferences\":1,\"entries\":3,\"ok\":true,\"tiles\":1}\n",
+    "stderr": "",
+    "unchanged": true,
+    "fixtureSha256": "b259c791e3af01d8d486135914e992f2aee0fff223989d1362789eef288632e8"
+  }
+}

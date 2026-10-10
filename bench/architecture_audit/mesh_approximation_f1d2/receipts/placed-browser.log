@@ -1,0 +1,20 @@
+{
+  "result": "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser.json",
+  "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+  "archive_sha256": "018e41510e5853910e92b2e360ef64d912d764e86bf986e74f648a42085767cd",
+  "proxy_faces": 44,
+  "regions": 6,
+  "coarse_picks": 6,
+  "fine_picks": 6,
+  "placement_accuracy": {
+    "maximum_basis_component_error": 1.1863174139341632e-16,
+    "maximum_origin_component_error_metres": 8.845845404077495e-10,
+    "basis_component_limit": 2e-15,
+    "origin_component_limit_metres": 1e-08
+  },
+  "controls_rejected": [
+    "missing-root-placement",
+    "wrong-height",
+    "swapped-east-north"
+  ]
+}

@@ -2,9 +2,10 @@
 //! representatives/full-detail records are held in memory at a time.
 use super::source::{position, Layout, RAW};
 use super::PointCloudOptions;
-use crate::report::Reporter;
+use super::{checkpoint, progress, ProducerIo};
+use crate::runtime::Attempt;
 use crate::{
-    glb_write::MetadataGlb,
+    metadata::MetadataGlb,
     tileset_node::{
         box_half, box_json, enclose_children, top_level_error, translation, translation_offset,
     },
@@ -60,8 +61,10 @@ impl Records {
     }
 }
 
-pub(super) struct Tree<'a> {
-    pub reporter: &'a Reporter,
+pub(super) struct Tree<'a, O: ProducerIo> {
+    pub operations: &'a mut O,
+    pub attempt: &'a Attempt,
+    pub members: Vec<String>,
     pub layout: &'a Layout,
     pub options: &'a PointCloudOptions,
     pub output: &'a Path,
@@ -71,18 +74,21 @@ pub(super) struct Tree<'a> {
     pub leaf_points: u64,
 }
 
-impl Tree<'_> {
+impl<O: ProducerIo> Tree<'_, O> {
     pub fn build(
         &mut self,
         path: &Path,
         parent_center: [f64; 3],
         depth: usize,
+        cell: Option<([f64; 3], [f64; 3])>,
     ) -> Result<Value, Error> {
+        checkpoint(self.attempt)?;
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         let mut lo = [f64::INFINITY; 3];
         let mut hi = [f64::NEG_INFINITY; 3];
         let mut count = 0_u64;
         loop {
+            checkpoint(self.attempt)?;
             let batch = records.next()?;
             if batch.is_empty() {
                 break;
@@ -119,7 +125,16 @@ impl Tree<'_> {
         let index = self.tiles;
         self.tiles += 1;
         let uri = format!("t/{index}.glb");
-        let rounding = emit(&rows, center, self.layout, &self.output.join(&uri))?;
+        let rounding = emit(
+            &rows,
+            center,
+            self.layout,
+            self.options.metadata_attributes,
+            &self.output.join(&uri),
+            self.attempt,
+            self.operations,
+        )?;
+        self.members.push(uri.clone());
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6));
@@ -130,33 +145,36 @@ impl Tree<'_> {
         if leaf {
             std::fs::remove_file(path)?;
             self.leaf_points += count;
-            self.reporter
-                .progress("tiling", self.leaf_points, self.total_points);
+            progress(self.attempt, "tiling", self.leaf_points, self.total_points)?;
             return Ok(node);
         }
-        if depth >= 64 {
-            return Err(Error::Data(
-                "point partition exceeds 64 levels; inspect source extent or raise maxPoints"
-                    .into(),
-            ));
+        let depth_limit = if self.options.explicit { 64 } else { 31 };
+        if depth >= depth_limit {
+            return Err(Error::Data(format!(
+                "point partition exceeds {depth_limit} levels; inspect source extent or raise maxPoints"
+            )));
         }
         let axis = (0..3)
             .max_by(|a, b| extent[*a].total_cmp(&extent[*b]).then_with(|| b.cmp(a)))
             .unwrap();
-        let paths = [
-            self.output.join(format!("scratch/{index}-0.bin")),
-            self.output.join(format!("scratch/{index}-1.bin")),
-        ];
+        let branches = if self.options.explicit { 2 } else { 8 };
+        let (cell_lo, cell_hi) = cell.unwrap_or((lo, hi));
+        let midpoint: [f64; 3] =
+            std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
+        let paths: Vec<_> = (0..branches)
+            .map(|branch| self.output.join(format!("scratch/{index}-{branch}.bin")))
+            .collect();
+        let mut counts = vec![0_u64; branches];
         {
-            let mut files = [
-                BufWriter::new(File::create(&paths[0])?),
-                BufWriter::new(File::create(&paths[1])?),
-            ];
-            let mut counts = [0_u64; 2];
+            let mut files: Vec<_> = paths
+                .iter()
+                .map(|p| File::create(p).map(BufWriter::new))
+                .collect::<Result<_, _>>()?;
             let mut seen = 0_u64;
             let mut records =
                 Records::new(path, self.layout.record_len, self.options.chunk_points)?;
             loop {
+                checkpoint(self.attempt)?;
                 let batch = records.next()?;
                 if batch.is_empty() {
                     break;
@@ -167,7 +185,16 @@ impl Tree<'_> {
                     } else {
                         position(row)[axis] < center[axis]
                     };
-                    let branch = usize::from(!left);
+                    let branch = if self.options.explicit {
+                        usize::from(!left)
+                    } else if extent == [0.; 3] {
+                        ((seen as u128 * 8 / count as u128) as usize).min(7)
+                    } else {
+                        let p = position(row);
+                        usize::from(p[0] >= midpoint[0])
+                            | (usize::from(p[1] >= midpoint[1]) << 1)
+                            | (usize::from(p[2] >= midpoint[2]) << 2)
+                    };
                     files[branch].write_all(row)?;
                     counts[branch] += 1;
                     seen += 1;
@@ -176,33 +203,63 @@ impl Tree<'_> {
             for file in &mut files {
                 file.flush()?;
             }
-            if counts.contains(&0) {
+            if self.options.explicit && counts.contains(&0) {
                 return Err(Error::Data("spatial split made no progress".into()));
             }
         }
         std::fs::remove_file(path)?;
-        let children = [
-            self.build(&paths[0], center, depth + 1)?,
-            self.build(&paths[1], center, depth + 1)?,
-        ];
-        let offsets = [
-            translation_offset(&children[0])?,
-            translation_offset(&children[1])?,
-        ];
+        let mut children = Vec::new();
+        for (branch, path) in paths.iter().enumerate() {
+            if counts[branch] == 0 {
+                std::fs::remove_file(path)?;
+                continue;
+            }
+            let child_cell = if self.options.explicit {
+                None
+            } else {
+                Some((
+                    std::array::from_fn(|i| {
+                        if branch & (1 << i) != 0 {
+                            midpoint[i]
+                        } else {
+                            cell_lo[i]
+                        }
+                    }),
+                    std::array::from_fn(|i| {
+                        if branch & (1 << i) != 0 {
+                            cell_hi[i]
+                        } else {
+                            midpoint[i]
+                        }
+                    }),
+                ))
+            };
+            let mut child = self.build(path, center, depth + 1, child_cell)?;
+            if !self.options.explicit {
+                child["extras"] = json!({"implicitChildIndex":branch});
+            }
+            children.push(child);
+        }
+        let offsets = children
+            .iter()
+            .map(translation_offset)
+            .collect::<Result<Vec<_>, _>>()?;
         let own_error = error + rounding;
         let error = enclose_children(&mut half, own_error, offsets.into_iter().zip(&children))?;
         node["geometricError"] = error.into();
         node["boundingVolume"]["box"] = box_json(0., half);
         // Move, rather than re-serialise, each finished subtree into its parent.
-        node["children"] = Value::Array(children.into());
+        node["children"] = Value::Array(children);
         Ok(node)
     }
 
     fn sample(&self, path: &Path, lo: [f64; 3], extent: [f64; 3]) -> Result<(Vec<u8>, f64), Error> {
         let grid = crate::point_sampling::VoxelGrid::new(lo, extent, self.options.max_points);
         let mut representatives = BTreeMap::new();
+        checkpoint(self.attempt)?;
         let mut records = Records::new(path, self.layout.record_len, self.options.chunk_points)?;
         loop {
+            checkpoint(self.attempt)?;
             let batch = records.next()?;
             if batch.is_empty() {
                 break;
@@ -220,7 +277,15 @@ impl Tree<'_> {
     }
 }
 
-fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f64, Error> {
+fn emit(
+    rows: &[u8],
+    center: [f64; 3],
+    layout: &Layout,
+    metadata_attributes: bool,
+    path: &Path,
+    attempt: &Attempt,
+    operations: &mut impl ProducerIo,
+) -> Result<f64, Error> {
     let count = rows.len() / layout.record_len;
     if count > 16_777_217 {
         return Err(Error::Data("too many exact feature IDs in one tile".into()));
@@ -233,6 +298,9 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
     let mut hi = [f32::NEG_INFINITY; 3];
     let mut rounding: f64 = 0.;
     for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
+        if index % 4096 == 0 {
+            checkpoint(attempt)?;
+        }
         let p = position(row);
         let local = [p[0] - center[0], p[2] - center[2], -(p[1] - center[1])];
         let encoded = local.map(|v| v as f32);
@@ -275,29 +343,92 @@ fn emit(rows: &[u8], center: [f64; 3], layout: &Layout, path: &Path) -> Result<f
     let mut schema = serde_json::Map::new();
     let mut columns = serde_json::Map::new();
     let mut values = Vec::new();
+    let mut property_attributes = BTreeMap::new();
+    let mut attribute_schema = serde_json::Map::new();
     for dim in &layout.dimensions {
+        checkpoint(attempt)?;
         values.clear();
-        for row in rows.chunks_exact(layout.record_len) {
+        for (index, row) in rows.chunks_exact(layout.record_len).enumerate() {
+            if index % 4096 == 0 {
+                checkpoint(attempt)?;
+            }
             dim.append(row, &mut values);
         }
-        schema.insert(
-            dim.name.clone(),
-            json!({"type":"SCALAR","componentType":dim.kind.component()}),
-        );
+        schema.insert(dim.name.clone(), dim.schema());
         columns.insert(dim.name.clone(), json!({"values":glb.view(&values)}));
+        if metadata_attributes
+            && matches!(
+                dim.name.as_str(),
+                "classification" | "intensity" | "return_number"
+            )
+        {
+            let semantic = format!("_{}", dim.name.to_ascii_uppercase());
+            let width = dim.kind.width();
+            let padded: Vec<u8> = values
+                .chunks_exact(width)
+                .flat_map(|v| {
+                    let mut bytes = [0; 4];
+                    bytes[..width].copy_from_slice(v);
+                    bytes
+                })
+                .collect();
+            let view = glb.view(&padded);
+            glb.document["bufferViews"][view]["byteStride"] = 4.into();
+            let accessor = glb.accessor(json!({"bufferView":view,"componentType":if width == 1 {5121} else {5123},"count":count,"type":"SCALAR"}));
+            attributes[&semantic] = accessor.into();
+            // Cesium emits shader fields for both tables and attributes.
+            // Give attribute properties distinct IDs to avoid duplicate fields
+            // when styling uses the table's original LAS property names.
+            let property = format!("vertex_{}", dim.name);
+            if layout.dimensions.iter().any(|d| d.name == property) {
+                return Err(Error::Data(format!(
+                    "LAS dimension {property:?} conflicts with metadata attribute property"
+                )));
+            }
+            attribute_schema.insert(
+                property.clone(),
+                json!({"type":"SCALAR","componentType":dim.kind.component()}),
+            );
+            property_attributes.insert(
+                property,
+                crate::metadata::PropertyAttributeProperty {
+                    attribute: semantic,
+                    ..Default::default()
+                },
+            );
+        }
     }
     glb.document["extensionsUsed"] = json!([
         "EXT_mesh_features",
         "EXT_structural_metadata",
         "KHR_materials_unlit"
     ]);
-    glb.document["extensions"] = json!({"EXT_structural_metadata":{
+    let mut metadata: crate::metadata::StructuralMetadata = serde_json::from_value(json!({
         "schema":{"id":"rusty_tiles_point_cloud","classes":{"point":{"properties":schema}}},
-        "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}});
+        "propertyTables":[{"name":"points","class":"point","count":count,"properties":columns}]}))?;
+    if metadata_attributes {
+        metadata.schema.as_mut().unwrap().classes.insert(
+            "pointAttribute".into(),
+            serde_json::from_value(json!({"properties":attribute_schema}))?,
+        );
+        metadata
+            .property_attributes
+            .push(crate::metadata::PropertyAttribute {
+                class: "pointAttribute".into(),
+                properties: property_attributes,
+                ..Default::default()
+            });
+    }
+    metadata.attach(&mut glb.document)?;
     glb.document["materials"] = json!([{"extensions":{"KHR_materials_unlit":{}},"pbrMetallicRoughness":{"metallicFactor":0,"roughnessFactor":1}}]);
     glb.document["meshes"] = json!([{"primitives":[{"mode":0,"attributes":attributes,"material":0,
-        "extensions":{"EXT_mesh_features":{"featureIds":[{"featureCount":count,"attribute":0,"propertyTable":0}]}}}]}]);
-    std::fs::write(path, glb.finish()?)?;
+        "extensions":{"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(count, 0, Some(0))}}]}]);
+    if metadata_attributes {
+        glb.document["meshes"][0]["primitives"][0]["extensions"]
+            [crate::metadata::STRUCTURAL_METADATA] = json!({"propertyAttributes":[0]});
+    }
+    checkpoint(attempt)?;
+    operations.member(path, &glb.finish()?)?;
     Ok(rounding)
 }
 

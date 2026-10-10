@@ -1,0 +1,146 @@
+{
+  "gate": "HELD_PRECODE",
+  "implementation_ready": false,
+  "revision": "Additive lifecycle revision-20261010; older frozen files remain byte-exact",
+  "historical_source": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "later_C1": "Corrected C1 acceptance is separate; no retrobinding or transferred metadata acceptance",
+  "inputs": {
+    "prior_lifecycle_contract": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0",
+    "codec_contract": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e",
+    "independent_review": "17ae5e13a9df36adefd08d65166b6b493ce39b38251b2f766bf3a492b4b2171e"
+  },
+  "evidence_classes": {
+    "read_in_this_lane": "Pinned additive inputs and SHA/JSON integrity only",
+    "review_reported_execution": "1088 literal codec integer-formula and1024 metadata modular arithmetic checks;241-byte fixed edit object",
+    "not_executed_in_this_lane": [
+      "new arithmetic",
+      "FFI",
+      "Rust/Cargo",
+      "serializer/counting",
+      "allocation/resources",
+      "filesystem/platform",
+      "CLI/Python",
+      "actual producer/consumer"
+    ]
+  },
+  "smallest_scope": {
+    "standalone": "intentional Rust plus existing hidden CLI worker; no new standalone Python feature",
+    "producer": "shared private pure codec under existing vector Attempt; installed producer Python mapping/parity affected",
+    "interface": "prepare(bytes,ValidatedCompressionLimits,generic checkpoint)->borrowing consumed Plan/CodecError<E>; encode(plan,generic checkpoint)->owned Encoded/statistics",
+    "excluded": [
+      "nested compression operation/Attempt",
+      "worker pool",
+      "full C1 payload inspector",
+      "general decoder framework",
+      "public IR/context/registry"
+    ]
+  },
+  "source_publication": {
+    "capture": "absolute original spelling + canonical regular selected entry/parent before observers; immutable bounded bytes + held identity",
+    "leaf": "nonregular/final symlink refused",
+    "cwd": "fixed paths cannot be redirected by callback CWD changes",
+    "hardlinks": "selected pathname replacement only; aliases/open old handles retain original object/bytes",
+    "windows_readonly": "Unsupported during source admission before observer/staging; no source attribute/permission mutation; no postcommit repair; F0 unchanged",
+    "windows_basis": "Independent static locked tempfile3.27 persist resets candidate FILE_ATTRIBUTE_NORMAL before MoveFileExW; not executed Windows defect",
+    "unix_permissions": "copy captured portable fs::Permissions to private complete candidate preseal; actual evidence HELD",
+    "recheck": "after final observer, spelling/path/regular identity/length/mtime/permission state + exact streaming bytes; Conflict on observed change, cancellation-aware64KiB buffer; handles close before seal",
+    "f0": "retained stable-namespace completed-file named-entry Replace/seal/sync/cleanup domain only",
+    "excluded_guarantees": [
+      "atomic expected-identity compare-and-replace",
+      "same-target competing-writer no-loss",
+      "hostile ancestor sandbox",
+      "inode/timestamps/owner/ACL/xattrs",
+      "crash durability",
+      "graceful cleanup on process/allocator abort"
+    ]
+  },
+  "framing": {
+    "core": "T=28+align4(J)+align4(U); zero BIN slack0..3",
+    "metadata": "j8=align8(20+J)-20=J+padding0..7; BIN_origin=28+j8; T=28+j8+align8(U); zero BIN slack0..7; JSON chunk end/BIN origin/final end absolute8 aligned",
+    "identity": "original framed input must already meet selected envelope; all-raw/validated compressed returns exact original bytes in separately owned candidate",
+    "producer_bridge": "count authored Value JSON, emit selected core4/metadata8 before shared planner; glb::encode_glb4 not accepted metadata bridge",
+    "legacy_generated": "no automatic valid identity admission from writer provenance; independently malformed standalone InvalidInput, internally authored malformed/unsupported bytes InvalidState; correct bridge without omitting semantics or implicit repair",
+    "proof_status": "Interpretation arithmetic supported by independent review; primary/actual consumer/artifact framing HELD; no C1 transfer"
+  },
+  "causal_errors": {
+    "CodecError": "Format(InvalidInput/Unsupported/ResourceLimit),Checkpoint(E),EncodingFailure(stage)",
+    "standalone": "Format InvalidInput/Unsupported/ResourceLimit map matching JobErrorKind retaining codec cause; EncodingFailure=>InvalidState with cause",
+    "producer": "authored InvalidInput/Unsupported=>InvalidState with codec cause; ResourceLimit fatal typed through fits_feature/final encoding; never FeatureRejected/skip_invalid/uncompressed fallback",
+    "checkpoint": "original cause and existing Attempt; first accepted prepermission abort primary; later diagnostics secondary; publisher owns postpermission result",
+    "io": "retain actual OS source/path; do not relabel codec failure Io",
+    "runtime_adapter": "minimal JobErrorKind::ResourceLimit + explicit CLI category + installed producer-Python ResourceLimitError/kind; minimal causal constructor/mapping reviewed, no framework",
+    "committed": "success not rewritten by postcommit cleanup/adapter diagnostics; uncertain name not unlinked"
+  },
+  "draft_defaults": {
+    "source_bytes": 33554432,
+    "json_bytes": 1048576,
+    "json_depth": 64,
+    "json_value_nodes": 65536,
+    "views": 4096,
+    "accessors": 4096,
+    "aggregate_view_bytes": 33554432,
+    "output_glb_bytes": 67108864,
+    "estimated_requested_working_bytes": 134217728
+  },
+  "defaults_status": "all proposed; individual maxima need not fit combined estimate; actual generated default/boundary/raised-cap corpus HELD; no C1 default inheritance",
+  "storage_model": {
+    "version": "v1 HELD engineering estimate; actual requested capacity and growth audit missing",
+    "E_JSON": "8J+256K+65536",
+    "E_PLAN": "2J+128K+256(V+A)",
+    "generic_bound": "b=min(256,16*floor(8192/(16*S))); B=1+ceil(N/b)*S*(S/4+ceil(b/64)+b)+max(32,S+S/4); eligibleS positive/divisible4/<=256; checked all terms",
+    "repack_BIN_upper": "U0=sum raw logical lengths + sum B per encoded physical view +7V; final selected chunk slack separately",
+    "rewrite_JSON_upper": "J0=J+512V+1024 HELD complete count/key-escaping proof; no separate JSON Vec",
+    "repack_GLB_upper": "selected T_core(J0,U0) or T_metadata(J0,U0), not universal four framing",
+    "identity_decoder": "D_stage=4ceil(Dmax/4)+Dmax <=2Dmax+3 per view; drop before next view and owned candidate copy; helper extraction/ABI/capacity HELD",
+    "standalone_phases": [
+      "capture I+C",
+      "JSON I+E_JSON",
+      "repack I+E_PLAN+U0+T0+C",
+      "compressed identity decode I+E_PLAN+D_stage+C",
+      "all-raw/compressed identity owned copy I+E_PLAN+I+C",
+      "postcodec write/recheck I+candidate_owned_capacity+C"
+    ],
+    "peak": "max(actual admitted branch phase peaks)+1024+actual path storage; add scratch overlap if lifetimes not proved; all raw identity decoder0, no repack U0/JSON",
+    "producer_bridge": "max(H+oldValueBIN+I_bridge+serializer_scratch,H+oldValueBIN_if_alive+E_codec); E_codec already includes I_bridge once; consume/drop old owners where valid",
+    "resource_claim": "requested engineering storage estimate only, not hard allocator/global RSS/whole-producer bound; measure RSS/scratch/descriptors separately",
+    "work": "logical per-physical-view sum<=aggregate cap; source read/recheck<=2I plus excess detection; scan metric(2depth+4)J unproved CPU/hash/deadline bound"
+  },
+  "coordinator_probe_tasks": [
+    {
+      "id": "P0",
+      "first": true,
+      "task": "Finish corrected C1 independent exact-source/artifact/package/CI acceptance and merge; no future target execution before prerequisite"
+    },
+    {
+      "id": "P2",
+      "task": "Pin postmerge baseline/toolchain/dependencies; source-audit actual slot/hash/key/plan/edit/path/state capacities/root/string scratch/growth; bounded count/raw serializer/identity copy sensitivity scaffolding; all nine max/max+1 and defaults/raised-cap adjudication; separate RSS"
+    },
+    {
+      "id": "P3",
+      "task": "Independent full G1-G9 + real portable/native generated corpus; raw tables/topology/numeric lexemes/shared matrices; framing residues/absolute offsets/zero slack0..7 vs0..3; malformed legacy envelope and compressed corrupt/repeated/all-raw identities; primary+actual consumer probes"
+    },
+    {
+      "id": "P4",
+      "task": "Selected framing producer bridge oldValue/BIN lifetimes, fits_feature/final checkpoints and fatal typed errors; reach EncodingFailure/authoredInvalid/Unsupported/ResourceLimit; no skip/fallback; reuse fingerprint + accepted inventory/final max_bytes + worker/bridge overlap"
+    },
+    {
+      "id": "P5",
+      "task": "Root serial Linux/macOS/Windows permission/source/open-handle/path/recheck/Replace/fault controls; Windows readonly refused preobserver/no staging/no original permission mutation; Unix mode+writableWindows feasibility; explicit non-CAS competitor window; aliases/cleanup/reoccupation/event traces"
+    },
+    {
+      "id": "PRECODE",
+      "task": "Fresh whole-slice exact-input review of additive drafts and postP0 probes; only then production implementation + separate final-source independent acceptance and applicable CLI/installed producerPython/browser/CI/wheel/officialBlender gates"
+    }
+  ],
+  "held": [
+    "coefficients/defaults",
+    "FFI/native ABI and actual encoder/decoder",
+    "raw serializer/key escaping/full growth/count bound",
+    "actual generated and historical identity artifact/framing",
+    "accepted C1 narrow helper extraction",
+    "producer bridge lifetimes/cause/reuse",
+    "Linux/macOS/Windows permission and install",
+    "full whole-slice precode gate"
+  ],
+  "authority": "No production/source/Git/Cargo or target execution; root sole heavy coordinator; parent issues/fullA2/main/tag/release unchanged"
+}

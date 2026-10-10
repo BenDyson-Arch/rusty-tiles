@@ -28,7 +28,7 @@ fn fixture(root: &Path) -> PathBuf {
     .unwrap();
     let out = root.join("valid.3tz");
     let result = support::rusty_tiles()
-        .args(["vector", "-i"])
+        .args(["vector", "--explicit", "-i"])
         .arg(&source)
         .arg("-o")
         .arg(&out)
@@ -238,7 +238,7 @@ fn point_archive_and_feature_attributes_use_valid_core_types() {
 }
 
 #[test]
-fn index_and_missing_external_validator_failures() {
+fn index_and_removed_external_validator_flag_failures() {
     let root = tempfile::tempdir().unwrap();
     let original = fixture(root.path());
     let bad = root.path().join("bad-index.3tz");
@@ -275,29 +275,29 @@ fn index_and_missing_external_validator_failures() {
         &original,
         &["--external-validator".as_ref(), missing.as_os_str()],
     );
-    assert_eq!(result.status.code(), Some(4));
-    assert_eq!(report["error"]["code"], "environment");
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(report["error"]["code"], "usage");
 }
 
 #[cfg(unix)]
 #[test]
-fn external_validator_reported_errors_fail_even_with_successful_exit() {
+fn removed_external_validator_flag_never_launches_a_process() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let original = fixture(root.path());
     let executable = root.path().join("validator");
-    fs::write(&executable, "#!/bin/sh\n[ \"$1\" = --tilesetFile ] && [ \"$3\" = --reportFile ] || exit 9\nprintf '%s' '{\"issues\":[{\"severity\":\"ERROR\",\"message\":\"fixture\"}]}' > \"$4\"\n").unwrap();
+    let marker = root.path().join("executed");
+    fs::write(
+        &executable,
+        format!("#!/bin/sh\ntouch '{}'\n", marker.display()),
+    )
+    .unwrap();
     fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
     let (result, report) = validate(
         &original,
         &["--external-validator".as_ref(), executable.as_os_str()],
     );
-    assert!(!result.status.success());
-    assert!(
-        report["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("external validation"),
-        "{report}"
-    );
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(report["error"]["code"], "usage");
+    assert!(!marker.exists());
 }

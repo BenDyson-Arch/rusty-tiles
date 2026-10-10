@@ -1,0 +1,89 @@
+{
+  "status": "Source-derived model reconciliation of already executed frozen scaffold only; no proposed representation execution",
+  "actualRawStdout": "/tmp/rusty-tiles-codec-p2-executions/raw/serializer-long-root-key-late-escape.stdout",
+  "fixtureInput": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/input.json",
+  "J": 65830,
+  "K": 21,
+  "V": 1,
+  "A": 0,
+  "actualTypes": {
+    "OwnedPair": 40,
+    "RawRef": 16,
+    "Pairs": 24,
+    "CowKey": 24,
+    "EditStack": 56,
+    "RootStack": 72
+  },
+  "literalDecodedRootKeyLengths": [
+    5,
+    7,
+    11,
+    14,
+    18,
+    65537,
+    3
+  ],
+  "allOwnedKeyCapacities": 65660,
+  "events": [
+    {
+      "name": "scratch_realloc_old_plus_new",
+      "terms": {
+        "oldScratch": 65536,
+        "newScratch": 131072,
+        "previousKeys": 55,
+        "rootPairSlots": 320
+      },
+      "expectedIncrementalRequested": 196983
+    },
+    {
+      "name": "long_key_copy_while_scratch_retained",
+      "terms": {
+        "scratch": 131072,
+        "longKeyCopy": 65537,
+        "previousKeys": 55,
+        "rootPairSlots": 320
+      },
+      "expectedIncrementalRequested": 196984
+    },
+    {
+      "name": "final_pad_key_while_scratch_retained",
+      "terms": {
+        "scratch": 131072,
+        "allRootKeys": 65595,
+        "rootPairSlots": 320
+      },
+      "expectedIncrementalRequested": 196987
+    },
+    {
+      "name": "root_after_decoder_drop",
+      "terms": {
+        "allRootKeys": 65595,
+        "rootPairSlots": 320
+      },
+      "expectedIncrementalRequested": 65915
+    },
+    {
+      "name": "all_retained_pairs",
+      "terms": {
+        "allKeys": 65660,
+        "pairSlotBytes": 800,
+        "viewDescriptorBytes": 24,
+        "bufferRawRefs": 64,
+        "viewRawRefs": 64,
+        "usedDeclarationRawRefs": 64,
+        "requiredDeclarationRawRefs": 0
+      },
+      "expectedIncrementalRequested": 66676
+    }
+  ],
+  "originalDraftEplan": 134604,
+  "actualConstructionGap": 62383,
+  "proposedEbuild": 200434,
+  "proposedEretain": 68774,
+  "proposedBuildMargin": 3447,
+  "proposedRetainMargin": 2098,
+  "originalParserEjson": 597552,
+  "actualParserIncrementalPeak": 197041,
+  "originalCalibrationExitCode": 2,
+  "futureUniversalCoefficientProof": false
+}

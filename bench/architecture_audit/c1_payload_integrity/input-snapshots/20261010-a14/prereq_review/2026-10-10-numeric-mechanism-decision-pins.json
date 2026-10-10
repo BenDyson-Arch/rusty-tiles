@@ -1,0 +1,62 @@
+{
+  "record": "Final immutable NONAUTHOR A14 precode representation decision pins",
+  "status": "Approve corrected iterative raw-only borrowed admission and exact unsigned consumed records for revised precode selection; A13 prerequisite and final freeze still coordinator-owned. No production acceptance.",
+  "decision_complete_for_freeze": true,
+  "immutable_review_inputs": {
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-mechanism-decision.md": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun.json": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun-receipt.json": "f9fee1ba0e9788406168e90e068db34fbb998009253f50365455860eeab1c35c",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/manifest.json": "8981b67ce0f4ab1f15d794b32f2294e900d16a2a99b2e6021eadbddcd2899f0f",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/manifest.json": "0026d03177e0fb66ec5fb7dcb372cd6aa7310d474af081163f72217bc333f4ec",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/artifact-snapshot.json": "2a4de0876afc80c2d70930e93b348a0ac7b2124c43fbbc10fabc2b751175701d",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build-iterative-raw-initial-node-expectation-failure.log": "c69417ff1a2dfc00114cd5568b05475672e646a48009541ab7919a9dd54d4182",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build-portable-source-final.log": "d3574cac645b58531e1690416e13ccda7e0fbaad9f8aa93cbd22e0c5c24d58f5",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build.log": "62964548b373437e07afa672f7ed5a1bf68b0dd2d8bf9fa555a30e8967add173",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/build-actual-pinned-serde.log": "4ee378c3bac234d73ff57cdb322065fb4d42997e95f07b0efd6aacfdac2b9b8a",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/main.rs": "d5d5df28438d24ae791e226288c91c26175cd68300fbf48d9a3c9c1278bd66e0",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/receipt.json": "67f527366f8d2072782c1a0835a7f96049e3b5d9e3d3ddf0595b877d882b6cf3",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/receipt-portable-source-final.json": "a1bcaa2f51f0a1a65d9cc922b48a92514a131e7ba1c8a7f9764d59cf0084da75",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/main.rs": "cd6f27e71ef93743d17bff6f2dde841c99c724b5a76ffac9deee4ee0f10c29e1",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/raw_admission.rs": "d49badd15af3673611f00e2a7a6e00657df0ad4eefb0d07e49212ae5a5c56246",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/build-unicode-correction.log": "a302af189f9b62cdf2e113d25feeeb4293e81224170dbdb2f2750bdd58fa01dc",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/receipt-unicode-correction.json": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/main.rs": "dbba5adac728dc25aa269d030f976e0aadc0ebf6fbe7e00d1fa5a90d6789dc29",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/raw_admission.rs": "2be33241cc109d80c509ebc2fb40ad70ba3a6bb478892ee8f318c17eb4d6cbc2"
+  },
+  "local_serde_source": {
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/read.rs": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/raw.rs": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/number.rs": "70b83c36286f6c58123f544f27db2b54a1135f928fe33b08b521b2997773f862",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/de.rs": "ceda1bf415aafde89caa83bf275811b70d393717d4e1038e0c61822d2da02993"
+  },
+  "independent_rerun": {
+    "artifact_sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "exit_code": 0,
+    "stdout_matches_corrected_receipt": true,
+    "controls": {
+      "finite": 22,
+      "raw": 31
+    },
+    "absolute_nice": 10,
+    "affinity": [
+      0,
+      1
+    ]
+  },
+  "proof_limits": [
+    "Actual mechanism representation/source bounds only, not complete production graph or C1 codec acceptance",
+    "Prior 8981 phase live binary overwritten; its retained source/log/receipt identity is historical, not independently rerun original artifact",
+    "Mutable earlier raw-only-tradeoff was previously referenced before completion; current dated decision is complete and will not be updated in place after freeze handshake",
+    "JSON temporary backing requested capacities/slot arithmetic and typed failures must be shown in final production source; substring work bound is not CPU-byte or RSS claim"
+  ]
+}

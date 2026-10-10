@@ -29,7 +29,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -eu
-          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "rusty-tiles"))')
           test "$RELEASE_TAG" = "v$version"
           git merge-base --is-ancestor HEAD origin/main
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -75,6 +75,10 @@ jobs:
           rustup update stable --no-self-update
           rustup default stable
           rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: portable-${{ matrix.target }}
       - name: Build and test the default CLI
         run: |
           cargo test --locked --target "$RELEASE_TARGET"
@@ -103,6 +107,29 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  wheels:
+    name: Python wheel acceptance
+    needs: check
+    uses: ./.github/workflows/wheel-acceptance.yml
+
+  pypi:
+    name: Publish Python wheels to PyPI
+    needs: [check, binaries, wheels, container]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rusty-tiles/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+      - name: Publish with PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+
   container:
     name: Native geospatial image (Linux amd64)
     needs: [check, binaries]
@@ -115,7 +142,22 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Test and publish the Python-free runtime
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build the packaged runtime
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: rusty-tiles:release
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=python-free-acceptance
+          cache-to: type=gha,scope=python-free-acceptance,mode=max
+      - name: Check and publish the Python-free runtime
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -123,19 +165,17 @@ jobs:
         run: |
           set -eu
           image="ghcr.io/${RELEASE_REPO,,}:$RELEASE_TAG"
-          docker build --target acceptance -t rusty-tiles:acceptance .
-          docker build --target runtime \
-            --label "org.opencontainers.image.source=https://github.com/$RELEASE_REPO" \
-            --label "org.opencontainers.image.version=$RELEASE_TAG" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            -t "$image" .
-          docker run --rm --network none "$image" doctor --json
+          docker tag rusty-tiles:release "$image"
+          docker run --rm --network none \
+            --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
+            --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
+            --entrypoint /bin/sh "$image" /test-packaged-runtime.sh /fixtures
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$image"
 
   publish:
     name: Publish release
-    needs: [check, binaries, container]
+    needs: [check, binaries, container, pypi]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

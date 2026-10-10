@@ -9,7 +9,7 @@ use rusty_tiles::glb_write::{write_glb, TilePrimitive};
 use rusty_tiles::mesh;
 use rusty_tiles::pack::list_zip_names;
 use rusty_tiles::tile::{mesh_to_3tz, MeshTo3tzOptions};
-use rusty_tiles::tileset::{glb_to_3tz, CreateTilesetOptions};
+use rusty_tiles::{model_to_archive, ModelWrapRequest, RunControl};
 use rusty_tiles::{validate_3tz, Cartographic, SourceCrs, SourceOffset};
 use serde_json::Value;
 
@@ -22,7 +22,8 @@ fn zip_bytes(tz: &Path, name: &str) -> Vec<u8> {
 }
 
 fn tileset_json(tz: &Path) -> Value {
-    serde_json::from_slice(&zip_bytes(tz, "tileset.json")).unwrap()
+    let manifest = serde_json::from_slice(&zip_bytes(tz, "tileset.json")).unwrap();
+    rusty_tiles::implicit::expand_tileset(&manifest, |name| Ok(zip_bytes(tz, name))).unwrap()
 }
 
 fn collect_uris(tile: &Value, out: &mut Vec<String>) {
@@ -219,27 +220,32 @@ fn grid_glb(nx: u32, ny: u32) -> Vec<u8> {
 }
 
 #[test]
-fn under_budget_matches_wrap() {
+fn legacy_under_budget_and_typed_wrap_both_preserve_source() {
     let tmp = tempfile::tempdir().unwrap();
     let glb = tmp.path().join("triangle.glb");
     fs::write(&glb, triangle_glb()).unwrap();
 
     let wrap = tmp.path().join("wrap.3tz");
-    glb_to_3tz(&glb, &wrap, &CreateTilesetOptions::default()).unwrap();
+    model_to_archive(
+        ModelWrapRequest::local_gltf(&glb, &wrap),
+        &RunControl::default(),
+    )
+    .unwrap();
 
     let tiled = tmp.path().join("tiled.3tz");
-    mesh_to_3tz(&glb, &tiled, &MeshTo3tzOptions::default()).unwrap();
+    mesh_to_3tz(
+        &glb,
+        &tiled,
+        &MeshTo3tzOptions {
+            explicit: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
 
     validate_3tz(&tiled).unwrap();
-    let mut wrap_names = list_zip_names(&wrap).unwrap();
-    let mut tile_names = list_zip_names(&tiled).unwrap();
-    wrap_names.sort();
-    tile_names.sort();
-    assert_eq!(wrap_names, tile_names);
-    assert_eq!(
-        zip_bytes(&wrap, "triangle.glb"),
-        zip_bytes(&tiled, "triangle.glb")
-    );
+    assert_eq!(zip_bytes(&wrap, "model/source.glb"), triangle_glb());
+    assert_eq!(zip_bytes(&tiled, "triangle.glb"), triangle_glb());
 }
 
 #[test]

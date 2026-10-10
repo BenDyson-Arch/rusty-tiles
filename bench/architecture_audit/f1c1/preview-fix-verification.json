@@ -1,0 +1,27 @@
+{
+  "source_commit": "5e4dbc30ef1de1f9231e5caf323ac72c52fffdd5",
+  "executed_by": "root",
+  "changed_compiled_inputs": [
+    "Cargo.lock",
+    "Cargo.toml",
+    "src/preview.rs"
+  ],
+  "full_portable_rust": "passed before final Linux-only test addition; final eight preview tests replayed separately",
+  "full_native_rust": "passed native-geospatial,native-jpeg before final Linux-only test addition; final eight preview tests replayed separately",
+  "final_preview_tests_each_feature_set": 8,
+  "workspace_all_target_clippy": "passed portable and native -Dwarnings",
+  "python_rust_mapping_tests": 2,
+  "terrain_browser": "passed unchanged T1 queries/clamp/imagery/render/reload acceptance",
+  "placement_browser_cases": 4,
+  "placement_positives_each_binary": 206,
+  "placement_refusals_each_binary": 106,
+  "new_wheel_empty_path_api_tests": 39,
+  "new_wheel_placement_positives": 134,
+  "new_wheel_placement_refusals": 100,
+  "source_package": "passed including verification build;88 root inputs compared;lock removes8 unused Python tables only",
+  "regression_source_sha256": "6dc63b3d09cb1d4ce9ed28b36d6e3a9610ab46af4dcbe6c656654e308a298522",
+  "fixed_connection_replay": "review_probes/preview-fixed-results.json",
+  "separate_nonauthor_review": "review_probes/preview-fixed-review.json",
+  "hosted_ci": "pending for new head",
+  "limits": "Linux x86_64 local artifacts, finite connection workloads. Original CI socket mapping inferred; held-open pool deadlock directly reproduced. Original broader placement/source/resource/material evidence stays pinned to3bd86c3; these transport corrections do not claim broader profile acceptance, universal liveness/resource bounds, or release authorization."
+}

@@ -1,0 +1,33 @@
+{
+  "compressed": {
+    "bytes": 85,
+    "headerByte": 160,
+    "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a"
+  },
+  "count": 4,
+  "driverSha256": "11c999cf1d112b2ad8c8cca45c0e92b266adb0dbe539382e0931521906ee0295",
+  "filter": "NONE",
+  "mode": "ATTRIBUTES",
+  "publishedExpected": {
+    "bytes": 48,
+    "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
+  },
+  "retainedFixture": {
+    "compressedPrefixMatches": true,
+    "contentName": "tile.glb",
+    "contentSha256": "9c9d249a5c0c62c70bdb5daec6bad8293d250bbf7fe683522fdee2522e80966b",
+    "path": "/tmp/rusty-tiles-c1-payload-foundation/tests/fixtures/c1/meshopt_none_golden.3tz",
+    "sha256": "0bf98053c8d0662acfd04f5be98e8cf94b03977506ad1d20347ad3bd72c120cb"
+  },
+  "retainedGeneratorLiteralComparison": {
+    "compressedMatches": true,
+    "expectedMatches": true,
+    "path": "/tmp/rusty-tiles-c1-payload-foundation/tests/c1_validation_oracle.py",
+    "sha256": "7be014c5041ec0a5a69ae4c5a3f26379e45b31c5a049db2668112e731059ec32"
+  },
+  "schemaVersion": 1,
+  "scope": "Static independent upstream literal extraction and retained-byte comparison; no codec execution or decoder acceptance.",
+  "stride": 12,
+  "upstreamSourceSha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+  "upstreamTest": "decodeVertexBuffer"
+}

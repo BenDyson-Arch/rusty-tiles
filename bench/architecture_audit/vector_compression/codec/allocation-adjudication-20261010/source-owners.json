@@ -1,0 +1,52 @@
+{
+  "status": "Read-only pinned source ownership; no implementation permission",
+  "sourcePoints": [
+    {
+      "file": "p2-proof-preparation-20261010/scaffolding/raw_probe.rs",
+      "owner": "Meter::realloc, Pairs::deserialize, pairs, declarations, main",
+      "facts": "Requested old+new preallocation peak; String+RawValue pair ownership; parse-per-object/drop decoder; stage reports and explicitly dropped identity owners."
+    },
+    {
+      "file": "inputs/dependencies/serde_json-1.0.151/src/read.rs",
+      "owner": "SliceRead::parse_str_bytes (494 onward)",
+      "facts": "Prefix scratch copy, decoded escape growth, borrowed versus copied reference."
+    },
+    {
+      "file": "inputs/dependencies/serde_json-1.0.151/src/de.rs",
+      "owner": "MapKey deserialize_any (2214 onward), deserialize_string (1553), ignore_value (1102)",
+      "facts": "Same retained Vec scratch; copied string visitor; clear retains capacity; iterative grammar uses same scratch."
+    },
+    {
+      "file": "serde_core-1.0.229/src/de/impls.rs",
+      "owner": "StringVisitor::visit_str (592), VecVisitor::visit_seq (1157)",
+      "facts": "String to_owned exact clone; sequence starts from absent size-hint capacity and grows by push."
+    },
+    {
+      "file": "std1.98 alloc/src/raw_vec/mod.rs",
+      "owner": "min_non_zero_cap (158), grow_amortized (503)",
+      "facts": "Element-size-specific minimum and doubling capacities, relevant small-slot caveat."
+    },
+    {
+      "file": "std1.98 alloc/src/str.rs +slice.rs",
+      "owner": "str::to_owned (250), slice::to_vec_in (396)",
+      "facts": "Distinct String byte allocation from decoded slice, requested length capacity on pinned System target."
+    },
+    {
+      "file": "std1.98 alloc/src/vec/spec_from_iter_nested.rs",
+      "owner": "TrustedLen Vec::from_iter (50)",
+      "facts": "One exact view descriptor capacity from refs.iter().map(...).collect()."
+    }
+  ],
+  "noCodeApprovalScope": [
+    "Correct the classification of the original 2J term as falsified for the measured owned-pair mechanism.",
+    "Consider phase construction3J/retainedJ payload scheduling only with the stated source-occurrence and decoder lifetime constraints.",
+    "Approve these static independent proof inputs for root-owned model execution/review only."
+  ],
+  "excludedApprovals": [
+    "Production implementation",
+    "Universal3J or128K/256 coefficient proof",
+    "Raised defaults",
+    "RSS guarantee",
+    "P2/P3/P4/P5 acceptance"
+  ]
+}

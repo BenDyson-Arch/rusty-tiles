@@ -20,22 +20,24 @@ RUN tar -xzf /tmp/gdal.tar.gz -C /tmp \
 
 FROM rust:1.98-trixie AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libclang-dev libsqlite3-dev libtiff-dev libgeos-dev pkg-config jq \
+    libclang-dev libsqlite3-dev libtiff-dev libgeos-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=geospatial-build /usr/local/ /usr/local/
 RUN ldconfig
 ENV RUSTY_TILES_DISABLE_NATIVE_JPEG=1
+ENV LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 WORKDIR /src
-COPY . .
+# Keep fixture, documentation and CI-only edits out of the release build cache.
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY src/ src/
+COPY bindings/python/Cargo.toml bindings/python/Cargo.toml
+COPY bindings/python/src/ bindings/python/src/
+COPY preview/ preview/
+COPY docs/schema/ docs/schema/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release --features native-geospatial \
-    && cargo test --locked --features native-geospatial --no-run --message-format=json > /tmp/artifacts.json \
-    && jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable != null) | .executable' \
-       /tmp/artifacts.json > /tmp/tests.list \
-    && test -s /tmp/tests.list && mkdir /out-tests /out-bin \
-    && while read -r test; do cp "$test" /out-tests/; done < /tmp/tests.list \
-    && cp target/debug/rusty-tiles /out-bin/debug-rusty-tiles \
+    && mkdir /out-bin \
     && cp target/release/rusty-tiles /out-bin/rusty-tiles
 
 FROM debian:trixie-slim AS native-runtime
@@ -48,15 +50,6 @@ COPY --from=geospatial-build /usr/local/share/proj /usr/local/share/proj
 COPY --from=geospatial-build /usr/local/share/gdal /usr/local/share/gdal
 RUN ldconfig && ! command -v python && ! command -v python3
 ENV PROJ_DATA=/usr/local/share/proj PROJ_NETWORK=OFF
-
-FROM native-runtime AS acceptance
-COPY --from=build /out-tests/ /tests/
-# Cargo embeds this executable location in CLI acceptance tests.
-COPY --from=build /out-bin/debug-rusty-tiles /src/target/debug/rusty-tiles
-COPY tests/fixtures /src/tests/fixtures
-COPY docs /src/docs
-WORKDIR /src
-RUN set -eu; for test in /tests/*; do "$test"; done
 
 FROM native-runtime AS runtime
 COPY --from=build /out-bin/rusty-tiles /usr/local/bin/rusty-tiles

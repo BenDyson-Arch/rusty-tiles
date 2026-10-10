@@ -1,0 +1,181 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-132-12d98ab-portable",
+  "binary_sha256": "9a63cd41f9a983cb06e73b7bb839682910d6366a7577a2735a2b088fdfd2bc01",
+  "sampling_interval_seconds": 0.01,
+  "limits": "10 ms Linux /proc and directory observations. Short peaks may be missed. One converter process includes reader, transform, spool, hierarchy and serialization; individual stage allocations are not attributed. Native geographic uses in-process geospatial libraries, not a worker process. Scratch/hierarchy/inventory grow with input and leaves; chunk/encoding costs grow with record width. These are observed fixed-setting workloads, not worst-case or universal memory bounds.",
+  "runs": [
+    {
+      "points": 1024,
+      "additional_u64_fields": 0,
+      "point_record_bytes": 78,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "coordinate_profile": "local_metre",
+      "elapsed_seconds": 0.021380435005994514,
+      "samples": 2,
+      "source_bytes": 82265,
+      "archive_bytes": 240212,
+      "peaks": {
+        "rss_bytes": 30769152,
+        "high_water_rss_bytes": 30769152,
+        "descriptors": 4,
+        "threads": 1,
+        "workspace_bytes": 172938,
+        "scratch_bytes": 87234,
+        "workspace_files": 8
+      },
+      "cli_report": {
+        "counts": {
+          "points": 1024,
+          "tiles": 9
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 8.723537702248584e-07
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 8192,
+      "additional_u64_fields": 0,
+      "point_record_bytes": 78,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "coordinate_profile": "local_metre",
+      "elapsed_seconds": 0.10963880999770481,
+      "samples": 10,
+      "source_bytes": 641369,
+      "archive_bytes": 1934259,
+      "peaks": {
+        "rss_bytes": 31993856,
+        "high_water_rss_bytes": 31993856,
+        "descriptors": 5,
+        "threads": 1,
+        "workspace_bytes": 3232769,
+        "scratch_bytes": 1097728,
+        "workspace_files": 123
+      },
+      "cli_report": {
+        "counts": {
+          "points": 8192,
+          "tiles": 73
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 7.204520476582465e-06
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 32768,
+      "additional_u64_fields": 0,
+      "point_record_bytes": 78,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "coordinate_profile": "local_metre",
+      "elapsed_seconds": 0.679691115001333,
+      "samples": 47,
+      "source_bytes": 2558297,
+      "archive_bytes": 10079015,
+      "peaks": {
+        "rss_bytes": 37031936,
+        "high_water_rss_bytes": 37031936,
+        "descriptors": 12,
+        "threads": 1,
+        "workspace_bytes": 18418156,
+        "scratch_bytes": 5551620,
+        "workspace_files": 1092
+      },
+      "cli_report": {
+        "counts": {
+          "points": 32768,
+          "tiles": 585
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 2.6367887821635813e-05
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 8192,
+      "additional_u64_fields": 32,
+      "point_record_bytes": 334,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "coordinate_profile": "local_metre",
+      "elapsed_seconds": 0.17643021600088105,
+      "samples": 16,
+      "source_bytes": 2744665,
+      "archive_bytes": 4823797,
+      "peaks": {
+        "rss_bytes": 32591872,
+        "high_water_rss_bytes": 32591872,
+        "descriptors": 5,
+        "threads": 1,
+        "workspace_bytes": 8841080,
+        "scratch_bytes": 3194880,
+        "workspace_files": 135
+      },
+      "cli_report": {
+        "counts": {
+          "points": 8192,
+          "tiles": 73
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 7.204520476582465e-06
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 8192,
+      "additional_u64_fields": 128,
+      "point_record_bytes": 1102,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "coordinate_profile": "local_metre",
+      "elapsed_seconds": 0.3904926120012533,
+      "samples": 35,
+      "source_bytes": 9054553,
+      "archive_bytes": 13509549,
+      "peaks": {
+        "rss_bytes": 34529280,
+        "high_water_rss_bytes": 34529280,
+        "descriptors": 5,
+        "threads": 1,
+        "workspace_bytes": 26560484,
+        "scratch_bytes": 9486336,
+        "workspace_files": 144
+      },
+      "cli_report": {
+        "counts": {
+          "points": 8192,
+          "tiles": 73
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 7.204520476582465e-06
+        }
+      },
+      "workspace_after_exit": []
+    }
+  ],
+  "production_source_commit": "12d98ab",
+  "probe_source_commit": "12d98ab",
+  "probe_sha256": "de512e6a177d15b3e43e8d53bd64f019364fee6750d8e7cf9938b673f07c4996"
+}

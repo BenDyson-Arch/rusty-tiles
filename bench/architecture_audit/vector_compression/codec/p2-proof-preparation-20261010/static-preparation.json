@@ -1,0 +1,20 @@
+{
+  "status": "PREPARATION_STATIC_CHECKS_ONLY_NO_TARGET_OR_MODEL_PROBE_EXECUTION",
+  "checks": [
+    "All Python sources AST parsed; all JSON record files parsed",
+    "66 retained source/draft/review/dependency/toolchain/primary copies hash-checked",
+    "Frozen fixture file hashes and independent input node/depth/byte shapes checked",
+    "Expected GLB envelope/types/JSON raw bytes/space padding/BIN bytes/zero padding/selected metadata absolute boundaries checked",
+    "All authored FFI source counts positive and64 eligible stride values; no native invocation",
+    "Exact expected output delta inequality checked only on authored byte model, not actual serde",
+    "Rust prototypes uncompiled and model/oracle/native/allocator commands unexecuted"
+  ],
+  "counts": {
+    "admission": 10,
+    "serializer": 78,
+    "streams": 424,
+    "generated-domain": 15
+  },
+  "rootCandidate": "5fdf6fb0bb15ccb404217b7e18f1414efc075a39 supplied by coordinator; accepted C1 merge still prerequisite",
+  "proofLimits": "No coefficient/default/format-consumer/production acceptance; late-escape stage hypothesis unexecuted"
+}

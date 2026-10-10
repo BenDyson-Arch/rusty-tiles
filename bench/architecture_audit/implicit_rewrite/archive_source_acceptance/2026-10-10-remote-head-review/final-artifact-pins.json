@@ -1,0 +1,473 @@
+{
+  "reviewed_head": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+  "scope": "Bounded stored archive source/current C1 owner accepted at exact corrected PR head with applicable remote21 checks, five hashed installed wheels and four checksum-pinned official Blender gates. No broader A2 or release acceptance.",
+  "wheels_verified": [
+    {
+      "target": "aarch64-apple-darwin",
+      "path": "wheels/wheel-aarch64-apple-darwin/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_arm64.whl",
+      "sha256": "1dd5173d9be2bb7ae2b700d60bd14fa34328397fbdbf5eaf6866f8d99a299cf9",
+      "bytes": 6383014,
+      "reports": [
+        {
+          "path": "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.10.json",
+          "sha256": "702695c7e8a0fe3297a4e0ad1decadc275ac1726e9b53bc5c9ad5893d504476b"
+        },
+        {
+          "path": "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.14.json",
+          "sha256": "8589fd1fe3c1c15a312cd88cf43934ba7eb6128b9936d92bc006851fcb5af794"
+        }
+      ]
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "path": "wheels/wheel-aarch64-unknown-linux-gnu/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+      "sha256": "4cdb22af15236852cb0df92893af27f384f7ca0ce70f0915cb8095379be060a1",
+      "bytes": 7027657,
+      "reports": [
+        {
+          "path": "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json",
+          "sha256": "daf3f60a9a81bc587ec33a2ad49d3418d5bbf04d6523b07a323e098ee2635dac"
+        },
+        {
+          "path": "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json",
+          "sha256": "a6406b252547145b5b0fc32e09cd37d794c03e7cffe47f10ddcc7e38b177adc3"
+        }
+      ]
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "path": "wheels/wheel-x86_64-apple-darwin/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_x86_64.whl",
+      "sha256": "90cfc193498bdd68ca2334e2c24265b3a511a52c02118b000ac0850ad9341f96",
+      "bytes": 6634900,
+      "reports": [
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.10.json",
+          "sha256": "98c361fce5c6e313c1afe98dddc1e47e1be828a1c719dda84679c346dcdf2e45"
+        },
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.14.json",
+          "sha256": "f741cd8f948860becef7d49c021fa6a3cb222dd4502157f3af1cdf4fa373fe8f"
+        }
+      ]
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "path": "wheels/wheel-x86_64-pc-windows-msvc/rusty_tiles-0.4.0-cp310-abi3-win_amd64.whl",
+      "sha256": "8d072eadf8ceb50cfd0a66334214a3e6b81640c4601c75cd2bff679e2b48528f",
+      "bytes": 6357766,
+      "reports": [
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json",
+          "sha256": "cd7996371404bfed33b9d081f5c4487c53cc6bc510e47545bc80c80a7705ca3c"
+        },
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json",
+          "sha256": "0f904eda4786fc52edb2556b8db1f9e3725363b030857f004b39227e93a3b128"
+        }
+      ]
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "path": "wheels/wheel-x86_64-unknown-linux-gnu/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+      "sha256": "dcec93407c4da89bac1171c8eedb33afc4dc9c6358d5d337d38cd20298d2e67c",
+      "bytes": 7155177,
+      "reports": [
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json",
+          "sha256": "8c4d6b2e47c8a1651fbebbb2c88a648476132476c534c2a9ea823fd3801c2b9b"
+        },
+        {
+          "path": "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json",
+          "sha256": "6762b35836e83e7c548991628e0c92b863663d349b890dd23aef11406ae7a5d2"
+        }
+      ]
+    }
+  ],
+  "official_blender_verified": [
+    {
+      "platform": "linux-x64",
+      "target": "x86_64-unknown-linux-gnu",
+      "wheel_sha256": "dcec93407c4da89bac1171c8eedb33afc4dc9c6358d5d337d38cd20298d2e67c",
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "linux-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-linux-x64.tar.xz",
+        "archive_sha256": "9ba871ff2ecd36526b77432745980b7e6664ecd0c7ca11c48849073dcfe06da3",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/home/runner/work/_temp/official-blender/blender-4.5.14-linux-x64/blender",
+        "executable_sha256": "050c02562f81fe80ba616a80198fa02d381e60f8b61b8d39add881f4bca0d7d8"
+      },
+      "tests_run": 44,
+      "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [GCC 11.2.1 20220127 (Red Hat 11.2.1-9)]",
+      "blender_build_hash": "62c1db4208e8",
+      "records": {
+        "blender-evidence/evidence-official-blender-linux-x64/blender-distribution.json": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5",
+        "blender-evidence/evidence-official-blender-linux-x64/blender-acceptance.json": "5f2d69753c1efcc3160c35e57934cb6a3db5eb029ec3826a86be8bc3f0393592"
+      }
+    },
+    {
+      "platform": "windows-x64",
+      "target": "x86_64-pc-windows-msvc",
+      "wheel_sha256": "8d072eadf8ceb50cfd0a66334214a3e6b81640c4601c75cd2bff679e2b48528f",
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "windows-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-windows-x64.zip",
+        "archive_sha256": "b9533d2397ac1984db4466fb23a7a4649391cca93f6e84209f9bcc60d071c8b9",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "D:\\a\\_temp\\official-blender\\blender-4.5.14-windows-x64\\blender.exe",
+        "executable_sha256": "57fa1d294ea76448c3bec84ca758caf4629611330abba7dcf55bb0c56a0a15ab"
+      },
+      "tests_run": 44,
+      "python": "3.11.15 (main, Aug 12 2026, 16:53:25) [MSC v.1929 64 bit (AMD64)]",
+      "blender_build_hash": "62c1db4208e8",
+      "records": {
+        "blender-evidence/evidence-official-blender-windows-x64/blender-distribution.json": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9",
+        "blender-evidence/evidence-official-blender-windows-x64/blender-acceptance.json": "24366c3361389c1f5626de7f9c6a62e867f85577c37b7ead9eb8aff1c1075c07"
+      }
+    },
+    {
+      "platform": "macos-x64",
+      "target": "x86_64-apple-darwin",
+      "wheel_sha256": "90cfc193498bdd68ca2334e2c24265b3a511a52c02118b000ac0850ad9341f96",
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "macos-x64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-x64.dmg",
+        "archive_sha256": "613e73339e97bd113adeeb28d9155beeacf2df7119ee4dbd6bdce234843645f6",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+        "executable_sha256": "7b3f5f63c8b0f1fa4cf964bed710e1888e88f341161807451be13401bb980ea8"
+      },
+      "tests_run": 44,
+      "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [Clang 15.0.0 (clang-1500.0.40.1)]",
+      "blender_build_hash": "62c1db4208e8",
+      "records": {
+        "blender-evidence/evidence-official-blender-macos-x64/blender-distribution.json": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b",
+        "blender-evidence/evidence-official-blender-macos-x64/blender-acceptance.json": "6af55687ee93f6496b1c9e26a2d5249833fe0d81a7f40da27f6a3647eb7f57ce"
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "target": "aarch64-apple-darwin",
+      "wheel_sha256": "1dd5173d9be2bb7ae2b700d60bd14fa34328397fbdbf5eaf6866f8d99a299cf9",
+      "distribution": {
+        "distribution": "official-blender.org",
+        "distribution_platform": "macos-arm64",
+        "version": "4.5.14",
+        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14-macos-arm64.dmg",
+        "archive_sha256": "65134d9b07b20e2fa8d3c9e44f6f44ffb5c9774dd521b95f50387310241ca170",
+        "checksum_url": "https://download.blender.org/release/Blender4.5/blender-4.5.14.sha256",
+        "executable": "/Users/runner/work/_temp/official-blender/Blender.app/Contents/MacOS/Blender",
+        "executable_sha256": "4708959c3d9a59e549a4ee94c7aaeddd96019bf4dccfe5e4335de6a7c8d04a47"
+      },
+      "tests_run": 44,
+      "python": "3.11.15 (main, Apr 25 2025, 12:39:20) [Clang 15.0.0 (clang-1500.0.40.1)]",
+      "blender_build_hash": "62c1db4208e8",
+      "records": {
+        "blender-evidence/evidence-official-blender-macos-arm64/blender-distribution.json": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884",
+        "blender-evidence/evidence-official-blender-macos-arm64/blender-acceptance.json": "5e3b1141327bdf7aee5d62c74e8826f3ab2dd56beb928cd6197aa9e64ebc911f"
+      }
+    }
+  ],
+  "final_runs": [
+    {
+      "path": "main-run-final.json",
+      "id": 38040463690,
+      "sha256": "f21efa599ae65433559692289043a45da9f4197d5c4a5242f4d2955a6f00ee80",
+      "conclusion": "success",
+      "head_sha": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440"
+    },
+    {
+      "path": "wheel-run-final.json",
+      "id": 38040463666,
+      "sha256": "5e8b30d620dfcb05bc8b8535fdb1f1e5a9b6b258707cc99dc4d4f1866f3233c9",
+      "conclusion": "success",
+      "head_sha": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440"
+    }
+  ],
+  "final_rollup": {
+    "sha256": "725943e585b542dc5ac684dc391845f2ea63756d8bde812f35537b2e18159738",
+    "mergeStateStatus": "CLEAN",
+    "success": 21,
+    "skipped": [
+      "Release acceptance",
+      "Distribution Blender (Linux x86_64)"
+    ]
+  },
+  "acceptance_harness_sha256": {
+    ".github/workflows/wheel-acceptance.yml": "4d155fa798b546c7285850437fd26b1948d74d91a831b04de4f764db290e70a5",
+    "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+    "scripts/test_blender_wheel.py": "10b2fb7d84f212300b15f49599efddb9a8b5445ddf178927e25345e2766db253",
+    "scripts/download_blender.py": "d2b2ac5a17aa9b9fdd424d0b4bce2417502a3e83665bfcd406cc2d370b712d14",
+    "scripts/blender_official.json": "cba2afc77b71cb36991430a429e9b2d93acbff127f76d5538bb103c4b1c77858",
+    "scripts/wheel_acceptance.py": "2a7170529cf44ad8081c64ef569057c7bdddc5eca18395c32902c340ba86dda1",
+    "bindings/python/tests/blender_acceptance.py": "58046bde9d4d7c763af3741643b571b99d3ac749d91f52e96f89e1a3214ba666"
+  },
+  "remote_records_sha256": {
+    "main-artifacts-final.json": "aef36fbe99cba6375fd444eb8acb8381afadc932f986657f1b541d95ca6cb4ac",
+    "rollup-final.json": "725943e585b542dc5ac684dc391845f2ea63756d8bde812f35537b2e18159738",
+    "wheel-jobs-final.json": "30cd7faac40d904fac608ec81e9565144ac072b4faec3a39b2298d3ac735a16c",
+    "wheel-artifacts-final.json": "b02e5387fbff653b174c62a1e871565efdfe432b9a27a545483215552af7dbfa",
+    "main-jobs-final.json": "1c6880d7ff269684fa39f66b93be18cb5240432bb354eb5482af1b17130e490f",
+    "main-run-final.json": "f21efa599ae65433559692289043a45da9f4197d5c4a5242f4d2955a6f00ee80",
+    "wheel-run-final.json": "5e8b30d620dfcb05bc8b8535fdb1f1e5a9b6b258707cc99dc4d4f1866f3233c9",
+    "actual-wheel-sha-verification.json": "aa2367ff388085064a3e391e55d3ca5d95cc8de74ea23312e9dedfd36a8bcd07",
+    "main-run-complete.json": "f21efa599ae65433559692289043a45da9f4197d5c4a5242f4d2955a6f00ee80",
+    "wheel-artifacts-after-wheels.json": "7d4b06c4d61673616e3b5413a995b578573a3ad967f0ee5468a4b612d86d77b4",
+    "rollup-current.json": "e7173f1f2c8a7b192f966de6c30d115b25d3a3a2c0e1536713777d51ab3ff88f",
+    "main-jobs-current.json": "1c6880d7ff269684fa39f66b93be18cb5240432bb354eb5482af1b17130e490f",
+    "wheel-artifacts-partial.json": "b14d9eb39c488afb27a8f4e148a1c579337a39522009c145ee538f34fd9a2f98",
+    "wheel-run.json": "845fb4f9d1b5566167d3ff2cc75a38beff03a667fbbbd6fd22aca2d101f35ba9",
+    "main-run.json": "0561e2d114406d03799dbec6eb6018d0a3f816e7cbdbadad1d3f3f52b3643893",
+    "main/c1-validation-evidence/c1-validation.json": "fb6826c506c1a9d9b293960312dd2bdc9bfafa733a30a625a76d457fd7efa03d",
+    "main/c1-validation-evidence/c1-resources.json": "acc084f69c2afccf77ad70def43097dfb45e4909e4028fdbd9b81b8ace5b01e2",
+    "main/c1-validation-evidence/c1-producer.json": "afa56be6bd4987350eef1713ffbe19dee94bda885f7ba4b4dc7377faa1707ab4",
+    "main/c1-validation-evidence/c1-archive-read.json": "407c36cc3670abc8d9f14be3b58de69b4e0611659a97932d4535aca2ba59814e",
+    "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.10.json": "702695c7e8a0fe3297a4e0ad1decadc275ac1726e9b53bc5c9ad5893d504476b",
+    "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.14.json": "8589fd1fe3c1c15a312cd88cf43934ba7eb6128b9936d92bc006851fcb5af794",
+    "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json": "0f904eda4786fc52edb2556b8db1f9e3725363b030857f004b39227e93a3b128",
+    "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json": "cd7996371404bfed33b9d081f5c4487c53cc6bc510e47545bc80c80a7705ca3c",
+    "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json": "a6406b252547145b5b0fc32e09cd37d794c03e7cffe47f10ddcc7e38b177adc3",
+    "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json": "daf3f60a9a81bc587ec33a2ad49d3418d5bbf04d6523b07a323e098ee2635dac",
+    "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json": "6762b35836e83e7c548991628e0c92b863663d349b890dd23aef11406ae7a5d2",
+    "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json": "8c4d6b2e47c8a1651fbebbb2c88a648476132476c534c2a9ea823fd3801c2b9b",
+    "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.14.json": "f741cd8f948860becef7d49c021fa6a3cb222dd4502157f3af1cdf4fa373fe8f",
+    "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.10.json": "98c361fce5c6e313c1afe98dddc1e47e1be828a1c719dda84679c346dcdf2e45",
+    "blender-evidence/evidence-official-blender-macos-x64/blender-distribution.json": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b",
+    "blender-evidence/evidence-official-blender-macos-x64/blender-acceptance.json": "6af55687ee93f6496b1c9e26a2d5249833fe0d81a7f40da27f6a3647eb7f57ce",
+    "blender-evidence/evidence-official-blender-macos-arm64/blender-distribution.json": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884",
+    "blender-evidence/evidence-official-blender-macos-arm64/blender-acceptance.json": "5e3b1141327bdf7aee5d62c74e8826f3ab2dd56beb928cd6197aa9e64ebc911f",
+    "blender-evidence/evidence-official-blender-linux-x64/blender-distribution.json": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5",
+    "blender-evidence/evidence-official-blender-linux-x64/blender-acceptance.json": "5f2d69753c1efcc3160c35e57934cb6a3db5eb029ec3826a86be8bc3f0393592",
+    "blender-evidence/evidence-official-blender-windows-x64/blender-distribution.json": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9",
+    "blender-evidence/evidence-official-blender-windows-x64/blender-acceptance.json": "24366c3361389c1f5626de7f9c6a62e867f85577c37b7ead9eb8aff1c1075c07"
+  },
+  "durable_remote_index": {
+    "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/index.json",
+    "sha256": "f6ba29667b4f08036f130479b43ebb3e02f5b7e2d914b1634e53b04938cb3aa0",
+    "verified_lossless_records": 30,
+    "records": [
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/actual-wheel-sha-verification.json.gz",
+        "source_record": "actual-wheel-sha-verification.json",
+        "sha256": "833085a3e314cc75e1b952a31bfcc22599efc3780bf24f25b390e9fe8f06885f",
+        "uncompressed_sha256": "aa2367ff388085064a3e391e55d3ca5d95cc8de74ea23312e9dedfd36a8bcd07",
+        "bytes": 2813
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-linux-x64/blender-acceptance.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-linux-x64/blender-acceptance.json",
+        "sha256": "1e43e93741b402130bea391d7c28150a255c1af73f1d0995a37bd81cbb978dad",
+        "uncompressed_sha256": "5f2d69753c1efcc3160c35e57934cb6a3db5eb029ec3826a86be8bc3f0393592",
+        "bytes": 1222
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-linux-x64/blender-distribution.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-linux-x64/blender-distribution.json",
+        "sha256": "111956314bb5bc406af3c45b655fa346233a6a9a243935351b2f3b32708bb4f8",
+        "uncompressed_sha256": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5",
+        "bytes": 571
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-macos-arm64/blender-acceptance.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-macos-arm64/blender-acceptance.json",
+        "sha256": "c2d281e838f31deed05edd377dec6774c3c31f89c86a923cf0556e897d8c8d06",
+        "uncompressed_sha256": "5e3b1141327bdf7aee5d62c74e8826f3ab2dd56beb928cd6197aa9e64ebc911f",
+        "bytes": 1242
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-macos-arm64/blender-distribution.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-macos-arm64/blender-distribution.json",
+        "sha256": "2d5e795553fb10d8a09d3256d7d2dfc2c86728a828552685f6049072fbd73632",
+        "uncompressed_sha256": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884",
+        "bytes": 575
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-macos-x64/blender-acceptance.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-macos-x64/blender-acceptance.json",
+        "sha256": "b9dfc8fe6eca6ce501202c2dbe323086af25ef9503a4f9d12d43c4d6e368b6b7",
+        "uncompressed_sha256": "6af55687ee93f6496b1c9e26a2d5249833fe0d81a7f40da27f6a3647eb7f57ce",
+        "bytes": 1240
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-macos-x64/blender-distribution.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-macos-x64/blender-distribution.json",
+        "sha256": "b1c8f545c1f1bf3a2e0f59e4f4fb041281b12f9924fcf68dcdc0531314f9f189",
+        "uncompressed_sha256": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b",
+        "bytes": 571
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-windows-x64/blender-acceptance.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-windows-x64/blender-acceptance.json",
+        "sha256": "d910b8655c969fcfab7af8bffe0167ad728f5d932a149682d53fae27df59365a",
+        "uncompressed_sha256": "24366c3361389c1f5626de7f9c6a62e867f85577c37b7ead9eb8aff1c1075c07",
+        "bytes": 1259
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/blender-evidence/evidence-official-blender-windows-x64/blender-distribution.json.gz",
+        "source_record": "blender-evidence/evidence-official-blender-windows-x64/blender-distribution.json",
+        "sha256": "81c2fef2836b1ea3fd7dc24eafdd11cfa028b8446e26853b86c7e47334a5fd59",
+        "uncompressed_sha256": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9",
+        "bytes": 580
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main/c1-validation-evidence/c1-archive-read.json.gz",
+        "source_record": "main/c1-validation-evidence/c1-archive-read.json",
+        "sha256": "586ff611656f58298d950d4e89b9bca700205c19b57247d8e95b8a11918197c1",
+        "uncompressed_sha256": "407c36cc3670abc8d9f14be3b58de69b4e0611659a97932d4535aca2ba59814e",
+        "bytes": 44851
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main/c1-validation-evidence/c1-producer.json.gz",
+        "source_record": "main/c1-validation-evidence/c1-producer.json",
+        "sha256": "776ff803df4707c6ebf1daf0a574b581ee6a42d00c752508d8f2820eacfd0b6a",
+        "uncompressed_sha256": "afa56be6bd4987350eef1713ffbe19dee94bda885f7ba4b4dc7377faa1707ab4",
+        "bytes": 2844
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main/c1-validation-evidence/c1-resources.json.gz",
+        "source_record": "main/c1-validation-evidence/c1-resources.json",
+        "sha256": "3be052ee3f21cedc5459fc07d56971101352faf76048b9a003c15588c2cf3c56",
+        "uncompressed_sha256": "acc084f69c2afccf77ad70def43097dfb45e4909e4028fdbd9b81b8ace5b01e2",
+        "bytes": 17276
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main/c1-validation-evidence/c1-validation.json.gz",
+        "source_record": "main/c1-validation-evidence/c1-validation.json",
+        "sha256": "009d0f4006aa3eb403d02d9cabc8a85358b9b009f34993bd289844d5dabedd8d",
+        "uncompressed_sha256": "fb6826c506c1a9d9b293960312dd2bdc9bfafa733a30a625a76d457fd7efa03d",
+        "bytes": 95612
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main-artifacts-final.json.gz",
+        "source_record": "main-artifacts-final.json",
+        "sha256": "ec5e5b95e18169407df4b21cb6340a95c0c1ae6e9b500e60f3eba8468d998047",
+        "uncompressed_sha256": "aef36fbe99cba6375fd444eb8acb8381afadc932f986657f1b541d95ca6cb4ac",
+        "bytes": 8013
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main-jobs-final.json.gz",
+        "source_record": "main-jobs-final.json",
+        "sha256": "a89dbcb6012ce07d64439a5b4ea7e1c9d92a9e24af608ca7309f9ce2dec5961c",
+        "uncompressed_sha256": "1c6880d7ff269684fa39f66b93be18cb5240432bb354eb5482af1b17130e490f",
+        "bytes": 41224
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/main-run-final.json.gz",
+        "source_record": "main-run-final.json",
+        "sha256": "ecf46c0fccb20e57b2be6c9ac36cc6557e2c2903bec8137df04f03ca27ee5144",
+        "uncompressed_sha256": "f21efa599ae65433559692289043a45da9f4197d5c4a5242f4d2955a6f00ee80",
+        "bytes": 13631
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/rollup-final.json.gz",
+        "source_record": "rollup-final.json",
+        "sha256": "3efa5712d508b49805fba4b801b3c54dae46eaffa5aa7c8fd58baef0807cea24",
+        "uncompressed_sha256": "725943e585b542dc5ac684dc391845f2ea63756d8bde812f35537b2e18159738",
+        "bytes": 7244
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-artifacts-final.json.gz",
+        "source_record": "wheel-artifacts-final.json",
+        "sha256": "b5ed3ddcb0d041f64cd49931062aa1818ce016dcf5ed8a90cfcfb0fa46062c11",
+        "uncompressed_sha256": "b02e5387fbff653b174c62a1e871565efdfe432b9a27a545483215552af7dbfa",
+        "bytes": 10326
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.10.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.10.json",
+        "sha256": "8c18bad573d81ce71857b97a94565a967654abfd963d7f27ff97c4f541e03bf6",
+        "uncompressed_sha256": "702695c7e8a0fe3297a4e0ad1decadc275ac1726e9b53bc5c9ad5893d504476b",
+        "bytes": 553
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.14.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.14.json",
+        "sha256": "1dd3d26218403a446d5e74e385d91c143e13b5511c901f628f667e8190e280b9",
+        "uncompressed_sha256": "8589fd1fe3c1c15a312cd88cf43934ba7eb6128b9936d92bc006851fcb5af794",
+        "bytes": 552
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json",
+        "sha256": "42d6edcd397f882797a98394ce9d3f81836eeb65667756c482d669d9453e713a",
+        "uncompressed_sha256": "daf3f60a9a81bc587ec33a2ad49d3418d5bbf04d6523b07a323e098ee2635dac",
+        "bytes": 486
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json",
+        "sha256": "0c028c19336c236d1f851a7a81155b4b40987c926814723f0eb191cebd67aacb",
+        "uncompressed_sha256": "a6406b252547145b5b0fc32e09cd37d794c03e7cffe47f10ddcc7e38b177adc3",
+        "bytes": 485
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.10.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.10.json",
+        "sha256": "12ecc8f3bfc0f8353b120b6446417e249c37ed44d41f88d6b9693d26caa5cde6",
+        "uncompressed_sha256": "98c361fce5c6e313c1afe98dddc1e47e1be828a1c719dda84679c346dcdf2e45",
+        "bytes": 531
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.14.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.14.json",
+        "sha256": "fdb69a7ed27756b59e94c6328b0427928eca34f2f29c38a5cec2da4e177d6634",
+        "uncompressed_sha256": "f741cd8f948860becef7d49c021fa6a3cb222dd4502157f3af1cdf4fa373fe8f",
+        "bytes": 554
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json",
+        "sha256": "80b052ee97da5bf8e2d5d9f4695440e84d20efc22dfdcb177abb620ee3c22e59",
+        "uncompressed_sha256": "cd7996371404bfed33b9d081f5c4487c53cc6bc510e47545bc80c80a7705ca3c",
+        "bytes": 542
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json",
+        "sha256": "1ef7d6852fecf6b1c67118a70b002ce1118006b92de5840e40171fd09b1eb171",
+        "uncompressed_sha256": "0f904eda4786fc52edb2556b8db1f9e3725363b030857f004b39227e93a3b128",
+        "bytes": 548
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json",
+        "sha256": "9d8daacd7e9d1672c214da7600cdba84572908e47436d0d320a7b90d0b7135e4",
+        "uncompressed_sha256": "8c4d6b2e47c8a1651fbebbb2c88a648476132476c534c2a9ea823fd3801c2b9b",
+        "bytes": 484
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json.gz",
+        "source_record": "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json",
+        "sha256": "111f4b7d98940ad8c6e47ac48d1a23c859c7a1a8189054f646f741fa930dfb8b",
+        "uncompressed_sha256": "6762b35836e83e7c548991628e0c92b863663d349b890dd23aef11406ae7a5d2",
+        "bytes": 483
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-jobs-final.json.gz",
+        "source_record": "wheel-jobs-final.json",
+        "sha256": "f9894c977f31fb7ad66bacc3e6414b28eeb7a9cd08ed2abee95d8cfc28b2150a",
+        "uncompressed_sha256": "30cd7faac40d904fac608ec81e9565144ac072b4faec3a39b2298d3ac735a16c",
+        "bytes": 30639
+      },
+      {
+        "path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/wheel-run-final.json.gz",
+        "source_record": "wheel-run-final.json",
+        "sha256": "1b53cbc10a8fcdaef8061b1b4263615013a0658eeecdd56c190afa92be39a387",
+        "uncompressed_sha256": "5e8b30d620dfcb05bc8b8535fdb1f1e5a9b6b258707cc99dc4d4f1866f3233c9",
+        "bytes": 13658
+      }
+    ],
+    "retention_phase": "New review/evidence untracked at acceptedCIhead; coordinator will retain in next checkpoint after merge, not rewrite accepted source identity."
+  },
+  "remaining_contract_limits": [
+    "Finite stored archive profile and current C1 validation scope only",
+    "Observed whole-process Linux resource costs, no universal RAM guarantee",
+    "Main remote debug CLI hash is an executed receipt hash; CLI/archive binary bytes not independently retained here",
+    "Official Blender bundle/executable hashes are executed runner identity checks, not reviewer-downloaded bundle bytes"
+  ]
+}

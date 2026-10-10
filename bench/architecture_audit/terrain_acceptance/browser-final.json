@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "provenance": {
+    "sourceHead": "1c87f0c704728c0c0f602eb17fb59196859ec45e",
+    "binarySha256": "3bd3d8b2986b8b84ea110d500a6d058329159203f9bfabcf26a69d9ba02c8bc2",
+    "buildManifestSha256": "4ddbb0ae77bc323a57aff446b646f08396dd52716ef760a022dc8bd6e369e1dd",
+    "features": [
+      "native-geospatial"
+    ],
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "gdal": "3.13.3",
+    "sourceFilesSha256": {
+      "preview/index.html": "aa1789945559f9ca4708f734148e84072d70e668d1f5de7b9f156433915e74e0",
+      "src/preview.rs": "97b0c196e09d653e9113bb04a04ea529194387b73066ce9aa0fd8207ac07214e",
+      "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+      "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+      "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d"
+    }
+  },
+  "inputs": {
+    "binary": {
+      "path": "/home/bend/.cache/rusty-tiles-135-native-reviewed",
+      "sha256": "3bd3d8b2986b8b84ea110d500a6d058329159203f9bfabcf26a69d9ba02c8bc2"
+    },
+    "cesium": {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
+      "sha256": "3a926acd55e0bc5e2b613474476e0d7fe953f106695ed5a5102ec3f59aca7b0d"
+    },
+    "browserFixtureSha256": "2c4603a8e002fb918cae148c3bf0b11a189833cc9ed6c7fd533478d2311f6559",
+    "runnerSha256": "974d785b471b0ccd080792b8b2686bd761f5bd8a2afdd74c9a28bb6c9173ed35",
+    "oracleSha256": "4b95757a7de15fa5fa5c30e1ca967c91ca80317c9d4450cd5de767407b0d0dbb"
+  },
+  "khronosValidation": {
+    "ok": true,
+    "reports": [
+      {
+        "uri": "tiles/0/0.glb",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 0,
+          "messages": [],
+          "truncated": false
+        }
+      },
+      {
+        "uri": "tiles/0/1.glb",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 0,
+          "messages": [],
+          "truncated": false
+        }
+      },
+      {
+        "uri": "tiles/1/0.glb",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 0,
+          "messages": [],
+          "truncated": false
+        }
+      },
+      {
+        "uri": "tiles/1/1.glb",
+        "validatorVersion": "2.0.0-dev.3.10",
+        "issues": {
+          "numErrors": 0,
+          "numWarnings": 0,
+          "numInfos": 0,
+          "numHints": 0,
+          "messages": [],
+          "truncated": false
+        }
+      }
+    ]
+  },
+  "oracle": {
+    "samples": [
+      {
+        "longitude": 12.05536,
+        "latitude": 41.75584,
+        "height": 133.71298414299395,
+        "tolerance": 0.05
+      },
+      {
+        "longitude": 12.16096,
+        "latitude": 41.84224,
+        "height": -999.1465357094945,
+        "tolerance": 0.05
+      },
+      {
+        "longitude": 12.13792,
+        "latitude": 41.94336,
+        "height": 133.71950605852783,
+        "tolerance": 0.05
+      }
+    ],
+    "outside": [
+      {
+        "longitude": 11.92,
+        "latitude": 41.84
+      },
+      {
+        "longitude": 12.005,
+        "latitude": 42.000000027121374,
+        "underlyingMeshHeight": 133.7365687329195,
+        "tolerance": 0.05
+      }
+    ],
+    "minimumLeaves": 4,
+    "imagery": true
+  },
+  "browser": {
+    "first": {
+      "version": "1.146.0",
+      "supported": true,
+      "collision": true,
+      "globeHidden": true,
+      "heights": [
+        133.7121813660125,
+        -999.1462110901167,
+        133.71995691024148
+      ],
+      "absent": [
+        null,
+        null
+      ],
+      "isolated": [
+        133.7121813660125
+      ],
+      "rawBorderHeights": [
+        133.73605890586322
+      ],
+      "clamped": [
+        133.71218136734842,
+        -999.1462110901167,
+        133.71995690892354
+      ],
+      "missingClamp": [
+        false,
+        false
+      ],
+      "invalidClamp": [
+        false
+      ],
+      "invalidSample": [
+        null
+      ],
+      "failures": []
+    },
+    "refreshed": {
+      "version": "1.146.0",
+      "supported": true,
+      "collision": true,
+      "globeHidden": true,
+      "heights": [
+        133.7121813660125,
+        -999.1462110901167,
+        133.71995691024148
+      ],
+      "absent": [
+        null,
+        null
+      ],
+      "isolated": [
+        133.7121813660125
+      ],
+      "rawBorderHeights": [
+        133.73605890586322
+      ],
+      "clamped": [
+        133.71218136734842,
+        -999.1462110901167,
+        133.71995690892354
+      ],
+      "missingClamp": [
+        false,
+        false
+      ],
+      "invalidClamp": [
+        false
+      ],
+      "invalidSample": [
+        null
+      ],
+      "failures": []
+    },
+    "terrainLeaves": 4,
+    "imageryProof": {
+      "changed": 125480,
+      "orangeBefore": 0,
+      "orangeAfter": 121368,
+      "bareSha256": "1732bb16b2cb649b32767114610a83405dc7e76fcdf3b5876ab6451c462fb576",
+      "drapedSha256": "8ffc69652d79206e04256abb09bf88626826e61fde78f701d12ca376af696d58"
+    },
+    "browserErrors": []
+  },
+  "browserSeconds": 10.17350703199918,
+  "outputs": {
+    "terrain": {
+      "sha256": "73b6811c205f44d49f199b07d75ce50839fb337dba97d5738c5461f93e4efcfb",
+      "files": [
+        {
+          "path": "conversion.json",
+          "bytes": 981,
+          "sha256": "a2af1124dca3599d3a6d71f7def652100d741d1ad79d1c1b28b746601b359650"
+        },
+        {
+          "path": "tiles/0/0.glb",
+          "bytes": 7396,
+          "sha256": "8c599aa3c450f10588a507ce88b195d9670e24a92e7ec5b75bed0ad80b3d02a9"
+        },
+        {
+          "path": "tiles/0/1.glb",
+          "bytes": 7396,
+          "sha256": "5c79ddfac328e9a2e9ef5e2580d30a6715b7e6633f3db4292b27584539c7a391"
+        },
+        {
+          "path": "tiles/1/0.glb",
+          "bytes": 7400,
+          "sha256": "76c78db32fbbfef0e1998f555369acc2dd5fa28a3d4d01941e47e378320ed45a"
+        },
+        {
+          "path": "tiles/1/1.glb",
+          "bytes": 7400,
+          "sha256": "79408f264022d62de1d8b48037ac7d607113b78cfae8bc57f96c4dbf28489e70"
+        },
+        {
+          "path": "tileset.json",
+          "bytes": 2711,
+          "sha256": "9e083699f73faa2666be6e5e502e4aad3f8ce15c2ec91728af4a3088ac2598b4"
+        }
+      ]
+    },
+    "imagery": {
+      "sha256": "318685af7847478cb11c49a527ea71ddf7f73b44383f28e851f2d665ae25a723",
+      "fileCount": 17
+    }
+  },
+  "limitation": "Pinned Cesium 1.146.0 with experimental tileset imagery draping; bounded ROI mesh queries, no global TerrainProvider equivalence. Screenshot hashes vary with render timing; fixed-camera image color counts provide the drape control."
+}

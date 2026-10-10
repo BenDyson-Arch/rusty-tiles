@@ -1,0 +1,28 @@
+{
+  "finding": "observed source growth beyond file admission cap was Unsupported rather than InvalidInput and could read up to the larger cap",
+  "discovery_and_execution_owner": "root; source agent authored deterministic descriptor-triggered controls; independent reviewer inspected but did not execute mutation tests",
+  "before_fix": {
+    "production_body_pin": "1078240532e2845d14a9671f855afa254ce0280f",
+    "test_only_additions": true,
+    "command": "cargo test --locked --lib growth_after_admission -- --nocapture",
+    "exit_code": 101,
+    "failed_tests": 2,
+    "expected": "InvalidInput",
+    "actual": "Unsupported",
+    "log_sha256": "0968bb323e3eb99eb6d8ecfdeb6fb70662015339d6aef9d3833897431c7475e6",
+    "log": "   Compiling rusty-tiles v0.4.0 (/home/bend/.cache/rusty-tiles-f1b2-resources)\n    Finished `test` profile [unoptimized] target(s) in 8.66s\n     Running unittests src/lib.rs (/home/bend/.cache/rusty-tiles-115-target/debug/deps/rusty_tiles-2a6b11975d79ac6a)\n\nrunning 2 tests\n\nthread 'mesh_archive::binding::tests::root_growth_after_admission_is_invalid_input' (2212711) panicked at src/mesh_archive/binding.rs:841:9:\nassertion `left == right` failed\n  left: Unsupported\n right: InvalidInput\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\ntest mesh_archive::binding::tests::root_growth_after_admission_is_invalid_input ... FAILED\n\nthread 'mesh_archive::binding::tests::dependency_growth_after_admission_is_invalid_input' (2212710) panicked at src/mesh_archive/binding.rs:871:9:\nassertion `left == right` failed\n  left: Unsupported\n right: InvalidInput\ntest mesh_archive::binding::tests::dependency_growth_after_admission_is_invalid_input ... FAILED\n\nfailures:\n\nfailures:\n    mesh_archive::binding::tests::dependency_growth_after_admission_is_invalid_input\n    mesh_archive::binding::tests::root_growth_after_admission_is_invalid_input\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 253 filtered out; finished in 0.02s\n\nerror: test failed, to rerun pass `--lib`\n"
+  },
+  "after_fix": {
+    "source_pin": "ce8a89c58e2781d72c2ac5dff686de2f8d340850",
+    "root_and_dependency_growth_tests": "passed in both full portable/native suites",
+    "zero_and_short_prefix_lengths": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "short_prefix_growth_test": "passed in both profiles",
+    "initial_oversize": "Unsupported verified by independent CLI exact/over controls",
+    "read_bound": "admitted length plus one detection byte; growth fails before copying extra data"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "record": "Contract-author adoption of separate nonauthor architectural dispositions and fresh primary-reference evidence",
+  "date": "2026-10-10",
+  "authorship": "Reviewer authored dispositions/models; primary owner fetched/read references; author inspected receipt/source hashes and revised own contract/preparation only",
+  "whole_slice_implementation_ready": false,
+  "implementation_acceptance_claim": false,
+  "reviewed_original_contract_sha256": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+  "reviewed_post_primary_contract_sha256": "5ad3fb11ad38239a1827b6805ed8b0991dad453702d8151965546790c6e3d130",
+  "current_revision_requires_review": true,
+  "nonauthor_review_sha256": "23be4a58b075912a4bd77422a631bdba9f487d73eef34159886931c59b670b13",
+  "nonauthor_receipt_sha256": "762360ead2050531c17b54c14978d13ec86619d0f90214ef01492c3eb2b981a5",
+  "review_artifact_sha256": {
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity-output.txt": "4ae02b459a31702d3cb5cf7b3f7b97c36bffa40e95d9f4ff221be89be1d920cb",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity_probe.rs": "66c089936b40014c452e75697f63fc59c836e609622f39af09781445d63a1db2",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite-models.json": "82a978634150a3e0dd60cd72ed91ef97343a6750420863d68c2500e1d28f3f22",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite_models.py": "fa27d35d7428b24c2df5ce55d7255d4933d4ee6d2cb02fde6edd057605c819c2",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/receipt.json": "762360ead2050531c17b54c14978d13ec86619d0f90214ef01492c3eb2b981a5",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/review.md": "23be4a58b075912a4bd77422a631bdba9f487d73eef34159886931c59b670b13"
+  },
+  "fresh_reference_artifact_sha256": {
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification.md": "b49002ba5c41bb59c965b4c0f006f7a46724dbe127a049135c3437f7dceb43d3",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/fetch-receipt.json": "05bf12891d71ce392cf56ed3ae910c61566a6cda238747355beb86912a0e9e21",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification-manifest.json": "97ad3a4c12c95e176cc4394661254cf2ea57dd8e5a7b589ebeee98aa4625e497",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-byte-comparison.json": "9c14e31eda72a4a25d4cff019f3e25ec3ce811e6751107e52a56c0a38411c1f7",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/original-artifact-guard.json": "91b4da8576d49ba5236edf17b0042358ed616212a8aba2868239547218f669da",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/json-schema-observation.json": "43812848dc41f79a4ce103a9c8487e7e2710c24fb2d8f8db6ad41ec743061083"
+  },
+  "fresh_sources": [
+    {
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "file": "KHR_mesh_quantization.md",
+      "bytes": 12593,
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc"
+    },
+    {
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "file": "EXT_meshopt_compression.md",
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+    },
+    {
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "file": "modern-b3dm.adoc",
+      "bytes": 11172,
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e"
+    },
+    {
+      "revision": "9811e8407d4533500cfc6b10e3bc408345035a6f",
+      "file": "KHR_mesh_primitive_restart-draft.md",
+      "bytes": 4364,
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707"
+    },
+    {
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+      "file": "meshopt_decoder.test.js",
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+    },
+    {
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "file": "b3dm.featureTable.schema.json",
+      "bytes": 1033,
+      "sha256": "c34c532c835f1bc73d4737b36a9f8b0e665421671f9d57830c970299637eb8d7"
+    },
+    {
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "file": "featureTable.schema.json",
+      "bytes": 5937,
+      "sha256": "a6500378c38d9af3f756bc8c3b23347f8329b37b12e0017a8729e2484a674587"
+    },
+    {
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "file": "feature-table.adoc",
+      "bytes": 6905,
+      "sha256": "3158281f21460941ccfd90a41dc0bffda04aeae5e5de296a5ba8197cc1934ece"
+    }
+  ],
+  "architecture_dispositions": "A1-A12 concrete dispositions adopted; A9 primary provenance closed, A10 corrections required",
+  "remaining_precode_gates": [
+    "A14 actual exact-number serde mechanism, opaque/global consumer effects, bounded raw scratch/repeated-scan work, consuming-domain classifications",
+    "A13 root accepted archive-reader exact head/rebase identity",
+    "Nonauthor confirmation of revised contract incorporation"
+  ],
+  "original_fourteen_executions_sha256": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174",
+  "original_fourteen_raw_bundle_sha256": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead",
+  "old_freeze_sha256": "afa9136fab4a143849216de09df37e1862ee476a0fcdcd9515d03513441a6cf0",
+  "post_primary_freeze_sha256": "6b299b1355f68d91027aa4d0db42fd2123a157b5ff4f31acdcfab5cf08b5a674",
+  "no_production_edits": true
+}

@@ -1,0 +1,34 @@
+{
+  "status": "ACCEPT_TWO_BOUNDED_EXISTING_F0_LINUX_PRIMITIVE_OBSERVATIONS",
+  "recorded_at_utc": "2026-10-10T13:35:34.311687+00:00",
+  "reviewer_task": "/root/vector_p3_nonauthor_review",
+  "root_actual_receipt_sha256": "b52f4fa688734cd728f76250eaa532812b058e847557add3edee4c8dd3712260",
+  "executable_sha256": "465d71090d4c3b07e5845f167d881306f28e998b695c79ee5c57be75b89d1c01",
+  "reviewer_verification": {
+    "argv": [
+      "nice",
+      "-n",
+      "10",
+      "python3",
+      "-B",
+      "/tmp/rusty-tiles-vector-f0-actual-review/verify_inputs.py"
+    ],
+    "exit_code": 0,
+    "observed_wall_time_seconds": 0.284981792,
+    "artifact_pins": 254,
+    "pinned_files": 339,
+    "missing_persistent_traced_link_inputs": 0,
+    "selected_linux_tests": 2
+  },
+  "compiler_cargo_target_native_decoder_producer_author_script_git_invocations": 0,
+  "repository_edits": 0,
+  "prior_epochs_modified": 0,
+  "review_files_sha256": {
+    "review.md": "362ec4bba834a8a0b2f6363ea0c97ff8312857d2f2e4822e5ca2f40d570bdf41",
+    "decisions.json": "d644a6db27d972df214db1d06fbd542455f8e469d8eb37dd98141e5879eeb09b",
+    "input-pin.json": "f6cf1f210064043788fb00b527c1827f674cd51e141af0518eaf6caf5abca672",
+    "verification.json": "decfc84ed4dd5ced5006c9535fd22f62fe9761342801dfe015f3cd1e15287066",
+    "verify_inputs.py": "6e004ba297e5c3053200c530dff7ef33877f8fba590ddc0487a132fcd882cf83"
+  },
+  "scope": "finite existing F0 Linux non-CAS and explicitly copied0640mode observations only; final documentation/head not reviewed"
+}

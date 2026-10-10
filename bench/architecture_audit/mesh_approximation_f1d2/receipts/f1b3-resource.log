@@ -1,0 +1,4 @@
+{"case": "core-pbr-single-leaf", "passed": true, "rss_kib": 113024}
+{"case": "core-pbr-many-leaves", "passed": true, "rss_kib": 57464}
+{"case": "shared-six-attrs-4096-primitives", "passed": true, "rss_kib": 35736}
+{"case": "triangles-100001-refused", "passed": true, "rss_kib": 22136}

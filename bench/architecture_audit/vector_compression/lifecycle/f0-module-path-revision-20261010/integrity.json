@@ -1,0 +1,41 @@
+{
+  "status": "FROZEN_ADDITIVE_F0_MODULE_PATH_INPUT_NOT_EXECUTION_ACCEPTANCE",
+  "files": {
+    "README.md": {
+      "bytes": 1377,
+      "sha256": "c7a862587340bf18a2e5f39e39a37215bb124cfe5affa9aa13a6d0a13e531422"
+    },
+    "compile-recipe.json": {
+      "bytes": 2189,
+      "sha256": "bffc697c96cdff6d45e7ae0647d7753630a6a70d16a7510f78da232162a8684c"
+    },
+    "isolated/f0_probe.rs": {
+      "bytes": 124,
+      "sha256": "ecf8305478125aa641c7ff7ef35530aad67f136aa7dfcaa2cf549e53ab3beef9"
+    },
+    "isolated/probes/p5_f0_seams.rs": {
+      "bytes": 4473,
+      "sha256": "8dc987d0bfd0f2963acf07c3139f425f422e1bb58bcafe4b2a8635ff70a94884"
+    },
+    "isolated/src/runtime/directory.rs": {
+      "bytes": 49206,
+      "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc"
+    },
+    "isolated/src/runtime/directory_platform.rs": {
+      "bytes": 17255,
+      "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64"
+    },
+    "isolated/src/runtime/mod.rs": {
+      "bytes": 21718,
+      "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+    },
+    "isolated/src/runtime/tests.rs": {
+      "bytes": 292,
+      "sha256": "e29922adbfc3ba44d6e13d7dcb1c5a76f330a05b336caa3e721dc94f5032376d"
+    },
+    "revision.json": {
+      "bytes": 2559,
+      "sha256": "03633a7571c8b37f57a4d81e38a5ff7cc50d4456940733d95c72ae91db1efc2e"
+    }
+  }
+}

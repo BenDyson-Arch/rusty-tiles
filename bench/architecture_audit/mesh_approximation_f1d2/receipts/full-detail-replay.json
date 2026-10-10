@@ -1,0 +1,92 @@
+[
+  {
+    "case": "f1a",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1a_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.6648698000008153,
+    "log_sha256": "a042bcbc85cbafcc1a0758459925bebe0b811b9298f0ae822a29313e5509a769"
+  },
+  {
+    "case": "f1b",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1b_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "--json-output",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b-full-detail.json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.1172204119993694,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "case": "f1b2",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1b2_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "--json-output",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b2-full-detail.json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.1667948290014465,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "case": "f1b3",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1b3_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "--json-output",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b3-full-detail.json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.467455957999846,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "case": "f1c1",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1c1_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "--json-output",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c1-full-detail.json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 5.573641869999847,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "case": "f1c2",
+    "command": [
+      "python3",
+      "-B",
+      "tests/f1c2_oracle.py",
+      "--binary",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "--json-output",
+      "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c2-full-detail.json",
+      "--self-test",
+      "--large"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 4.022633327998847,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

@@ -1,0 +1,210 @@
+{
+  "sourceHead": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+  "binarySha256": "d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef",
+  "checks": {
+    "defaultRust": {
+      "status": "passed",
+      "command": "cargo test --locked",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-default-tests.log",
+      "logSha256": "b912262afc31d11f120be2520e352b0880952247679f5de5fbeb8da25223ce9b",
+      "testResults": [
+        "test result: ok. 242 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.29s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s",
+        "test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.39s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+        "test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s",
+        "test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.74s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s",
+        "test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.67s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.48s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    "nativeRust": {
+      "status": "passed",
+      "command": "cargo test --locked --features native-geospatial",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-native-tests.log",
+      "logSha256": "31ddfedb6fa3e9bd3cd0644b4262d204e937ea69e4afb4ecc64716f572f5213b",
+      "testResults": [
+        "test result: ok. 286 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 37.71s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.77s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s",
+        "test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.15s",
+        "test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.35s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s",
+        "test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s",
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.75s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s",
+        "test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.27s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    "defaultClippy": {
+      "status": "passed",
+      "command": "cargo clippy --locked --all-targets -- -D warnings",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-default-clippy.log",
+      "logSha256": "b44e42d0d3653057309503a678ea868aaab06f8fed8916f475df4604512b2358"
+    },
+    "nativeClippy": {
+      "status": "passed",
+      "command": "cargo clippy --locked --all-targets --features native-geospatial -- -D warnings",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-native-clippy.log",
+      "logSha256": "b58435ee1bdc3d0417ea4bbf747bde8c2e3a854d22e3f30aa78e1867600abc8b"
+    },
+    "pythonBindingsClippy": {
+      "status": "passed",
+      "command": "cargo clippy --locked -p rusty-tiles-python -- -D warnings",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-binding-clippy.log",
+      "logSha256": "1f7f5dfd2f98aca5589c015d19686b5ed293259ed0141551b2c6f934b698e635"
+    },
+    "pythonBindingTests": {
+      "status": "passed",
+      "command": "cargo test --locked -p rusty-tiles-python",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-binding-tests.log",
+      "logSha256": "841037229da094d2b245c29e284122fce019e76f0ad46cc11cb080f65e664ed6",
+      "testResults": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+      ]
+    },
+    "pythonTests": {
+      "status": "passed",
+      "command": "RUSTY_TILES_BIN=<frozen-native> python -m unittest discover -s tests -p test_*.py",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-python-tests.log",
+      "logSha256": "8b3919f816ff5a31a016c6b1f1a9e5c9ef691a7db82504cf577b0633e24fa670",
+      "testSummary": [
+        "Ran 127 tests in 31.439s",
+        "OK (skipped=2)"
+      ]
+    },
+    "installedWheelApi": {
+      "status": "passed",
+      "command": "python scripts/test_python_wheel.py <release-wheel> --report-json wheel-api.json",
+      "log": "/home/bend/.cache/rusty-tiles-c1-review-wheel-api.log",
+      "logSha256": "35fa327da89f213c162ddad2ff1e2c66cdb985901a7f0395b126f5643316716e"
+    },
+    "nativeCorpus": {
+      "status": "passed",
+      "evidence": "cli.json",
+      "evidenceSha256": "3c88346fbe531dedad941bb2332b6fc2a939b1fb7145c6ab60634f0652495791"
+    },
+    "resources": {
+      "status": "passed",
+      "evidence": "resources.json",
+      "evidenceSha256": "9afffd63a096c04ed5f47ee0b2b13ccb6956635c54e4c52d933da9ed3b05fbd7"
+    },
+    "producerAlignment": {
+      "status": "passed",
+      "evidence": "producer-alignment.json",
+      "evidenceSha256": "5e2f0d2f3b9b5d5d5a41bb6226f5ba845aef4e2119f9f9dac08fe8b567fe2000"
+    },
+    "historicalMissingBin": {
+      "status": "passed",
+      "evidence": "historical-final.json",
+      "evidenceSha256": "ea120b40a3136433528561eb6cc4c4bd9092265e0029784665206c6000ba6952"
+    },
+    "khronosPositives": {
+      "status": "passed",
+      "evidence": "official-positive.json",
+      "evidenceSha256": "6b66fa78935a25bc6faae50de8591ff4cb7f50b7c49f3b5b53c07db1079f23d9"
+    },
+    "freshPayloadReview": {
+      "status": "passed",
+      "evidence": "fresh-payload-findings.json",
+      "evidenceSha256": "aaca9119001527fb17d61c9d5d94904eb0428dfe23ca3d693bb752c9a5f4c957"
+    },
+    "installedWheelParity": {
+      "status": "passed",
+      "evidence": "wheel-parity.json",
+      "evidenceSha256": "3c65052eab1181714c97c7c1af5a96beb4dc9badb82dc144b59af0d3125004a8"
+    },
+    "sourceArchive": {
+      "status": "passed",
+      "command": "cargo package --locked",
+      "commit": "d901ffda45996482c18667b0b70c71d5ab7f0565",
+      "archiveSha256": "95cdadfa0d9a2ecf192938a4361bc0b3db73c85b5fc576405d7fe4d5b1c2db20",
+      "files": 535,
+      "log": "/home/bend/.cache/rusty-tiles-c1-framing-package.log",
+      "logSha256": "e420553721bbcd1811e35acd2e5a55bd999ec4fdfc0343972ffcfc2401e16592",
+      "verification": "Clean archive including portable framing fixture unpacked and compiled by Cargo with default features; no --no-verify or --allow-dirty, no publication."
+    },
+    "ciRustOracleProfile": {
+      "status": "passed",
+      "features": [
+        "native-jpeg"
+      ],
+      "nativeGeospatial": false,
+      "binary": "/home/bend/.cache/rusty-tiles-c1-ci-native-jpeg",
+      "binarySha256": "4c4e24dd97b95e8ec1ae0456764c9547c60ada80e079f9c67f4a3bde79f6dde0",
+      "sourceHead": "0a1cc94e467f92f615215ddc6327d59d7b3a64c0",
+      "sequence": "All six Rust-job oracle commands completed successfully under set -e: C1 independent corpus, resource probes, producer framing, F1a mesh, vector acceptance, point oracle.",
+      "evidenceSha256": {
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-validation.json": "4e16c614784989464619bf6818613328c160b6cdd086213ae92b9568a019d2c4",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-resources.json": "fb455a13a018bb3024a5dc67665e9f0f9d4f44ee315e5963cf285d07757b40ea",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-producer.json": "9aa746d8ca189f3b5fb41b5ff92d5bee641ba63a45ff4e5399cc9da26394c344",
+        "/home/bend/.cache/rusty-tiles-c1-ci-complete-point.json": "8670c4eca406e6540efafe1f0288163b3d8a05dbd474bbb67ad45f852afd465b"
+      }
+    }
+  },
+  "pending": [
+    "remote CI"
+  ]
+}

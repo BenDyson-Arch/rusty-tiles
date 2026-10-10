@@ -1,0 +1,14 @@
+{
+  "timeout": true,
+  "killedAfterSeconds": 3,
+  "exit": -9,
+  "stdout": "",
+  "stderr": "",
+  "binarySha256": "d6f7d6ae3146f5dce09c113fb977ebcf37ecfacc71932cfe4b1734a65d896990",
+  "binaryUnchanged": true,
+  "wallSeconds": 3.04880135699932,
+  "fixtureBytes": 4052035,
+  "primitiveCount": 1000,
+  "indexCount": 1000000,
+  "jsonBytes": 58466
+}

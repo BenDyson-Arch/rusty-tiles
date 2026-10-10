@@ -10,12 +10,15 @@ use std::path::Path;
 pub const COMMANDS: &[(&str, &[&str])] = &[
     ("vector", &[]),
     ("raster", &[]),
+    ("raster-tile-to-directory", &[]),
     ("terrain", &[]),
     ("point-cloud", &[]),
     ("mesh-to-3tz", &["meshTo3tz"]),
+    ("mesh-local-to-3tz", &[]),
     ("glb-to-3tz", &["glbTo3tz"]),
     ("createTilesetJson", &["create-tileset-json"]),
     ("convert", &[]),
+    ("convert-to-implicit", &[]),
     ("validate", &[]),
     ("preview", &[]),
 ];
@@ -40,17 +43,28 @@ pub fn report(selected: &[String], cesium: Option<&Path>) -> Result<Value, Error
         json!({"commands":{},"nativeGeospatial":geospatial,"proj":proj_inventory(&geospatial)});
     for name in [
         "mesh-to-3tz",
+        "mesh-local-to-3tz",
         "glb-to-3tz",
         "createTilesetJson",
         "convert",
+        "convert-to-implicit",
         "validate",
     ] {
         report["commands"][name] = json!({"ready":true,"requires":[],"backend":"native Rust"});
     }
     report["commands"]["preview"] = preview_readiness(cesium.unwrap_or(Path::new(DEFAULT_CESIUM)));
     report["commands"]["point-cloud"] = point_cloud_readiness(&geospatial);
+    report["commands"]["mesh-to-3tz"]["generalCrs"] =
+        point_cloud_readiness(&geospatial)["geospatial"].clone();
+    report["commands"]["mesh-to-3tz"]["note"] = json!("Local/manual placement and legacy geographic/Web Mercator adapters remain available. General mesh CRS uses the shared horizontal resolver and requires explicit xyz/y-up axes after node transforms and an ellipsoidal metre height offset; E/N shifts use horizontal units, A metres. No compound/geocentric input or manual placement/rotation on the general path.");
     report["commands"]["terrain"] = terrain_readiness(&geospatial);
     report["commands"]["raster"] = raster_readiness(&geospatial);
+    report["commands"]["raster-tile-to-directory"] = json!({
+        "ready": geospatial["ready"] == true,
+        "requires":["native-geospatial", "supported local output filesystem"],
+        "backend":"GDAL RGB source reader / Rust PNG and directory publisher",
+        "note":"Finite aligned RGB tile profile; destination filesystem support is checked per request."
+    });
     report["commands"]["vector"] = vector_readiness(&geospatial);
     let mut names: Vec<String> = Vec::new();
     if selected.is_empty() {
@@ -82,12 +96,12 @@ fn preview_readiness(cesium: &Path) -> Value {
     json!({"ready":true,"requires":[],"backend":"native Rust",
         "cesium":{"path":cesium.to_string_lossy(),"found":found,
             "note":if found {"Cesium IIFE runtime found; pass this directory to preview --cesium."}
-                else {"No Cesium.js here. Install cesium@1.143.0 as described in the README and pass its Build/Cesium directory to preview --cesium."}}})
+                else {"No Cesium.js here. Install cesium@1.146.0 as described in the README and pass its Build/Cesium directory to preview --cesium."}}})
 }
 
 fn terrain_readiness(geospatial: &Value) -> Value {
     json!({"ready":geospatial["ready"],"backend":"native GDAL/Rust","requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
-        "geospatial":geospatial,"note":"Native terrain sampling and encoding; conversion validates the source-specific CRS operation."})
+        "geospatial":geospatial,"note":"Bounded EPSG:4326 GeoTIFF elevation decoding to 3D Tiles 1.1; source admission is checked during conversion."})
 }
 
 fn raster_readiness(geospatial: &Value) -> Value {
@@ -106,16 +120,29 @@ fn raster_readiness(geospatial: &Value) -> Value {
 
 fn vector_readiness(geospatial: &Value) -> Value {
     #[cfg(feature = "native-geospatial")]
-    let geometry = match crate::vector::native_available() {
-        Ok(()) => json!({"ready":true}),
-        Err(error) => json!({"ready":false,"error":error.to_string()}),
-    };
+    {
+        let geometry = match crate::vector::native_available() {
+            Ok(()) => json!({"ready":true}),
+            Err(error) => json!({"ready":false,"error":error.to_string()}),
+        };
+        json!({"ready":geospatial["ready"] == true && geometry["ready"] == true,
+            "requires":["native GDAL >= 3.12", "GEOS >= 3.10", "SQLite", "PROJ >= 9.2"],
+            "backend":"native GDAL/GEOS", "geospatial":geospatial, "geometry":geometry,
+            "note":"Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required."})
+    }
     #[cfg(not(feature = "native-geospatial"))]
-    let geometry = json!({"ready":false});
-    json!({"ready":geospatial["ready"] == true && geometry["ready"] == true,
-        "requires":["native GDAL >= 3.12", "GEOS >= 3.10", "SQLite", "PROJ >= 9.2"],
-        "backend":"native GDAL/GEOS", "geospatial":geospatial, "geometry":geometry,
-        "note":"Native OGR ingestion, constrained triangulation, LOD, meshopt and archive reuse; no Python required."})
+    {
+        let crs = point_cloud_readiness(geospatial)["geospatial"]["crsClasses"].clone();
+        json!({"ready":true,"requires":[],"backend":"portable Rust/SQLite",
+            "inputs":["GeoJSON","GeoPackage"],
+            "reader":{"ready":true,"backend":"Rust GeoJSON and bundled SQLite/WKB"},
+            "geometry":{"ready":true,"backend":"Rust polygon validation, repair and triangulation"},
+            "geospatial":{"ready":true,"backend":"pure Rust (proj4rs)","crsClasses":crs,
+                "nativeFallback":geospatial,
+                "limitations":"Only verified grid-free horizontal CRS operations are available. Grids, geoid/compound heights, coordinate epochs and unverified datum operations require --features native-geospatial. GeoPackage 3D horizontal-CRS inputs require an explicit ellipsoidal metre height offset; GeoJSON heights use its ellipsoidal convention."},
+            "limitations":"GeoJSON and GeoPackage only; use --features native-geospatial for Shapefile and other OGR drivers. Measured geometries, geometry collections, curves and unsupported field types are refused. Conversion validates each selected source and operation.",
+            "note":"Local XYZ, grid-free globe placement, polygons with holes, LOD, meshopt and archive reuse need no Python or system GDAL/GEOS/SQLite."})
+    }
 }
 
 fn geospatial_readiness() -> Value {
@@ -133,8 +160,22 @@ fn geospatial_readiness() -> Value {
 }
 
 fn point_cloud_readiness(geospatial: &Value) -> Value {
+    let classes = [
+        "WGS84 geographic (EPSG:4326)",
+        "WGS84 UTM north/south (EPSG:32601–32660/32701–32760)",
+        "WGS84 Mercator (EPSG:3857/3395)",
+        "supported local projections with an explicit WGS84 datum or 3/7-parameter Helmert shift",
+    ];
+    let tier = if cfg!(feature = "native-geospatial") {
+        "pure Rust with strict native fallback"
+    } else {
+        "pure Rust"
+    };
+    let placement = json!({"ready":true,"backend":"pure Rust (proj4rs)","tier":tier,
+        "crsClasses":classes,"nativeFallback":geospatial,
+        "limitations":"Grids, geoid/compound heights, coordinate epochs, unverified datum operations, geographic +lon_0 offsets, non-decimal PROJ angles, quoted PROJ values, PROJ +init or spaced assignments, unsupported WKT syntax, incomplete/mismatched WKT method parameters, unverified method-specific parameter names/identities or colliding aliases, spherical transverse Mercator, oblique stereographic origins at or beyond 80 degrees latitude, ordinary stereographic origins from 80 degrees to below 90 degrees, distinct conic parallels less than one degree apart, conic parallels beyond 80 degrees, omitted LCC origins/second parallels, oblique/nonpolar stereographic points at or beyond 80 degrees source latitude, failed coordinate-domain probes, conflicting polar hemispheres or zero polar standard parallels and Lambert azimuthal equal area require --features native-geospatial. UTM requires an explicit zone; projection scales must be positive, latitudes within method-specific domains and projected PROJ units linear. Conflicting polar stereographic scales and conic parallels whose signed sum has magnitude below one degree and Albers points at or beyond 80 degrees source latitude are refused in all builds. Point clouds require a 2D horizontal CRS and explicit ellipsoidal metre height offset."});
     json!({"ready":true,"requires":[],"reader":"native LAS/LAZ","local":{"ready":true},
-        "geospatial":geospatial,"note":"Local XYZ needs no Python or GDAL. Geospatial placement needs native GDAL/PROJ and a source-specific strict operation; conversion validates it."})
+        "geospatial":placement,"note":"Local XYZ and verified grid-free globe placement need no Python or GDAL. Conversion validates the source-specific operation."})
 }
 
 fn proj_inventory(database: &Value) -> Value {
@@ -228,6 +269,22 @@ pub fn display(report: &Value, json_output: bool) {
                 if let Some(error) = info[capability]["error"].as_str() {
                     println!("  {capability}: {error}");
                 }
+            }
+            if let Some(backend) = info["geospatial"]["backend"].as_str() {
+                println!("  geospatial: {backend}");
+                if let Some(classes) = info["geospatial"]["crsClasses"].as_array() {
+                    for class in classes {
+                        println!("    {}", class.as_str().unwrap_or(""));
+                    }
+                }
+                println!(
+                    "  native fallback: {}",
+                    if info["geospatial"]["nativeFallback"]["ready"] == true {
+                        "ready"
+                    } else {
+                        "unavailable"
+                    }
+                );
             }
             if let Some(path) = info["cesium"]["path"].as_str() {
                 if info["cesium"]["found"] == true {

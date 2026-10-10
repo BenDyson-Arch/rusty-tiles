@@ -1,0 +1,593 @@
+{
+  "production_pin": "92c7e02433efc2031df835290cd05d72a392ebdc",
+  "compiled_inputs_verified": 89,
+  "checks": [
+    {
+      "command": "cargo test --locked",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "bc9c7100d8014c8cc65bfb5e4aaf253173f826ba10216bcae5ab4093f543d4aa",
+      "test_result_summaries": [
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 262,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 3
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 2
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 19,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        }
+      ],
+      "largest_test_suite_passed": 262
+    },
+    {
+      "command": "cargo test --locked --features native-geospatial",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "e86a8f9ffd37ec489f09fd82c81967ff103839a35eb02584514ea4571e0a46e8",
+      "test_result_summaries": [
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 306,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 3
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 7,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 2
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 17,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 13,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        }
+      ],
+      "largest_test_suite_passed": 306
+    },
+    {
+      "command": "cargo clippy --locked --all-targets -- -D warnings",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "2fbb9acdc87fa07bb082af42adbc76812bc0e3fde3acd4c01dd8ac50259bd0e9"
+    },
+    {
+      "command": "cargo clippy --locked --all-targets --features native-geospatial -- -D warnings",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "2c68b6fb72dbb9949ecf36d3b7b2c6ff000706116dbff44e2c82013b827c23bf"
+    },
+    {
+      "command": "cargo clippy --locked -p rusty-tiles-python -- -D warnings",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "17c9557c14057dccc8799a9eb2967858924cbc8602bbd5f5a12f03bcd392452e"
+    },
+    {
+      "command": "cargo test --locked -p rusty-tiles-python",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "9fd1d4e9412a7638f2c6ed2142f1e3e8f4c881137b9e962b5ad08f0d4862c7bd",
+      "test_result_summaries": [
+        {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        }
+      ],
+      "largest_test_suite_passed": 2
+    },
+    {
+      "command": "maturin build --release --locked (portable JPEG, Python3.14, extension-module)",
+      "executed_by": "root",
+      "status": "passed",
+      "log_sha256": "c23ffdd6bb123d2c1e9cd9f97cc85812e2177c7ecc53081258c25d0f1d638951"
+    },
+    {
+      "command": "cargo fmt --all --check; git diff --check",
+      "executed_by": "root",
+      "status": "passed"
+    },
+    {
+      "command": "Installed Python API under isolated Python3.14 with PATH empty",
+      "executed_by": "root",
+      "status": "passed",
+      "test_count": 38,
+      "receipt": "wheel-api-final.json",
+      "log_sha256": "c53249432a02aa48dedfe1e594d291122f8ae617227ac9a9bfe02ec887064201"
+    },
+    {
+      "command": "cargo package --locked (including Cargo verification build)",
+      "status": "passed",
+      "executed_by": "root",
+      "receipt": "source-package-final.json"
+    }
+  ],
+  "artifacts": {
+    "README.md": "28dd95af8f8c0efe19fe390b089a850fbefb77ec8c405ffb46fb403faa2682dc",
+    "appearance-embedded-final.json": "dca87ff053c848e807dabf377cf4b7814c1770934f97b6d739f096366e3f4d6a",
+    "appearance-external-final.json": "592f5f3ac1865577e090139684b0a3d04aa2dbb4e53f465e8794d990cf681bd9",
+    "audits/acceptance.md": "75d1e1c70e76b294ff9cd1d56efce27899099fb3bb9521b1a079793ba1cadf29",
+    "audits/attribute-math.json": "7cadb5cbafe2629bb03d79199d591289f8b6eb4a0ec2105441c8cbcf636b4091",
+    "audits/attribute.md": "805a962abec08c520649172ae7875ae596328e7f8c911080ae56ceacc89fbd6d",
+    "audits/material.md": "c5ea2eb0297379ee987671aaab1902cba5a2bdea50b3661069ed5e5295fe00b1",
+    "build-manifest.json": "b8be6d4437ab5910ca9e7faf95b43ebedaad208c72fe95586e54b43509e579a4",
+    "independent-oracle-self-test.json": "455fd2b101c1955b5f68aed8f6e4a858b1754181cd8ac761e322af6bc9b36ef0",
+    "independent-provenance.json": "c8bfae9f949d9cf5860ca0b2a09332c0c44df7b7de04ce6534351c8c9818a7bf",
+    "receipts/independent-khronos-final.json.gz": "080e66677ede11acf9ef74ef56c6e00f0ae6f14dba445fbecb9b431a4a020f73",
+    "receipts/independent-lit-viewer-final.json.gz": "5bdcd68cec6ea4979baf915e14d18504a4ccd7daeca52ab1a80b615d2da06e57",
+    "receipts/index.json": "8edc1d1091fb06683443de746229847a021759c988e4e4e6b7cab65ee895ad69",
+    "receipts/native-embedded.json.gz": "6a0510b01d872491669f6c9e25416d2bed9f927328e164120fe862af3ccd118b",
+    "receipts/native-external.json.gz": "756045038dcf8998c41c165fb4df5c26f55f4f6856d560259fa6e7cb29e38223",
+    "receipts/native-oracle-full.json.gz": "13821fa4ece583db0c15315f2b6cafd602c56585619efb9e72628e7a54b293e6",
+    "receipts/portable-embedded.json.gz": "71bf31524a9623963354414d5ed3c89cdbe96b934155e88e07a6067a5d546854",
+    "receipts/portable-external.json.gz": "27d946fdfdf35c297823e006180c9b1429c8fcdb2c6a5be374c68273965c6304",
+    "receipts/portable-geometry-final.json.gz": "81a515d8f1afc9013d7c0832618e582db48c3ecfe7dde7f5ea0da6e74ceb08ad",
+    "receipts/portable-oracle-full.json.gz": "cc9ed627d921a2be89856d4dbebf97a36f480ceacb0c8ffcfcb01cb374adf0ba",
+    "receipts/resource-embedded-final.json.gz": "28c540c3dc3f9cb51c94d0005f831f69a8f3ec777e714b67d36752c9ae2f47b6",
+    "receipts/static-final.json.gz": "a1ec2b4f1b36f7fb88fd9bd9f1bb20b49305c500a3f70b835a75f7c317e58f96",
+    "receipts/wheel-core-final.json.gz": "a5a484b49b28de913cd25129d342435ea7444dae48b52b118580242c189edfed",
+    "receipts/wheel-embedded-final.json.gz": "b75602060a94eb6d760fee80a2fad0cd226ed0f14b85a5ffdfe751780a46d8ed",
+    "receipts/wheel-external-final.json.gz": "7a5ca9f0260297d811656501ece6f21172727faffbc3471cbdf4e695cdda86aa",
+    "regressions/vertex-encoding-classification.json": "4b6beb7dacc9a59b049c1256b78f6cf1b880d51da0ca0f63d08bf2efa1856859",
+    "resource-core-final.json": "44f43076280d66d2d842dcddb1d83aea07d41a09f67ab2cf13102e8a0734f26f",
+    "resource-external-final.json": "9de7b5ea8b22d769f6f4ed2efa699b05090c36c164aafd536d4b8e07c725a96d",
+    "resource_probe.py": "bf73eac0666f8361cf149a4977e035c24d8dc30224db29814649e93b6ce891fc",
+    "review_probes/acceptance-ci-review.json": "49f91659353736a0002fbc5fdc606e0e1beadc454fd4d2e5e840282b6562b9be",
+    "review_probes/final-review.json": "db26a2758da53665665d0c3e24ea021018f1f07793db780bd2cba02352564e1c",
+    "review_probes/probe.py": "b92d5f611ab9ffd31c7cb01199c6ab0d8b93bbdc5a8d84a77a6fe3c851537d72",
+    "review_probes/runtime-results.json": "2539422436414be0638291d80c984de8661b77279264f60210cddfa52d3e5f6e",
+    "review_probes/source-verification.json": "d7031c97b350f3d5ae2ffcf268269a94bdda34fd73c076d702df21b96c9dd1d2",
+    "routing-final.json": "fa8ba74577517949e7c517a2d042fd12a651ecff5a0f66c21538996dd2aa711e",
+    "source-package-final.json": "80910c1d417f974cafc5d47adf9d0e2f9f127cb04f755c4a546f458a5d432e72",
+    "wheel-api-final.json": "d17d8b3b5fe87b7399fc2e2da1da10a12ea140562a724a1a21bee3adfeb977bf"
+  },
+  "acceptance_drivers_sha256": {
+    "bindings/python/tests/test_api.py": "76e1bbae9ef38ce6f92515e67cb881d367c8725df392fcab69004507685c4839",
+    "tests/f1b2_wheel.py": "710172dd70f0d5a57c6ea640c2cd0920781032339c1b13746245aaf575be5662",
+    "tests/f1b_wheel.py": "156eb09471d31db893b98bf76e542dd2d63aa185a69003546f3abb05075aa525",
+    ".github/workflows/ci.yml": "131785e112d83b88ae43d67c9c832bffd651bbce1e7f4cbec26518cfe7bd7257"
+  },
+  "execution_attribution": {
+    "root": "Rust/lint/build/wheel/frontends/oracle replays, Cesium regression, earlier resource replay, source package",
+    "independent_acceptance_agent": "Authored independent source/output oracle/static fixtures and executed lit Three/Khronos proof, no production code",
+    "independent_review_agent": "Handcrafted final27runtimecases/8controls and final acceptance/CI review; no implementation or main-oracle authoring",
+    "material_implementation_agent": "Material audit/plan and four concrete resource measurements; measurements are separate from independent fidelity proof"
+  },
+  "proof_limits": [
+    "Final hosted platform, native, wheel and Blender checks remain pending PR CI. No release authorization.",
+    "Existing deterministic source snapshot/publication/fault/observer/cancellation tests replay in full Rust and Python suites; this is not a new formal or hostile-filesystem proof.",
+    "Lit Three proof covers extracted leaf glTF appearance, and Cesium routing/unlit is separate. No universal renderer or nonconformal tangent bake claim.",
+    "Linux resource results are concrete sampled workloads, not hard memory/performance guarantees."
+  ]
+}

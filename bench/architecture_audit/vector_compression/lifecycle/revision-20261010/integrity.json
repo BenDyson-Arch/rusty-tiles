@@ -1,0 +1,82 @@
+{
+  "status": "Additive DRAFT revision integrity only; HELD precode, not implementation approval or execution proof",
+  "created_at_utc": "2026-10-10T11:37:10.365392+00:00",
+  "historical_source": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "previous_freeze_preserved_exact": {
+    "lifecycle/contract-draft.md": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0",
+    "lifecycle/decisions.json": "237fc0232a8faf9b29b20311602284bec3265b18783bc3fc6d167eadae559ece",
+    "lifecycle/draft-integrity.json": "e7147c7e8b848a606a3e3033db6f3cc69bf905dd26b9508309e3d47375273afb"
+  },
+  "inputs": {
+    "lifecycle/contract-draft.md": {
+      "sha256": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0",
+      "bytes": 26205
+    },
+    "lifecycle/decisions.json": {
+      "sha256": "237fc0232a8faf9b29b20311602284bec3265b18783bc3fc6d167eadae559ece",
+      "bytes": 13103
+    },
+    "lifecycle/draft-integrity.json": {
+      "sha256": "e7147c7e8b848a606a3e3033db6f3cc69bf905dd26b9508309e3d47375273afb",
+      "bytes": 1304
+    },
+    "lifecycle/source-pin.json": {
+      "sha256": "af20cfc2187dbea221968ff3f39a893ac38900ceba7c33119173f8b555eee36d",
+      "bytes": 3281
+    },
+    "codec/contract-draft.md": {
+      "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e",
+      "bytes": 18401
+    },
+    "codec/decisions.json": {
+      "sha256": "a7a93c86b20bb713dbd15b0556c8d5fc37086886d71a711ca120b1710dc2fe90",
+      "bytes": 20032
+    },
+    "codec/draft-integrity.json": {
+      "sha256": "830da62ba894df135a9e89728fbd6f87e744a091a7298534decb1f9edbbdd3dd",
+      "bytes": 1316
+    },
+    "precode_review/review.md": {
+      "sha256": "17ae5e13a9df36adefd08d65166b6b493ce39b38251b2f766bf3a492b4b2171e",
+      "bytes": 15443
+    },
+    "precode_review/decisions.json": {
+      "sha256": "a746904a74d524b0c14536728cbe88087a4244fcebbc845a23ec161826e03cfa",
+      "bytes": 3880
+    },
+    "precode_review/arithmetic.json": {
+      "sha256": "988827ba5b8ac4a498f8c087f374dd9a0bfa7129ca6dc49bde952bcb98ac3f81",
+      "bytes": 4849
+    },
+    "precode_review/input-pin.json": {
+      "sha256": "214e29fe94d59c25ef2068f2226de7ee93f0e440cd87e4d630b052afb1c148d8",
+      "bytes": 2050
+    },
+    "precode_review/integrity.json": {
+      "sha256": "855f52a91fed5faf64484dd6e997d298a97a1ff461a3045145d504f09c6acbd0",
+      "bytes": 841
+    }
+  },
+  "files": {
+    "contract-draft.md": {
+      "sha256": "637bac2fb0c85c11abc43eb370880aea7daa9aadf54953cbcded87a201a93789",
+      "bytes": 24408
+    },
+    "decisions.json": {
+      "sha256": "ee25201087f277b56051ae0a36806893856f36c7822a6c7b8a306909f4939173",
+      "bytes": 9899
+    }
+  },
+  "executed_here": [
+    "SHA-256 exact preservation/input/output checks",
+    "JSON parse/consistency"
+  ],
+  "not_executed": [
+    "arithmetic probes",
+    "Cargo/builds",
+    "FFI/serializer/allocation",
+    "filesystem/platform",
+    "producer/consumer/CLI/Python target execution"
+  ],
+  "only_writes": "lifecycle/revision-20261010/{contract-draft.md,decisions.json,integrity.json}"
+}

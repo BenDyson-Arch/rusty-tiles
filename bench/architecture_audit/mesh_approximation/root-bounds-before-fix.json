@@ -1,0 +1,27 @@
+{
+  "status": "executed_pre_fix_defect",
+  "production_source_commit_prefix_from_coordinator": "8fe9bf6",
+  "binary_sha256": "28af5e5101baec56d75eb0fbf607184b0218fdfd954b37e0efb81f17909e1027",
+  "archive_sha256": "fec032e6282688e181e1d451796caae9bce675c4ed8ea6152cba9d64ac78c9a6",
+  "observations": [
+    {
+      "leaf": "t/0.glb",
+      "axis": 1,
+      "root_center": -1.9999999999999998,
+      "root_half_axis": 2.0000000000000004,
+      "child_center": -2.0,
+      "child_half_axis": 2.0000000000000004,
+      "exact_extent_excess": "1/4503599627370496"
+    },
+    {
+      "leaf": "t/1.glb",
+      "axis": 1,
+      "root_center": -1.9999999999999998,
+      "root_half_axis": 2.0000000000000004,
+      "child_center": -2.0,
+      "child_half_axis": 2.0000000000000004,
+      "exact_extent_excess": "1/4503599627370496"
+    }
+  ],
+  "scope": "Decoded content is enclosed, but emitted child box is not fully enclosed by root in exact real arithmetic of stored f64 numbers. No claim of visible viewer defect."
+}

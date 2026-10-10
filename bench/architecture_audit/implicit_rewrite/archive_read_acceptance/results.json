@@ -1,0 +1,1088 @@
+{
+  "classification": "independent45fixture preparation; historical45CLI executions; finalcandidate acceptance pending",
+  "current_probe_sha256": "f55837402c63c61241934fd5ce510fece38ba71f208b80f8e6f9c824b905cd89",
+  "historical_cli_executions": 45,
+  "isolated_descriptor_controls": [
+    {
+      "actual": "admitted",
+      "central_remaining": 16,
+      "expected": "admitted",
+      "label": "only-short-end-fits",
+      "matching_ends": [
+        12,
+        16
+      ],
+      "next_local_remaining": 12,
+      "raw_hex": "504b0708504b0708504b0708504b0708",
+      "selected_end": 12
+    },
+    {
+      "actual": "unsupported",
+      "central_remaining": 16,
+      "expected": "unsupported",
+      "label": "two-ends-fit",
+      "matching_ends": [
+        12,
+        16
+      ],
+      "next_local_remaining": 16,
+      "raw_hex": "504b0708504b0708504b0708504b0708",
+      "selected_end": null
+    },
+    {
+      "actual": "unsupported",
+      "central_remaining": 16,
+      "expected": "unsupported",
+      "label": "both-cross-local-boundary",
+      "matching_ends": [
+        12,
+        16
+      ],
+      "next_local_remaining": 11,
+      "raw_hex": "504b0708504b0708504b0708504b0708",
+      "selected_end": null
+    },
+    {
+      "actual": "invalid_input",
+      "central_remaining": 11,
+      "expected": "invalid_input",
+      "label": "both-cross-central-boundary",
+      "matching_ends": [
+        12,
+        16
+      ],
+      "next_local_remaining": 16,
+      "raw_hex": "504b0708504b0708504b0708504b0708",
+      "selected_end": null
+    }
+  ],
+  "lossless_retained_receipts": {
+    "crc-ranges.json.gz": {
+      "compressed_sha256": "0e768cb1f4c1011651d310a94299a3f13da98e0b15eadf4caf464d0c854cc249",
+      "expanded_bytes": 50659,
+      "expanded_sha256": "00826dbb11fd2f2c068acfc26c974c0e954d4b5417243dbe9573a5eb9840a6d0"
+    },
+    "frozen-crc-ranges.json.gz": {
+      "compressed_sha256": "c1cbcfe6e0bb0e5d0e21d184d6ac60a2a675df09c2ccd9d46879898a9f36bc15",
+      "expanded_bytes": 98042,
+      "expanded_sha256": "bc573248f650a05f5cade8cdb844923cd912d520e721dc28fef01bc94ef704c3"
+    },
+    "frozen-identity-raw.json.gz": {
+      "compressed_sha256": "9202eac26118a44e7768fbd6b0432b6ee2126cb991f888592b4d7a466c18db84",
+      "expanded_bytes": 144392,
+      "expanded_sha256": "caa2d557c7653e26a23cbdbe70ad7443fd423714b199877205b37ba1a6539e70"
+    },
+    "frozen-raw.json.gz": {
+      "compressed_sha256": "a18dbe713dcd3467e0a7265385dec9623f40b2b787d2c2a559febbbafb8a9be3",
+      "expanded_bytes": 223752,
+      "expanded_sha256": "3f51ee3368735ab53611fa5740e803a8ca92f9a73dad3281a64028519bf1eb7b"
+    },
+    "independent-raw.json.gz": {
+      "compressed_sha256": "c4122c46184c9d44fc5ef9e553fe81e53ba2e31d7daf6ba599032f90c5010d68",
+      "expanded_bytes": 132291,
+      "expanded_sha256": "9c45df68daf2465ecdf3a11cf79cd2e48e91a7ef05ebfe85e704270c6c27b147"
+    }
+  },
+  "model_io_categories": [
+    "io",
+    "io"
+  ],
+  "model_limit_controls": [
+    {
+      "actual_value": 916,
+      "expected": "admitted",
+      "field": "archive",
+      "kind": "admitted",
+      "limit": 916
+    },
+    {
+      "actual_value": 916,
+      "expected": "resource_limit",
+      "field": "archive",
+      "kind": "resource_limit",
+      "limit": 915
+    },
+    {
+      "actual_value": 174,
+      "expected": "admitted",
+      "field": "central",
+      "kind": "admitted",
+      "limit": 174
+    },
+    {
+      "actual_value": 174,
+      "expected": "resource_limit",
+      "field": "central",
+      "kind": "resource_limit",
+      "limit": 173
+    },
+    {
+      "actual_value": 3,
+      "expected": "admitted",
+      "field": "entries",
+      "kind": "admitted",
+      "limit": 3
+    },
+    {
+      "actual_value": 3,
+      "expected": "resource_limit",
+      "field": "entries",
+      "kind": "resource_limit",
+      "limit": 2
+    },
+    {
+      "actual_value": 372,
+      "expected": "admitted",
+      "field": "member",
+      "kind": "admitted",
+      "limit": 372
+    },
+    {
+      "actual_value": 372,
+      "expected": "resource_limit",
+      "field": "member",
+      "kind": "resource_limit",
+      "limit": 371
+    },
+    {
+      "actual_value": 594,
+      "expected": "admitted",
+      "field": "stored",
+      "kind": "admitted",
+      "limit": 594
+    },
+    {
+      "actual_value": 594,
+      "expected": "resource_limit",
+      "field": "stored",
+      "kind": "resource_limit",
+      "limit": 593
+    }
+  ],
+  "records": [
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/adjacent-classic.3tz",
+      "archive_sha256": "639559a27ddadcf261bb5b16e2da728a61ca6469cac8f6d7b369f26f8a7033e7",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "adjacent-classic",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 923,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/disjoint-with-padding.3tz",
+      "archive_sha256": "149ed247052c7d36ccd07770f8026415b43e70a49457ea1309b0fab160ddf60e",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "disjoint-with-padding",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/central-order-reversed.3tz",
+      "archive_sha256": "3d3bf28749e06ff8ebf1da40f1494076008830ca1d5cec7feabacc5c2d191e5d",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "central-order-reversed",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1040,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/zip64-end-and-sizes.3tz",
+      "archive_sha256": "9ca3274fff8384ffb00906f4bd33a2b056e6b05905384d62acefb3087f883a25",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "zip64-end-and-sizes",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 928,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-unsigned32.3tz",
+      "archive_sha256": "28522bbef21891fe78dba602a23463a191b53dfe22721da4da2fabbb02a646b6",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "descriptor-unsigned32",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 932,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-signed32.3tz",
+      "archive_sha256": "618c376136b2c5d2a0cdbbced5c021872c7c61857d5dad7a4e5b8e0bbe3075e8",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "descriptor-signed32",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 984,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-unsigned64.3tz",
+      "archive_sha256": "2002c2598b7e964bb8b64ef7b55b20e80056a7532a4744e3032f95281f57509f",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "descriptor-unsigned64",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 988,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-signed64.3tz",
+      "archive_sha256": "b759ab9fb94443f7e0a9db8da6f5b3f566c2eb75d555dd165f417a00f0dd279b",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "descriptor-signed64",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 936,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/zip64-local-only.3tz",
+      "archive_sha256": "3a6fcaf55374ecec018327594a9194232b8dbdf6bd4ffd951314c4622fc5d0b2",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "zip64-local-only",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 928,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/zip64-central-offset-only-no-descriptor.3tz",
+      "archive_sha256": "0e6c7889aa2a04d2f9499631502255c93404be896670bc3b36df08707af13dd1",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "zip64-central-offset-only-no-descriptor",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 944,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/zip64-central-offset-only-descriptor.3tz",
+      "archive_sha256": "3ceb7e17e37296b813608f851d816330e8b4e300249057055eb2c8adc6445919",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "zip64-central-offset-only-descriptor",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 960,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/zip64-central-sizes-only-descriptor.3tz",
+      "archive_sha256": "61a344eb4901f232e7dda62671ddc5da5792d74341544c12786536173d4252a2",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "ZIP data descriptor differs from central directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "zip64-central-sizes-only-descriptor",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 960,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-zip64-extra-no-sentinel.3tz",
+      "archive_sha256": "93eb0ab935e373931982b23ee98a34060e31aaf52d36f3966517b543d0cdbd18",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "ZIP data descriptor differs from central directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "descriptor-zip64-extra-no-sentinel",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 952,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-local-ZIP64-with-32bit-width.3tz",
+      "archive_sha256": "f9ffe4a9d123587742873cf95daea192f0d90990227a23a7515fe37a62fe28c7",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "ZIP data descriptor differs from central directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "descriptor-local-ZIP64-with-32bit-width",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 936,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/unknown-wellframed-extras.3tz",
+      "archive_sha256": "0b55e1317d8bdfb577684d8ac3f431f42a72ebabc8d35eec7742f057e29a8ad9",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "unknown-wellframed-extras",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1090,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/physical-overlap-data.3tz",
+      "archive_sha256": "c8b383fa5be5bfa05e96d85244e829ff58e4d2cd2f89270bfb39646c0b03a923",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "physical-overlap-data",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1087,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/physical-overlap-header.3tz",
+      "archive_sha256": "9495a6cb0a2adbf8104cbedbb855ecb77d60fd478bd26ab596c99e317f84b426",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "physical-overlap-header",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1090,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/physical-overlap-partial-data.3tz",
+      "archive_sha256": "d7a9fe93c5f2f5787618e55cf69d3610bd2183a60e35f10273ca1e9966f2a68a",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "physical-overlap-partial-data",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1227,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/ordinary-nested-ZIP-is-opaque.3tz",
+      "archive_sha256": "6bdbb3925e61a96e578a11ef758e4a7adea362366acb7ca41e63095e68cf55ef",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "ordinary-nested-ZIP-is-opaque",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1078,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/unsigned-descriptor-CRC-equals-signature.3tz",
+      "archive_sha256": "017dc2fac41e04f7be4446f2aa8c612427e789b251b03db4ff3b34b454bf3795",
+      "expected_format": "admitted",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "admitted",
+      "label": "unsigned-descriptor-CRC-equals-signature",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 917,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-truncated-TLV-header.3tz",
+      "archive_sha256": "886b9bc722f3d264ebf1527795eb06057846385d177d97be038e14f3e38434aa",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "local-truncated-TLV-header",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 921,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-truncated-TLV-body.3tz",
+      "archive_sha256": "fc7557fc5d462b4188b6e21891b142b5f215d699bc376c6dcd399ea675373ac4",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "local-truncated-TLV-body",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 917,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/central-truncated-TLV-header.3tz",
+      "archive_sha256": "b78ba99d221f2f71785db842ee0ecd433fd5893e23ad2d0d3a89d45f5a4f8566",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "central-truncated-TLV-header",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 921,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/central-truncated-TLV-body.3tz",
+      "archive_sha256": "70c30870568a657596ee7c5fbb31fd70b1277d894c2b96e3132cdeaeb1762feb",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "central-truncated-TLV-body",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 924,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-duplicate-ZIP64-no-sentinel.3tz",
+      "archive_sha256": "5869b2c991b4f94a3ade7e41b67d59e8dbe5b4ab40fdc2efda2f13856e47ce6b",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "local-duplicate-ZIP64-no-sentinel",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 924,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/central-duplicate-ZIP64-no-sentinel.3tz",
+      "archive_sha256": "31b4f334c33a06a01e51f0cd7ec951afc441f7418c17c8834d4ff4eb63756a1f",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "central-duplicate-ZIP64-no-sentinel",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 936,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-missing-sentinel-extra.3tz",
+      "archive_sha256": "d9ddc5cc4ea43fb9fe2faab79e694f2444fda4e10f0d187ebba4398ea9c82639",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "missing ZIP64 sizes/offset",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "local-missing-sentinel-extra",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 944,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/central-missing-sentinel-extra.3tz",
+      "archive_sha256": "095bde4ed8f72177ffee2b6a29cca3f069ff59d6294679e2bd94b9aadde8d83f",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "missing ZIP64 sizes/offset",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "central-missing-sentinel-extra",
+      "supplementary_declared_CRC_ranges": {
+        "readable": false,
+        "reason": "central sentinel has no ZIP64 values"
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 995,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/duplicate-coherent-local-offset.3tz",
+      "archive_sha256": "59a163ce73e5df9169a1dd69113f22120e463c8ae39888ba2e873648369e1e22",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index must contain every member exactly once",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "duplicate-coherent-local-offset",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-data-enters-central.3tz",
+      "archive_sha256": "32822ab9dd0532a6ae2f745efb4c7a1079db0aae17a439010f2198c604c854fa",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "stored ZIP payload outside source",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-data-enters-central",
+      "supplementary_declared_CRC_ranges": {
+        "readable": false,
+        "reason": "central-declared data range enters central directory"
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-header-enters-central.3tz",
+      "archive_sha256": "9924aaae110cad816edddd4ab2fb0e9c20d3decd72c36e9ba7c40baea7eda022",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [],
+      "independent_kind": "invalid_input",
+      "label": "index-header-enters-central",
+      "supplementary_declared_CRC_ranges": {
+        "readable": false,
+        "reason": "central-declared data range enters central directory"
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 915,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-too-short.3tz",
+      "archive_sha256": "f5c63993bde8686e1bb3139223a7b50a24862b0a7c42b6f4a6732bf69cdea8bc",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index length is not a multiple of 24",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-too-short",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 917,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-too-long.3tz",
+      "archive_sha256": "531254716a491fe3a1644399df66e54089f6fb3ee343d977ae2e698ec49f1e74",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index length is not a multiple of 24",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-too-long",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-order-reversed.3tz",
+      "archive_sha256": "5f84434d2eba6b7a24a819de3bce64d253c1c03bae1ab1413a5b4ee231ef39db",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index hashes are not ordered",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-order-reversed",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-bad-hash-association.3tz",
+      "archive_sha256": "86613cd555a32103794cd37e72b426431f70527bc77c439b92e78fce8790406d",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index differs from ZIP directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-bad-hash-association",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-bad-offset.3tz",
+      "archive_sha256": "40b971066817f67c39ffd6f45e06110628ca52397fff263acbfaa2f331cf6293",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "3TZ index differs from ZIP directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-bad-offset",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/index-CRC-mismatch.3tz",
+      "archive_sha256": "32a17011185d83beb767f9988767fcca08156b09ba368695cb30c752a6e11703",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "malformed archive bytes: Invalid checksum",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "index-CRC-mismatch",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": false,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 928,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/descriptor-truncated-at-next-header.3tz",
+      "archive_sha256": "8ef43a14e018905a4d215594d93eeadeb61bf75820b90a1d2f18b9efe5537073",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "e2cba051ebef843f2f37a18cd313e1b830183fb0559c7c54a5432054a3c86976",
+          "message": "ZIP data descriptor differs from central directory",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "descriptor-truncated-at-next-header",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-central-name-mismatch.3tz",
+      "archive_sha256": "5fcb64c51c18240115f5865c7383b1e374baddbbb3fed7a0e7ba872e672dc89f",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [],
+      "independent_kind": "invalid_input",
+      "label": "local-central-name-mismatch",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 916,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/local-central-size-mismatch.3tz",
+      "archive_sha256": "31cdfa067e5d92e26d7d9e75ac75185f362ef6c402f493986a30ca42f8cffb9b",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [],
+      "independent_kind": "invalid_input",
+      "label": "local-central-size-mismatch",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1382,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/duplicate-GLB-shortened-index.3tz",
+      "archive_sha256": "bbf63b18a3faf7dc9acd2a4f4d3fe5510f90b0f0436a402324cd32942293545a",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "ee6f8d7b5db5d5eaed0f8d9d43a829f1fe79b183383d766cd130b29ee805b063",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "duplicate-GLB-shortened-index",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1190,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/duplicate-manifest-shortened-index.3tz",
+      "archive_sha256": "393fb818d83224053f3f362c9a72e8710b44a06717a4e8f4c8fc0f0460bca904",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "ee6f8d7b5db5d5eaed0f8d9d43a829f1fe79b183383d766cd130b29ee805b063",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "duplicate-manifest-shortened-index",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 1406,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/duplicate-GLB-full-cardinality-index.3tz",
+      "archive_sha256": "3d4d6e9e20be90c72758ea9bec924ce930436113a29dbf19d0d2120acde98bf3",
+      "expected_format": "invalid_input",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "ee6f8d7b5db5d5eaed0f8d9d43a829f1fe79b183383d766cd130b29ee805b063",
+          "message": "3TZ index must contain every member exactly once",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "invalid_input",
+      "label": "duplicate-GLB-full-cardinality-index",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 937,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/UnicodePath-local-identity-override.3tz",
+      "archive_sha256": "e8814ad643962e1a510d87e90fb6ec232a9393c7e140b04131e72218ff07968b",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "admitted",
+          "executed_probe_sha256": "ee6f8d7b5db5d5eaed0f8d9d43a829f1fe79b183383d766cd130b29ee805b063",
+          "message": null,
+          "returncode": 0
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "UnicodePath-local-identity-override",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    },
+    {
+      "Cursor_held_file_agree": true,
+      "archive_bytes": 937,
+      "archive_path": "/tmp/rusty-tiles-archive-read-independent-final3/UnicodePath-central-identity-override.3tz",
+      "archive_sha256": "9c0398abae59b5333f497b3667311d53530857d6726ba74e3ef38d543e823da6",
+      "expected_format": "unsupported",
+      "historical_cli_on_exact_bytes": [
+        {
+          "category": "invalid_input",
+          "executed_probe_sha256": "ee6f8d7b5db5d5eaed0f8d9d43a829f1fe79b183383d766cd130b29ee805b063",
+          "message": "3TZ index must contain every member exactly once",
+          "returncode": 3
+        }
+      ],
+      "independent_kind": "unsupported",
+      "label": "UnicodePath-central-identity-override",
+      "supplementary_declared_CRC_ranges": {
+        "all_declared_payload_crc_equal": true,
+        "readable": true
+      }
+    }
+  ]
+}

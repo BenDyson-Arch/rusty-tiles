@@ -1,0 +1,7 @@
+{
+  "scope": "Formatter-only compiled copy; original independent source unchanged",
+  "original": "compiled_stride_controls.rs",
+  "original_sha256": "64fd2e6c8660c064daa7496c85dc4e71af69f09c42075c5df2637265c593dd10",
+  "compiled": "compiled_stride_controls_formatted.rs",
+  "compiled_sha256": "9f71a4c34353771e95c73b7c9904643da368cea21f7e7581c247688dcfe4b188"
+}

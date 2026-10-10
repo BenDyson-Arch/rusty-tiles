@@ -1,0 +1,41 @@
+[
+  {
+    "case": {
+      "name": "color_set_noninteger",
+      "path": "color_set_noninteger.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "COLOR_foo has a valid color accessor but its set suffix is not a nonnegative integer.",
+      "sha256": "28b074b485d21376cb5536736548e196bcfa003a6aa13023d1ce0fe1713a9192"
+    },
+    "exit": 0,
+    "stdout": "{\"archive\":\"<work>/color_set_noninteger.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":1,\"entries\":3,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadata and feature semantics\",\"metadataSemantics\",\"scene transforms, skins, animations and rendered bounds\"],\"ok\":true,\"payloads\":[{\"accessorsChecked\":3,\"primitivesChecked\":1,\"uri\":\"tile.glb\",\"vertices\":3}],\"tiles\":1}\n",
+    "stderr": ""
+  },
+  {
+    "case": {
+      "name": "texcoord_set_noninteger",
+      "path": "texcoord_set_noninteger.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "TEXCOORD_foo has valid VEC2 FLOAT values but an invalid set suffix.",
+      "sha256": "868644ea961afb90672909795c29b519d8d92a74dea75fff4a7af748c36d792d"
+    },
+    "exit": 0,
+    "stdout": "{\"archive\":\"<work>/texcoord_set_noninteger.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":1,\"entries\":3,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadata and feature semantics\",\"metadataSemantics\",\"scene transforms, skins, animations and rendered bounds\"],\"ok\":true,\"payloads\":[{\"accessorsChecked\":3,\"primitivesChecked\":1,\"uri\":\"tile.glb\",\"vertices\":3}],\"tiles\":1}\n",
+    "stderr": ""
+  },
+  {
+    "case": {
+      "name": "mixed_index_vertex_view",
+      "path": "mixed_index_vertex_view.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "One 40-byte view contains UBYTE indices at offset zero and FLOAT vertex positions at offset four; view has no target or stride to reveal the illegal mixed roles.",
+      "sha256": "f51488856bf8dfcc5ab9fcc3d6806314581b8bfed5b21416fc82d34b289b1236"
+    },
+    "exit": 0,
+    "stdout": "{\"archive\":\"<work>/mixed_index_vertex_view.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":1,\"entries\":3,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadata and feature semantics\",\"metadataSemantics\",\"scene transforms, skins, animations and rendered bounds\"],\"ok\":true,\"payloads\":[{\"accessorsChecked\":2,\"primitivesChecked\":1,\"uri\":\"tile.glb\",\"vertices\":3}],\"tiles\":1}\n",
+    "stderr": ""
+  }
+]

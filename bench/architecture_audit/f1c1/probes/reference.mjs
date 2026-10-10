@@ -1,0 +1,2 @@
+import {Cartesian3, Matrix4, Transforms} from "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/engine/index.js";
+const cases=[[0, 0, 0], [90, 0, 0], [-180, 0, 125], [180, 0, 125], [153, -27, 42], [23, 52, -500], [37, 90, 0], [-74, -90, 25], [179.999999, 89.999999, 35786000], [-179.999999, -89.999999, -1000000], [123, 45, 100000000]]; console.log(JSON.stringify(cases.map(([lon,lat,h])=>({anchor:[lon,lat,h],origin:Cartesian3.fromDegrees(lon,lat,h),matrix:Array.from(Transforms.eastNorthUpToFixedFrame(Cartesian3.fromDegrees(lon,lat,h)))}))));

@@ -1,0 +1,75 @@
+{
+  "evidence": "independent candidate inventory model; no C1/Rust/producer execution",
+  "driver_sha256": "13727de58d9c5d635e606c5b3fece81b61d9d3ba67c3b48fbdd5db46b6ed35f0",
+  "metadata_model_sha256": "3c084d69a831ab4f5dd5d69c993dea463bf371207118775547b5d13826d8bb2a",
+  "inspected_c1_source_sha256": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+  "cases": [
+    {
+      "case": "original_payload_and_snapshots_and_opaque_bytes",
+      "outcome": "model_pass",
+      "facts": {
+        "members_verified": 7,
+        "original_payload_model_calls": [
+          "nested/payload.glb"
+        ],
+        "historical_state_has_no_live_reuse_claim": true,
+        "opaque_bytes_have_no_semantic_validation_claim": true
+      }
+    },
+    {
+      "case": "original_payload_change",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate member differs from admitted bytes: nested/payload.glb"
+    },
+    {
+      "case": "source_snapshot_same_value_different_bytes",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate member differs from admitted bytes: a2-source-tileset.json"
+    },
+    {
+      "case": "missing_source_report_snapshot",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate inventory differs from admitted plan"
+    },
+    {
+      "case": "missing_known_geometry_report",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate inventory differs from admitted plan"
+    },
+    {
+      "case": "retained_orphan_bytes_change",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate member differs from admitted bytes: orphan.bin"
+    },
+    {
+      "case": "extra_member_with_report_claim",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "candidate inventory differs from admitted plan"
+    },
+    {
+      "case": "original_payload_inspected_without_legacy_report_operation",
+      "outcome": "model_pass"
+    },
+    {
+      "case": "missing_expected_reference",
+      "outcome": "refused",
+      "kind": "invalid_input"
+    },
+    {
+      "case": "historical_state_accounted_without_live_marker",
+      "outcome": "model_pass"
+    },
+    {
+      "case": "historical_state_bytes_change",
+      "outcome": "refused",
+      "kind": "invalid_input"
+    }
+  ],
+  "proof_limits": "C1 private seam/report profile, ZIP/index/CRC, actual payload codecs, IO and lifecycle require production implementation/acceptance"
+}

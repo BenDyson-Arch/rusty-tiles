@@ -1,0 +1,412 @@
+{
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1b3-portable-92c7e02",
+  "binary_sha256": "e8ac65740cf396bd8d1d79327a54a7ed98817466a202b067d37c23dc024f1960",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "probe_sha256": "bf73eac0666f8361cf149a4977e035c24d8dc30224db29814649e93b6ce891fc",
+  "prior_probe_sha256": "25b61127f8827f6c972c95f502a693504ab6b304fa15781ef74653ffb5ac4ecd",
+  "provenance": "Consumer-authored literal six-attribute/five-role GLB workload. Reuses F1b1 PNG encoder, wait4 launcher and /proc/workspace sampling helpers only; does not use acceptance oracle fixture/reader as fidelity truth.",
+  "measurement_contract": "Linux child wait4 high-water RSS after separate C launcher exec excludes Python fixture generation. Sampling every >=2ms plus inspection can miss FD/thread/child/scratch peaks; null means unobserved. Scratch measures .mesh-work-* files only, excludes archive staging and input/output. Concrete serial workloads establish neither hard RSS bounds nor universal performance. Refusal before staging is source-defined plus sampled evidence; cancellation remains separately tested.",
+  "results": [
+    {
+      "case": "core-pbr-single-leaf",
+      "expected": {
+        "triangles": 100000,
+        "source_bytes": 601816,
+        "source_sha256": "84f30b49b7e8e81d2ce5a8b4d940b87d1f8672aca1893c5a08d8b20218307d89",
+        "image_bytes": 70,
+        "image_sha256": "2f4c90d5872ac79c048a064fd80f72128b9cd2f334866b766265a5cb680126dc",
+        "primitive_count": 1,
+        "accessor_count_sum": 300018
+      },
+      "leaf_triangles": 100000,
+      "exit_code": 0,
+      "elapsed_seconds": 0.7451852030062582,
+      "peak_rss_kib_wait4": 98644,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 327,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 5,
+          "samples": 327,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 327,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 4,
+        "peak_bytes": 21602387,
+        "samples": 329,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "launcher_proc_observations": {
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "termination": null,
+      "scratch_remaining": [],
+      "output_bytes": 21603011,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b3-resources-6lqz1394/core-pbr-single-leaf/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 100000
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816,
+          "triangles": 100000
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b3-resources-6lqz1394/core-pbr-single-leaf/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816
+        },
+        "skippedFeatures": null
+      },
+      "stderr_excerpt": "",
+      "passed": true,
+      "inventory": {
+        "leaf_tiles": 1,
+        "triangle_count_from_output_accessors": 100000,
+        "report": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816,
+          "triangles": 100000
+        }
+      }
+    },
+    {
+      "case": "core-pbr-many-leaves",
+      "expected": {
+        "triangles": 100000,
+        "source_bytes": 601816,
+        "source_sha256": "84f30b49b7e8e81d2ce5a8b4d940b87d1f8672aca1893c5a08d8b20218307d89",
+        "image_bytes": 70,
+        "image_sha256": "2f4c90d5872ac79c048a064fd80f72128b9cd2f334866b766265a5cb680126dc",
+        "primitive_count": 1,
+        "accessor_count_sum": 300018
+      },
+      "leaf_triangles": 1000,
+      "exit_code": 0,
+      "elapsed_seconds": 0.8651574100076687,
+      "peak_rss_kib_wait4": 56140,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 382,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 5,
+          "samples": 382,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 382,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 131,
+        "peak_bytes": 21819028,
+        "samples": 383,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "launcher_proc_observations": {
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "termination": null,
+      "scratch_remaining": [],
+      "output_bytes": 21834422,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b3-resources-6lqz1394/core-pbr-many-leaves/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 128,
+          "triangles": 100000
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 128,
+          "leaf_triangles": 1000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816,
+          "triangles": 100000
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b3-resources-6lqz1394/core-pbr-many-leaves/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 1000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816
+        },
+        "skippedFeatures": null
+      },
+      "stderr_excerpt": "",
+      "passed": true,
+      "inventory": {
+        "leaf_tiles": 128,
+        "triangle_count_from_output_accessors": 100000,
+        "report": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 128,
+          "leaf_triangles": 1000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 601816,
+          "triangles": 100000
+        }
+      }
+    },
+    {
+      "case": "shared-six-attrs-4096-primitives",
+      "expected": {
+        "triangles": 4096,
+        "source_bytes": 443936,
+        "source_sha256": "55beb1ad933751c3a0e6b718ca11af987c24cdeba5f7121e2b8a6c18381fda61",
+        "image_bytes": 70,
+        "image_sha256": "2f4c90d5872ac79c048a064fd80f72128b9cd2f334866b766265a5cb680126dc",
+        "primitive_count": 4096,
+        "accessor_count_sum": 18
+      },
+      "leaf_triangles": 100000,
+      "exit_code": 0,
+      "elapsed_seconds": 0.0672406580124516,
+      "peak_rss_kib_wait4": 36836,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 29,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 4,
+          "samples": 29,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 29,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 1,
+        "peak_bytes": 70,
+        "samples": 30,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "launcher_proc_observations": {
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "termination": null,
+      "scratch_remaining": [],
+      "output_bytes": 887721,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/rusty-f1b3-resources-6lqz1394/shared-six-attrs-4096-primitives/result.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "leaf_tiles": 1,
+          "triangles": 4096
+        },
+        "meshReport": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 443936,
+          "triangles": 4096
+        },
+        "ok": true,
+        "output": "/tmp/rusty-f1b3-resources-6lqz1394/shared-six-attrs-4096-primitives/result.3tz",
+        "reuse": null,
+        "settings": {
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_triangles": 100000,
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 443936
+        },
+        "skippedFeatures": null
+      },
+      "stderr_excerpt": "",
+      "passed": true,
+      "inventory": {
+        "leaf_tiles": 1,
+        "triangle_count_from_output_accessors": 4096,
+        "report": {
+          "coordinates": "local-gltf",
+          "external_bytes": 0,
+          "external_files": 0,
+          "image_bytes": 70,
+          "image_pixels": 1,
+          "images": 1,
+          "leaf_tiles": 1,
+          "leaf_triangles": 100000,
+          "profile": "f1b-core-pbr-gltf-v1",
+          "routing_geometric_error_metres": 1.4142135623730954,
+          "schema_version": 3,
+          "source_bytes": 443936,
+          "triangles": 4096
+        }
+      }
+    },
+    {
+      "case": "triangles-100001-refused",
+      "expected": {
+        "triangles": 100001,
+        "source_bytes": 601824,
+        "source_sha256": "db71c32a39000efc2129813df67d906d608dbf7193d9787673cac3d6e17aa68f",
+        "image_bytes": 70,
+        "image_sha256": "2f4c90d5872ac79c048a064fd80f72128b9cd2f334866b766265a5cb680126dc",
+        "primitive_count": 1,
+        "accessor_count_sum": 300021
+      },
+      "leaf_triangles": 100000,
+      "exit_code": 2,
+      "elapsed_seconds": 0.0047724540054332465,
+      "peak_rss_kib_wait4": 27668,
+      "sampled_process_observations": {
+        "threads": {
+          "peak": 1,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "file_descriptors": {
+          "peak": 3,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        },
+        "converter_child_processes": {
+          "peak": 0,
+          "samples": 1,
+          "permission_denials": 0,
+          "vanished_races": 0
+        }
+      },
+      "sampled_workspace": {
+        "peak_files": 0,
+        "peak_bytes": 0,
+        "samples": 2,
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "launcher_proc_observations": {
+        "permission_denials": 0,
+        "vanished_races": 0
+      },
+      "termination": null,
+      "scratch_remaining": [],
+      "output_bytes": 0,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "declared triangle ceiling exceeded",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      },
+      "stderr_excerpt": "",
+      "passed": true
+    }
+  ],
+  "binary_unchanged": true
+}

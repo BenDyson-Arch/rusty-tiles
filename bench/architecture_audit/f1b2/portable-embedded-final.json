@@ -1,0 +1,3949 @@
+{
+  "self_test": {
+    "png_analytic_filters": {
+      "0": "passed",
+      "1": "passed",
+      "2": "passed",
+      "3": "passed",
+      "4": "passed"
+    },
+    "jpeg_manifest_sha256": "ec41b92388795ceda2260f6fe9a25d2f79cee10b539e2da678a43b813c5578b4",
+    "analytic_transform_normal_UV_winding": "passed",
+    "fixture_variants": {
+      "standard": "passed",
+      "nested": "passed",
+      "instanced": "passed",
+      "scenes": "passed",
+      "coincident": "passed",
+      "degenerate": "passed",
+      "normal-absent": "passed",
+      "nonindexed": "passed",
+      "uv-u8": "passed",
+      "uv-u16": "passed",
+      "empty-sampler": "passed",
+      "wrap": "passed",
+      "mixed": "passed",
+      "jpeg": "passed",
+      "spike": "passed",
+      "reordered-spike": "passed",
+      "thin": "passed",
+      "disconnected": "passed",
+      "interleaved": "passed",
+      "uv-on-untextured": "passed",
+      "two-images": "passed",
+      "selected-image-one": "passed",
+      "sampler-9728": "passed",
+      "sampler-9729": "passed",
+      "sampler-9984": "passed",
+      "sampler-9985": "passed",
+      "sampler-9986": "passed",
+      "sampler-9987": "passed"
+    },
+    "sensitive_corruption_controls": {
+      "missing-triangle": "rejected",
+      "wrong-winding": "rejected",
+      "wrong-uv": "rejected",
+      "uv-corner-order": "rejected",
+      "missing-normal": "rejected",
+      "wrong-factor": "rejected",
+      "alpha-cutoff": "rejected",
+      "double-sided": "rejected",
+      "sampler-omission": "rejected",
+      "alpha-only": "rejected",
+      "explicit-default-alpha-omission": "rejected",
+      "explicit-default-sampler-omission": "rejected",
+      "orphan-image": "rejected",
+      "missing-image": "rejected",
+      "wrong-image-rows": "rejected",
+      "encoded-byte-change-same-pixels": "rejected",
+      "image-alpha": "rejected",
+      "leaf-wrong-texture-index": "rejected",
+      "leaf-unused-image": "rejected",
+      "leaf-wrong-image-uri": "rejected",
+      "leaf-uv-association": "rejected"
+    },
+    "scope": "full-detail textured leaf fidelity; no coarse approximation/error-bound acceptance"
+  },
+  "candidate": {
+    "binary": "/home/bend/.cache/rusty-tiles-f1b2-portable-ce8a89c",
+    "binary_sha256": "522b5e62fa9fae9e93431cd4d9171a9ee825051452e100c9db689ad544e14ffc",
+    "cases": [
+      {
+        "variant": "standard",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "0bedcb1621daabb130a9bd2cb95de27eb6275a43eb933510c2c1ab9af28756f8",
+        "archive_sha256": "cd7552883f293b37c18ba233c776ce4979365abffea76cac95b92e0a269f82db"
+      },
+      {
+        "variant": "standard",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "0bedcb1621daabb130a9bd2cb95de27eb6275a43eb933510c2c1ab9af28756f8",
+        "archive_sha256": "addbae404c30cf2bdb5caaad7cc78528bd7bf1a9371212164de0ff52ea9dd41e"
+      },
+      {
+        "variant": "standard",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "0bedcb1621daabb130a9bd2cb95de27eb6275a43eb933510c2c1ab9af28756f8",
+        "archive_sha256": "31a6e55f6651e82e80d29a82658855af10bfac4213912fa5f2f794cc2a1e5043"
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "31e98b925defc366f42282160033c38a5dc1e64c6dcdb2ff6994d193b203d798",
+        "archive_sha256": "69d56d0f3a55761a8e04598e2edab306a2265327835036c11d99d8e7d245548f"
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "31e98b925defc366f42282160033c38a5dc1e64c6dcdb2ff6994d193b203d798",
+        "archive_sha256": "a39d77c16643f8f4fa3c5b1fda4913b172cb28ef064c0f52ceadfbf50c2981fc"
+      },
+      {
+        "variant": "nested",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "31e98b925defc366f42282160033c38a5dc1e64c6dcdb2ff6994d193b203d798",
+        "archive_sha256": "4e8e993715769faf605b5f37ea92ae163fe80a7f990fa6bfd18ab8be9d0a14b2"
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 16,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/10.glb",
+          "t/11.glb",
+          "t/12.glb",
+          "t/13.glb",
+          "t/14.glb",
+          "t/15.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "t/8.glb",
+          "t/9.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 16,
+          "leaf_tiles": 16,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 155.79794607118546
+        },
+        "source_sha256": "15534df7a62453abf469e49c1fe765d49e87dfe99736593453b5533171e7153e",
+        "archive_sha256": "9e7b7f0d1d2b3d537bfa651b613ac0e45df0374ce578ce54606cff54cc94211a"
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 16,
+          "leaf_tiles": 8,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 155.79794607118546
+        },
+        "source_sha256": "15534df7a62453abf469e49c1fe765d49e87dfe99736593453b5533171e7153e",
+        "archive_sha256": "d8d9aa31d96a3f58abf5e324a235ebf154c686c56cc8ad0b97c21598d1e09a96"
+      },
+      {
+        "variant": "instanced",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 16,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7084,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 16,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 155.79794607118546
+        },
+        "source_sha256": "15534df7a62453abf469e49c1fe765d49e87dfe99736593453b5533171e7153e",
+        "archive_sha256": "d5e53b68cfedeee837b9bef5228681fde4e6dbf816d93db47602a735e148c1c1"
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7096,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "cd687705f5e391a6d32c540617ea0a330c7616d92bc46ab6141530f725c40270",
+        "archive_sha256": "dfaaeeecd53de32b473d8cd62cc86f70948bf3f8f81369eb71519d7775a5dd0a"
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7096,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "cd687705f5e391a6d32c540617ea0a330c7616d92bc46ab6141530f725c40270",
+        "archive_sha256": "755f98d5b173ffd40e1d669449326e9164e28983f8d2f2501334986709fe9369"
+      },
+      {
+        "variant": "scenes",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7096,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "cd687705f5e391a6d32c540617ea0a330c7616d92bc46ab6141530f725c40270",
+        "archive_sha256": "7d476806d10d930fbfe17c1c06f7da55418d76485e7201e073c6f2eda956b4d0"
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3.64005494464026
+        },
+        "source_sha256": "2bb1e7b15fa315ec48872d324d4860a6d158360ad37845212d46bb62a9bcc698",
+        "archive_sha256": "89dd47d348c7fad29e0c225e725630fa5c74e90c6c75e72a414f4bdf43d10e98"
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3.64005494464026
+        },
+        "source_sha256": "2bb1e7b15fa315ec48872d324d4860a6d158360ad37845212d46bb62a9bcc698",
+        "archive_sha256": "6b7614e03733d0500e82545d319fdd1039131fc6ee54a571bc33d059b4479f30"
+      },
+      {
+        "variant": "coincident",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3.64005494464026
+        },
+        "source_sha256": "2bb1e7b15fa315ec48872d324d4860a6d158360ad37845212d46bb62a9bcc698",
+        "archive_sha256": "ed87af7ae563eec487dd286f407e262a514ca148ab6f884f0b498e8ed6964dad"
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 2.0000000000000004
+        },
+        "source_sha256": "d1b7e3aa4a73425f7255c70ab3d7f4e2c243481bfd4e426908ecfdb609f3c761",
+        "archive_sha256": "ceb1c4eb6da01aa9947cc931f986009f41553b894a4c5dbeaa63627de1e75af8"
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 2.0000000000000004
+        },
+        "source_sha256": "d1b7e3aa4a73425f7255c70ab3d7f4e2c243481bfd4e426908ecfdb609f3c761",
+        "archive_sha256": "7c3d3a2ca94d3be4efc6316c1980c3f42f4106ea4a9be284bda1593903c8477c"
+      },
+      {
+        "variant": "degenerate",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7036,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 2.0000000000000004
+        },
+        "source_sha256": "d1b7e3aa4a73425f7255c70ab3d7f4e2c243481bfd4e426908ecfdb609f3c761",
+        "archive_sha256": "d21087572a995dcd7a884048ad2a25f4546c02b14f662409c50f1677f1944368"
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5004,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "a9a77fbc7b235304372b67be968840a992edd7e87eafa4fab391d5096c6dc9ea",
+        "archive_sha256": "24a9100e336b8286a314c8eb9a0feaba7924d185fd4e8a0f351586c3c6b00e66"
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5004,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "a9a77fbc7b235304372b67be968840a992edd7e87eafa4fab391d5096c6dc9ea",
+        "archive_sha256": "93c7ead95c762795344dc563a6918771d4dedc9bf0b210f305815a33d25a5b33"
+      },
+      {
+        "variant": "normal-absent",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 5004,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "a9a77fbc7b235304372b67be968840a992edd7e87eafa4fab391d5096c6dc9ea",
+        "archive_sha256": "bf572936d246a1c924176152c8ab3ca8e0b2c6a688aa9c56bcc9fa10b6d0da00"
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6028,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "c784f28e08be721a7f2b7842db01e52ea6ce642f59ddd77552d93f1b23c4c27e",
+        "archive_sha256": "1f43e38fae95306711f7bd274fef5572ead6936e57b848536c13a75b35a31d42"
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6028,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "c784f28e08be721a7f2b7842db01e52ea6ce642f59ddd77552d93f1b23c4c27e",
+        "archive_sha256": "2046ba1999d111143f5f0b883bf292bb1222341edc4ccb3f1243ecd67cefad37"
+      },
+      {
+        "variant": "nonindexed",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 6028,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "c784f28e08be721a7f2b7842db01e52ea6ce642f59ddd77552d93f1b23c4c27e",
+        "archive_sha256": "8e7c7b5a1128347affbb1d43988076f0d8c444e16890d6a9b9161254d4438764"
+      },
+      {
+        "variant": "uv-u8",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7212,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "f9c33c094c552eb47dc4b87297f942f10ceffa3a01244b0e21d2310e511640fa",
+        "archive_sha256": "218497484bcf8878ad7dcdf1ff5a8454585c4e8431ff545ecdc5abe8a7371528"
+      },
+      {
+        "variant": "uv-u8",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7212,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "f9c33c094c552eb47dc4b87297f942f10ceffa3a01244b0e21d2310e511640fa",
+        "archive_sha256": "fe1a3bc8173048abe0dc773a843531356978ffea2104f09e3cc4f6f11eb2cf39"
+      },
+      {
+        "variant": "uv-u8",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7212,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "f9c33c094c552eb47dc4b87297f942f10ceffa3a01244b0e21d2310e511640fa",
+        "archive_sha256": "22dd1667ed97040d2295b3a282d87ec93c3abd3c67394b86272f0f142c3dae66"
+      },
+      {
+        "variant": "uv-u16",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "5cf351979dc212a0697bda980c2e3a5c1ba3e1662270be426b31a5bfdf78ce44",
+        "archive_sha256": "55718b3475a41c7ad8a2cf3baf9d99e0d415a7d9501bfec97957cea3b98843e2"
+      },
+      {
+        "variant": "uv-u16",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "5cf351979dc212a0697bda980c2e3a5c1ba3e1662270be426b31a5bfdf78ce44",
+        "archive_sha256": "f53d1a8f11dad90a537a5d072970be612e03e06cfae87524d4ad2e9bbc99172c"
+      },
+      {
+        "variant": "uv-u16",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7092,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "5cf351979dc212a0697bda980c2e3a5c1ba3e1662270be426b31a5bfdf78ce44",
+        "archive_sha256": "104cb613b8a3d38a4f858c02929e573f2ed609616916a57fa2895a5bd3c8e385"
+      },
+      {
+        "variant": "empty-sampler",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7060,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "f32d8ee5f8fa7435a8ffb2e36c803886bcfb3ae016195d1c7bcaa8529f517d8f",
+        "archive_sha256": "916a596fc2693ed0c8d2bee2c73d417adbfbe994cc4401766272a9b3316e93e1"
+      },
+      {
+        "variant": "empty-sampler",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7060,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "f32d8ee5f8fa7435a8ffb2e36c803886bcfb3ae016195d1c7bcaa8529f517d8f",
+        "archive_sha256": "6b5a9c35308fc6f52b664dba061cd070d17ab51712abc98ae2b65d9d8ffc5d80"
+      },
+      {
+        "variant": "empty-sampler",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7060,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "f32d8ee5f8fa7435a8ffb2e36c803886bcfb3ae016195d1c7bcaa8529f517d8f",
+        "archive_sha256": "493a4dd04d5f35b4fc4b5c80700ea332e50bf0fa095d10e6d7467c590fa63f2e"
+      },
+      {
+        "variant": "wrap",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "1feeaaa73fe473fc248ebc02c2ceec68f9e0d66dd7fdac02fe28d3625cc11766",
+        "archive_sha256": "4a8ff96c3313afb0f7f949aee52b7a79a035c14cf6975830e040051fb4ef8ef3"
+      },
+      {
+        "variant": "wrap",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "1feeaaa73fe473fc248ebc02c2ceec68f9e0d66dd7fdac02fe28d3625cc11766",
+        "archive_sha256": "e718637e593a81332c86f9154059454dd654a111cfed13c914ae3714b536f13b"
+      },
+      {
+        "variant": "wrap",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "1feeaaa73fe473fc248ebc02c2ceec68f9e0d66dd7fdac02fe28d3625cc11766",
+        "archive_sha256": "e19ae54db0c64b50f8fb5831e422e21d3673e9e670f50cf825fe46af959f0472"
+      },
+      {
+        "variant": "mixed",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7088,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "1129ab579f558ad7526ab927effef966d80ff66c8ff9de1504d82c460e678e7a",
+        "archive_sha256": "0f551b930331e381b48920a30b05e22b726d8e3d95ada715ff12d67c24ca768f"
+      },
+      {
+        "variant": "mixed",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7088,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "1129ab579f558ad7526ab927effef966d80ff66c8ff9de1504d82c460e678e7a",
+        "archive_sha256": "a167cf06a347ba12248c5df4c07a10b7fbc7cc13bc8e06978f20f37334a3a729"
+      },
+      {
+        "variant": "mixed",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7088,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "1129ab579f558ad7526ab927effef966d80ff66c8ff9de1504d82c460e678e7a",
+        "archive_sha256": "18a06597b112cde297a1e984a166f781339ae2ab5f8c2494e4c8d966c16ecbc9"
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7860,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "be01c6294250e9dc0e42928d17037e58093415b5f28d0cbb607dbe0fb88e64ab",
+        "archive_sha256": "18a4cf845f5acf33d81812b8afe3b408e17758d718aeb99408373dd9adc7e5e9"
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7860,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "be01c6294250e9dc0e42928d17037e58093415b5f28d0cbb607dbe0fb88e64ab",
+        "archive_sha256": "7da841e590ff841379c0f418c6b5ff8901f8a1ad3ca70d334d83fa88aa15c1d7"
+      },
+      {
+        "variant": "jpeg",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.jpg"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.jpg",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7860,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 897,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "be01c6294250e9dc0e42928d17037e58093415b5f28d0cbb607dbe0fb88e64ab",
+        "archive_sha256": "8ba8d57b44cf7032b8397084485b11257ee6285fde6d0f2698c4755aed4631cc"
+      },
+      {
+        "variant": "spike",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "36b12ff86ae63f13734de0a9915cfcb83dfa8880c45e743e763e258d3621d84c",
+        "archive_sha256": "ef4ef61a35b61c3efc583ad3d1cc23f53092e1abfe5fd838aafbe436d59af553"
+      },
+      {
+        "variant": "spike",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "36b12ff86ae63f13734de0a9915cfcb83dfa8880c45e743e763e258d3621d84c",
+        "archive_sha256": "aff15d28596279a27f2921640944a4fac7a51b03dd53171e26ce5affcea8d027"
+      },
+      {
+        "variant": "spike",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "36b12ff86ae63f13734de0a9915cfcb83dfa8880c45e743e763e258d3621d84c",
+        "archive_sha256": "6f36ab96c29988ef783218d99cbfea53747d2b9fabb40babc0e4f1be3cec5cb8"
+      },
+      {
+        "variant": "reordered-spike",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "824c5978dbe65ec6858d400ae075591be23cd1cdf80b9e37809f329dd09d532f",
+        "archive_sha256": "4502f566d8cb8fef391471e9c937f3062c4304e866969d0b5f85ff46bf19c6a4"
+      },
+      {
+        "variant": "reordered-spike",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "824c5978dbe65ec6858d400ae075591be23cd1cdf80b9e37809f329dd09d532f",
+        "archive_sha256": "3294224b4745ba46116c0fb57d03043658ce31a3af01ac3386d52a49739bcc22"
+      },
+      {
+        "variant": "reordered-spike",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7052,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.55564141412947
+        },
+        "source_sha256": "824c5978dbe65ec6858d400ae075591be23cd1cdf80b9e37809f329dd09d532f",
+        "archive_sha256": "ab8d9db0974618926821532b6b320cf2b9d8acc6d773ffabe9865b42106336d4"
+      },
+      {
+        "variant": "thin",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7100,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.1819493627307
+        },
+        "source_sha256": "1730fe88018be236b8b596329c552a9c3a9f9667ba8eb990228d54dc485f7506",
+        "archive_sha256": "dbfc4079f677c7d727a9c2deff61da9d16080b47b229c5b98956df257a356159"
+      },
+      {
+        "variant": "thin",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7100,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.1819493627307
+        },
+        "source_sha256": "1730fe88018be236b8b596329c552a9c3a9f9667ba8eb990228d54dc485f7506",
+        "archive_sha256": "b5fe14295333239bac694242ae831d577492deaf07199154caaa00db2faccf5d"
+      },
+      {
+        "variant": "thin",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7100,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 305.1819493627307
+        },
+        "source_sha256": "1730fe88018be236b8b596329c552a9c3a9f9667ba8eb990228d54dc485f7506",
+        "archive_sha256": "ebaf15c1b8d84740104d0853f0236519c4b54cf50f72d173341a20499863f757"
+      },
+      {
+        "variant": "disconnected",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7068,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3640.0906932669677
+        },
+        "source_sha256": "0fccf39baf1b30a7a832415fb13bed335650d27e32c1fd73504adb5d34b4046c",
+        "archive_sha256": "0f5bd71b90aa0c745eff2fe959fd798f842af4983b229c1adbb7e36e618326ea"
+      },
+      {
+        "variant": "disconnected",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7068,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3640.090693266968
+        },
+        "source_sha256": "0fccf39baf1b30a7a832415fb13bed335650d27e32c1fd73504adb5d34b4046c",
+        "archive_sha256": "da86f3efdb6de971523466f94801846dd8d87569bd20f8ed13d42345e3f62d92"
+      },
+      {
+        "variant": "disconnected",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7068,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 3640.090693266968
+        },
+        "source_sha256": "0fccf39baf1b30a7a832415fb13bed335650d27e32c1fd73504adb5d34b4046c",
+        "archive_sha256": "9c7979f4e64c5568237933f27866c9ea977d85bedd63a8876a49b192ba90f88f"
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 8700,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6eddeee94f7b46b6f7a4d40b46e975ea2999e451049188d6e28967158cb29e13",
+        "archive_sha256": "0f81f47efb01dafb069ac41a3279c6fd1a46f678238680f41e657bdc84e106e9"
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 8700,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "6eddeee94f7b46b6f7a4d40b46e975ea2999e451049188d6e28967158cb29e13",
+        "archive_sha256": "f48b064991a8f5118fe106a35589f8024e7a006488950913bab23afdbddbe501"
+      },
+      {
+        "variant": "interleaved",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 8700,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "6eddeee94f7b46b6f7a4d40b46e975ea2999e451049188d6e28967158cb29e13",
+        "archive_sha256": "9e0cdd36e53bd4222e34726725c1ba505197344de85f930e10641c28fafc2330"
+      },
+      {
+        "variant": "uv-on-untextured",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7104,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "4d323dc9c454dc6dd43c0d7bee56f206531309f4a63713db14c2d6568991a117",
+        "archive_sha256": "0d4e2002f825f26f33ca7ccd07cbd2bde70aef0df62666f67456a367fcf47706"
+      },
+      {
+        "variant": "uv-on-untextured",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7104,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "4d323dc9c454dc6dd43c0d7bee56f206531309f4a63713db14c2d6568991a117",
+        "archive_sha256": "d815cdad819610515122da37eab4d41c560f52d065687d3a69420047fe782dc5"
+      },
+      {
+        "variant": "uv-on-untextured",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7104,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "4d323dc9c454dc6dd43c0d7bee56f206531309f4a63713db14c2d6568991a117",
+        "archive_sha256": "14a1b0242dbe1410ac4aaf23d7c92ab462e0bc2ed0622a9a7fa0884e6822ad75"
+      },
+      {
+        "variant": "two-images",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 2,
+          "image_bytes": 212,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7bfd8b2272bea17b8675df157dfa763b9c18219a6133084b1aab600ef71b4fb4",
+        "archive_sha256": "c1f33e4e0cc4852af2d20236e6bcc4b7149f1869a8cf187479e3c414355b46d0"
+      },
+      {
+        "variant": "two-images",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 2,
+          "image_bytes": 212,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "7bfd8b2272bea17b8675df157dfa763b9c18219a6133084b1aab600ef71b4fb4",
+        "archive_sha256": "4a82d2eeb28f5a1e821a27c914c7f7df8f4418220ab00641d6d8e92a81d8c0c1"
+      },
+      {
+        "variant": "two-images",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png",
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 2,
+          "image_bytes": 212,
+          "image_pixels": 12,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "7bfd8b2272bea17b8675df157dfa763b9c18219a6133084b1aab600ef71b4fb4",
+        "archive_sha256": "c86add48100e6ebf575b0d2e1ea77142d7ede958f2b89af81bd862ef91081753"
+      },
+      {
+        "variant": "selected-image-one",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7888,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 125,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "b9fb276fb7b3f22ed0d9fb430aefb8e3c3be0817127bff1d0bc34738e4ae41b3",
+        "archive_sha256": "ddd948a01ade9e9e0cbd78563cc39727f9bf3543b9fbafd53c9bfcc82689e022"
+      },
+      {
+        "variant": "selected-image-one",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7888,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 125,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "b9fb276fb7b3f22ed0d9fb430aefb8e3c3be0817127bff1d0bc34738e4ae41b3",
+        "archive_sha256": "ff897c4fb8b14cb161629242b46b710e58411659be796a8800a6318c89a53104"
+      },
+      {
+        "variant": "selected-image-one",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/1.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/1.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7888,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 125,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 29.034462281915953
+        },
+        "source_sha256": "b9fb276fb7b3f22ed0d9fb430aefb8e3c3be0817127bff1d0bc34738e4ae41b3",
+        "archive_sha256": "7825b0470aded93fc33ebe581341f03528b5d0a2be6eca06d13d9b5fe5e0d3de"
+      },
+      {
+        "variant": "sampler-9728",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "01bb48fda8004882c8f6f4870b87caf7b8e8539d7d3c16f7f04f7d044aa914f0",
+        "archive_sha256": "a69efd7a74cf498317b53d4b24303be4efcce4003738f19ee1fb3c7bb7e5a3a3"
+      },
+      {
+        "variant": "sampler-9728",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "01bb48fda8004882c8f6f4870b87caf7b8e8539d7d3c16f7f04f7d044aa914f0",
+        "archive_sha256": "59a7214b76f09b6d531a6879c1d379b024ff0984940ba0f31bbcd42ee04e34de"
+      },
+      {
+        "variant": "sampler-9728",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "01bb48fda8004882c8f6f4870b87caf7b8e8539d7d3c16f7f04f7d044aa914f0",
+        "archive_sha256": "48417bad9c831ad13ac4c284dd6758c1214cdf78dfdcb520085aa288c7304aef"
+      },
+      {
+        "variant": "sampler-9729",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "50f23521e6ebda0d7b3e24cfbc4dd6869523458180be5de5ec5741d239b3ff55",
+        "archive_sha256": "c3eef427c3d920c55d28fe9d5197fe37c914bfd2a82c100a629715296dd73383"
+      },
+      {
+        "variant": "sampler-9729",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "50f23521e6ebda0d7b3e24cfbc4dd6869523458180be5de5ec5741d239b3ff55",
+        "archive_sha256": "31909b336c943669fbf074325e6083c128762aab4b720a9294569562eb2c198a"
+      },
+      {
+        "variant": "sampler-9729",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "50f23521e6ebda0d7b3e24cfbc4dd6869523458180be5de5ec5741d239b3ff55",
+        "archive_sha256": "ef1ac795ec4616964602d3014fbaa01e2eb0e885ad0a18f3fd537d323d501947"
+      },
+      {
+        "variant": "sampler-9984",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "895fbc1e84e155ad334cefadfbcda3ed8d096d603d026a3d96fbff141f259ff8",
+        "archive_sha256": "11683ce8bbc054f07814f7312e9530136af7ec2ad8dc51f90426237183ab252c"
+      },
+      {
+        "variant": "sampler-9984",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "895fbc1e84e155ad334cefadfbcda3ed8d096d603d026a3d96fbff141f259ff8",
+        "archive_sha256": "8363970f137b6f1728fcf452a433d99b69cfce99c516c19335aaddfb6fd5bf17"
+      },
+      {
+        "variant": "sampler-9984",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "895fbc1e84e155ad334cefadfbcda3ed8d096d603d026a3d96fbff141f259ff8",
+        "archive_sha256": "f39af1346e03ca4278bff41903ecdac210455cdbf1dcda9c54da7395590c498c"
+      },
+      {
+        "variant": "sampler-9985",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "99f9f5456bf9a35ab1302d3f8024abbc3ee572d3818983bcfb6978e5877f8bbc",
+        "archive_sha256": "9a6a8eb880a15f2cf09ff7200ba1ed2fa5ad7f983ec023365343439053586f0e"
+      },
+      {
+        "variant": "sampler-9985",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "99f9f5456bf9a35ab1302d3f8024abbc3ee572d3818983bcfb6978e5877f8bbc",
+        "archive_sha256": "f8ff168a5a6da1e1c26a6d33416cf208a10933bb75e82b216412117acef77a4e"
+      },
+      {
+        "variant": "sampler-9985",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "99f9f5456bf9a35ab1302d3f8024abbc3ee572d3818983bcfb6978e5877f8bbc",
+        "archive_sha256": "e4378142b494925ede3d9dc05eff2539b0ca863335a35373e1ecbd1ecce54362"
+      },
+      {
+        "variant": "sampler-9986",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "629ad334632a1dd6f145980d99223843c1552672dc43490f6aa8ef8a3d49472e",
+        "archive_sha256": "05dd079463588a90e717e5dc3cb2b4bd0a52744006b6e9af9ed47bb80a1f2124"
+      },
+      {
+        "variant": "sampler-9986",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "629ad334632a1dd6f145980d99223843c1552672dc43490f6aa8ef8a3d49472e",
+        "archive_sha256": "7c0fd791ef3480d466320fc004e6b5e3db980e6d723e6bb761227b3933519f49"
+      },
+      {
+        "variant": "sampler-9986",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "629ad334632a1dd6f145980d99223843c1552672dc43490f6aa8ef8a3d49472e",
+        "archive_sha256": "c9a63e68bc04ff209633f8161d633b408fc8fe79f3ff6b1f5078f008b47c762d"
+      },
+      {
+        "variant": "sampler-9987",
+        "leaf_limit": 1,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 8,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "t/4.glb",
+          "t/5.glb",
+          "t/6.glb",
+          "t/7.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 8,
+          "leaf_triangles": 1,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "c82be1cd37c9a21ef52ab78ddd25cc4c781a8b48f4569e3d9f34d475d57e4a05",
+        "archive_sha256": "74af93e528d4ad43a69d36cdd5cbed6aaa516e2a3903f7a968e7bba96be368d2"
+      },
+      {
+        "variant": "sampler-9987",
+        "leaf_limit": 3,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 4,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "t/1.glb",
+          "t/2.glb",
+          "t/3.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 4,
+          "leaf_triangles": 3,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.07968663827312
+        },
+        "source_sha256": "c82be1cd37c9a21ef52ab78ddd25cc4c781a8b48f4569e3d9f34d475d57e4a05",
+        "archive_sha256": "7143881e6eab9b959532ce41673862bc3a34eb0270035d5a53e282a0043b6b65"
+      },
+      {
+        "variant": "sampler-9987",
+        "leaf_limit": 1000,
+        "status": "passed",
+        "source_triangles": 8,
+        "leaves": 1,
+        "published_images": [
+          "textures/0.png"
+        ],
+        "members": [
+          "@3dtilesIndex1@",
+          "conversion.json",
+          "t/0.glb",
+          "textures/0.png",
+          "tileset.json"
+        ],
+        "report": {
+          "schema_version": 3,
+          "profile": "f1b-local-gltf-v1",
+          "coordinates": "local-gltf",
+          "source_bytes": 7044,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8,
+          "leaf_tiles": 1,
+          "leaf_triangles": 1000,
+          "images": 1,
+          "image_bytes": 87,
+          "image_pixels": 6,
+          "routing_geometric_error_metres": 58.079686638273124
+        },
+        "source_sha256": "c82be1cd37c9a21ef52ab78ddd25cc4c781a8b48f4569e3d9f34d475d57e4a05",
+        "archive_sha256": "fc9352a533a5231806aafab8653cfc1f5914eee33aceca493ba4d984a55c59c3"
+      }
+    ],
+    "refusal_controls": [
+      {
+        "case": "image-uri-encoded-separator",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "79c6dd59942585ba91a27c9930c80efcdd0e8211cfafd2c4061891941c7668dc"
+      },
+      {
+        "case": "image-uri-encoded-separator",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "79c6dd59942585ba91a27c9930c80efcdd0e8211cfafd2c4061891941c7668dc"
+      },
+      {
+        "case": "image-uri-parent",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "104c5c208b7bd07ec7c5d8adf0314fae4bbb015b58dd1eed62438b863f43227e"
+      },
+      {
+        "case": "image-uri-parent",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "104c5c208b7bd07ec7c5d8adf0314fae4bbb015b58dd1eed62438b863f43227e"
+      },
+      {
+        "case": "image-uri-network",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2a7d36545b10c355eb3b5985abf01dac0173d5aa7088f3f3a2297f17bd4c95cb"
+      },
+      {
+        "case": "image-uri-network",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2a7d36545b10c355eb3b5985abf01dac0173d5aa7088f3f3a2297f17bd4c95cb"
+      },
+      {
+        "case": "image-uri-absolute",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b8e19d2e1c6ce185d2b6fd9ee442236cd0f197dd7887a1d68198455e2c0f07e5"
+      },
+      {
+        "case": "image-uri-absolute",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b8e19d2e1c6ce185d2b6fd9ee442236cd0f197dd7887a1d68198455e2c0f07e5"
+      },
+      {
+        "case": "image-uri-data",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "623907cadd434768f60b7e66d4e780f4fdaf1252453513c68cb4715c39af0351"
+      },
+      {
+        "case": "image-uri-data",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "623907cadd434768f60b7e66d4e780f4fdaf1252453513c68cb4715c39af0351"
+      },
+      {
+        "case": "buffer-uri-scheme",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "7b26effe10175e69c5819c36e2581b19853b47f620413a61cfc742e0d74d3b4f"
+      },
+      {
+        "case": "buffer-uri-scheme",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "7b26effe10175e69c5819c36e2581b19853b47f620413a61cfc742e0d74d3b4f"
+      },
+      {
+        "case": "blend",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "3f250f6cd806b104598e09dc638dac2d71164e4a16d641353d2cbf3fd5b668d2"
+      },
+      {
+        "case": "blend",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "3f250f6cd806b104598e09dc638dac2d71164e4a16d641353d2cbf3fd5b668d2"
+      },
+      {
+        "case": "normal-texture",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "fa8a472ec8b833fa8215e1f25dfdc310f189feadc4b6be3a66112bdaf0a6fe6b"
+      },
+      {
+        "case": "normal-texture",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "fa8a472ec8b833fa8215e1f25dfdc310f189feadc4b6be3a66112bdaf0a6fe6b"
+      },
+      {
+        "case": "metallic-roughness-texture",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b9f40a1cc700e4b44c79d967bd3127f1c0537b89dead80ba9118d5848b725e8e"
+      },
+      {
+        "case": "metallic-roughness-texture",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b9f40a1cc700e4b44c79d967bd3127f1c0537b89dead80ba9118d5848b725e8e"
+      },
+      {
+        "case": "occlusion-texture",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e9b7c3b69cff15f3cf93cbb7b303ab8807eac61675568e013a7d27a39c3cd152"
+      },
+      {
+        "case": "occlusion-texture",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e9b7c3b69cff15f3cf93cbb7b303ab8807eac61675568e013a7d27a39c3cd152"
+      },
+      {
+        "case": "emissive-texture",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b2a5c6ad423c81cb49cfbd1138790fdfb47de476a5bf36aa2109e2dd09055990"
+      },
+      {
+        "case": "emissive-texture",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "b2a5c6ad423c81cb49cfbd1138790fdfb47de476a5bf36aa2109e2dd09055990"
+      },
+      {
+        "case": "texcoord-one",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c48604e4217094571a334d449adf6edac177f7ed7bb0ac86f18032fe74fa8a47"
+      },
+      {
+        "case": "texcoord-one",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c48604e4217094571a334d449adf6edac177f7ed7bb0ac86f18032fe74fa8a47"
+      },
+      {
+        "case": "tangent",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "0cc32a62e2e4dc7c5c2560018e065970b725b796f83068ea206a9cd199cd3ce7"
+      },
+      {
+        "case": "tangent",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "0cc32a62e2e4dc7c5c2560018e065970b725b796f83068ea206a9cd199cd3ce7"
+      },
+      {
+        "case": "uv1",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "6d697986dcc9effcb55c3832d967a69562a2e732131e73ed9e0ebd0694b21a72"
+      },
+      {
+        "case": "uv1",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "6d697986dcc9effcb55c3832d967a69562a2e732131e73ed9e0ebd0694b21a72"
+      },
+      {
+        "case": "extensions-required",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "a4a287f33c0a37d69e643da46e32fcabb50163e54dd2c688fd058020b9d24d0f"
+      },
+      {
+        "case": "extensions-required",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "a4a287f33c0a37d69e643da46e32fcabb50163e54dd2c688fd058020b9d24d0f"
+      },
+      {
+        "case": "extensions-used",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "bcfab1fc5637e2ac9981c6ef28d2e7dbc6b759c4732521bccb5e44e603387aeb"
+      },
+      {
+        "case": "extensions-used",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "bcfab1fc5637e2ac9981c6ef28d2e7dbc6b759c4732521bccb5e44e603387aeb"
+      },
+      {
+        "case": "unused-image-extras",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "177b1adaf43ce5de9030ce8a801202810205bffc131193cd840b6ac9bc8e34a8"
+      },
+      {
+        "case": "unused-image-extras",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "177b1adaf43ce5de9030ce8a801202810205bffc131193cd840b6ac9bc8e34a8"
+      },
+      {
+        "case": "unused-image-uri",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "584c2d67ae178b62cddfc8567c474baecf1a841787b2d9f047b142458960a034"
+      },
+      {
+        "case": "unused-image-uri",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "584c2d67ae178b62cddfc8567c474baecf1a841787b2d9f047b142458960a034"
+      },
+      {
+        "case": "material-extras",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "948557139b180037b30af339a7449bf48d0cbd7ebea9bceeaadb604cd4eae38d"
+      },
+      {
+        "case": "material-extras",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "948557139b180037b30af339a7449bf48d0cbd7ebea9bceeaadb604cd4eae38d"
+      },
+      {
+        "case": "image-count",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "a248d4c7918f7c6a4a71ab54fd19cddcdc75cee07c7a377afc45af55e00121e7"
+      },
+      {
+        "case": "image-count",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "a248d4c7918f7c6a4a71ab54fd19cddcdc75cee07c7a377afc45af55e00121e7"
+      },
+      {
+        "case": "textured-no-uv",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "49cb409c1090581df03c0af40fd56908ffe94ff5b96c2447b3e5bd852efe4401"
+      },
+      {
+        "case": "textured-no-uv",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "49cb409c1090581df03c0af40fd56908ffe94ff5b96c2447b3e5bd852efe4401"
+      },
+      {
+        "case": "uv-count",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "dcb702c1aa4431947b7ef211ab5fd577f911d4904401222e3a496629201dae96"
+      },
+      {
+        "case": "uv-count",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "dcb702c1aa4431947b7ef211ab5fd577f911d4904401222e3a496629201dae96"
+      },
+      {
+        "case": "texture-source",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e178fc50319e2167171df901feacbc5bebd68a47389321b25277de2d7db4b311"
+      },
+      {
+        "case": "texture-source",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e178fc50319e2167171df901feacbc5bebd68a47389321b25277de2d7db4b311"
+      },
+      {
+        "case": "texture-sampler",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "fc9ce09ab52e7dac6165e898b0c06d9836da5a52055672938b9041377ce07ea2"
+      },
+      {
+        "case": "texture-sampler",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "fc9ce09ab52e7dac6165e898b0c06d9836da5a52055672938b9041377ce07ea2"
+      },
+      {
+        "case": "material-texture",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "797952ba4fb0f0bcada092b87a36403a76a12574eaf1b4920a1dd8b121bfd13d"
+      },
+      {
+        "case": "material-texture",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "797952ba4fb0f0bcada092b87a36403a76a12574eaf1b4920a1dd8b121bfd13d"
+      },
+      {
+        "case": "invalid-mag-filter",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "01a143f574e6cae1e1c8862ba8df5cde56b7a5d04f62b2d7877a6ec6d235b5ed"
+      },
+      {
+        "case": "invalid-mag-filter",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "01a143f574e6cae1e1c8862ba8df5cde56b7a5d04f62b2d7877a6ec6d235b5ed"
+      },
+      {
+        "case": "mime-mismatch",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c0f4a1f80665a59a47a429cf93ff65ac76ed47461dc5659294e6f1f40071e6d4"
+      },
+      {
+        "case": "mime-mismatch",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c0f4a1f80665a59a47a429cf93ff65ac76ed47461dc5659294e6f1f40071e6d4"
+      },
+      {
+        "case": "image-view-target",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c3b1831ffee3fd0328167df6806d0fa2d2555ecaec144aa7b89c485d761e43ed"
+      },
+      {
+        "case": "image-view-target",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c3b1831ffee3fd0328167df6806d0fa2d2555ecaec144aa7b89c485d761e43ed"
+      },
+      {
+        "case": "image-view-stride",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "66167fa3be324bf2c0be5d50ef33136dd6b6949274e21bc76e35ec4c1afe4376"
+      },
+      {
+        "case": "image-view-stride",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "66167fa3be324bf2c0be5d50ef33136dd6b6949274e21bc76e35ec4c1afe4376"
+      },
+      {
+        "case": "image-view-range",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2c5e503bee0f1589d370b2d827b4b61f19825be54dad544780980b088991f3d2"
+      },
+      {
+        "case": "image-view-range",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2c5e503bee0f1589d370b2d827b4b61f19825be54dad544780980b088991f3d2"
+      },
+      {
+        "case": "jpeg-missing-eoi",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "495bbd3c86346523bc77b271159fcb20e995eeae8f48b8f0ecda0950a18b11c6"
+      },
+      {
+        "case": "jpeg-missing-eoi",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "495bbd3c86346523bc77b271159fcb20e995eeae8f48b8f0ecda0950a18b11c6"
+      },
+      {
+        "case": "png-crc",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c5c79bb7d9bb9e32225ac20aaa0ee45773f4044945802c1ba92ef97089f700dc"
+      },
+      {
+        "case": "png-crc",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "c5c79bb7d9bb9e32225ac20aaa0ee45773f4044945802c1ba92ef97089f700dc"
+      },
+      {
+        "case": "png-zlib",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e17ba384d268810821dd30b01c6378ab0401de557723b47e64545c296f15e363"
+      },
+      {
+        "case": "png-zlib",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e17ba384d268810821dd30b01c6378ab0401de557723b47e64545c296f15e363"
+      },
+      {
+        "case": "unused-invalid-png",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "026ae48d2e6d8ba2d90ee6f3e66c7522e9ab4a07a6eb244a6658f544a793b516"
+      },
+      {
+        "case": "unused-invalid-png",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "026ae48d2e6d8ba2d90ee6f3e66c7522e9ab4a07a6eb244a6658f544a793b516"
+      },
+      {
+        "case": "png-missing-iend",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "7bb817a6c5df29f4e61406097158b4926f8b982f2f9e1cdf6d126e9c15a0c845"
+      },
+      {
+        "case": "png-missing-iend",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "7bb817a6c5df29f4e61406097158b4926f8b982f2f9e1cdf6d126e9c15a0c845"
+      },
+      {
+        "case": "png-trailing-bytes",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "671e6ac5a1b8aa428240c73dd7f1baef276f183534496ea4f5a7e95eb0fde637"
+      },
+      {
+        "case": "png-trailing-bytes",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "671e6ac5a1b8aa428240c73dd7f1baef276f183534496ea4f5a7e95eb0fde637"
+      },
+      {
+        "case": "png-iend-crc",
+        "leaf_limit": 1,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e3900944dd48004429e5996864bea883295ad2cb272ab1ddfabddde06bfd5c75"
+      },
+      {
+        "case": "png-iend-crc",
+        "leaf_limit": 1000,
+        "error_kind": "invalid_input",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "e3900944dd48004429e5996864bea883295ad2cb272ab1ddfabddde06bfd5c75"
+      },
+      {
+        "case": "png-apng",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "4f31262964c329bc21be1f668c7447bcbe227da06c603e5f101e3a8a2b41ff0b"
+      },
+      {
+        "case": "png-apng",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "4f31262964c329bc21be1f668c7447bcbe227da06c603e5f101e3a8a2b41ff0b"
+      },
+      {
+        "case": "png16-2-image0",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "28eeed32d6d6d9fbcc523f601783047f324ffe807d1d452640fabdf03b9fd2b8"
+      },
+      {
+        "case": "png16-2-image0",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "28eeed32d6d6d9fbcc523f601783047f324ffe807d1d452640fabdf03b9fd2b8"
+      },
+      {
+        "case": "png16-2-image1",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "d0f03a5cf2cbe164866d14a65942f4a6e70f32a5d4bb3060155d1775db0bd4b0"
+      },
+      {
+        "case": "png16-2-image1",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "d0f03a5cf2cbe164866d14a65942f4a6e70f32a5d4bb3060155d1775db0bd4b0"
+      },
+      {
+        "case": "png16-6-image0",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "96fa5301dbedc5524b806dfe4e73451a25f8213638042926c7248134fb451131"
+      },
+      {
+        "case": "png16-6-image0",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "96fa5301dbedc5524b806dfe4e73451a25f8213638042926c7248134fb451131"
+      },
+      {
+        "case": "png16-6-image1",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "5a554e064fc6687cd7a1aac9d7deb9a2a98f39908b1fbfc0e0da86b1cd75e265"
+      },
+      {
+        "case": "png16-6-image1",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "5a554e064fc6687cd7a1aac9d7deb9a2a98f39908b1fbfc0e0da86b1cd75e265"
+      },
+      {
+        "case": "image-edge",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "623d3dc7b36e800f9c5e7fc73f8cf8a0b1715606d4d2b72d081fec5a715f8701"
+      },
+      {
+        "case": "image-edge",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "623d3dc7b36e800f9c5e7fc73f8cf8a0b1715606d4d2b72d081fec5a715f8701"
+      },
+      {
+        "case": "image-pixel-ceiling",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "f073953326c42cbacaeada7d79bd9049ec6ab1795c25161dac1462f1e2fab7af"
+      },
+      {
+        "case": "image-pixel-ceiling",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "f073953326c42cbacaeada7d79bd9049ec6ab1795c25161dac1462f1e2fab7af"
+      },
+      {
+        "case": "image-total-pixel-ceiling",
+        "leaf_limit": 1,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2a64c8eae21d6b0b806462335ba8daf41989d5965b065694a6f0fd2645314b1d"
+      },
+      {
+        "case": "image-total-pixel-ceiling",
+        "leaf_limit": 1000,
+        "error_kind": "unsupported",
+        "output_exists": false,
+        "output_parent_exists": false,
+        "source_sha256": "2a64c8eae21d6b0b806462335ba8daf41989d5965b065694a6f0fd2645314b1d"
+      }
+    ]
+  }
+}

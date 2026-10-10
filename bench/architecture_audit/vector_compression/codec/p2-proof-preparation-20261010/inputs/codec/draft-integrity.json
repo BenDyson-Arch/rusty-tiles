@@ -1,0 +1,31 @@
+{
+  "status": "PRECODE DRAFT freeze after coordinator-requested independent-review corrections; no implementation approval",
+  "source_pin": "Audit exact historical2ebfb749 source pins retained; current C1 correction belongs to coordinator and its independent final acceptance",
+  "historical_audit_supersession": "Existing-compressed Unsupported in earlier audit is superseded by bounded ATTRIBUTES/NONE identity in current contract; historical files not rewritten",
+  "files": {
+    "contract-draft.md": {
+      "bytes": 18401,
+      "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e"
+    },
+    "decisions.json": {
+      "bytes": 20032,
+      "sha256": "a7a93c86b20bb713dbd15b0556c8d5fc37086886d71a711ca120b1710dc2fe90"
+    },
+    "audit.md": {
+      "bytes": 20113,
+      "sha256": "fa82b064622358f985ff16e8ee452716c122f52a51416e20a5a7e31bb0a1c3e7"
+    },
+    "audit.json": {
+      "bytes": 27513,
+      "sha256": "261edcad319e8b98de00325dd11ee4cc51f8f396f0367256a67270fc4ef9d017"
+    },
+    "record-verification.json": {
+      "bytes": 594,
+      "sha256": "d52801e3238086cc13f7c7b48cc0f0a7c1951c469cae0bbdab2d9d63a9a8cc0a"
+    },
+    "primary/primary-receipt.json": {
+      "bytes": 6116,
+      "sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8"
+    }
+  }
+}

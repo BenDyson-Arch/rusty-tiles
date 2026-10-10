@@ -1,0 +1,126 @@
+{
+  "binary_sha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1",
+  "probe_sha256": "57fcd5a1df7601fe941f8b3098c4acb5f1757af9f24bd40638f7b31df0363cba",
+  "records": [
+    {
+      "case": "exact-64MiB",
+      "logical_emitted_bytes": 67108864,
+      "unique_external_bytes": 33554238,
+      "source_sha256": "7d0d13845fe2018fd2b349b84a9003189ba934b89a352b52c434b1292da4ea5b",
+      "artifact_sha256": "f6bd4dda7e1a6e0af99fd2984a546d1c26d90b216c7d87e51c65f854e50375f5",
+      "status": 0,
+      "result": {
+        "cleanupDiagnostics": [],
+        "conversionReport": {
+          "archive": "/tmp/w1-emitted-alias-review-w_i1vs33/exact-64MiB/out.3tz",
+          "entry": "conversion.json"
+        },
+        "counts": {
+          "triangles": 1
+        },
+        "modelReport": {
+          "bounding_box": [
+            0.5000000000000011,
+            0.0,
+            0.5000000000000009,
+            0.5000000000000012,
+            0.0,
+            0.0,
+            0.0,
+            1.5e-322,
+            0.0,
+            0.0,
+            0.0,
+            0.500000000000001
+          ],
+          "captured_bytes": 33554626,
+          "coordinates": "local-gltf",
+          "external_bytes": 33554238,
+          "external_files": 1,
+          "model_payload_bytes": 67108864,
+          "model_payload_files": 3,
+          "placement": {
+            "kind": "local"
+          },
+          "product": "archive",
+          "profile": "w1-static-model-v1",
+          "root_geometric_error_metres": 0.0,
+          "root_transform": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "schema_version": 1,
+          "source_bytes": 388,
+          "source_coordinates": "local-gltf",
+          "tileset_geometric_error_metres": 1.4142135623730991,
+          "triangles": 1
+        },
+        "ok": true,
+        "output": "/tmp/w1-emitted-alias-review-w_i1vs33/exact-64MiB/out.3tz",
+        "reuse": null,
+        "settings": {
+          "captured_bytes": 33554626,
+          "external_bytes": 33554238,
+          "external_files": 1,
+          "model_payload_bytes": 67108864,
+          "model_payload_files": 3,
+          "root_geometric_error_metres": 0.0,
+          "schema_version": 1,
+          "source_bytes": 388,
+          "tileset_geometric_error_metres": 1.4142135623730991
+        },
+        "skippedFeatures": null
+      },
+      "measurements": {
+        "elapsed_seconds": 0.14568406199987294,
+        "sampled_scratch_bytes": 129566617,
+        "sampled_open_descriptors": 6,
+        "max_rss_kib": 62904
+      }
+    },
+    {
+      "case": "over-64MiB-by-two",
+      "logical_emitted_bytes": 67108866,
+      "unique_external_bytes": 33554239,
+      "source_sha256": "7d0d13845fe2018fd2b349b84a9003189ba934b89a352b52c434b1292da4ea5b",
+      "artifact_sha256": "1dd17190a2f261044d8e04d099db4ebe2754ff402e5c2b8b759498176ddd343a",
+      "status": 2,
+      "result": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "model emitted alias payload exceeds 64 MiB",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      },
+      "measurements": {
+        "elapsed_seconds": 0.010564673999851948,
+        "sampled_scratch_bytes": 0,
+        "sampled_open_descriptors": 4,
+        "max_rss_kib": 62480
+      }
+    }
+  ],
+  "limits": [
+    "Linux wait4 max RSS for these executions; descriptors/scratch sampled at10ms",
+    "no whole-process bound inferred; two distinct hard-link alias names"
+  ]
+}

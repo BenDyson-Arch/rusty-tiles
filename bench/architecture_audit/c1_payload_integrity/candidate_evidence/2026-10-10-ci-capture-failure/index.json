@@ -1,0 +1,48 @@
+{
+  "sourceHead": "5fdf6fb0bb15ccb404217b7e18f1414efc075a39",
+  "run": 38049923044,
+  "job": 114206817691,
+  "scope": "Actual full native Cargo tests passed; context receipt extraction failed on interleaved original output. No repair, record dropping or82-call receipt acceptance. Subsequent serial harness capture and new exact-head CI required.",
+  "records": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/remote-5fdf6fb/rust-job-api-complete.log",
+      "file": "rust-job-api-complete.log.gz",
+      "rawBytes": 203348,
+      "rawSha256": "a6ef3061719aa8dc4d790abd3a41424d34ca8379f6fca19709dedd7f80334d7f",
+      "gzipBytes": 38520,
+      "gzipSha256": "770a250aef05a0d63d23c0abdb7764dcd44a2f7a012acc2f410919bbc926141f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/remote-5fdf6fb/rust-job-initial-failure.json",
+      "file": "rust-job-initial-failure.json.gz",
+      "rawBytes": 5802,
+      "rawSha256": "a7ba496bdccf5a92eeffe4218d74950000a2e216dd83559d1a78f40a93461f95",
+      "gzipBytes": 1103,
+      "gzipSha256": "18d36f8ab77bf1e689aaa20a7e612a273690fe13c28d5b5e68e528f0c0eb2079"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/remote-5fdf6fb/failed-capture-observation.json",
+      "file": "failed-capture-observation.json.gz",
+      "rawBytes": 1997,
+      "rawSha256": "4891cb2e74fdf333d4c5c3d91de6177765e35a9f68dd0604b7b9f247d3fc7750",
+      "gzipBytes": 946,
+      "gzipSha256": "6a3ec5d5b439bee42b552384963d200f03af799c957fda585a577e061d339081"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/remote-5fdf6fb/failed-main-c1-upload/c1-library.log",
+      "file": "failed-main-c1-upload__c1-library.log.gz",
+      "rawBytes": 133158,
+      "rawSha256": "669eb8f547b8b868292a3ffcb9ce28feceef85505beef5706976ec25ba857023",
+      "gzipBytes": 21552,
+      "gzipSha256": "6eb319e0a3650abe4e30250ee1a1a28b18af545b22868a7aeb098ea08935a38a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/remote-5fdf6fb/pull-merge-preview.json",
+      "file": "pull-merge-preview.json.gz",
+      "rawBytes": 259,
+      "rawSha256": "d0073eb9d34abbc2bdb9deac46045f4acf22bd2657230ced73f91a7fd2f3dd12",
+      "gzipBytes": 172,
+      "gzipSha256": "ece056fce115d748dc2434f3c4aaa68526bb1525529b943a7a8ac5e772185b56"
+    }
+  ]
+}

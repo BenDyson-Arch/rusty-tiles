@@ -1,0 +1,67 @@
+{
+  "classification": "independent tiny actual CLI physical-cardinality control; no generic ZIP or allocation claim",
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+  "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+  "driver_sha256": "c50911d3ffcbee8ef3625f2b7627a01202d16ce4b36b94e7dcb902910a2fa3d6",
+  "records": [
+    {
+      "label": "single-manifest-control",
+      "archive_sha256": "d57d530239ff3608543ab19848e13057bca43f06d290bcc0f2e569582e880622",
+      "archive_bytes": 396,
+      "facts": {
+        "physical_central_records": 2,
+        "non_index_records": 1,
+        "index_bytes": 24,
+        "required_physical_index_bytes": 24,
+        "local_starts": [
+          0,
+          186
+        ],
+        "central_start": 255,
+        "all_physical_extents_disjoint": true
+      },
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "--json",
+        "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/single-manifest-control.3tz"
+      ],
+      "returncode": 0,
+      "stdout": "{\"archive\":\"/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/single-manifest-control.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":0,\"entries\":2,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyDepth\":128,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"jsonDepth\":64,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadataSemantics\"],\"ok\":true,\"payloads\":[],\"tiles\":1}\n",
+      "stderr": ""
+    },
+    {
+      "label": "disjoint-duplicate-name-hidden-index-row",
+      "archive_sha256": "7bdac57b26de634c2c49dba168509d87f4d455733139aa34731e004415f8311a",
+      "archive_bytes": 527,
+      "facts": {
+        "physical_central_records": 3,
+        "non_index_records": 2,
+        "index_bytes": 24,
+        "required_physical_index_bytes": 48,
+        "local_starts": [
+          0,
+          73,
+          259
+        ],
+        "central_start": 328,
+        "all_physical_extents_disjoint": true
+      },
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "validate",
+        "--json",
+        "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/disjoint-duplicate-name-hidden-index-row.3tz"
+      ],
+      "returncode": 0,
+      "stdout": "{\"archive\":\"/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/disjoint-duplicate-name-hidden-index-row.3tz\",\"checks\":[\"archiveIndex\",\"archiveCrc\",\"contentHashes\",\"tilesetSchema\",\"payloadEnvelope\",\"bufferRanges\",\"accessorValues\",\"primitiveIndices\",\"hierarchyBounds\",\"geometricErrorOrder\",\"resourceReferences\",\"recordedBudgets\"],\"contentReferences\":0,\"entries\":2,\"limits\":{\"accessorElements\":4000000,\"archiveEntries\":65536,\"archiveStoredBytes\":1073741824,\"centralDirectoryBytes\":16777216,\"documentDecodedBytes\":67108864,\"documentItems\":65536,\"hierarchyDepth\":128,\"hierarchyVisits\":65536,\"jsonBytes\":8388608,\"jsonDepth\":64,\"memberBytes\":67108864,\"references\":262144,\"sourceArchiveBytes\":1073741824,\"totalBytesRead\":2147483648,\"totalPayloadElements\":16000000},\"notInspected\":[\"decodedContentBounds\",\"geometricErrorAccuracy\",\"materialAndImageSemantics\",\"metadataSemantics\"],\"ok\":true,\"payloads\":[],\"tiles\":1}\n",
+      "stderr": ""
+    }
+  ]
+}

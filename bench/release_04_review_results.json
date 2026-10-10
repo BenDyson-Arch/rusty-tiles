@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-09",
+  "packageVersion": "0.4.0",
+  "scope": "Local combined validation of the three correctness findings in release PR110. Hosted release acceptance and wheel checks run separately; no publication.",
+  "reviewUrl": "https://github.com/BenDyson-Arch/rusty-tiles/pull/110#issuecomment-6072197745",
+  "reviewedHead": "8feece00b123600fb1215f7ceae79c4f04177d09",
+  "integratedSourceCommit": "18aa42a7c4ea9a5d88888fc424eec75b9a2052b9",
+  "testedTrees": {
+    "src": "791e93ebcecb8986abd55377897766e3ac568298",
+    "tests": "966522e74e3ce336bfff592b60dc48b53db52673",
+    "Cargo.toml": "296390ed47a3e60a86a3c5ec11080b20f438a4d8",
+    "Cargo.lock": "ffe554c4f2a7676dc71bd19c363bfa5ea9fe484c",
+    "bindings/python": "412d77932dfbeed21453c023ec4b8998f0194d9e"
+  },
+  "changes": [
+    {
+      "finding": "Implicit small-mesh external resources",
+      "before": "Conversion succeeds but archive validation reports missing implicit-content/buffer.bin.",
+      "after": "Declared buffers, images and schemas are packed at the relocated URI base without changing source bytes.",
+      "regressions": [
+        "Validate complete external glTF and GLB archives",
+        "Independently import extracted buffers and decode images",
+        "Nested/dot URIs, deduplication and a schema referring to the original document",
+        "Unsafe/missing resources and generated-name collisions preserve previous output"
+      ],
+      "focusedDefaultTestsPassed": 22
+    },
+    {
+      "finding": "Mesh normal derivative domains",
+      "before": "Valid longitude180 vertices fail because a synthetic normal probe exceeds180.",
+      "after": "Actual coordinates are strictly validated before periodic longitude or inward one-sided derivative sampling; a resolver promotion recomputes the complete batch.",
+      "regressions": [
+        "Date-line and near-pole positions in degrees and grads",
+        "XYZ/Y-up axes and explicit/implicit output",
+        "Independent WGS84 world positions/normals and analytic projected Albers derivative",
+        "Strict native epoch and projected metre/foot/US-foot operations",
+        "Invalid source positions and singular geographic-pole normals fail atomically"
+      ],
+      "focusedDefaultTestsPassed": 23,
+      "focusedNativeTestsPassed": 25,
+      "independentCodeReview": "No concrete blocker found"
+    },
+    {
+      "finding": "Case-distinct GeoJSON properties in SQLite filters",
+      "before": "A/a properties cause duplicate-column errors even for keep=1 and constant0 filters.",
+      "after": "Unrelated and constant filters work; ambiguous direct SQLite identifiers are explicitly refused using placeholder columns and a read authorizer. Original property names/values are retained.",
+      "regressions": [
+        "Quoted/unquoted ambiguity and rowid/TRUE fallbacks",
+        "String literals, spaces, quoted keywords and Unicode names",
+        "Empty and matching published archives; source and prior-output preservation",
+        "Existing filter security and exact-integer checks"
+      ],
+      "focusedDefaultTestsPassed": 21,
+      "payloadCheck": "Matching filtered GLB payload is byte-identical to the unfiltered pre-fix reproduction.",
+      "reuseImpact": "Existing source fingerprint includes portable.rs; changing that reader requires a fresh portable reuse baseline."
+    }
+  ],
+  "rust": {
+    "default": {
+      "passed": 269,
+      "failed": 0,
+      "ignored": 8
+    },
+    "native": {
+      "passed": 294,
+      "failed": 0,
+      "ignored": 9
+    }
+  },
+  "checks": [
+    {
+      "check": "format",
+      "exitCode": 0,
+      "seconds": 0.4
+    },
+    {
+      "check": "default-tests",
+      "exitCode": 0,
+      "seconds": 17.57
+    },
+    {
+      "check": "default-clippy",
+      "exitCode": 0,
+      "seconds": 10.09
+    },
+    {
+      "check": "python-clippy",
+      "exitCode": 0,
+      "seconds": 4.28
+    },
+    {
+      "check": "native-tests",
+      "exitCode": 0,
+      "seconds": 53.92
+    },
+    {
+      "check": "native-clippy",
+      "exitCode": 0,
+      "seconds": 2.78
+    },
+    {
+      "check": "native-build",
+      "exitCode": 0,
+      "seconds": 0.1
+    },
+    {
+      "check": "python-oracles",
+      "exitCode": 0,
+      "seconds": 38.81
+    }
+  ],
+  "pythonOracleSuite": {
+    "testsRun": 125,
+    "skipped": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipReason": "Optional external geodiff integrations are not configured."
+  },
+  "outputDigests": "Two existing digest tests pass in both profiles; one opt-in export helper remains ignored.",
+  "logSha256": {
+    "format": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "default-tests": "a1c423f2b0c8eda8ec43d30c71cf41d8d0a1ddb9af0f3c97a8d5564eeca0cb70",
+    "default-clippy": "e5a2ee13b3d4a2fd0860c2e85aa292359b22d49c4cbcce890f166ba568be3e88",
+    "python-clippy": "7e2e02274dd2cccc34e2a823f6491ed80ab57f8f76abfdcadc5ade7c6682621e",
+    "native-tests": "438ae5bb1a47ee2ca268089046a9b77c733003656a22948a70d4fdf9c96298e3",
+    "native-clippy": "ed2d6734bef797c0b418e24fe63e9612a413f8a7d63ea37587ec264518e2c476",
+    "native-build": "3fe980a0f9709b0a2d093ea2a65202e1e589d4893ac71be4272c165923b9e527",
+    "python-oracles": "ffeaa3231a547911cb322f014f7ee5f6594125513074dc036a57841befd94350"
+  },
+  "localBuild": {
+    "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "gdal": "3.13.3",
+    "debugInfo": false,
+    "incremental": false,
+    "rustMinStack": 33554432,
+    "nativeSQLite": "Shared system SQLite; override unset for standard builds"
+  },
+  "publication": {
+    "tagCreated": false,
+    "pypiPublished": false
+  },
+  "windowsTestFollowup": {
+    "initialFailureJob": "https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/37870520937/job/113627303054",
+    "finding": "The new extracted-resource regression kept its ZipArchive inspection handle open during forced replacement; Windows returned Access is denied.",
+    "change": "Close the inspection reader after extraction, retaining all replacement and byte-equality assertions. Production code is unchanged.",
+    "localFocusedResult": {
+      "resourceTestsPassed": 9,
+      "failed": 0
+    },
+    "hostedVerification": "See the current Windows CLI check on PR112 for the rerun."
+  }
+}

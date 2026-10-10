@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","id":"storage-failure","properties":{"audit_storage_failure":true},"geometry":{"type":"Point","coordinates":[0,0,0]}},{"type":"Feature","id":"valid","properties":{"audit_storage_failure":false},"geometry":{"type":"Point","coordinates":[20,20,0]}}]}

@@ -1,0 +1,1795 @@
+{
+  "audited_tree_head": "43d14b1 (coordinator-provided accepted head)",
+  "classification": "bounded old-operation observations and independent design-plan probes; no replacement acceptance",
+  "merged_baseline": "34a76152d18b02553691f472207225f116307a67 (coordinator reports identical tree)",
+  "runs": {
+    "native": {
+      "binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+      "binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+      "cases": [
+        {
+          "aggregate_json_bytes": 5462,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 10834,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "279c947822b0f6507d81ab2be30d810effde3f2f182189a97695f6db2d93f303",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-flat-rounded",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 9694,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/47a5f87aa35787335ad33983c5c8115ef346a4d88fdfd651ec1922f0374faf1e.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/47a5f87aa35787335ad33983c5c8115ef346a4d88fdfd651ec1922f0374faf1e.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5536,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11148,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "53b6d67e6e19f780ccf36cbcd04c061f04272cb9009a9508a393843f9a0af313",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-quantized",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2098,
+          "max_nominal_cell_excess_metres": 4.676814491233472e-15,
+          "member_bytes_excluding_index": 10008,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/8bad2ba5ef30ca548f8d85224ce744ac219e061339c83e61303a06dc27617c8c.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/7162629434b6bddbe1978758b741789af0e54e28db8710f163fad7749909be03.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 2.746108165911428e-07,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/7162629434b6bddbe1978758b741789af0e54e28db8710f163fad7749909be03.glb",
+              "t/8bad2ba5ef30ca548f8d85224ce744ac219e061339c83e61303a06dc27617c8c.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5454,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 12138,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "c8d690d2e81b45ccc2ac8899bb4434287260a1542d2b7fc5fc7e567cfb175afb",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-compressed",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2082,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10998,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/01615eaf51f996d00839b2b244fd9d9eb5990031e3d1e68e2c02717f3e3a552f.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/dee599eeb72bdf36acb14825c0860c28d6e1da23e1ec9c0c37e1dfc1ccde13c2.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/01615eaf51f996d00839b2b244fd9d9eb5990031e3d1e68e2c02717f3e3a552f.glb",
+              "t/dee599eeb72bdf36acb14825c0860c28d6e1da23e1ec9c0c37e1dfc1ccde13c2.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5567,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 12515,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "a98bc5c9de47d9d70e7c8018f6acdb375b887daeebdbd5a58632573d84e12831",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-quantized-compressed",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2108,
+          "max_nominal_cell_excess_metres": 4.676814491233472e-15,
+          "member_bytes_excluding_index": 11375,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/e50722e30869c9b757d95a3c1059dc22edf7eb17c84dcc8543a27039326c57d6.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/80a62271e717d0f7df2b82a1610093bf70cf6a6737b323d622b88bcdc408d315.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 2.746108165911428e-07,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/80a62271e717d0f7df2b82a1610093bf70cf6a6737b323d622b88bcdc408d315.glb",
+              "t/e50722e30869c9b757d95a3c1059dc22edf7eb17c84dcc8543a27039326c57d6.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 7501,
+          "alias_resource_closure": null,
+          "archive_bytes": 16781,
+          "archive_member_count_including_index": 9,
+          "archive_sha256": "8dc572ee43307d02f8d7483de4994f0c0d3e8e87e148bc5ac484bcc0423f1232",
+          "content_references": 4,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 4,
+          "index_bytes": 192,
+          "label": "vector-deep-tight",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 3176,
+          "max_nominal_cell_excess_metres": 100.001,
+          "member_bytes_excluding_index": 15161,
+          "members_excluding_index": 8,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 7,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 7,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 30999,
+          "alias_resource_closure": null,
+          "archive_bytes": 99863,
+          "archive_member_count_including_index": 31,
+          "archive_sha256": "4603dbf7e67f76e66ee90571507dbb4d9f7ff95e6ce3567ccf32b7a4e54540a5",
+          "content_references": 26,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 26,
+          "index_bytes": 720,
+          "label": "vector-array-b3dm",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 2,
+          "max_json_bytes": 13903,
+          "max_nominal_cell_excess_metres": 1.0000000269619667,
+          "member_bytes_excluding_index": 92935,
+          "members_excluding_index": 30,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 27,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 27,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 11705,
+          "alias_resource_closure": null,
+          "archive_bytes": 21729,
+          "archive_member_count_including_index": 9,
+          "archive_sha256": "c50e84a87826c815774a3dd3fec2fa754543f2b61caec6de35ab121f71fa22db",
+          "content_references": 11,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 4,
+          "index_bytes": 192,
+          "label": "vector-fragmented-line",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 7161,
+          "max_nominal_cell_excess_metres": 0.06800000384807882,
+          "member_bytes_excluding_index": 20109,
+          "members_excluding_index": 8,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 11,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 11,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 3198,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-0-0-0-0-0-0.glb",
+              "t/owned-1-0-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 18442,
+          "archive_member_count_including_index": 6,
+          "archive_sha256": "d719edaef4cae30debcbfa883db75ef601c2f267538be108f66af66b272f66d1",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 3,
+          "index_bytes": 120,
+          "label": "point-flat-rounded",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2087,
+          "max_nominal_cell_excess_metres": 1e-06,
+          "member_bytes_excluding_index": 17718,
+          "members_excluding_index": 5,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/0.glb",
+                "t/owned-0-0-0-0-0-0.glb"
+              ],
+              [
+                "t/1.glb",
+                "t/owned-1-0-0-0-0-0.glb"
+              ],
+              [
+                "t/2.glb",
+                "t/owned-2-0-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "OCTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/0.glb",
+              "t/1.glb",
+              "t/2.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 14613,
+          "alias_resource_closure": null,
+          "archive_bytes": 86751,
+          "archive_member_count_including_index": 18,
+          "archive_sha256": "2e85d504ce17974f824d654d02f368a4b33e8b849269ac03875c2f0b226c1740",
+          "content_references": 15,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 15,
+          "index_bytes": 408,
+          "label": "point-deep-tight",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run point-cloud from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 13516,
+          "max_nominal_cell_excess_metres": 100.000001,
+          "member_bytes_excluding_index": 84649,
+          "members_excluding_index": 17,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 15,
+          "owned_oracle": null,
+          "scheme": "OCTREE",
+          "source_nodes": 15,
+          "source_position_error_metres": 0.0,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 6355,
+          "alias_resource_closure": null,
+          "archive_bytes": 40179,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "fe05dfac497250bac88f64bd73419c6f576991a6c1e49e8e7e0c369b031af58d",
+          "content_references": 7,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 7,
+          "index_bytes": 216,
+          "label": "point-duplicate-midpoint",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (multiple children occupy the same regular cell); re-run point-cloud from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 5260,
+          "max_nominal_cell_excess_metres": 1e-06,
+          "member_bytes_excluding_index": 38999,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 7,
+          "owned_oracle": null,
+          "scheme": "OCTREE",
+          "source_nodes": 7,
+          "source_position_error_metres": 0.0,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 18045,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-0-0-0-0-0.b3dm",
+              "t/owned-0-0-0-0-1.glb"
+            ]
+          },
+          "archive_bytes": 29479,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "85a5eb3e684d1924c551eb96345b7adfcd3f629dc9d6890cfb850731afb693eb",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "fragmented-array-leaf",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 9892,
+          "max_nominal_cell_excess_metres": 0,
+          "member_bytes_excluding_index": 28337,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 1,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/3a9c82e8c08da8f2279b94f2860a6092defda0b153d37342a2ebe0e61400fa42.b3dm",
+                "t/owned-0-0-0-0-0.b3dm"
+              ],
+              [
+                "t/3da47b9d475a1e4e5e6166290019f39b9ff08b887c3cc3139e50e8a3625e2562.glb",
+                "t/owned-0-0-0-0-1.glb"
+              ]
+            ],
+            "external_roots": 0
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 1,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/3a9c82e8c08da8f2279b94f2860a6092defda0b153d37342a2ebe0e61400fa42.b3dm",
+              "t/3da47b9d475a1e4e5e6166290019f39b9ff08b887c3cc3139e50e8a3625e2562.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5776,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/nested/owned-1-0-0-0-0.glb",
+              "t/nested/owned-1-0-0-0-1.glb",
+              "t/nested/paint.png",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11496,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "60c85a18d4d7e089d9d8bdeddb67296debaee8c1066fee09c98425d2b2d46c81",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 216,
+          "label": "shared-relative-resources",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10016,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-1.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/nested/paint.png",
+              "t/nested/payload.glb",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5776,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [
+              "VENDOR_resource"
+            ],
+            "reached": [
+              "t/nested/owned-1-0-0-0-0.glb",
+              "t/nested/owned-1-0-0-0-1.glb",
+              "t/nested/paint.png",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11584,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "128e57cc5ae945b55bddf6802c081e17f0aab391e7e6c4e0b1674532a3faf2ac",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 216,
+          "label": "opaque-extension-known-resource",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10104,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-1.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [
+              "VENDOR_resource"
+            ],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/nested/paint.png",
+              "t/nested/payload.glb",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5776,
+          "alias_resource_closure": null,
+          "archive_bytes": 11752,
+          "archive_member_count_including_index": 11,
+          "archive_sha256": "d4c276613837e07df5c598d5f5ef568c0198b0ad6d67ebf1235c9e25efb356b1",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 240,
+          "label": "opaque-extension-private-resource",
+          "legacy_error": {
+            "code": "invalid_input",
+            "message": "unreferenced archive entries: t/nested/private.dat"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10132,
+          "members_excluding_index": 10,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        }
+      ],
+      "codec_calls": 4,
+      "commands": 44,
+      "controls": [
+        {
+          "independent_control": "rejected",
+          "label": "availability-swap",
+          "reason": "availability uses wrong emitted-root slot"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-box",
+          "reason": "box metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-error",
+          "reason": "error metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-extras",
+          "reason": "extras metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "external-transform",
+          "reason": "root field preservation: transform"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "alias-bytes",
+          "reason": "alias payload bytes"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "relative-alias-base",
+          "reason": "relative resource base changed"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "missing-external-buffer",
+          "reason": "missing resource t/nested/positions.bin"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "missing-schema",
+          "reason": "missing resource t/nested/schemas/features.json"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "changed-resource-bytes",
+          "reason": "resource identity mismatch"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "orphan-resource",
+          "reason": "orphan resource inventory"
+        },
+        {
+          "inventory": [
+            {
+              "descendant": "subtrees/owned-0-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            },
+            {
+              "descendant": "subtrees/owned-1-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            },
+            {
+              "descendant": "subtrees/owned-2-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            }
+          ],
+          "label": "source-subtrees",
+          "legacy_exit": 1,
+          "legacy_result": {
+            "error": {
+              "code": "io",
+              "message": "File exists (os error 17)"
+            },
+            "exitCode": 1,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "kind": "exact",
+              "name": "t/nested/owned-1-0-0-0-0.glb"
+            }
+          ],
+          "label": "nested-alias-exact",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: generated content alias collides with source member: t/nested/owned-1-0-0-0-0.glb"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "descendant": "t/nested/owned-1-0-0-0-0.glb/resource.json",
+              "file": "t/nested/owned-1-0-0-0-0.glb",
+              "kind": "ancestor"
+            }
+          ],
+          "label": "nested-alias-ancestor",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: generated content alias collides with source member: t/nested/owned-1-0-0-0-0.glb"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "kind": "exact",
+              "name": "t/owned-1-0-0-0-0.glb"
+            }
+          ],
+          "label": "root-alias-exact",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: archive contains reserved implicit output paths"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "external-tileset-schema",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: external tileset schemaUri is unsupported; use an inline schema before conversion"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "reserved-schema-class",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: source schema uses reserved rustyTile class"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "tile-metadata",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: irregular explicit hierarchy (explicit tile metadata requires unsupported subtree property tables); re-run vector from source without --explicit"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "content-volume",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: irregular explicit hierarchy (content bounding volumes require unsupported subtree content metadata); re-run vector from source without --explicit"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        }
+      ],
+      "method": {
+        "RAYON_NUM_THREADS": 2,
+        "converter_concurrency": 1,
+        "fixtures": "bounded literal LAS and independently authored GeoJSON; no large resource matrix",
+        "nice": 10,
+        "process_timeout_seconds": 120
+      },
+      "probe_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+      "raw_gzip_sha256": "f641e9bfb14ecaa2c03761a068fd1745e1104cb0108848bc72ad5f0dd9a4c2dc",
+      "raw_receipt": "native-raw.json.gz",
+      "raw_receipt_sha256": "ec92c154077c77cd178279248b1d7cb489889266929e03e11551dc246349099d"
+    },
+    "portable": {
+      "binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+      "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+      "cases": [
+        {
+          "aggregate_json_bytes": 5459,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 10831,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "0b4bb48e516f8550c76b919ccef9229765020c0a702bf8865c177d42b0ebcf6f",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-flat-rounded",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 9691,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/47a5f87aa35787335ad33983c5c8115ef346a4d88fdfd651ec1922f0374faf1e.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/47a5f87aa35787335ad33983c5c8115ef346a4d88fdfd651ec1922f0374faf1e.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5533,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11145,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "dbdb19935b405f599cf6da5e258f3856c1df86059b2b61d36f34b342e29f80f7",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-quantized",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2098,
+          "max_nominal_cell_excess_metres": 4.676814491233472e-15,
+          "member_bytes_excluding_index": 10005,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/8bad2ba5ef30ca548f8d85224ce744ac219e061339c83e61303a06dc27617c8c.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/7162629434b6bddbe1978758b741789af0e54e28db8710f163fad7749909be03.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 2.746108165911428e-07,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/7162629434b6bddbe1978758b741789af0e54e28db8710f163fad7749909be03.glb",
+              "t/8bad2ba5ef30ca548f8d85224ce744ac219e061339c83e61303a06dc27617c8c.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5451,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 12135,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "041314a2c98117286a18ffb0cb7f6dd2d13feaed429f2bd7780642805cd509d4",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-compressed",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2082,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10995,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/01615eaf51f996d00839b2b244fd9d9eb5990031e3d1e68e2c02717f3e3a552f.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/dee599eeb72bdf36acb14825c0860c28d6e1da23e1ec9c0c37e1dfc1ccde13c2.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/01615eaf51f996d00839b2b244fd9d9eb5990031e3d1e68e2c02717f3e3a552f.glb",
+              "t/dee599eeb72bdf36acb14825c0860c28d6e1da23e1ec9c0c37e1dfc1ccde13c2.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5564,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-1-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 12512,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "08896c87b962af0644e0c5055bebd52d1d45d13c989a531951b3077022468934",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "vector-quantized-compressed",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2108,
+          "max_nominal_cell_excess_metres": 4.676814491233472e-15,
+          "member_bytes_excluding_index": 11372,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/e50722e30869c9b757d95a3c1059dc22edf7eb17c84dcc8543a27039326c57d6.glb",
+                "t/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/80a62271e717d0f7df2b82a1610093bf70cf6a6737b323d622b88bcdc408d315.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 2.746108165911428e-07,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/80a62271e717d0f7df2b82a1610093bf70cf6a6737b323d622b88bcdc408d315.glb",
+              "t/e50722e30869c9b757d95a3c1059dc22edf7eb17c84dcc8543a27039326c57d6.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 7498,
+          "alias_resource_closure": null,
+          "archive_bytes": 16778,
+          "archive_member_count_including_index": 9,
+          "archive_sha256": "ced58e26b34637e6ce88f4f0a0c156902b9e98b38261288f5c141511af7f6cc9",
+          "content_references": 4,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 4,
+          "index_bytes": 192,
+          "label": "vector-deep-tight",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 3176,
+          "max_nominal_cell_excess_metres": 100.001,
+          "member_bytes_excluding_index": 15158,
+          "members_excluding_index": 8,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 7,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 7,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 29740,
+          "alias_resource_closure": null,
+          "archive_bytes": 96342,
+          "archive_member_count_including_index": 30,
+          "archive_sha256": "15c4501b30b0072d3c1f18aa6689e2294461e446b799f3dd1ea034beefa50e6c",
+          "content_references": 25,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 25,
+          "index_bytes": 696,
+          "label": "vector-array-b3dm",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 2,
+          "max_json_bytes": 13021,
+          "max_nominal_cell_excess_metres": 1.000000033589713,
+          "member_bytes_excluding_index": 89656,
+          "members_excluding_index": 29,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 25,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 25,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 11702,
+          "alias_resource_closure": null,
+          "archive_bytes": 21726,
+          "archive_member_count_including_index": 9,
+          "archive_sha256": "04c04e1da6c34e94e98fdf54e58ba4aeb9d4e2a249fd2144acf66005abef5b70",
+          "content_references": 11,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 4,
+          "index_bytes": 192,
+          "label": "vector-fragmented-line",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run vector from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 7161,
+          "max_nominal_cell_excess_metres": 0.06800000384807882,
+          "member_bytes_excluding_index": 20106,
+          "members_excluding_index": 8,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 11,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 11,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 3198,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-0-0-0-0-0-0.glb",
+              "t/owned-1-0-0-0-0-0.glb",
+              "t/owned-2-0-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 18442,
+          "archive_member_count_including_index": 6,
+          "archive_sha256": "d719edaef4cae30debcbfa883db75ef601c2f267538be108f66af66b272f66d1",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 3,
+          "index_bytes": 120,
+          "label": "point-flat-rounded",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 1,
+          "max_json_bytes": 2087,
+          "max_nominal_cell_excess_metres": 1e-06,
+          "member_bytes_excluding_index": 17718,
+          "members_excluding_index": 5,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/0.glb",
+                "t/owned-0-0-0-0-0-0.glb"
+              ],
+              [
+                "t/1.glb",
+                "t/owned-1-0-0-0-0-0.glb"
+              ],
+              [
+                "t/2.glb",
+                "t/owned-2-0-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "OCTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": 4.768452299686032e-10,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/0.glb",
+              "t/1.glb",
+              "t/2.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 14613,
+          "alias_resource_closure": null,
+          "archive_bytes": 86751,
+          "archive_member_count_including_index": 18,
+          "archive_sha256": "2e85d504ce17974f824d654d02f368a4b33e8b849269ac03875c2f0b226c1740",
+          "content_references": 15,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 15,
+          "index_bytes": 408,
+          "label": "point-deep-tight",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run point-cloud from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 13516,
+          "max_nominal_cell_excess_metres": 100.000001,
+          "member_bytes_excluding_index": 84649,
+          "members_excluding_index": 17,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 15,
+          "owned_oracle": null,
+          "scheme": "OCTREE",
+          "source_nodes": 15,
+          "source_position_error_metres": 0.0,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 6355,
+          "alias_resource_closure": null,
+          "archive_bytes": 40179,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "fe05dfac497250bac88f64bd73419c6f576991a6c1e49e8e7e0c369b031af58d",
+          "content_references": 7,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 7,
+          "index_bytes": 216,
+          "label": "point-duplicate-midpoint",
+          "legacy_error": {
+            "code": "data",
+            "message": "convert-to-implicit: irregular explicit hierarchy (multiple children occupy the same regular cell); re-run point-cloud from source without --explicit"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 1,
+          "max_json_bytes": 5260,
+          "max_nominal_cell_excess_metres": 1e-06,
+          "member_bytes_excluding_index": 38999,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": true,
+          "ordinal_design_roots": 7,
+          "owned_oracle": null,
+          "scheme": "OCTREE",
+          "source_nodes": 7,
+          "source_position_error_metres": 0.0,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 17668,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/owned-0-0-0-0-0.b3dm",
+              "t/owned-0-0-0-0-1.glb"
+            ]
+          },
+          "archive_bytes": 29010,
+          "archive_member_count_including_index": 7,
+          "archive_sha256": "b8f66bd4a208a3bb1b4c841cbd6527ba59270d3054fa41ec4e9ca7061198936b",
+          "content_references": 2,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 144,
+          "label": "fragmented-array-leaf",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 9892,
+          "max_nominal_cell_excess_metres": 0,
+          "member_bytes_excluding_index": 27868,
+          "members_excluding_index": 6,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 1,
+          "owned_oracle": {
+            "alias_count": 2,
+            "aliases": [
+              [
+                "t/928b4cfb9953dc32487095fc1f79ac62bd60e8ea981b801f1da05d286ec46bbb.b3dm",
+                "t/owned-0-0-0-0-0.b3dm"
+              ],
+              [
+                "t/faac72cd51053aba889ad9e76954e7e93ad8a13ef037dc2eeed3735d96f97a90.glb",
+                "t/owned-0-0-0-0-1.glb"
+              ]
+            ],
+            "external_roots": 0
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 1,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/928b4cfb9953dc32487095fc1f79ac62bd60e8ea981b801f1da05d286ec46bbb.b3dm",
+              "t/faac72cd51053aba889ad9e76954e7e93ad8a13ef037dc2eeed3735d96f97a90.glb"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5773,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/nested/owned-1-0-0-0-0.glb",
+              "t/nested/owned-1-0-0-0-1.glb",
+              "t/nested/paint.png",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11493,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "dee41235c476cfb6f9f6be866c237c5ce10590f6e438e2f26b7bf26fa1f2fb93",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 216,
+          "label": "shared-relative-resources",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10013,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-1.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/nested/paint.png",
+              "t/nested/payload.glb",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5773,
+          "alias_resource_closure": {
+            "opaque_root_extensions": [
+              "VENDOR_resource"
+            ],
+            "reached": [
+              "t/nested/owned-1-0-0-0-0.glb",
+              "t/nested/owned-1-0-0-0-1.glb",
+              "t/nested/paint.png",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json",
+              "t/owned-2-0-0-0-0.glb"
+            ]
+          },
+          "archive_bytes": 11581,
+          "archive_member_count_including_index": 10,
+          "archive_sha256": "97267761114fa0d38e6543d732121a7b548e527da401d2f5bb790c803ce8bb99",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 216,
+          "label": "opaque-extension-known-resource",
+          "legacy_error": null,
+          "legacy_exit": 0,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10101,
+          "members_excluding_index": 9,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": {
+            "alias_count": 3,
+            "aliases": [
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-0.glb"
+              ],
+              [
+                "t/nested/payload.glb",
+                "t/nested/owned-1-0-0-0-1.glb"
+              ],
+              [
+                "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+                "t/owned-2-0-0-0-0.glb"
+              ]
+            ],
+            "external_roots": 2
+          },
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": {
+            "opaque_root_extensions": [
+              "VENDOR_resource"
+            ],
+            "reached": [
+              "t/3092479493a7f1a9c4ab4a9f5d9afa62748aa62a49e4534b69f9674e0ae5981b.glb",
+              "t/nested/paint.png",
+              "t/nested/payload.glb",
+              "t/nested/positions.bin",
+              "t/nested/schemas/features.json"
+            ]
+          },
+          "zip_compression_methods": [
+            0
+          ]
+        },
+        {
+          "aggregate_json_bytes": 5773,
+          "alias_resource_closure": null,
+          "archive_bytes": 11749,
+          "archive_member_count_including_index": 11,
+          "archive_sha256": "6bcceae72a6b3c7ee61affe2d86b93946e9665e02ef33a81a27bef2adbdbd383",
+          "content_references": 3,
+          "decoded_descendant_geometry_box_escape": false,
+          "decoded_own_geometry_box_escape": false,
+          "distinct_payload_members": 2,
+          "index_bytes": 240,
+          "label": "opaque-extension-private-resource",
+          "legacy_error": {
+            "code": "invalid_input",
+            "message": "unreferenced archive entries: t/nested/private.dat"
+          },
+          "legacy_exit": 3,
+          "max_content_slots": 2,
+          "max_json_bytes": 2085,
+          "max_nominal_cell_excess_metres": 2.588207426157396e-15,
+          "member_bytes_excluding_index": 10129,
+          "members_excluding_index": 10,
+          "numerical_source_identity_checked": false,
+          "ordinal_design_roots": 3,
+          "owned_oracle": null,
+          "scheme": "QUADTREE",
+          "source_nodes": 3,
+          "source_position_error_metres": null,
+          "source_resource_closure": null,
+          "zip_compression_methods": [
+            0
+          ]
+        }
+      ],
+      "codec_calls": 4,
+      "commands": 44,
+      "controls": [
+        {
+          "independent_control": "rejected",
+          "label": "availability-swap",
+          "reason": "availability uses wrong emitted-root slot"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-box",
+          "reason": "box metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-error",
+          "reason": "error metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "metadata-extras",
+          "reason": "extras metadata"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "external-transform",
+          "reason": "root field preservation: transform"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "alias-bytes",
+          "reason": "alias payload bytes"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "relative-alias-base",
+          "reason": "relative resource base changed"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "missing-external-buffer",
+          "reason": "missing resource t/nested/positions.bin"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "missing-schema",
+          "reason": "missing resource t/nested/schemas/features.json"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "changed-resource-bytes",
+          "reason": "resource identity mismatch"
+        },
+        {
+          "independent_control": "rejected",
+          "label": "orphan-resource",
+          "reason": "orphan resource inventory"
+        },
+        {
+          "inventory": [
+            {
+              "descendant": "subtrees/owned-0-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            },
+            {
+              "descendant": "subtrees/owned-1-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            },
+            {
+              "descendant": "subtrees/owned-2-0-0-0.subtree",
+              "file": "subtrees",
+              "kind": "ancestor"
+            }
+          ],
+          "label": "source-subtrees",
+          "legacy_exit": 1,
+          "legacy_result": {
+            "error": {
+              "code": "io",
+              "message": "File exists (os error 17)"
+            },
+            "exitCode": 1,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "kind": "exact",
+              "name": "t/nested/owned-1-0-0-0-0.glb"
+            }
+          ],
+          "label": "nested-alias-exact",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: generated content alias collides with source member: t/nested/owned-1-0-0-0-0.glb"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "descendant": "t/nested/owned-1-0-0-0-0.glb/resource.json",
+              "file": "t/nested/owned-1-0-0-0-0.glb",
+              "kind": "ancestor"
+            }
+          ],
+          "label": "nested-alias-ancestor",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: generated content alias collides with source member: t/nested/owned-1-0-0-0-0.glb"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "inventory": [
+            {
+              "kind": "exact",
+              "name": "t/owned-1-0-0-0-0.glb"
+            }
+          ],
+          "label": "root-alias-exact",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: archive contains reserved implicit output paths"
+            },
+            "exitCode": 3,
+            "ok": false
+          },
+          "prior_unchanged": true,
+          "remaining_workdirs": [],
+          "source_unchanged": true
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "external-tileset-schema",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: external tileset schemaUri is unsupported; use an inline schema before conversion"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "reserved-schema-class",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: source schema uses reserved rustyTile class"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "tile-metadata",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: irregular explicit hierarchy (explicit tile metadata requires unsupported subtree property tables); re-run vector from source without --explicit"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        },
+        {
+          "classification": "admission observation, not source validity proof",
+          "label": "content-volume",
+          "legacy_exit": 3,
+          "legacy_result": {
+            "error": {
+              "code": "data",
+              "message": "convert-to-implicit: irregular explicit hierarchy (content bounding volumes require unsupported subtree content metadata); re-run vector from source without --explicit"
+            },
+            "exitCode": 3,
+            "ok": false
+          }
+        }
+      ],
+      "method": {
+        "RAYON_NUM_THREADS": 2,
+        "converter_concurrency": 1,
+        "fixtures": "bounded literal LAS and independently authored GeoJSON; no large resource matrix",
+        "nice": 10,
+        "process_timeout_seconds": 120
+      },
+      "probe_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+      "raw_gzip_sha256": "7e000490a829be059e77e0e78621d2e3641e068745f7c9f2f63762770b977d7a",
+      "raw_receipt": "portable-raw.json.gz",
+      "raw_receipt_sha256": "a44b4f35f44e375c77474ed523d4d587e241d7ec034239aa3b5c7adf1c5b616c"
+    }
+  }
+}

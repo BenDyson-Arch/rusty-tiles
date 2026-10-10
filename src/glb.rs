@@ -1,6 +1,6 @@
 //! Shared GLB container plumbing: chunk framing, alignment, buffer-view
 //! appends, extension declarations and the one `EXT_meshopt_compression`
-//! view rewriter used by mesh and vector content.
+//! view rewriter used by lossless mesh tiles.
 //!
 //! Every writer keeps its glTF document and binary buffer in memory and
 //! serialises exactly once through [`encode_glb`].
@@ -13,6 +13,41 @@ use crate::error::Error;
 const HEADER_LEN: usize = 12;
 const CHUNK_HEADER_LEN: usize = 8;
 const MESHOPT: &str = "EXT_meshopt_compression";
+
+/// Align an owned GLB to eight bytes by adding JSON whitespace, preserving BIN.
+pub(crate) fn align_glb_eight(bytes: &mut Vec<u8>) -> Result<(), Error> {
+    if bytes.len() < 20
+        || &bytes[..4] != b"glTF"
+        || &bytes[16..20] != b"JSON"
+        || !bytes.len().is_multiple_of(4)
+    {
+        return Err(Error::Data("invalid GLB alignment input".into()));
+    }
+    let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    let json = u32::from_le_bytes(bytes[12..16].try_into().unwrap());
+    let end = 20usize
+        .checked_add(json as usize)
+        .filter(|end| *end <= bytes.len())
+        .ok_or_else(|| Error::Data("invalid GLB JSON length".into()))?;
+    if declared != bytes.len() || json % 4 != 0 {
+        return Err(Error::Data("invalid GLB length".into()));
+    }
+    if bytes.len().is_multiple_of(8) {
+        return Ok(());
+    }
+    let length = bytes
+        .len()
+        .checked_add(4)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| Error::Data("GLB exceeds format limit".into()))?;
+    let json = json
+        .checked_add(4)
+        .ok_or_else(|| Error::Data("GLB JSON exceeds format limit".into()))?;
+    bytes.splice(end..end, [b' '; 4]);
+    bytes[12..16].copy_from_slice(&json.to_le_bytes());
+    bytes[8..12].copy_from_slice(&length.to_le_bytes());
+    Ok(())
+}
 
 /// Zero-pad `buf` to a multiple of `align` bytes.
 pub(crate) fn pad_to(buf: &mut Vec<u8>, align: usize) {
@@ -38,7 +73,6 @@ pub(crate) fn glb_len(json_len: usize, bin_len: usize) -> Result<usize, Error> {
 }
 
 /// Serialised JSON length of `document`, without materialising it.
-#[cfg(any(test, feature = "native-geospatial"))]
 pub(crate) fn json_len<T: Serialize + ?Sized>(document: &T) -> Result<usize, Error> {
     struct Count(usize);
     impl std::io::Write for Count {
@@ -120,21 +154,11 @@ pub(crate) enum MeshoptStream {
     Attributes { count: usize, stride: usize },
 }
 
-/// Where compressed views point in the uncompressed fallback buffer.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum FallbackOffsets {
-    /// Keep each view's source `byteOffset`; the fallback spans the source.
-    Source,
-    /// Repack compressed views contiguously at the layout alignment.
-    Packed,
-}
-
 /// Container layout for one family of meshopt-compressed content.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct MeshoptLayout {
-    /// Alignment of every view in the compressed (and packed fallback) buffer.
+    /// Alignment of every view in the compressed buffer.
     pub align: usize,
-    pub fallback: FallbackOffsets,
     /// Write `"filter":"NONE"` explicitly on compressed views.
     pub explicit_filter: bool,
 }
@@ -142,7 +166,8 @@ pub(crate) struct MeshoptLayout {
 /// Compress buffer views of `document` (whose binary is `source`) with
 /// `EXT_meshopt_compression`. `classify(view, byte_length)` selects the
 /// stream role of each view; `None` copies the view verbatim. Accessors,
-/// view identities and element order are unchanged. Returns the new binary.
+/// view identities and element order are unchanged. Compressed views retain
+/// source offsets in a fallback buffer spanning `source`. Returns the new binary.
 pub(crate) fn meshopt_compress(
     document: &mut Value,
     source: &[u8],
@@ -153,7 +178,6 @@ pub(crate) fn meshopt_compress(
         .as_array_mut()
         .ok_or_else(|| Error::msg("missing views"))?;
     let mut binary = Vec::with_capacity(source.len());
-    let mut packed_size = 0usize;
     let mut indices = Vec::new();
     for (index, view) in views.iter_mut().enumerate() {
         let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
@@ -207,11 +231,6 @@ pub(crate) fn meshopt_compress(
             }
         };
         view["buffer"] = json!(1);
-        if let FallbackOffsets::Packed = layout.fallback {
-            packed_size = packed_size.next_multiple_of(layout.align);
-            view["byteOffset"] = json!(packed_size);
-            packed_size += length;
-        }
         let mut extension = json!({"buffer":0,"byteOffset":start,"byteLength":binary.len() - start,
             "byteStride":stride,"count":count,"mode":mode});
         if layout.explicit_filter {
@@ -219,12 +238,8 @@ pub(crate) fn meshopt_compress(
         }
         view["extensions"] = json!({ MESHOPT: extension });
     }
-    let fallback = match layout.fallback {
-        FallbackOffsets::Source => source.len(),
-        FallbackOffsets::Packed => packed_size,
-    };
     document["buffers"] = json!([{"byteLength":binary.len()},
-        {"byteLength":fallback,"extensions":{MESHOPT:{"fallback":true}}}]);
+        {"byteLength":source.len(),"extensions":{MESHOPT:{"fallback":true}}}]);
     add_extension(document, MESHOPT, true)?;
     Ok(binary)
 }
@@ -286,7 +301,7 @@ fn encode_attributes(
 /// Small GLB builder for feature attributes and structural metadata. Views are
 /// eight-byte aligned so numeric property tables can retain 64-bit source values.
 #[derive(Clone)]
-pub(crate) struct MetadataGlb {
+pub struct MetadataGlb {
     pub document: Value,
     binary: Vec<u8>,
 }
@@ -305,6 +320,11 @@ impl MetadataGlb {
         }
     }
 
+    /// Continue authoring an existing glTF document and its binary buffer.
+    pub fn from_parts(document: Value, binary: Vec<u8>) -> Self {
+        Self { document, binary }
+    }
+
     pub fn view(&mut self, bytes: &[u8]) -> usize {
         let offset = append_aligned(&mut self.binary, Self::ALIGN, bytes);
         let views = self.document["bufferViews"].as_array_mut().unwrap();
@@ -319,14 +339,12 @@ impl MetadataGlb {
     }
 
     /// Replace a generated view while retaining accessor/metadata identities.
-    #[cfg(feature = "native-geospatial")]
     pub fn replace_view(&mut self, index: usize, bytes: &[u8]) {
         let offset = append_aligned(&mut self.binary, Self::ALIGN, bytes);
         self.document["bufferViews"][index]["byteOffset"] = offset.into();
         self.document["bufferViews"][index]["byteLength"] = bytes.len().into();
     }
 
-    #[cfg(feature = "native-geospatial")]
     pub fn compact_views(&mut self) {
         let mut binary = Vec::with_capacity(self.binary.len());
         for view in self.document["bufferViews"].as_array_mut().unwrap() {
@@ -345,7 +363,6 @@ impl MetadataGlb {
 
     /// Length of the GLB [`Self::finish`] would produce now, without
     /// serialising or copying the binary.
-    #[cfg(feature = "native-geospatial")]
     pub fn encoded_len(&mut self) -> Result<usize, Error> {
         self.record_buffer_length();
         glb_len(json_len(&self.document)?, self.binary.len())
@@ -353,7 +370,6 @@ impl MetadataGlb {
 
     /// The finished document and its four-byte padded binary buffer, for
     /// callers that rewrite views (e.g. meshopt) before [`encode_glb`].
-    #[cfg(feature = "native-geospatial")]
     pub fn into_parts(mut self) -> (Value, Vec<u8>) {
         self.record_buffer_length();
         pad_to(&mut self.binary, 4);
@@ -370,6 +386,24 @@ impl MetadataGlb {
 mod tests {
     use super::*;
     use std::borrow::Cow;
+
+    #[test]
+    fn eight_byte_alignment_preserves_document_and_bin() {
+        for length in 0..16 {
+            let doc = json!({"asset":{"version":"2.0"},"extras":"x".repeat(length)});
+            let mut bytes = encode_glb(&doc, &[1, 2, 3, 4, 5]).unwrap();
+            let before = gltf::Glb::from_slice(&bytes).unwrap();
+            let bin = before.bin.unwrap().into_owned();
+            align_glb_eight(&mut bytes).unwrap();
+            assert_eq!(bytes.len() % 8, 0);
+            let after = gltf::Glb::from_slice(&bytes).unwrap();
+            assert_eq!(serde_json::from_slice::<Value>(&after.json).unwrap(), doc);
+            assert_eq!(after.bin.unwrap().as_ref(), bin);
+            let aligned = bytes.clone();
+            align_glb_eight(&mut bytes).unwrap();
+            assert_eq!(bytes, aligned);
+        }
+    }
 
     fn reference(json: &[u8], bin: &[u8]) -> Vec<u8> {
         gltf::Glb {

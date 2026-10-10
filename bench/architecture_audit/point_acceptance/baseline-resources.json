@@ -1,0 +1,101 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-119-12ce-portable",
+  "binary_sha256": "cd3e3f300617da8861b0d1999f18e846563901671a05d3bce85526b462e4b935",
+  "sampling_interval_seconds": 0.01,
+  "limits": "Observed Linux process RSS/high-water RSS, descriptors, threads and on-disk workspace at fixed settings. Short peaks can be missed. Reader, transform, spool, leaves, hierarchy and serialization share this serial process; the observations do not attribute each allocation or establish a whole-job constant-memory bound. Hierarchy/member inventory and scratch grow with input and leaf count. No worker/native subprocess exists in the measured local profile.",
+  "runs": [
+    {
+      "points": 1024,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "elapsed_seconds": 0.020881699994788505,
+      "samples": 2,
+      "source_bytes": 82265,
+      "archive_bytes": 239930,
+      "peaks": {
+        "rss_bytes": 27254784,
+        "high_water_rss_bytes": 27254784,
+        "descriptors": 3,
+        "threads": 1,
+        "workspace_bytes": 218230,
+        "scratch_bytes": 34438,
+        "workspace_files": 9
+      },
+      "cli_report": {
+        "counts": {
+          "points": 1024,
+          "tiles": 9
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 8.723537702248584e-07
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 8192,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "elapsed_seconds": 0.09505165299924556,
+      "samples": 9,
+      "source_bytes": 641369,
+      "archive_bytes": 1933977,
+      "peaks": {
+        "rss_bytes": 28753920,
+        "high_water_rss_bytes": 28753920,
+        "descriptors": 12,
+        "threads": 1,
+        "workspace_bytes": 3490628,
+        "scratch_bytes": 1097728,
+        "workspace_files": 134
+      },
+      "cli_report": {
+        "counts": {
+          "points": 8192,
+          "tiles": 73
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 7.204520476582465e-06
+        }
+      },
+      "workspace_after_exit": []
+    },
+    {
+      "points": 32768,
+      "max_points": 256,
+      "chunk_points": 1024,
+      "implicit": true,
+      "elapsed_seconds": 0.6223456190055003,
+      "samples": 51,
+      "source_bytes": 2558297,
+      "archive_bytes": 10078733,
+      "peaks": {
+        "rss_bytes": 33865728,
+        "high_water_rss_bytes": 33865728,
+        "descriptors": 12,
+        "threads": 1,
+        "workspace_bytes": 19033340,
+        "scratch_bytes": 7897558,
+        "workspace_files": 1127
+      },
+      "cli_report": {
+        "counts": {
+          "points": 32768,
+          "tiles": 585
+        },
+        "settings": {
+          "chunkPoints": 1024,
+          "maxPoints": 256,
+          "maxPositionRoundingMetres": 2.6367887821635813e-05
+        }
+      },
+      "workspace_after_exit": []
+    }
+  ]
+}

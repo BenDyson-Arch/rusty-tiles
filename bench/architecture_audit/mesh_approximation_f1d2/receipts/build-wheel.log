@@ -1,0 +1,11 @@
+📦 Including license file `LICENSE`
+🐍 Found CPython 3.14 at /usr/bin/python3
+🔗 Found pyo3 bindings with abi3-py3.10 support
+📡 Using build options features from pyproject.toml
+   Compiling pyo3-ffi v0.29.3
+   Compiling rusty-tiles v0.4.0 (/tmp/rusty-tiles-f1d2-resume)
+   Compiling pyo3 v0.29.3
+   Compiling rusty-tiles-python v0.4.0 (/tmp/rusty-tiles-f1d2-resume/bindings/python)
+    Finished `release` profile [optimized] target(s) in 16.65s
+⚠️  Warning: No compatible platform tag found, using the linux tag instead. You won't be able to upload those wheels to PyPI.
+📦 Built wheel for abi3 Python ≥ 3.10 to /tmp/rusty-tiles-f1d2-final-evidence/wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl

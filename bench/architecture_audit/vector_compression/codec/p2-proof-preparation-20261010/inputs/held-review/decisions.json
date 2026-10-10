@@ -1,0 +1,70 @@
+{
+  "gate": "HELD_PRECODE",
+  "implementation_ready": false,
+  "independent_nonauthor": true,
+  "scope": "Whole generated-vector compression + stable named-entry in-place replacement preparation",
+  "exact_source": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "codec_contract_sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e",
+  "lifecycle_contract_sha256": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0",
+  "evidence_classes": {
+    "static": "Pinned source/dependency/primary inspection and hash matches",
+    "executed_arithmetic": "1088 locked-bound integer comparisons; 1024 metadata modular framing checks; fixed meshopt object241 bytes",
+    "not_executed": "Rust/Cargo/FFI/serializer/allocation/platform/CLI/producer/consumer probes"
+  },
+  "resolved_codec_corrections": [
+    "Valid noncodec strides remain Raw",
+    "Distinct accessor windows versus physical codec record count",
+    "Core/metadata selected chunk padding and slack",
+    "Actual extension positions and image/schema URI exclusion",
+    "Narrow actual-consumed identity stream helper",
+    "ResourceLimit/checkpoint causal propagation, internal authored/native faults"
+  ],
+  "remaining_blockers": [
+    {
+      "id": "P0",
+      "owner": "Root/C1 independent lane",
+      "requires": "Corrected C1 final acceptance and exact-head merge before next implementation or runtime probes"
+    },
+    {
+      "id": "P1",
+      "owner": "Root lifecycle owner",
+      "requires": "Synchronize new codec framing, error policy and Windows readonly Unsupported with frozen lifecycle draft; classify generated identity source envelope"
+    },
+    {
+      "id": "P2",
+      "owner": "Codec/request owner + independent review",
+      "requires": "Actual representation and pinned requested-capacity/growth model; count/raw output bound; all nine numeric defaults; identity input+owned-output overlap"
+    },
+    {
+      "id": "P3",
+      "owner": "Independent semantic probe owner",
+      "requires": "Full generated and external raw preservation matrix, metadata absolute framing interpretation, malformed legacy envelope disposition, identity corruption controls"
+    },
+    {
+      "id": "P4",
+      "owner": "Vector producer owner",
+      "requires": "Selected-framing bounded bridge schedule, consumed Value/BIN lifetimes, real checkpoints in fitting/final encoding, typed fatal resource/cause route, reuse fingerprint"
+    },
+    {
+      "id": "P5",
+      "owner": "Root platform acceptance",
+      "requires": "Actual Linux/macOS/Windows source/permission/open-handle/recheck/install/cleanup controls"
+    }
+  ],
+  "windows_decision": {
+    "kind": "Independent corrective design decision from static locked dependency",
+    "choice": "Use F0 unchanged; Windows readonly source Unsupported before observers/staging; writable Windows and Unix copied permissions await actual platform acceptance",
+    "source": "tempfile3.27.0/src/file/imp/windows.rs persist resets candidate FILE_ATTRIBUTE_NORMAL",
+    "not_claimed": "Actual Windows failure reproduction or broader F0 defect"
+  },
+  "facade_choice": "Intentional Rust + existing CLI standalone; installed producer Python remains required; no speculative new standalone binding",
+  "identity_choice": "Retain bounded canonical ATTRIBUTES/NONE original-byte candidate with one-view validation; no full C1 inspector or decoded-array framework",
+  "authority": "No future implementation approval; no source/Git mutation or target execution; parent issues/fullA2/release gates unchanged",
+  "smallest_resolution_order": [
+    "Finish P0",
+    "Apply P1 additive synced freeze",
+    "Root serial bounded P2-P3-P4-P5 representation/semantic/platform preparation controls",
+    "Fresh whole-slice precode adjudication with exact inputs",
+    "Only then production slice + separate nonauthor final-source acceptance"
+  ]
+}

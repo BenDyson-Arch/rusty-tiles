@@ -1,0 +1,53 @@
+{
+  "scope": "One authored fixture feasibility plus sensitive controls; no broader converter acceptance.",
+  "baseline": {
+    "productionSource": "4e1bda6de8d9f8be9ee4f776d51671420ff8faf5",
+    "mergedAuditTree": "e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e",
+    "note": "Production sources unchanged by the merge; supplied frozen CLI artifact.",
+    "binarySha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1",
+    "productionSha256": "22f4b82e6379d889441be2f0f9e364aa51570ec6f391b3c98c95be58ef0d8444"
+  },
+  "authoredFixtureSha256": "218943a1f182a26a933fcfcf51066538cc3b06e40998c976ce0c39b54bbea1ed",
+  "explicitSha256": "871e47ef1ac51c5a8daed646fad9cb51e9f121cd81269873cd208d735d306ccb",
+  "implicitSha256": "009b8feaa92cb236fddc679379074c6543b8caae217f6b7c24300bb1c60a795d",
+  "sourceUntouched": true,
+  "positive": {
+    "availableIndices": [
+      0,
+      1,
+      4
+    ],
+    "points": 8,
+    "maxSourcePositionError": 6.705533905915217e-10
+  },
+  "sensitivity": {
+    "availability_clear": "rejected",
+    "availability_swap": "rejected",
+    "box_wrong": "rejected",
+    "error_wrong": "rejected",
+    "external_transform_wrong": "rejected",
+    "payload_flip": "rejected"
+  },
+  "versionMutation": {
+    "exit": 0,
+    "inputUntouched": true,
+    "priorReplaced": true,
+    "outputAssetVersion": "1.0",
+    "interpretation": "Admission/declaration observation; does not establish mutated native-vector source as valid 3D Tiles 1.0."
+  },
+  "reservedAncestor": {
+    "sourceAdmitted": true,
+    "sourceSha256": "259f1693248bec9d4f3df1a92e9daa07306e63b3a3b182e7ca4b3792e4567798",
+    "exit": 1,
+    "stdout": "{\"error\":{\"code\":\"io\",\"message\":\"File exists (os error 17)\"},\"exitCode\":1,\"ok\":false}\n",
+    "stderr": "",
+    "sourceUntouched": true,
+    "priorOutputUntouched": true,
+    "workDirsRemaining": []
+  },
+  "replay": "python3 bench/architecture_audit/implicit_rewrite/probes/replay_baseline.py /home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-portable-verified /tmp/NEW_EMPTY_DIRECTORY",
+  "replayScriptSha256": "12f1e20088ceb81e5672d65116a7e5ba9db69aa2bdc7d263b9c4f9538b3d3678",
+  "rawReceiptPath": "/tmp/rusty-a2-implicit-replay-2/receipt.json",
+  "rawReceiptSha256": "96eb7be9fd10ddba1d6fc38e412f4f1a6aa724c69314a392896c7cb986ff305b",
+  "committedRawReceipt": "baseline-raw.json.gz"
+}

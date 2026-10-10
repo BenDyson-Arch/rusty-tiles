@@ -1,0 +1,129 @@
+{
+  "self_test": {
+    "literal_UV1_RGBA_normalized_RGB_reflected_tangent": "passed",
+    "variants": {
+      "mr-only": [
+        2
+      ],
+      "occlusion-defaults": [
+        4
+      ],
+      "occlusion-strength": [
+        4
+      ],
+      "emissive-only": [
+        5
+      ],
+      "all-slots": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "shared-orm": [
+        2
+      ],
+      "shared-colorspace": [
+        1
+      ],
+      "uv1-slots": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "uv1-outside": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "uv1-u8": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "uv1-u16": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "color-f32-rgb": [],
+      "color-f32-rgba-mask": [],
+      "color-u8-rgb": [],
+      "color-u8-rgba": [],
+      "color-u16": [],
+      "unused-attributes": [],
+      "normal-signs": [
+        3
+      ],
+      "normal-scales": [
+        3
+      ],
+      "uniform-rotation": [
+        3
+      ],
+      "reflected": [
+        3
+      ],
+      "interleaved": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "nonuniform-nonnormal": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "selected-equal-images": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "nested-conformal": [
+        3
+      ],
+      "nonorthogonal-tangent": [
+        3
+      ]
+    },
+    "sensitive_semantic_controls": {
+      "omit-TANGENT": "rejected",
+      "omit-COLOR_0": "rejected",
+      "omit-TEXCOORD_1": "rejected",
+      "omit-baseColorTexture": "rejected",
+      "omit-metallicRoughnessTexture": "rejected",
+      "omit-normalTexture": "rejected",
+      "omit-occlusionTexture": "rejected",
+      "omit-emissiveTexture": "rejected",
+      "wrong-uv1": "rejected",
+      "wrong-color-alpha": "rejected",
+      "wrong-tangent-w": "rejected",
+      "wrong-tangent-xyz": "rejected",
+      "wrong-winding": "rejected",
+      "wrong-slot": "rejected",
+      "wrong-normal-scale": "rejected",
+      "wrong-occlusion-strength": "rejected",
+      "missing-texcoord-field": "rejected",
+      "wrong-logical-image-id": "rejected",
+      "equal-byte-logical-image-swap": "rejected",
+      "missing-nonbase-image": "rejected",
+      "orphan-nonbase-image": "rejected",
+      "changed-nonbase-image-bytes": "rejected",
+      "leaf-wrong-slot": "rejected",
+      "leaf-wrong-uv-selection": "rejected",
+      "leaf-omitted-normal-slot": "rejected"
+    },
+    "scope": "bounded conformal authored tangents; exact core-PBR closure and corner semantics; no universal renderer claim"
+  }
+}

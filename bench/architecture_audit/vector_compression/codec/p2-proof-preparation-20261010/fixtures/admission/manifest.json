@@ -1,0 +1,135 @@
+{
+  "status": "Frozen boundary/scratch expectations; actual serde/allocator source remains unexecuted",
+  "cases": [
+    {
+      "name": "tiny-no-max-reservation",
+      "path": "tiny-no-max-reservation",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "admitted",
+        "expectedNodes": 1
+      },
+      "inputBytes": 1,
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "name": "decoded-key-duplicate",
+      "path": "decoded-key-duplicate",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "invalid_input",
+        "expectedNodes": null
+      },
+      "inputBytes": 18,
+      "sha256": "961266c2e42a000802c6eb1d325e7455ece518e0228ced748990ea6d586b7277"
+    },
+    {
+      "name": "nodes-exact",
+      "path": "nodes-exact",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 3,
+        "category": "admitted",
+        "expectedNodes": 3
+      },
+      "inputBytes": 13,
+      "sha256": "c82eac97ef55b2f05b20616da2e88f9459043ceb8aee7715dba4c730c3abd278"
+    },
+    {
+      "name": "nodes-one-below",
+      "path": "nodes-one-below",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 2,
+        "category": "resource_limit",
+        "expectedNodes": null
+      },
+      "inputBytes": 13,
+      "sha256": "c82eac97ef55b2f05b20616da2e88f9459043ceb8aee7715dba4c730c3abd278"
+    },
+    {
+      "name": "depth64-wide-pending",
+      "path": "depth64-wide-pending",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 68,
+        "category": "admitted",
+        "expectedNodes": 68
+      },
+      "inputBytes": 135,
+      "sha256": "40e7586b850d84268812c65a48610073cf10d12cb0acf2f5eee012a63bd784dd"
+    },
+    {
+      "name": "depth63-wide-pending",
+      "path": "depth63-wide-pending",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 63,
+        "nodes": 65536,
+        "category": "resource_limit",
+        "expectedNodes": null
+      },
+      "inputBytes": 135,
+      "sha256": "40e7586b850d84268812c65a48610073cf10d12cb0acf2f5eee012a63bd784dd"
+    },
+    {
+      "name": "long-escaped-scalar",
+      "path": "long-escaped-scalar",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "admitted",
+        "expectedNodes": 1
+      },
+      "inputBytes": 60002,
+      "sha256": "fdcc982dbca9ba0d1cf9e9c7b67bc9b76acd3c85b1c79988f0de35e7985da2ab"
+    },
+    {
+      "name": "opaque-huge-number",
+      "path": "opaque-huge-number",
+      "expected": {
+        "bytes": 1048576,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "admitted",
+        "expectedNodes": 4
+      },
+      "inputBytes": 43,
+      "sha256": "0fb3b40747939272cbaabce84dc15d055460ac05336a185ef16cf7a294f54aa6"
+    },
+    {
+      "name": "bytes-exact",
+      "path": "bytes-exact",
+      "expected": {
+        "bytes": 9,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "admitted",
+        "expectedNodes": 3
+      },
+      "inputBytes": 9,
+      "sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1"
+    },
+    {
+      "name": "bytes-one-below",
+      "path": "bytes-one-below",
+      "expected": {
+        "bytes": 8,
+        "depth": 64,
+        "nodes": 65536,
+        "category": "resource_limit",
+        "expectedNodes": null
+      },
+      "inputBytes": 9,
+      "sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1"
+    }
+  ]
+}

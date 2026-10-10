@@ -1,9 +1,11 @@
-"""Native vector CLI helpers for the Python acceptance tests.
+"""Vector CLI helpers for the Python acceptance tests.
 
-Acceptance always invokes the selected native CLI. Tests that compare with
+Acceptance always invokes the selected CLI. Tests that compare with
 the frozen Python oracle import it from tests/fixtures/vector_oracle directly.
 """
 import os
+import functools
+import json
 import pathlib
 import subprocess
 import sys
@@ -14,6 +16,15 @@ import zipfile
 
 from cli_bin import BIN
 
+@functools.cache
+def portable_vectors():
+    """Read the actual selected build's capabilities instead of trusting an env flag."""
+    if not BIN:
+        raise unittest.SkipTest('RUSTY_TILES_BIN is not set')
+    result = subprocess.run([BIN, 'doctor', '--command', 'vector', '--json'],
+                            capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)['commands']['vector'].get('backend') == 'portable Rust/SQLite'
+
 def native_run(args):
     if not BIN:
         raise unittest.SkipTest('RUSTY_TILES_BIN is not set; set it to the rusty-tiles binary for native CLI acceptance')
@@ -22,6 +33,10 @@ def native_run(args):
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
         archive = pathlib.Path(scratch) / 'output.3tz'
         command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
+        # Frozen oracle and explicit-hierarchy audits retain their original
+        # contract. Browser fixtures opt into the converter's implicit default.
+        if getattr(args, 'explicit', True):
+            command.append('--explicit')
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
             max_vertices='maxVertices', max_bytes='maxBytes', max_tiles='maxTiles',
             max_source_vertices='maxSourceVertices', lod_tolerance='lodTolerance', lod_levels='lodLevels',

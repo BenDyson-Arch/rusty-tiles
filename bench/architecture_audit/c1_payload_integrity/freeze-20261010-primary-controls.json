@@ -1,0 +1,31 @@
+{
+  "record": "C1 payload-integrity post-primary contract freeze",
+  "date": "2026-10-10",
+  "recorded_at_utc": "2026-10-10T08:56:02.515358+00:00",
+  "source_head": "c8cbfb187de863ae21fe904275794894aa0a8381",
+  "state": "Pending separate nonauthor adjudication; A10 has demonstrated correction obligation; A14 representation unresolved; no production code or final acceptance",
+  "implementation_acceptance_claim": false,
+  "production_files_unchanged": true,
+  "prior_freeze_sha256": "afa9136fab4a143849216de09df37e1862ee476a0fcdcd9515d03513441a6cf0",
+  "prior_contract_sha256": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+  "prior_snapshot_directory": "bench/architecture_audit/c1_payload_integrity/history/20261010-initial",
+  "prior_snapshot_preserved_and_hash_verified": true,
+  "contract_sha256": "5ad3fb11ad38239a1827b6805ed8b0991dad453702d8151965546790c6e3d130",
+  "files": {
+    "docs/architecture/c1-payload-integrity-contract.md": "5ad3fb11ad38239a1827b6805ed8b0991dad453702d8151965546790c6e3d130",
+    "bench/architecture_audit/c1_payload_integrity/README.md": "8c24ef483e71a935b670363bdfa6b7df5ed85ea7cdef42f4c44bd9c79489b4e3",
+    "bench/architecture_audit/c1_payload_integrity/adjudication.md": "eea3b1002ae3b960dafe39e72a22a44ec29eefbfafe1691a770ec70117c4417e",
+    "bench/architecture_audit/c1_payload_integrity/reference-plan.json": "c9d7aff133b1d1999c4ba531f115a311dbf1a0c41cd6fcf10de7f4e1e7108e52",
+    "bench/architecture_audit/c1_payload_integrity/source-inventory.json": "2928bf989771af6a000b94b6b4aab86bd562e3fb09d53485a1c7ca310676dbdf",
+    "bench/architecture_audit/c1_payload_integrity/next-foundation-audit-20261010.json": "07428a3642dc3c68683d2e5dcc054c6d4a4fb4c790e5db7f744c204433b67a50",
+    "bench/architecture_audit/c1_payload_integrity/primary-evidence-binding-20261010.json": "25c87c16c84b1a0af5b608cafee9f5c394e998ff8e8dff0af5d5359546733b25",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/README.md": "5f389f54236d862a17eb93dc53944e30d80c9ac4217bd31e7eaeb0d2778ddbf1",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/probe.py": "6ae3697e1fd07e5bce0809d16dd1fac4f9a78a5e6f4b9e2c6e9f355496023fb9",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/receipt.json": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/adjudication.json": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/evidence-manifest.json": "a17658126c251f71a3a050d1ee984d71f3e4582f4751d1225a382412c9fc7f85",
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/raw-evidence.tar.gz": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead"
+  },
+  "authorship": "Contract author revised own contract/preparation only; primary-controls lane separately authored and executed; its namespace untouched",
+  "pending": "A1-A14 nonauthor adjudication, accepted archive-reader head/rebase, implementation/final evidence review"
+}

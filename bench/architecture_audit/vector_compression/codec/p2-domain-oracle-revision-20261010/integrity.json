@@ -1,0 +1,208 @@
+{
+  "status": "FROZEN ADDITIVE INPUTS; root execution pending; P2-P5 HELD",
+  "files": {
+    "README.md": {
+      "bytes": 2904,
+      "sha256": "e0032b6c650b3d39d79a031b8340531c5c723080eea3a0546cd9a723f7cfb4e3"
+    },
+    "coordinator_adapter.py": {
+      "bytes": 3413,
+      "sha256": "00636ea14c784922adbeafdd90b0385856125af57bf6af475a29a6814e8ae3f9"
+    },
+    "domain_oracle.py": {
+      "bytes": 4322,
+      "sha256": "b8b1361fbf497122fdcd91b6c47682dc67aa48087b608ae95ecbc7dbc0430c0c"
+    },
+    "expected-selftest-records.json": {
+      "bytes": 14390,
+      "sha256": "8d0398c9d6b9577642557f4c036305060904381290398f3097a82748ac11bbb6"
+    },
+    "external-inputs.json": {
+      "bytes": 10550,
+      "sha256": "69d2df6d10b8ba9446544372765be289a512a35adc237435feecda79c1380812"
+    },
+    "revision.json": {
+      "bytes": 5510,
+      "sha256": "afad874e122068fc06ecce6e5f0c016db778bd9bde2d3e768f10e2f267e61b55"
+    },
+    "static-preparation.json": {
+      "bytes": 448,
+      "sha256": "a3257fd1d89e8642f8c010deafb7ee2137f294b07c21528848d411f209e55c3b"
+    }
+  },
+  "externalInputs": {
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/integrity.json": {
+      "bytes": 152822,
+      "sha256": "20c6f6dff821962f6ca1845853765499f53baf2bcf5e498eb11adbffaa1da78e"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/domain_oracle.py": {
+      "bytes": 2264,
+      "sha256": "40d721b03630f797338e67fb10e27c61fcf9f1f8446f2d730ae249f6a39c6ce2"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/coordinator_runner.py": {
+      "bytes": 6610,
+      "sha256": "ee7bc73abbd813dc32090c19139520b853e4cbe2a765f8e9781bb6c907d11bcf"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/phase_model.py": {
+      "bytes": 3011,
+      "sha256": "add35278ef19afe3d2d54af4455637fcd40829600ced4fdb43da86459d0b8c92"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/frame_oracle.py": {
+      "bytes": 3645,
+      "sha256": "2ec3cc819d820c449518b301e2836621fbb7b8d01ae6996903c9fd450d738162"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/manifest.json": {
+      "bytes": 18632,
+      "sha256": "76476cb80fe3f997e9543b1a196e70d443f09d035d3dae5fdba855397cbaad49"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/src/content_integrity/json.rs": {
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    "/tmp/rusty-tiles-codec-p2-executions/models/receipt.json": {
+      "bytes": 2841,
+      "sha256": "57dfbc2a59a45ce4f384889eaff73035b83cc44294de8a0b594fba73cae305c2"
+    },
+    "/tmp/rusty-tiles-codec-p2-executions/models/domain_oracle.stderr": {
+      "bytes": 538,
+      "sha256": "20c52d801f616432d4f54bc395af99d4c4d651d36613c47e65acbe4b98bd8f7c"
+    },
+    "/tmp/rusty-tiles-codec-p2-executions/accepted-c1-gate.json": {
+      "bytes": 679,
+      "sha256": "144b71d8184ed741dd49a64582309b9fba5850510e339c5740463c7fa9c16e7f"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/positions-f32/positions.bin": {
+      "bytes": 48,
+      "sha256": "d1209481d37b00a392b0dd6b604a2c6cec452dde659aa8a305797df1406d36e1"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/positions-f32/associations.json": {
+      "bytes": 118,
+      "sha256": "ca3fa4504d3dd1cc600fb91de6c8759558ac65403040c15feef7eb10b2e77144"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/positions-normalized-u16/positions.bin": {
+      "bytes": 32,
+      "sha256": "2a85460dc543fa8f4a0cc5ea31d0aaa8c77b17cceac7976ded8d01472995fa8e"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/positions-normalized-u16/associations.json": {
+      "bytes": 183,
+      "sha256": "1468602147e8aceb509b472f319cb9b837efa94a9e5f112f5b620d8e4ffec445"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/feature-ids-padded-u16/ids.bin": {
+      "bytes": 12,
+      "sha256": "26ff4a751a9c9d3ca20313e9197274bb11278c8316afd2a1f23a708e0f7ebd11"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/feature-ids-padded-u16/associations.json": {
+      "bytes": 93,
+      "sha256": "0aeeceb82739c647238c14ececeebfdc0b54bd2e9018e06d285b6577b0ede077"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/feature-ids-f32/ids.bin": {
+      "bytes": 16,
+      "sha256": "5a391f82cece75b729243659186e3161fff41f2bb269f99cf24c3ff82b50ed28"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/feature-ids-f32/associations.json": {
+      "bytes": 96,
+      "sha256": "990ec6dbd519499a17ed3db974cfcc0c77f8e0e2ffce17fe769ff3349a7442d8"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/line-restart/indices.bin": {
+      "bytes": 20,
+      "sha256": "08e1a7764b7f9be065a59767177ef9998fa47d94d4ff45437478612852118553"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/line-restart/associations.json": {
+      "bytes": 96,
+      "sha256": "d6c6014e03eca72f13e34dc49bd668d369f9134c8f3d3dc4fbe9bda53b16699b"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/polygon-loops-offsets/loops.bin": {
+      "bytes": 44,
+      "sha256": "4d4753c830f2fe0b6d91b891ab03827882231c89b86a853843ce0e4d9242cc42"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/polygon-loops-offsets/offsets.bin": {
+      "bytes": 12,
+      "sha256": "e26adf78d7a1efc64b246fc8470d8c8eb78ae84fc5ab3921cb03ab8d69e94c3a"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/polygon-loops-offsets/associations.json": {
+      "bytes": 87,
+      "sha256": "7a626750b314c66e43300bd6bea3289f235c749ef236cb2fa19027be883e5230"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/fill-triangles-material/indices.bin": {
+      "bytes": 24,
+      "sha256": "fe78c65211dd0b56a97024fb61111e686ef1fe054aa132ba58e2891ac496f1ee"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/fill-triangles-material/associations.json": {
+      "bytes": 176,
+      "sha256": "bd61b1e92392fd93a156bed554bcd0ee3b1fe0f3b88fd4bb8d0a1aaf9a48e2bf"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-boolean-bitset/values.bin": {
+      "bytes": 2,
+      "sha256": "6e185fc6f992a89751ce8beebd60154efda05eb5ceab8f184813f62fb4fbb92f"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-boolean-bitset/associations.json": {
+      "bytes": 85,
+      "sha256": "d776dcd18c0c0bd8f49a38811ecb88b74821af8256d018f9f8e8da0ff608b90f"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-int64-nodata/values.bin": {
+      "bytes": 32,
+      "sha256": "5d76a66fb26e28b26ef899d4eb925a5056a47e5603a500361bf710483762fb60"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-int64-nodata/associations.json": {
+      "bytes": 101,
+      "sha256": "782ffd0463c1138e6f5d7ceceb629a6efc48778f403aa839ba637f1c64022eff"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-float64/values.bin": {
+      "bytes": 32,
+      "sha256": "a4a1155eb2edbf04f803516ae44d57eb15b69dfb09096959ed0f202777cf9e58"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-float64/associations.json": {
+      "bytes": 52,
+      "sha256": "3a9d3b0f51d81f0f08eb238abf62e71dd41fb1d86d70040714b4a7c80a0e3f6f"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-utf8-array-string/values.bin": {
+      "bytes": 44,
+      "sha256": "86b2cd4782f1b8d72de0007116b9487e3f423c8f01d07cbbfffd68258b6aca3f"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-utf8-array-string/stringOffsets.bin": {
+      "bytes": 20,
+      "sha256": "ce73e1575b0b7fcda6c51eda3d02c68de7d935365cfa7ec3e49fd3ee756ec0d9"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/metadata-utf8-array-string/associations.json": {
+      "bytes": 113,
+      "sha256": "ef86b8b4a2fb9c33477efee380c8b1d728ab76d98fa4177b1f8b53011b0aee56"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-uint64/values.bin": {
+      "bytes": 24,
+      "sha256": "c0689d422c3dd455464a62c4e8ed1b55c00d4e949da94767929c354a77109da5"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-uint64/associations.json": {
+      "bytes": 51,
+      "sha256": "7b1934a4b9b7eefe5e353934c30aba0fb7a7bcca15f6c4730536c0f11afb42f1"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-structural-array-shared/values.bin": {
+      "bytes": 32,
+      "sha256": "69599c59d9a4c38b055747b1d04c57633cef9caf0ccdcd8728683342d14e8ae3"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-structural-array-shared/arrayOffsets.bin": {
+      "bytes": 16,
+      "sha256": "78c1f43ab6f856dfb12c9e73f27ee7883763e8a6a3d27f49a8e89a74de3dd84a"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-structural-array-shared/associations.json": {
+      "bytes": 123,
+      "sha256": "851fc98efc8ed6f858474f7dfd4acee2218555e45d451ec0463589fc25bbc043"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-interleaved-matrix-partial/interleaved.bin": {
+      "bytes": 48,
+      "sha256": "4dbdc2b2b62cb00749785bc84202236dbc3777d74660611b8e58812f0cfde6c3"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-interleaved-matrix-partial/mat3-u8-occupied11.bin": {
+      "bytes": 11,
+      "sha256": "fa1a3fd11eef4b245a890163d17beef297528e6ebcafb6f89993ea733b2bcb0e"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/external-interleaved-matrix-partial/associations.json": {
+      "bytes": 91,
+      "sha256": "09a310a6fc4291a115326b581cdef4d83ad4e51dae207f55de07bf3b06e11c3a"
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/generated-domain/opaque-source-json/associations.json": {
+      "bytes": 130,
+      "sha256": "a27d8e5dde895ba9224bf930a384f2a8af76e8e3446e957c654ab60f91d70f3e"
+    }
+  },
+  "originalInputPinsTransitiveVia": "Original integrity.json SHA and all its unchanged file entries; adapter calls original verify_package before/after."
+}

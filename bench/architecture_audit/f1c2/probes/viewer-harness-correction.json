@@ -1,0 +1,24 @@
+{
+  "kind": "harness correction, not candidate defect",
+  "prior_camera": {
+    "direction": [
+      0,
+      18,
+      -32
+    ],
+    "up": [
+      0,
+      0,
+      1
+    ]
+  },
+  "observed": {
+    "default_good_exact_first_targets": 9,
+    "remaining_targets_outside_1100px_viewport": 3,
+    "largest_projected_x": 1215.177253633814
+  },
+  "correction": "Normalize direction and choose perpendicular normalized up; preserve all exact property/target/sensitivity assertions.",
+  "initial_driver_sha256": "not captured; original failing tool outputs contain the observation, so no source-pinned prototype acceptance is claimed",
+  "replayed_receipt": "sparse-table-browser-feasibility.json",
+  "scope": "Independent synthetic feasibility, not candidate conversion acceptance."
+}

@@ -1,0 +1,311 @@
+{
+  "record": "Immutable copied foreign inputs for A14 contract selection after final reviewer handshake",
+  "date": "2026-10-10",
+  "reviewer_handshake": "Dated decision and decision-pins complete; reviewer guarantees unchanged after handshake",
+  "acceptance_claim": false,
+  "files": {
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/Cargo.lock": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/Cargo.lock",
+      "sha256": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+      "bytes": 2679
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/Cargo.toml": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/Cargo.toml",
+      "sha256": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+      "bytes": 232
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/artifact-snapshot.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/artifact-snapshot.json",
+      "sha256": "2a4de0876afc80c2d70930e93b348a0ac7b2124c43fbbc10fabc2b751175701d",
+      "bytes": 676
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/build-unicode-correction.log": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/build-unicode-correction.log",
+      "sha256": "a302af189f9b62cdf2e113d25feeeb4293e81224170dbdb2f2750bdd58fa01dc",
+      "bytes": 1852
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/manifest.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/manifest.json",
+      "sha256": "0026d03177e0fb66ec5fb7dcb372cd6aa7310d474af081163f72217bc333f4ec",
+      "bytes": 1673
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/receipt-unicode-correction.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/receipt-unicode-correction.json",
+      "sha256": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+      "bytes": 7345
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/main.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/src/main.rs",
+      "sha256": "dbba5adac728dc25aa269d030f976e0aadc0ebf6fbe7e00d1fa5a90d6789dc29",
+      "bytes": 9581
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/original-json.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/src/original-json.rs",
+      "sha256": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+      "bytes": 4834
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010-unicode-correction/src/raw_admission.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010-unicode-correction/src/raw_admission.rs",
+      "sha256": "2be33241cc109d80c509ebc2fb40ad70ba3a6bb478892ee8f318c17eb4d6cbc2",
+      "bytes": 3651
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/Cargo.lock": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/Cargo.lock",
+      "sha256": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+      "bytes": 2679
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/Cargo.toml": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/Cargo.toml",
+      "sha256": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+      "bytes": 232
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build-iterative-raw-initial-node-expectation-failure.log": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/build-iterative-raw-initial-node-expectation-failure.log",
+      "sha256": "c69417ff1a2dfc00114cd5568b05475672e646a48009541ab7919a9dd54d4182",
+      "bytes": 2037
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build-portable-source-final.log": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/build-portable-source-final.log",
+      "sha256": "d3574cac645b58531e1690416e13ccda7e0fbaad9f8aa93cbd22e0c5c24d58f5",
+      "bytes": 1852
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/build.log": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/build.log",
+      "sha256": "62964548b373437e07afa672f7ed5a1bf68b0dd2d8bf9fa555a30e8967add173",
+      "bytes": 626
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.lock": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.lock",
+      "sha256": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+      "bytes": 2679
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.toml": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/Cargo.toml",
+      "sha256": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+      "bytes": 232
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/build-actual-pinned-serde.log": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/build-actual-pinned-serde.log",
+      "sha256": "4ee378c3bac234d73ff57cdb322065fb4d42997e95f07b0efd6aacfdac2b9b8a",
+      "bytes": 2247
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/main.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/main.rs",
+      "sha256": "d5d5df28438d24ae791e226288c91c26175cd68300fbf48d9a3c9c1278bd66e0",
+      "bytes": 5332
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/original-json.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/original-json.rs",
+      "sha256": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+      "bytes": 4834
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/finite-value-phase/receipt.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/finite-value-phase/receipt.json",
+      "sha256": "67f527366f8d2072782c1a0835a7f96049e3b5d9e3d3ddf0595b877d882b6cf3",
+      "bytes": 3641
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/manifest.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/manifest.json",
+      "sha256": "8981b67ce0f4ab1f15d794b32f2294e900d16a2a99b2e6021eadbddcd2899f0f",
+      "bytes": 3358
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/receipt-portable-source-final.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/receipt-portable-source-final.json",
+      "sha256": "a1bcaa2f51f0a1a65d9cc922b48a92514a131e7ba1c8a7f9764d59cf0084da75",
+      "bytes": 6741
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/main.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/src/main.rs",
+      "sha256": "cd6f27e71ef93743d17bff6f2dde841c99c724b5a76ffac9deee4ee0f10c29e1",
+      "bytes": 8922
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/original-json.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/src/original-json.rs",
+      "sha256": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+      "bytes": 4834
+    },
+    "bench/architecture_audit/c1_payload_integrity/numeric_mechanism_probe/20261010/src/raw_admission.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/numeric_mechanism_probe/20261010/src/raw_admission.rs",
+      "sha256": "d49badd15af3673611f00e2a7a6e00657df0ad4eefb0d07e49212ae5a5c56246",
+      "bytes": 3083
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-mechanism-decision-pins.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/2026-10-10-numeric-mechanism-decision-pins.json",
+      "sha256": "1c4050e4eef8bcd13cbadfc7282118fba261dd53c0c99267b87c48703179bd70",
+      "bytes": 7367
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-mechanism-decision.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/2026-10-10-numeric-mechanism-decision.md",
+      "sha256": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+      "bytes": 12093
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun-receipt.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/2026-10-10-numeric-proof-rerun-receipt.json",
+      "sha256": "f9fee1ba0e9788406168e90e068db34fbb998009253f50365455860eeab1c35c",
+      "bytes": 840
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/2026-10-10-numeric-proof-rerun.json",
+      "sha256": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+      "bytes": 7345
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity-output.txt": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/capacity-output.txt",
+      "sha256": "4ae02b459a31702d3cb5cf7b3f7b97c36bffa40e95d9f4ff221be89be1d920cb",
+      "bytes": 288
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/capacity_probe.rs": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/capacity_probe.rs",
+      "sha256": "66c089936b40014c452e75697f63fc59c836e609622f39af09781445d63a1db2",
+      "bytes": 902
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite-models.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/finite-models.json",
+      "sha256": "82a978634150a3e0dd60cd72ed91ef97343a6750420863d68c2500e1d28f3f22",
+      "bytes": 2542
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/finite_models.py": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/finite_models.py",
+      "sha256": "fa27d35d7428b24c2df5ce55d7255d4933d4ee6d2cb02fde6edd057605c819c2",
+      "bytes": 2968
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/raw-only-tradeoff.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/raw-only-tradeoff.md",
+      "sha256": "f6f79871684f4ded5661beb2da0720885256d2020b4b87dedfb93aa9536fce5f",
+      "bytes": 14425
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/receipt.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/receipt.json",
+      "sha256": "5dbaddfaaa19f2e08f7084530b089a6907b3e9cded796c542506f67fa3f73865",
+      "bytes": 6625
+    },
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/review.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/prereq_review/review.md",
+      "sha256": "23be4a58b075912a4bd77422a631bdba9f487d73eef34159886931c59b670b13",
+      "bytes": 14138
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/EXT_meshopt_compression.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/EXT_meshopt_compression.md",
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "bytes": 35576
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_primitive_restart-draft.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_primitive_restart-draft.md",
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707",
+      "bytes": 4364
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_quantization.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_quantization.md",
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "bytes": 12593
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/b3dm.featureTable.schema.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/b3dm.featureTable.schema.json",
+      "sha256": "c34c532c835f1bc73d4737b36a9f8b0e665421671f9d57830c970299637eb8d7",
+      "bytes": 1033
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/feature-table.adoc": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/feature-table.adoc",
+      "sha256": "3158281f21460941ccfd90a41dc0bffda04aeae5e5de296a5ba8197cc1934ece",
+      "bytes": 6905
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/featureTable.schema.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/featureTable.schema.json",
+      "sha256": "a6500378c38d9af3f756bc8c3b23347f8329b37b12e0017a8729e2484a674587",
+      "bytes": 5937
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/fetch-receipt.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/fetch-receipt.json",
+      "sha256": "05bf12891d71ce392cf56ed3ae910c61566a6cda238747355beb86912a0e9e21",
+      "bytes": 4507
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-byte-comparison.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/golden-byte-comparison.json",
+      "sha256": "9c14e31eda72a4a25d4cff019f3e25ec3ce811e6751107e52a56c0a38411c1f7",
+      "bytes": 1358
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-compressed.bin": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/golden-compressed.bin",
+      "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a",
+      "bytes": 85
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-expected.bin": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/golden-expected.bin",
+      "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+      "bytes": 48
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/json-schema-observation.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/json-schema-observation.json",
+      "sha256": "43812848dc41f79a4ce103a9c8487e7e2710c24fb2d8f8db6ad41ec743061083",
+      "bytes": 608
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/meshopt_decoder.test.js": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/meshopt_decoder.test.js",
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "bytes": 16220
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/modern-b3dm.adoc": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/modern-b3dm.adoc",
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e",
+      "bytes": 11172
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/original-artifact-guard.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/original-artifact-guard.json",
+      "sha256": "91b4da8576d49ba5236edf17b0042358ed616212a8aba2868239547218f669da",
+      "bytes": 860
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification-manifest.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/verification-manifest.json",
+      "sha256": "97ad3a4c12c95e176cc4394661254cf2ea57dd8e5a7b589ebeee98aa4625e497",
+      "bytes": 2472
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verification.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/verification.md",
+      "sha256": "b49002ba5c41bb59c965b4c0f006f7a46724dbe127a049135c3437f7dceb43d3",
+      "bytes": 6480
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/verify_golden.py": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/2026-10-10-pinned-reference-verification/verify_golden.py",
+      "sha256": "11c999cf1d112b2ad8c8cca45c0e92b266adb0dbe539382e0931521906ee0295",
+      "bytes": 3649
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/README.md": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/README.md",
+      "sha256": "5f389f54236d862a17eb93dc53944e30d80c9ac4217bd31e7eaeb0d2778ddbf1",
+      "bytes": 5521
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/adjudication.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/adjudication.json",
+      "sha256": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64",
+      "bytes": 5752
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/evidence-manifest.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/evidence-manifest.json",
+      "sha256": "a17658126c251f71a3a050d1ee984d71f3e4582f4751d1225a382412c9fc7f85",
+      "bytes": 17657
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/probe.py": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/probe.py",
+      "sha256": "6ae3697e1fd07e5bce0809d16dd1fac4f9a78a5e6f4b9e2c6e9f355496023fb9",
+      "bytes": 10492
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/raw-evidence.tar.gz": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/raw-evidence.tar.gz",
+      "sha256": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead",
+      "bytes": 66149
+    },
+    "bench/architecture_audit/c1_payload_integrity/primary_controls/receipt.json": {
+      "snapshot": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/primary_controls/receipt.json",
+      "sha256": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174",
+      "bytes": 53299
+    }
+  },
+  "local_serde_source_pins_verified": {
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/read.rs": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/raw.rs": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/number.rs": "70b83c36286f6c58123f544f27db2b54a1135f928fe33b08b521b2997773f862",
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/de.rs": "ceda1bf415aafde89caa83bf275811b70d393717d4e1038e0c61822d2da02993"
+  },
+  "limits": "Earlier overwritten exploratory executable not copied or newly verified; corrected externally frozen artifact separately pinned"
+}
