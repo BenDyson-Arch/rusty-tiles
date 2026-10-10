@@ -57,6 +57,17 @@ branch no later than its production terminal patch. This depends on exact
 source-patch coverage and reconstruction; rounded physical midpoints break the
 argument and must not become the source representation.
 
+Exact child coverage is a parameter-space fact, including degenerate physical
+faces. For any parent barycentric weights w_i >= 0 summing to 1, if some w_i >=
+1/2, that point belongs to corner child i with child coefficients
+(2*w_i-1, 2*w_j, 2*w_k). If all w_i <= 1/2, it belongs to the centre child with
+coefficients (1-2*w_2, 1-2*w_0, 1-2*w_1) for vertices (AB, BC, CA). Those
+coefficients are nonnegative and sum to 1. Thus the four children cover the
+whole closed parent, intersecting only along boundaries. This proof does not
+use floating coordinate midpoints, measured area, finite point samples or
+nondegeneracy. Recursively replacing every rejected patch with all four
+children preserves complete coverage.
+
 No public proof payload or private production trace is needed for these bounded
 artifact checks. The exploratory transcript checker in the focused prototype
 shows the alternative's required information but is **not** the selected
