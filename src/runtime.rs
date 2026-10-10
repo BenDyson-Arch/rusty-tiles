@@ -336,6 +336,20 @@ pub(crate) struct Attempt {
 }
 
 impl Attempt {
+    #[cfg(feature = "native-geospatial")]
+    pub(crate) fn failure_record_bytes() -> usize {
+        std::mem::size_of::<ErrorDetail>() + 2 * std::mem::size_of::<usize>()
+    }
+
+    #[cfg(feature = "native-geospatial")]
+    pub(crate) fn fixed_owned_bytes(&self) -> usize {
+        // The caller owns the observer. Empty error/diagnostic storage has no
+        // backing allocation at successful producer admission.
+        std::mem::size_of::<Self>()
+            + std::mem::size_of::<Control>()
+            + 2 * std::mem::size_of::<usize>()
+    }
+
     pub(crate) fn check(&self) -> Result<(), JobError> {
         let state = self.control.state();
         match state.phase {

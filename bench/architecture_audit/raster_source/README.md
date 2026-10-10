@@ -42,3 +42,36 @@ seconds in total. No R2 production code or compiler ran in these epochs. The
 actual callbacks, sample/component facts and private temporary-file operations
 have bounded scope; actual Rust lifecycle, resource ownership, final artifact,
 CI, wheel and Blender acceptance still require implementation and evidence.
+
+[Local production retention](production_evidence/20261011-local/index.json)
+adds 1260 original records, 622 lossless blobs (3979625 compressed bytes)
+and 84 selected external or compiled artifact identities. Index SHA-256:
+`3ce6560371f80f4d9808353634f239aebc3773bf38ce3d406186662fd698df42`. Original compiler failures in epochs01/04/06 and
+the epoch07 lint failure remain failures. Two optional preparation placeholders
+were absent; their correctly named actual execution directories are explicitly
+retained as separate roots. Every original, compressed and reconstructed identity
+was checked before this copy. Native binaries/libraries remain metadata only.
+
+The assembled epoch08 production pin is
+`256dfbb462c8f4f147cf3748d94253cc6dc2bb0c13daa78c9a6bfa41ba542d41`.
+Its fresh CLI is
+`6e6c3d7d7552435f089806c3f1689bf508eab0e61ca3d4c14132c3601fdbbbf8`.
+Native and portable all-target lint passed. Current tests passed 30 native
+raster units, three native CLI tests, four native facade controls, 423 portable
+units and two portable facade controls. Nine migrated Python raster tests passed.
+The broad earlier native suite and affected D1/T1/vector callers passed on their
+retained epoch05 source; unchanged shared callers are not claimed rerun on08.
+
+Six independent full COG/PNG/report/TileJSON publications passed; all13 actual
+public cap invocations passed equality/one-below and preserved the preceding
+complete publication on refusal. Four further PNG/JPEG/palette/config positives
+and17 source/config refusals passed. Two genuine native Finalize fault modes
+reached real Run/Finalize/Release, retained causal primary and cleanup records,
+preserved old output, and observed configuration restoration before shutdown.
+CLI secondary kind remains an inference from pinned source because the CLI
+serializes secondary messages. Same-process TLS, physical file boundaries,
+logical owners, arbitrary native allocation and RSS are distinct scopes.
+
+The local source/artifact records require a separate final review and exact
+remote CI, wheel and official Blender acceptance before an evidence-backed
+develop merge. They do not close #113/#121/#125/#126 or authorize release.

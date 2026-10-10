@@ -2,21 +2,19 @@
 //!
 //! One process initialisation registers drivers and bounds the raster block
 //! cache. Datasets are owned, worker-local handles (neither Send nor Sync);
-//! derived/virtual datasets borrow their source so they always close first.
+//! Handles are independent datasets; virtual/derived source borrowing is not
+//! part of this shared owner.
 //! Domain policy (DEM inspection, imagery display recipes, OGR ingestion)
 //! stays with each converter.
 use super::{diagnostic, offline, QuietErrors};
 use crate::Error;
 use std::{
-    ffi::{c_char, c_void, CStr, CString},
-    marker::PhantomData,
+    ffi::{c_void, CStr, CString},
     path::Path,
-    ptr::{null, null_mut, NonNull},
+    ptr::{null, NonNull},
     sync::Once,
 };
 
-/// `GDAL_OF_RASTER`, a C macro excluded by bindgen.
-const RASTER: u32 = 0x02;
 /// `GDAL_OF_VECTOR`, a C macro excluded by bindgen.
 const VECTOR: u32 = 0x04;
 /// Process-wide raster block cache limit shared by every native converter.
@@ -47,111 +45,11 @@ pub(crate) fn c_str(text: &str) -> Result<CString, Error> {
     CString::new(text).map_err(|_| Error::Data(format!("native argument contains NUL: {text:?}")))
 }
 
-/// Owned, null-terminated C argv for GDAL's utility option parsers.
-pub(crate) struct Arguments {
-    _strings: Vec<CString>,
-    pointers: Vec<*mut c_char>,
-}
-
-impl Arguments {
-    pub(crate) fn new<S: AsRef<str>>(arguments: &[S]) -> Result<Self, Error> {
-        let strings = arguments
-            .iter()
-            .map(|a| c_str(a.as_ref()))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self::owned(strings))
-    }
-
-    pub(crate) fn owned(strings: Vec<CString>) -> Self {
-        let mut pointers = strings
-            .iter()
-            .map(|s| s.as_ptr().cast_mut())
-            .collect::<Vec<_>>();
-        pointers.push(null_mut());
-        Self {
-            _strings: strings,
-            pointers,
-        }
-    }
-
-    /// GDAL's parsers take `char**` but only read the list and its strings.
-    pub(crate) fn as_mut_ptr(&mut self) -> *mut *mut c_char {
-        self.pointers.as_mut_ptr()
-    }
-
-    pub(crate) fn as_ptr(&self) -> *const *const c_char {
-        self.pointers.as_ptr().cast()
-    }
-}
-
-macro_rules! utility_options {
-    ($(#[$doc:meta])* $name:ident, $ty:ty, $new:path, $free:path) => {
-        $(#[$doc])*
-        pub(crate) struct $name(NonNull<$ty>);
-        impl $name {
-            pub(crate) fn new(arguments: &mut Arguments, context: &str) -> Result<Self, Error> {
-                let _errors = QuietErrors::new();
-                // SAFETY: The owned null-terminated argv stays live during
-                // parsing; GDAL copies what it keeps. No binary-options output.
-                NonNull::new(unsafe { $new(arguments.as_mut_ptr(), null_mut()) })
-                    .map(Self)
-                    .ok_or_else(|| Error::Data(diagnostic(context)))
-            }
-            pub(crate) fn as_ptr(&self) -> *mut $ty {
-                self.0.as_ptr()
-            }
-        }
-        impl Drop for $name {
-            fn drop(&mut self) {
-                // SAFETY: One matching free for the uniquely owned allocation.
-                unsafe { $free(self.0.as_ptr()) };
-            }
-        }
-    };
-}
-
-utility_options!(
-    /// Parsed `gdal_translate` options.
-    TranslateOptions,
-    gdal_sys::GDALTranslateOptions,
-    gdal_sys::GDALTranslateOptionsNew,
-    gdal_sys::GDALTranslateOptionsFree
-);
-utility_options!(
-    /// Parsed `gdalinfo` options.
-    InfoOptions,
-    gdal_sys::GDALInfoOptions,
-    gdal_sys::GDALInfoOptionsNew,
-    gdal_sys::GDALInfoOptionsFree
-);
-utility_options!(
-    /// Parsed `gdaldem` options.
-    DemOptions,
-    gdal_sys::GDALDEMProcessingOptions,
-    gdal_sys::GDALDEMProcessingOptionsNew,
-    gdal_sys::GDALDEMProcessingOptionsFree
-);
-utility_options!(
-    /// Parsed `gdalwarp` options.
-    WarpOptions,
-    gdal_sys::GDALWarpAppOptions,
-    gdal_sys::GDALWarpAppOptionsNew,
-    gdal_sys::GDALWarpAppOptionsFree
-);
-
-/// An owned GDAL dataset. `'a` is the lifetime of the source a derived or
-/// virtual dataset references, so it cannot outlive (or close after) it.
-pub(crate) struct Dataset<'a> {
+pub(crate) struct Dataset {
     handle: NonNull<c_void>,
-    source: PhantomData<&'a Dataset<'a>>,
 }
 
-impl Dataset<'static> {
-    /// Open a raster read-only with default drivers and options.
-    pub(crate) fn open_raster(path: &Path, context: &str) -> Result<Self, Error> {
-        Self::open(path, RASTER, &[], context)
-    }
-
+impl Dataset {
     /// Open a vector read-only with the given driver open options.
     pub(crate) fn open_vector(
         path: &Path,
@@ -191,24 +89,21 @@ impl Dataset<'static> {
     }
 }
 
-impl<'a> Dataset<'a> {
+impl Dataset {
     /// Take ownership of a handle returned by a GDAL open/create/utility call.
     ///
     /// # Safety
     /// `handle` is null or a uniquely owned dataset not closed elsewhere, and
-    /// anything it references lives for `'a`. Call directly after the native
-    /// operation so `context` reports its thread-local diagnostic.
+    /// it is independent of any borrowed source dataset. Call directly after
+    /// the native operation so `context` reports its thread-local diagnostic.
     pub(crate) unsafe fn adopt(handle: *mut c_void, context: &str) -> Result<Self, Error> {
         NonNull::new(handle)
-            .map(|handle| Self {
-                handle,
-                source: PhantomData,
-            })
+            .map(|handle| Self { handle })
             .ok_or_else(|| Error::Data(diagnostic(context)))
     }
 }
 
-impl Dataset<'_> {
+impl Dataset {
     pub(crate) fn raw(&self) -> gdal_sys::GDALDatasetH {
         self.handle.as_ptr()
     }
@@ -218,7 +113,7 @@ impl Dataset<'_> {
         let _errors = QuietErrors::new();
         let owned = std::mem::ManuallyDrop::new(self);
         // SAFETY: Consumes the uniquely owned handle; ManuallyDrop prevents a
-        // second close. Borrowing datasets cannot exist (self is moved).
+        // second close. This independent handle has no borrowed source owner.
         if unsafe { gdal_sys::GDALClose(owned.raw()) } != 0 {
             return Err(Error::Data(diagnostic(context)));
         }
@@ -262,62 +157,11 @@ impl Dataset<'_> {
         // SAFETY: A live dataset and a six-element output buffer.
         (unsafe { gdal_sys::GDALGetGeoTransform(self.raw(), gt.as_mut_ptr()) } == 0).then_some(gt)
     }
-
-    /// `gdal_translate` to `destination` ("" with VRT/MEM stays in memory).
-    pub(crate) fn translate<'s>(
-        &'s self,
-        destination: &Path,
-        options: &TranslateOptions,
-        context: &str,
-    ) -> Result<Dataset<'s>, Error> {
-        let _errors = QuietErrors::new();
-        let destination = c_path(destination)?;
-        let mut usage = 0;
-        // SAFETY: Source, filename and options stay live through translation;
-        // the result is a new owned dataset that may reference this source.
-        unsafe {
-            let raw = gdal_sys::GDALTranslate(
-                destination.as_ptr(),
-                self.raw(),
-                options.as_ptr(),
-                &mut usage,
-            );
-            Dataset::adopt(raw, context)
-        }
-    }
-
-    /// Quiet single-source `gdalwarp` to `destination` ("" with VRT/MEM stays in
-    /// memory). Quiet mode keeps native progress off the CLI's JSON stdout.
-    pub(crate) fn warp<'s>(
-        &'s self,
-        destination: &Path,
-        options: &WarpOptions,
-        context: &str,
-    ) -> Result<Dataset<'s>, Error> {
-        let _errors = QuietErrors::new();
-        let destination = c_path(destination)?;
-        let mut source = self.raw();
-        let mut usage = 0;
-        // SAFETY: Source/options/filename are live and exactly one source is
-        // passed. The result is a new owned dataset that may reference self.
-        unsafe {
-            gdal_sys::GDALWarpAppOptionsSetQuiet(options.as_ptr(), 1);
-            let raw = gdal_sys::GDALWarp(
-                destination.as_ptr(),
-                null_mut(),
-                1,
-                &mut source,
-                options.as_ptr(),
-                &mut usage,
-            );
-            Dataset::adopt(raw, context)
-        }
-    }
 }
 
-impl Drop for Dataset<'_> {
+impl Drop for Dataset {
     fn drop(&mut self) {
-        // SAFETY: Unique ownership; borrowing derived datasets drop first. GDAL
+        // SAFETY: This independent dataset handle is uniquely owned. GDAL
         // closes and reclaims every band and buffer the dataset owns.
         unsafe {
             gdal_sys::GDALClose(self.raw());
@@ -332,26 +176,21 @@ mod tests {
     #[test]
     fn nul_bytes_are_data_errors_not_panics() {
         assert!(matches!(c_str("a\0b"), Err(Error::Data(_))));
-        assert!(matches!(
-            Arguments::new(&["-of", "x\0"]),
-            Err(Error::Data(_))
-        ));
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStrExt;
             let path = Path::new(std::ffi::OsStr::from_bytes(b"dem\0.tif"));
             assert!(matches!(c_path(path), Err(Error::Data(_))));
             assert!(matches!(
-                Dataset::open_raster(path, "cannot open"),
+                Dataset::open_vector(path, &[], "cannot open"),
                 Err(Error::Data(_))
             ));
         }
     }
 
     #[test]
-    fn derived_datasets_close_before_their_source_and_report_close() {
-        let source = Dataset::open_raster(Path::new("/nonexistent/rusty-tiles.tif"), "missing");
-        assert!(source.is_err());
+    fn owned_datasets_report_shape_and_close_explicitly() {
+        init().unwrap();
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("grid.asc");
         std::fs::write(
@@ -359,13 +198,14 @@ mod tests {
             "ncols 2\nnrows 2\nxllcorner 12\nyllcorner 41\ncellsize 0.1\n1 2\n3 4\n",
         )
         .unwrap();
-        let source = Dataset::open_raster(&path, "cannot open").unwrap();
+        let filename = c_path(&path).unwrap();
+        // SAFETY: Live terminated filename; read-only raster flags, null optional
+        // lists. GDAL returns an independent uniquely owned source dataset.
+        let handle =
+            unsafe { gdal_sys::GDALOpenEx(filename.as_ptr(), 0x02, null(), null(), null()) };
+        // SAFETY: This new independent handle has no other owner.
+        let source = unsafe { Dataset::adopt(handle, "cannot open") }.unwrap();
         assert_eq!((source.band_count(), source.size()), (1, [2, 2]));
-        let options =
-            WarpOptions::new(&mut Arguments::new(&["-of", "VRT"]).unwrap(), "bad").unwrap();
-        let derived = source.warp(Path::new(""), &options, "warp failed").unwrap();
-        assert_eq!(derived.size(), [2, 2]);
-        derived.finish("cannot finish").unwrap();
         source.finish("cannot finish").unwrap();
     }
 }

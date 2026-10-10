@@ -44,7 +44,11 @@ fn gray_int16_alpha_intersects_mask_and_nodata_without_executables() {
             if (128..192).contains(&x) && (128..192).contains(&y) {
                 mask[i] = 0;
             }
-            if x == 256 || y >= 256 {
+            if y >= 256 {
+                gray[i] = 220;
+                alpha[i] = 64;
+            }
+            if x == 256 {
                 alpha[i] = 0;
             }
         }
@@ -166,8 +170,10 @@ fn gray_int16_alpha_intersects_mask_and_nodata_without_executables() {
     let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report["ok"], true);
     let recipe: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(output.join("conversion.json")).unwrap()).unwrap();
-    assert_eq!(recipe["alphaBand"], 4);
+        serde_json::from_slice(&std::fs::read(output.join("report.json")).unwrap()).unwrap();
+    assert_eq!(recipe["display"]["alpha_band"], 4);
+    assert_eq!(recipe, report["rasterReport"]);
+    assert_eq!(recipe["profile"], "r2-source-cog-direct-nearest-pyramid");
     let sample = |x: usize, y: usize| {
         let lon = 12.5 + (x as f64 + 0.5) * 0.00001;
         let lat = 41.9 - (y as f64 + 0.5) * 0.00001;
@@ -193,6 +199,11 @@ fn gray_int16_alpha_intersects_mask_and_nodata_without_executables() {
     assert_eq!(sample(32, 160)[3], 0, "NoData with opaque alpha");
     assert_eq!(sample(160, 160)[3], 0, "masked data with opaque alpha");
     assert_eq!(sample(224, 224), [128, 128, 128, 255]);
+    assert_eq!(
+        sample(224, 257),
+        [220, 220, 220, 64],
+        "display reaches the final source window"
+    );
     assert_eq!(std::fs::read(&input).unwrap(), original);
     // COG keeps every Int16 band and the dataset mask unchanged.
     let cog = CString::new(output.join("source.cog.tif").as_os_str().as_encoded_bytes()).unwrap();
@@ -251,7 +262,7 @@ fn gray_int16_alpha_intersects_mask_and_nodata_without_executables() {
     let before = std::fs::read(output.join("tilejson.json")).unwrap();
     let result = run(&output, "5", true);
     assert_eq!(result.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&result.stdout).contains("band does not exist"));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("alpha band index"));
     assert_eq!(std::fs::read(output.join("tilejson.json")).unwrap(), before);
     assert_eq!(std::fs::read_dir(&output).unwrap().count(), 4);
 }
@@ -355,7 +366,14 @@ fn raster_cli_preserves_source_and_coverage_without_executables() {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    assert_eq!(progress.first().unwrap()["done"], 0);
+    let completed: Vec<_> = progress
+        .iter()
+        .filter(|event| event["phase"] == "raster_complete")
+        .collect();
+    assert_eq!(completed.len(), 1);
+    assert_eq!(completed[0]["done"], report["rasterReport"]["tiles"]);
+    assert_eq!(completed[0]["total"], report["rasterReport"]["tiles"]);
+    assert_eq!(progress.last().unwrap()["phase"], "conversion");
     assert_eq!(progress.last().unwrap()["done"], 1);
     let gray_output = root.path().join("gray output");
     let gray = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
@@ -480,9 +498,9 @@ fn default_build_reports_native_raster_requirement() {
         .env("PATH", "")
         .output()
         .unwrap();
-    assert_eq!(result.status.code(), Some(4));
+    assert_eq!(result.status.code(), Some(2));
     let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(report["error"]["code"], "environment");
+    assert_eq!(report["error"]["code"], "unsupported");
     assert!(report["error"]["message"]
         .as_str()
         .unwrap()

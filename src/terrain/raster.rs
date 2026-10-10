@@ -115,9 +115,9 @@ pub(super) fn prepare(path: &Path, attempt: &Attempt) -> Result<PreparedRaster, 
 fn prepare_with_close(
     path: &Path,
     attempt: &Attempt,
-    close: impl FnOnce(Dataset<'static>) -> Result<(), JobError>,
+    close: impl FnOnce(Dataset) -> Result<(), JobError>,
 ) -> Result<PreparedRaster, JobFailure> {
-    let open = || -> Result<(Dataset<'static>, std::fs::Metadata), JobError> {
+    let open = || -> Result<(Dataset, std::fs::Metadata), JobError> {
         attempt.check()?;
         let metadata =
             std::fs::symlink_metadata(path).map_err(|e| JobError::io("inspect DEM", path, e))?;
@@ -238,11 +238,7 @@ fn admit_block(width: i32, height: i32, sample_bytes: u64) -> Result<(), JobErro
     Ok(())
 }
 
-fn decode(
-    dataset: &Dataset<'_>,
-    path: &Path,
-    attempt: &Attempt,
-) -> Result<PreparedRaster, JobError> {
+fn decode(dataset: &Dataset, path: &Path, attempt: &Attempt) -> Result<PreparedRaster, JobError> {
     let _quiet = QuietErrors::new();
     // SAFETY: Metadata pointers borrow the live dataset; file list is released once.
     unsafe {
