@@ -1,0 +1,19 @@
+{
+  "base_commit_supplied_by_coordinator": "3b5703231bf3991c2e37caef99989214308cc08d",
+  "convexity_rational_controls": 1000,
+  "corner_sampling_interior_hole_centroid_distance_squared": "32/9",
+  "coverage_rational_points": 6544,
+  "depth_24_integer_paths": 100,
+  "kind": "preimplementation-exact-mathematical-controls",
+  "limitations": "Controls illustrate analytic obligations; no production build or final-source acceptance executed.",
+  "maximum_axis_terminal_patch_size_depth12_metres": 488.28125,
+  "maximum_axis_terminal_patch_size_depth24_metres": 0.11920928955078125,
+  "rounded_midpoint_lost_exact_contribution": "1/1427247692705959881058285969449495136382746624",
+  "source_sha256": {
+    "/home/bend/.cache/rusty-tiles-f1d2-slice/bench/architecture_audit/mesh_approximation_f1d2/math_probes/exact_controls.py": "861ae08035044b6ab6cbf6435547366e8e058788a2c0991c61a1f90738248d12",
+    "src/mesh_archive/approximation.rs": "42d9b6ca892ad31ba45d0b9911d95464181f7e55bf9294389857ee5a9256fc98"
+  },
+  "status": "pass",
+  "zero_true_distance_fixed_witness_lattice_error_decimal": 0.013278961181640625,
+  "zero_true_distance_fixed_witness_lattice_error_metres": "3481/262144"
+}
