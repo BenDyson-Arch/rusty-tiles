@@ -1,0 +1,671 @@
+{
+  "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+  "sourceTree": "dd6bf3dc696f9adf1a44f5fe9e5b0c9ea873813b",
+  "sourcePinSha256": "744afbee34cb3ef13955101cfd3dd17d19328e9540a4dc7d1f67af479baa7969",
+  "scope": {
+    "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+    "successfulCurrentPhase": "stride-final-build and stride-final-integrations-executable, verified stride-final-source-package",
+    "historicalD642": "Actual library367/82 pass; first wrapper selected first of two nested one-test summaries and stopped after completed Cargo; separate last-summary verification retains original. Native Clippy101 test-only modulo lint; originals retained, equivalent selected test copy freshly compiled at e4ec. No d642 CLI artifact acceptance.",
+    "historicalOld2ebSensitive6": "Four pass and two expected false InvalidInput defects before the authorized six-line correction; original source/artifact identity retained.",
+    "historicalPrecaseAttempt": "stride-final-integrations stopped before case execution because root copyfile omitted execute mode. Only executable metadata changed; both artifact byte hashes unchanged. Separate fresh evidence directory contains all12 successful current commands.",
+    "artifactScope": "Executables and source crate remain frozen externally; byte hashes and actual commands retained here. No whole-process OOM/RSS, full A2, remote CI, release or publication acceptance."
+  },
+  "records": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/c1-producer-local-two-workers-binding.json",
+      "file": "c1-producer-local-two-workers-binding.json.gz",
+      "bytes": 623,
+      "sha256": "11a7622ff2f9ed6f8810b4c0c21adf2edf9f4b5d36b41d55acc95c2751889078",
+      "gzipBytes": 423,
+      "gzipSha256": "2acdcf064facf9d4d69fd589e9ccd160d2b38840ce0dd4460f032626e7698a8c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/c1-producer-local-two-workers.py",
+      "file": "c1-producer-local-two-workers.py.gz",
+      "bytes": 3047,
+      "sha256": "19dc9b4f1b4c3e5995b0eef992b8742f59e05f88d2c2f097a348c397c40f1e1d",
+      "gzipBytes": 1409,
+      "gzipSha256": "337c2d42b31fd6ae76e6b00f3340ccf7ada2e4c687e314c5cce31ed21af268be"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-corrected-checks-initial-parser.py",
+      "file": "run-stride-corrected-checks-initial-parser.py.gz",
+      "bytes": 3222,
+      "sha256": "b2ac9b464b7ad5e8f93015128e035172dd6d88f7d9e019bd3ea389092729b541",
+      "gzipBytes": 1416,
+      "gzipSha256": "23b3dcae9d7564b4dbcfb4a138a0f7cab225ff3eabd3dd03cc075c4528a05833"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-corrected-checks.py",
+      "file": "run-stride-corrected-checks.py.gz",
+      "bytes": 3222,
+      "sha256": "b2ac9b464b7ad5e8f93015128e035172dd6d88f7d9e019bd3ea389092729b541",
+      "gzipBytes": 1416,
+      "gzipSha256": "23b3dcae9d7564b4dbcfb4a138a0f7cab225ff3eabd3dd03cc075c4528a05833"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-corrected-remaining.py",
+      "file": "run-stride-corrected-remaining.py.gz",
+      "bytes": 2536,
+      "sha256": "42859040560133fc9c40c48e7cbe3f116f84523ce41fbfa2187d89b3a174f907",
+      "gzipBytes": 1172,
+      "gzipSha256": "2f4e9552c68dc460679260a49829cd2a19fa5b1418a3dc1580a52b4ef5cc79ef"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-final-checks.py",
+      "file": "run-stride-final-checks.py.gz",
+      "bytes": 3220,
+      "sha256": "98667ff02e6e272c6e48de7c68d3c583f444605d64d3defd2221827f0d6b5558",
+      "gzipBytes": 1419,
+      "gzipSha256": "76d46910fed0252c7ed0219953532a4933a379ca7b806f28a6ef0c89f4edc7a3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-final-integrations-executable.py",
+      "file": "run-stride-final-integrations-executable.py.gz",
+      "bytes": 2484,
+      "sha256": "f49599c0010d095b8b0cdffc4d0e1990c84611ea0ffc8240b714a7b28ee3e89b",
+      "gzipBytes": 983,
+      "gzipSha256": "584d1b8d3747f984a9d1a6073042453cd36769d10bb8fd6f1c40a64222b3cbbd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-stride-final-integrations.py",
+      "file": "run-stride-final-integrations.py.gz",
+      "bytes": 2473,
+      "sha256": "044acd2b96dc7fde048ae0d2480a7a2e1814c6de9a33f465ca6d224708cc6799",
+      "gzipBytes": 979,
+      "gzipSha256": "bb667739020f483362a294b4f3e27f272159ec23c4312d7f00cd3bedef1b4752"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/context-harness-receipt.json",
+      "file": "stride-corrected-build__context-harness-receipt.json.gz",
+      "bytes": 123016,
+      "sha256": "6662a0f8a4e00e274ccdf9adcba760b0173e3c249963b62069f308297498faca",
+      "gzipBytes": 16737,
+      "gzipSha256": "ef0e8956f236a87742924a99e66c09cf328d7966c5a6811e9768ed4b34b3a3b6"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/context-parser-receipt.json",
+      "file": "stride-corrected-build__context-parser-receipt.json.gz",
+      "bytes": 802,
+      "sha256": "aa5de03336e3d955c4298d3c5ade61ebaa751764f7397088dbbe07e28b548760",
+      "gzipBytes": 442,
+      "gzipSha256": "91ea47d24bab777f721b8266e858d86f0ffd39fd0d08ab859a7a732515cfaaca"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/context-parser.log",
+      "file": "stride-corrected-build__context-parser.log.gz",
+      "bytes": 138,
+      "sha256": "be266805aa56ea3d17d5462d2fa87a563e4e39a214c759af81a2f5a5fc1e5c46",
+      "gzipBytes": 129,
+      "gzipSha256": "42caede01093151f7f239d2ecd96a38c04521b7e70a5251aca3b0ab8fb798f2b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/library-receipt.json",
+      "file": "stride-corrected-build__library-receipt.json.gz",
+      "bytes": 942,
+      "sha256": "1df151cfa30769efcab3938af7e31202c9001e09938a654e158bdc4695f41027",
+      "gzipBytes": 513,
+      "gzipSha256": "b4a5ec9a3bc2bea91100d5f7b9111527ce2a8f648b68d71b393da2acff38ae05"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/library-result-verification.json",
+      "file": "stride-corrected-build__library-result-verification.json.gz",
+      "bytes": 995,
+      "sha256": "c1fb119a8f96f4568c32ce10459845727d6e87dce61ec401047ad15c905e0198",
+      "gzipBytes": 525,
+      "gzipSha256": "6f5c01f308c25803c4237c828788c758e8a3d9995474463d577ced14f9480341"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/library.log",
+      "file": "stride-corrected-build__library.log.gz",
+      "bytes": 87552,
+      "sha256": "6d53fb6ea285facc9f524e91f616115371d351d26c6b1423403c74e2d71c0a49",
+      "gzipBytes": 14206,
+      "gzipSha256": "79fde6c4af7d470888e13b3c9138d2cd379bf36100ee4dbbb5d2edfb4583ddfb"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/native-clippy-receipt.json",
+      "file": "stride-corrected-build__native-clippy-receipt.json.gz",
+      "bytes": 749,
+      "sha256": "cebefaef2ed5259e5bb29fb2691c24d4bb1147d36f50f028633c95b99f4674ae",
+      "gzipBytes": 477,
+      "gzipSha256": "863a66932136b072fa7473691f95ae4724619639c0acaba511f8c2a96d33649d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/native-clippy.log",
+      "file": "stride-corrected-build__native-clippy.log.gz",
+      "bytes": 1350,
+      "sha256": "f88ff728eb5e586a83f8645a9e7f40572d27b62b5ab9008b48e06b4573599488",
+      "gzipBytes": 537,
+      "gzipSha256": "b1713560cc377adfb4ad520f80431d9e59932af9c1abda56858361dab62ab460"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-corrected-build/source-pin.json",
+      "file": "stride-corrected-build__source-pin.json.gz",
+      "bytes": 55213,
+      "sha256": "2d3814a7d97fc90b0ec6b7a915144ab42b8820609e1b6d98e04d7873651b19dd",
+      "gzipBytes": 13111,
+      "gzipSha256": "e8878a11b0cae0c2ac44f5bec2702f150bb1f12ccf03d27f8c5c48f8166f67ff"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/bindings-clippy-receipt.json",
+      "file": "stride-final-build__bindings-clippy-receipt.json.gz",
+      "bytes": 706,
+      "sha256": "91b92747c4915ed0b6cd862afeecb78fd0cb89f6a90a92aea71c38ac499d4222",
+      "gzipBytes": 450,
+      "gzipSha256": "574412a16c23f8606204a8c3f98bde80d2a5a7fdf6b2de4fd42f96c29b5bd6d5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/bindings-clippy.log",
+      "file": "stride-final-build__bindings-clippy.log.gz",
+      "bytes": 231,
+      "sha256": "e6e3292d32daa01650c2626daf15956bc468bdbfcfd74e5187c500064ff9302c",
+      "gzipBytes": 155,
+      "gzipSha256": "48b07655f24d0683a714b8ea98ecc3346c493166a3aa18ebc0b724dc81039c11"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/context-harness-receipt.json",
+      "file": "stride-final-build__context-harness-receipt.json.gz",
+      "bytes": 126695,
+      "sha256": "0e62cc1f227bb8994b366e5eb86e9f4e637283ec173cc014d60c583d0cc04ee7",
+      "gzipBytes": 17374,
+      "gzipSha256": "084fa9de4eea9ad44e8f6cda89755cf3f14b6a9972ef4b9dd47acc4cbaa081f2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/context-parser-receipt.json",
+      "file": "stride-final-build__context-parser-receipt.json.gz",
+      "bytes": 794,
+      "sha256": "31db945e64fa7573c6f9e3fea403772a801a2c80d9a1dfdcae69b44abcc7e84c",
+      "gzipBytes": 438,
+      "gzipSha256": "2f0ede777219ef1d16fadcdffce7b5f5610b862861b0909cc495fa058966ed63"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/context-parser.log",
+      "file": "stride-final-build__context-parser.log.gz",
+      "bytes": 134,
+      "sha256": "2e70f16f07779bc6bded3d2e9417dad4b2ed4be3125b1dc896b1811353d4a816",
+      "gzipBytes": 127,
+      "gzipSha256": "719127aa5d24009af45b09ab031277ae913da08358b12bb84e99b36af1806096"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/library-receipt.json",
+      "file": "stride-final-build__library-receipt.json.gz",
+      "bytes": 1060,
+      "sha256": "bc38b42601a4177c6bed2a9d8f684e58c6a280525fff1e7766a6a62c95f358e0",
+      "gzipBytes": 560,
+      "gzipSha256": "802d0ebe669fdad195dd2ec124a9b6cd92bff8efe95bcb9e422d9ed7bcf39973"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/library.log",
+      "file": "stride-final-build__library.log.gz",
+      "bytes": 87552,
+      "sha256": "cc9d22355a308aea6cbb9b0f8b493d69c674a55100dc964f61a3fa2179be25ac",
+      "gzipBytes": 14218,
+      "gzipSha256": "5a1b443d897884999e3f8c12b6151bb1f1ef31fe7ebdc92bf5e72ee9d50bd683"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/native-cli-receipt.json",
+      "file": "stride-final-build__native-cli-receipt.json.gz",
+      "bytes": 1007,
+      "sha256": "75caffd3335ea068ffdb77e95c94709f415e7e51cb46cffe4e885963dc7e1783",
+      "gzipBytes": 564,
+      "gzipSha256": "a680b21470b158c5019d793f6dbdc756c3e50fc14712242dbc899788bc4d85db"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/native-cli.log",
+      "file": "stride-final-build__native-cli.log.gz",
+      "bytes": 202,
+      "sha256": "3946080343e73233e8f1493026d80ec8b03697fcedd5410d5bf663b9c60d9561",
+      "gzipBytes": 160,
+      "gzipSha256": "884f53afeb976b09cef3b7d2f0b62d10a890521f6d941ade57f0959de397f8af"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/native-cli.path",
+      "file": "stride-final-build__native-cli.path.gz",
+      "bytes": 142,
+      "sha256": "70b0af08ba9b354978438322b9700f3341e253150340ebc729b3d9cbc4b35533",
+      "gzipBytes": 129,
+      "gzipSha256": "293c0197188a212f4f16580e96fd2651b11bcf75f936c585b540bacae3912bc4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/native-clippy-receipt.json",
+      "file": "stride-final-build__native-clippy-receipt.json.gz",
+      "bytes": 747,
+      "sha256": "97e3305696523414f62da5eaa32e24d88679c5557ad921147323e28b1feca33b",
+      "gzipBytes": 476,
+      "gzipSha256": "d3a6ae2f1016408b1f0d27b945af58c55ed260db60542564f8e03ad15721b859"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/native-clippy.log",
+      "file": "stride-final-build__native-clippy.log.gz",
+      "bytes": 135,
+      "sha256": "e5e4ffca17b86b213d37c769d826db742d838fd442d9829a34e35bdf2c15ef6f",
+      "gzipBytes": 134,
+      "gzipSha256": "c92e6092480bf4583ade3695c4f0e1438832d4232329181e69e1fd6ac2e747e3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/portable-cli-receipt.json",
+      "file": "stride-final-build__portable-cli-receipt.json.gz",
+      "bytes": 932,
+      "sha256": "bd7a1b1c0399881c784ca02af86b303dc780ce002dc82b7cd3925786f8e94196",
+      "gzipBytes": 503,
+      "gzipSha256": "2594d4fb5f5fb430775d47f36f6815555150c4e78910c2589257f02ce248487a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/portable-cli.log",
+      "file": "stride-final-build__portable-cli.log.gz",
+      "bytes": 136,
+      "sha256": "2949f0207d6b90963f59e595f6cecd25866d75a725f12244f9f83c5328fa88f9",
+      "gzipBytes": 134,
+      "gzipSha256": "501f70f07e34946e5e1743adcf0018e52080250c0ace9b62bdda4848755266c4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/portable-cli.path",
+      "file": "stride-final-build__portable-cli.path.gz",
+      "bytes": 144,
+      "sha256": "959a19358cdaa846b683973d6c3920d472390b7c1cceb3bfd2fb0b1dfc8101cc",
+      "gzipBytes": 130,
+      "gzipSha256": "4140a79d9207d04b32414c2ac90d8a43a69790c7ad0f9e27f770b3f05b3d0f33"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/source-pin.json",
+      "file": "stride-final-build__source-pin.json.gz",
+      "bytes": 58850,
+      "sha256": "744afbee34cb3ef13955101cfd3dd17d19328e9540a4dc7d1f67af479baa7969",
+      "gzipBytes": 13730,
+      "gzipSha256": "893c845e0f6e46fd12ddb55d5f7cbec687d5e27c4cc3f5ce056cddd5671ea777"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-executable-mode-binding.json",
+      "file": "stride-final-executable-mode-binding.json.gz",
+      "bytes": 1211,
+      "sha256": "0d7caf7c8565d8c8ece958b5b2a842c588a22be76559d74d8e6f6950f9569141",
+      "gzipBytes": 541,
+      "gzipSha256": "6f81664653db7b78ebe8cf7d827fb9fe3df2c452b131a1248d71412e17d123e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations/integration-executions.json",
+      "file": "stride-final-integrations__integration-executions.json.gz",
+      "bytes": 1084,
+      "sha256": "dae784246e27d56266e5ca8ae8b5092656b78acb031d1e091f3f8c289b60415e",
+      "gzipBytes": 528,
+      "gzipSha256": "60b6ba30b956863f5c9cea66518841582fba585003e51919898be7d0796636b8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations/portable-payload210.json",
+      "file": "stride-final-integrations__portable-payload210.json.gz",
+      "bytes": 590,
+      "sha256": "1e7585ad33eeffbe3509facac2da3a733a7001c9d54860f319c47310dcf348a3",
+      "gzipBytes": 410,
+      "gzipSha256": "129b0917d7278487a742b3f0776006f2b917ce2855455bdec410a55e656ce6d2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations/portable-payload210.log",
+      "file": "stride-final-integrations__portable-payload210.log.gz",
+      "bytes": 593,
+      "sha256": "3b90b64bd8480317cc932247eaa7ffe5f21a7d6d128baa96a2767a09325d63c6",
+      "gzipBytes": 290,
+      "gzipSha256": "78e310533158626ce4c5a217a558f836648f0b76c0a8d5ce92dd38f545b2a72a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/integration-executions.json",
+      "file": "stride-final-integrations-executable__integration-executions.json.gz",
+      "bytes": 13251,
+      "sha256": "fa5536c8447e2327fa7daf83a8d7b76bcbd08dfb3348a0e3c46410b8bfb0cd66",
+      "gzipBytes": 1952,
+      "gzipSha256": "26c8ed30e8027bae5a2640e196c50b2fcd2adc347a8c781ffd82332e7671a017"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-archive45.json",
+      "file": "stride-final-integrations-executable__native-archive45.json.gz",
+      "bytes": 51221,
+      "sha256": "b721964eadb1208200b6beab72235a5e6d2d158e0a5b63eee2f019072eebd4ae",
+      "gzipBytes": 4650,
+      "gzipSha256": "17d99377c5197cf224e7908b2d520cd5b05f59e89f89005a3496d202b17d0c65"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-archive45.log",
+      "file": "stride-final-integrations-executable__native-archive45.log.gz",
+      "bytes": 140,
+      "sha256": "e1cc7a24b9a8bc61c08c4a832272d8cca1b89c3329ea2fb0d12027c3a655135e",
+      "gzipBytes": 129,
+      "gzipSha256": "71777263c99361e0e70a9c384165801feabdf73428316d72c38180232b1d843d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-c1-corpus.json",
+      "file": "stride-final-integrations-executable__native-c1-corpus.json.gz",
+      "bytes": 97880,
+      "sha256": "e55351352b8fdb79a8ae841801681f519ecf32258a981a610c0b531416c9ee08",
+      "gzipBytes": 4014,
+      "gzipSha256": "114dfc9d0b6dc0e17a3e2003870e09565febab92af0b48508790a628cbccfcad"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-c1-corpus.log",
+      "file": "stride-final-integrations-executable__native-c1-corpus.log.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-payload210.json",
+      "file": "stride-final-integrations-executable__native-payload210.json.gz",
+      "bytes": 849265,
+      "sha256": "d756caf5153aa94c9418feb355446fc11d068e269d7da691052add543a3d2686",
+      "gzipBytes": 85615,
+      "gzipSha256": "3d8148383bf53e0881c3c02d755f66dea57cb45f708bbf67affb114bdf7e6ba3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-payload210.log",
+      "file": "stride-final-integrations-executable__native-payload210.log.gz",
+      "bytes": 22789,
+      "sha256": "97153c4440d76d3d6e1e3c09466584ae4286b6279b34c67b1acbc4bcbdc9baa5",
+      "gzipBytes": 1881,
+      "gzipSha256": "07a6c1765374e9bb1a73d7475569e570dc88bee8d2d39d1cf37fa11f3b703b86"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-producer.json",
+      "file": "stride-final-integrations-executable__native-producer.json.gz",
+      "bytes": 2583,
+      "sha256": "fa0e1d0fbf5113a0ea4733b1a19b90cc174f7ec27c94b418f0ae6baa3a72385e",
+      "gzipBytes": 980,
+      "gzipSha256": "40fc85861211765a71475a6bc7de6acd261019d66376d6828981e36bbd7eefb1"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-producer.log",
+      "file": "stride-final-integrations-executable__native-producer.log.gz",
+      "bytes": 32,
+      "sha256": "c9a39dffe6d5d37775c3aec7af3f80139987fa8d3fc9dd7bca0d0fcfcbba7ccd",
+      "gzipBytes": 51,
+      "gzipSha256": "8929a3341c7d30ef61c52817ab27e435cc2919badcd1f753028b305951c1e40a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-resources20.json",
+      "file": "stride-final-integrations-executable__native-resources20.json.gz",
+      "bytes": 17458,
+      "sha256": "9c642b995ac8ace7fee1e5fc6ea0929c520def69ca06449b4e8a98fdd383125c",
+      "gzipBytes": 1904,
+      "gzipSha256": "8e68b11a24d8720da1759246d342adb3d90304664cf48a0cf200436dc8fd2f71"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-resources20.log",
+      "file": "stride-final-integrations-executable__native-resources20.log.gz",
+      "bytes": 141,
+      "sha256": "98361927657002bb6156823908a6bf855579c1a834e41fac447a50b46ecb245e",
+      "gzipBytes": 131,
+      "gzipSha256": "f560a2b81e7c2f058dc4454c290ea5675e37923cbf62ceef2f3526d3b95ec656"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-stride7.json",
+      "file": "stride-final-integrations-executable__native-stride7.json.gz",
+      "bytes": 57972,
+      "sha256": "4fda0da476c7c17675c3ad358e53a2dced3c8265ec9967dc0dfe1d8d3763dd9a",
+      "gzipBytes": 16445,
+      "gzipSha256": "26ebb56060e1269059a54703009312a4b140c9829130b5119387f5f0fbb27cfc"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-stride7.log",
+      "file": "stride-final-integrations-executable__native-stride7.log.gz",
+      "bytes": 731,
+      "sha256": "f0607d811fc972dce269b54b94a96ce5d19ed15ba497208841d82c660f9c10ea",
+      "gzipBytes": 189,
+      "gzipSha256": "433cd37e93db51405fda5fbe274852e2b732c4101bbb25991f675254b2042ec7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-archive45.json",
+      "file": "stride-final-integrations-executable__portable-archive45.json.gz",
+      "bytes": 51429,
+      "sha256": "9fe7b29d64694dc2f2ca0e5c07cab88c2d474829c6018a44073bfbdf18ed0e0c",
+      "gzipBytes": 4653,
+      "gzipSha256": "532c6b911898db48d11c9ba60d5db302fa98aefa0ba8457c3fa045aa4783aa3c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-archive45.log",
+      "file": "stride-final-integrations-executable__portable-archive45.log.gz",
+      "bytes": 142,
+      "sha256": "cc45dab45c874a2b7f42467e0535167f022cb25e2820ec42ff6efef2846c559c",
+      "gzipBytes": 130,
+      "gzipSha256": "1ff8d412a3aac00f81d70b731063eeed76ad755d0ed2b3a41c488483f5c1ca93"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-c1-corpus.json",
+      "file": "stride-final-integrations-executable__portable-c1-corpus.json.gz",
+      "bytes": 97958,
+      "sha256": "3e664269d33c357c1328a68b0d4344def82afdc4154c71be2ba0b260f903ed3f",
+      "gzipBytes": 4017,
+      "gzipSha256": "8f552349bdce3479373c6dfb5d7b9a5b21c82c48f570ccc02a02d79566733582"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-c1-corpus.log",
+      "file": "stride-final-integrations-executable__portable-c1-corpus.log.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-payload210.json",
+      "file": "stride-final-integrations-executable__portable-payload210.json.gz",
+      "bytes": 850676,
+      "sha256": "85d8250a209f0ca2ac1e15ebe7bb2aec04e51b3c962cc8f80fa9d3eed0c09ceb",
+      "gzipBytes": 85718,
+      "gzipSha256": "a2fca31f32a0ad887b82fdccaf62d25ad6fbd5e2ed12f956561df87a81f4fcc9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-payload210.log",
+      "file": "stride-final-integrations-executable__portable-payload210.log.gz",
+      "bytes": 22791,
+      "sha256": "b7cf6c8a2d6f992b7cbe5d8b2fea60fd89bab8a0f1439edb82849fd156dc88fa",
+      "gzipBytes": 1882,
+      "gzipSha256": "e5ad7ef18e20166f81595f7d358d35698128079b4b7ded3465d9b2759aec2255"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-producer.json",
+      "file": "stride-final-integrations-executable__portable-producer.json.gz",
+      "bytes": 3001,
+      "sha256": "d0555c1a205cc885412e384281b89ac2cc95608bf5046d3414fb09a82fc835d0",
+      "gzipBytes": 1052,
+      "gzipSha256": "6f691cb30b2198775ad29c19cac765ca5b62d461c5cceb5d982c548f71e6758a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-producer.log",
+      "file": "stride-final-integrations-executable__portable-producer.log.gz",
+      "bytes": 32,
+      "sha256": "07be06361f68334f8d4d84e3399c352feb27f6d26ed66f5a5cf5712470c8725c",
+      "gzipBytes": 51,
+      "gzipSha256": "7ac6c91caa49b429bdd36653d4f8ab253af2c7c697889b1b3e3698e57a3ef306"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-resources20.json",
+      "file": "stride-final-integrations-executable__portable-resources20.json.gz",
+      "bytes": 17458,
+      "sha256": "5bc9b6d55ecc0ea682d2a69865f7c16ad3709866d00b1ed53382833d8ac2452b",
+      "gzipBytes": 1911,
+      "gzipSha256": "25f4bde9fbfa1d2b51105658479100e7318b3ce60b29eabdb8bd39ae732160f9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-resources20.log",
+      "file": "stride-final-integrations-executable__portable-resources20.log.gz",
+      "bytes": 143,
+      "sha256": "a31f2939d9c241d8863da135c0e8acd3914032c7e79f548b2b50f8388230422c",
+      "gzipBytes": 130,
+      "gzipSha256": "966b998133ab7ea86430d76622e0851b2ce2132d838085017f314a7630ca719d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-stride7.json",
+      "file": "stride-final-integrations-executable__portable-stride7.json.gz",
+      "bytes": 57993,
+      "sha256": "7b36bb25a36545aa612c25498220149042488fa32077e1725f15cdf01e380847",
+      "gzipBytes": 16451,
+      "gzipSha256": "ba9b6bce31f3601b215f898530cc612eb2447875b8ca1740e38ef43f83e798c5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/portable-stride7.log",
+      "file": "stride-final-integrations-executable__portable-stride7.log.gz",
+      "bytes": 731,
+      "sha256": "f0607d811fc972dce269b54b94a96ce5d19ed15ba497208841d82c660f9c10ea",
+      "gzipBytes": 189,
+      "gzipSha256": "433cd37e93db51405fda5fbe274852e2b732c4101bbb25991f675254b2042ec7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-phase-notes.json",
+      "file": "stride-final-phase-notes.json.gz",
+      "bytes": 1206,
+      "sha256": "ff6aaeda4d208ae98798e4a66bdf3ce794187cd6548a4f0377b05595a1e2cd3e",
+      "gzipBytes": 663,
+      "gzipSha256": "63f37ddce49a255e04efe80b475e6a9f6315088d21cb6ace02cc9555a5dd88e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-source-package/archive-inventory.json",
+      "file": "stride-final-source-package__archive-inventory.json.gz",
+      "bytes": 540091,
+      "sha256": "096acd05a6efd4543d522d2504ab1676f913235088f007e78263e318a2ef6adf",
+      "gzipBytes": 97345,
+      "gzipSha256": "e0c46209cf03212cf69001df372f09c2e84c966ff36dc635f1d54cd0dbdf8d84"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-source-package/inventory.py",
+      "file": "stride-final-source-package__inventory.py.gz",
+      "bytes": 2896,
+      "sha256": "f4e7086870fbfd232ffa426bdf39c8eb3a326ce5e9ffe7f8290e1a9cb44123fb",
+      "gzipBytes": 1359,
+      "gzipSha256": "dc80a2d17b4ecf24d60d886ddaa2abe12828f1494b39a436c3339d034596e232"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-source-package/package-verify.log",
+      "file": "stride-final-source-package__package-verify.log.gz",
+      "bytes": 395,
+      "sha256": "78f70d3084d7d5e99f358d11fdff7ce5349936a59e119a6cdc6075d031e75067",
+      "gzipBytes": 231,
+      "gzipSha256": "91f46725eba558555014b835378de36d22c5e5303eceb4e42bf0a4a42e185a3c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-source-package/receipt.json",
+      "file": "stride-final-source-package__receipt.json.gz",
+      "bytes": 901,
+      "sha256": "76b838c0ff910a4525671dcf2db84f6135eae999fa9916ef5e8f568354c4b868",
+      "gzipBytes": 524,
+      "gzipSha256": "29eee61dd5c07e526b9d3ab3052887b9b84ab073926f9dc8a7ca7c7b27953546"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-final-source-package/run.py",
+      "file": "stride-final-source-package__run.py.gz",
+      "bytes": 1911,
+      "sha256": "4cf22acc331356cc6d1f4259df163a29dcc0ed982115492a677bdfb5e70bb679",
+      "gzipBytes": 856,
+      "gzipSha256": "4822dfdab4ce6f22d27c5de602fdb14c2eb5a166e667e3626f4ae582a5840adb"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/absent-parent-baseline.stderr",
+      "file": "stride-old-binary-sensitive6__absent-parent-baseline.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/absent-parent-baseline.stdout",
+      "file": "stride-old-binary-sensitive6__absent-parent-baseline.stdout.gz",
+      "bytes": 1100,
+      "sha256": "582f8380aef00543d5270c63e984f16ef262571eab1d345580708424f8f34953",
+      "gzipBytes": 593,
+      "gzipSha256": "d16979497bb2c8a622977aedfa3405424916f27ff10a80634eea0cf92cc17486"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/coordinator.json",
+      "file": "stride-old-binary-sensitive6__coordinator.json.gz",
+      "bytes": 1612,
+      "sha256": "9cb899b134d34c63e7a634ea1ba6ea50664a37b1caad57919765f47d584ab3c9",
+      "gzipBytes": 759,
+      "gzipSha256": "6480d0db5c4b3aefbe71f17da35f026ad7a7530122bfe7fad7bdbcc271f38096"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/explicit-parent-stride.stderr",
+      "file": "stride-old-binary-sensitive6__explicit-parent-stride.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/explicit-parent-stride.stdout",
+      "file": "stride-old-binary-sensitive6__explicit-parent-stride.stdout.gz",
+      "bytes": 1100,
+      "sha256": "8ada789516c38849108fce596e2940e22cc459f6420fe6df6ba6e9ed4d819503",
+      "gzipBytes": 593,
+      "gzipSha256": "d332ea4f3015d4195561b156e04e7d982ed0bbb3c0c590d4156dffea1c32f76e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/receipt.json",
+      "file": "stride-old-binary-sensitive6__receipt.json.gz",
+      "bytes": 67232,
+      "sha256": "1e8d8d249bdc8da4fcc4a5be660b1825aa8fdeafa7158177571bd9d57dc05244",
+      "gzipBytes": 14196,
+      "gzipSha256": "004f8213da687dd519445b309731d865a73fb7aa008ae659799e32f3edc36eac"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/scalar-real-range.stderr",
+      "file": "stride-old-binary-sensitive6__scalar-real-range.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/scalar-real-range.stdout",
+      "file": "stride-old-binary-sensitive6__scalar-real-range.stdout.gz",
+      "bytes": 106,
+      "sha256": "b39f398ad9c39078524d6db1ee0d8e110260e78a51d8124b3e0478983d772321",
+      "gzipBytes": 113,
+      "gzipSha256": "1fbae53a0e6cc624df26603531521db0d7ff6ab2ffb0732c03187a73ec1ad8bd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/unused-packed-scalar-offset.stderr",
+      "file": "stride-old-binary-sensitive6__unused-packed-scalar-offset.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/unused-packed-scalar-offset.stdout",
+      "file": "stride-old-binary-sensitive6__unused-packed-scalar-offset.stdout.gz",
+      "bytes": 123,
+      "sha256": "33b0b892b77eeca153d39d1cdf11acabbaf3388f08ce0a9222a72708f1e92672",
+      "gzipBytes": 120,
+      "gzipSha256": "d8e635cfe25aedd88bed4a57250d573c0810d167826b953aa41188a97b1d4836"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/unused-packed-scalar.stderr",
+      "file": "stride-old-binary-sensitive6__unused-packed-scalar.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/unused-packed-scalar.stdout",
+      "file": "stride-old-binary-sensitive6__unused-packed-scalar.stdout.gz",
+      "bytes": 123,
+      "sha256": "33b0b892b77eeca153d39d1cdf11acabbaf3388f08ce0a9222a72708f1e92672",
+      "gzipBytes": 120,
+      "gzipSha256": "d8e635cfe25aedd88bed4a57250d573c0810d167826b953aa41188a97b1d4836"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/wrong-parent-stride.stderr",
+      "file": "stride-old-binary-sensitive6__wrong-parent-stride.stderr.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/stride-old-binary-sensitive6/wrong-parent-stride.stdout",
+      "file": "stride-old-binary-sensitive6__wrong-parent-stride.stdout.gz",
+      "bytes": 110,
+      "sha256": "2c800dd602c0d1433ca0b6b59266e1edcc89bfadd465681351521b640c009b4c",
+      "gzipBytes": 117,
+      "gzipSha256": "6a9b4523017f904183aa69b6c334d93ecf83d147ec9d9c027b19f7e6a37ff828"
+    }
+  ]
+}

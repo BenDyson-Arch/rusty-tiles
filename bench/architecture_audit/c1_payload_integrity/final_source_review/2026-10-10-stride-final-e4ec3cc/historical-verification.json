@@ -1,0 +1,14 @@
+{
+  "earlierReviewPhasesUnchanged": true,
+  "earlier2ebExecutedDefects": [
+    "unused-packed-scalar",
+    "unused-packed-scalar-offset"
+  ],
+  "oldRawStreamsVerified": 12,
+  "d642CompleteLibraryPassed": 367,
+  "d642ParserStopNotProductionFailure": true,
+  "d642TestOnlyClippyExitCode": 101,
+  "finalPrecaseModeFailureHasNoExecutedCases": true,
+  "frozenArtifactByteHashesUnchangedByModeCorrection": true,
+  "noExecutionIdentitiesRebound": true
+}

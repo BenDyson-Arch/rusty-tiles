@@ -1,0 +1,38 @@
+{
+  "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+  "sourceTree": "dd6bf3dc696f9adf1a44f5fe9e5b0c9ea873813b",
+  "originalLocalExecutionSource": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+  "sourcePinSha256": "744afbee34cb3ef13955101cfd3dd17d19328e9540a4dc7d1f67af479baa7969",
+  "all97ProductionAnd237AcceptanceInputsMatch": true,
+  "packageDefaultVerificationExitCode": 0,
+  "logSha256": "78f70d3084d7d5e99f358d11fdff7ce5349936a59e119a6cdc6075d031e75067",
+  "archiveSha256": "6a63ab5ec1e769418c56ed8e15cd57c739f6ee2a9e8c724fccdc78b932a2f3c0",
+  "archiveBytes": 5792085,
+  "archiveMembers": 1965,
+  "originalMembersByteIdenticalToCommit": 1961,
+  "actualSrcFiles": 92,
+  "selectedSourceAndControlMembersByteIdentical": 329,
+  "omittedSeparatePackageAndWorkflowPaths": [
+    "bindings/python/Cargo.toml",
+    "bindings/python/src/lib.rs",
+    ".github/workflows/ci.yml"
+  ],
+  "vcsCleanExactCommit": true,
+  "manifestOrigExact": true,
+  "normalizedManifestSemanticChanges": false,
+  "lockedPackageTablesUnchanged": 288,
+  "removedUnreachablePythonPackageTables": [
+    "portable-atomic",
+    "pyo3",
+    "pyo3-build-config",
+    "pyo3-ffi",
+    "pyo3-macros",
+    "pyo3-macros-backend",
+    "rusty-tiles-python",
+    "target-lexicon"
+  ],
+  "retainedIndexSha256": "0a5e2b4be92b413420bad856d284aa77d73a0ce24456c4e98877b640da445739",
+  "losslessPhaseRecordsVerified": 82,
+  "decision": "Bounded extracted root source archive compilation accepted",
+  "scope": "Default dev-profile compilation, not rerun library/public controls, native-feature source build, installed wheel, Blender, remote CI, publication, full A2 or release acceptance"
+}
