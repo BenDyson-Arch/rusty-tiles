@@ -1,0 +1,250 @@
+{
+  "purpose": "Lossless storage of verbose F1c2 receipts. Embedded original names and hashes identify decompressed bytes; historical evidence is unchanged.",
+  "compression": {
+    "recipe": "gzip.compress(original_bytes, compresslevel=9, mtime=0)",
+    "python_version": "3.14.7",
+    "zlib_version": "1.3.1.zlib-ng"
+  },
+  "entries": [
+    {
+      "original": "model-wrapping-oracle.json",
+      "stored": "model-wrapping-oracle.json.gz",
+      "uncompressed_bytes": 28440,
+      "uncompressed_sha256": "7f119f8781c4db5aabc2a18b605d9be53cd8d119f1d205fa4452aa18b27ccab4",
+      "compressed_bytes": 3122,
+      "compressed_sha256": "91de2a5fa96b0ffb546e976df30dd9cc3a2c35fb1bd6de225a13fcbd56c3fa12"
+    },
+    {
+      "original": "probes/empty-names-picking-candidate.json",
+      "stored": "probes/empty-names-picking-candidate.json.gz",
+      "uncompressed_bytes": 84476,
+      "uncompressed_sha256": "b20152a8c95cf199c8d0ddb9e08c0581d8f80ce00675dc54a8f3a9f37be7073c",
+      "compressed_bytes": 2868,
+      "compressed_sha256": "18adc46be978c7e64c4957369dbfb88b1ef02698731e3edd2865d9cea0703af8"
+    },
+    {
+      "original": "probes/empty-names-picking-final-s2.json",
+      "stored": "probes/empty-names-picking-final-s2.json.gz",
+      "uncompressed_bytes": 84476,
+      "uncompressed_sha256": "4dfad684def4278192f6536287e2a37aec6171c22ca69f1b90cf2a035235ab03",
+      "compressed_bytes": 2870,
+      "compressed_sha256": "948c0391b5814446b5fe804d4c2cc994fa5c7e4e1758c0babe340f98e60c168f"
+    },
+    {
+      "original": "probes/empty-names-picking-final.json",
+      "stored": "probes/empty-names-picking-final.json.gz",
+      "uncompressed_bytes": 84474,
+      "uncompressed_sha256": "9838803d2b2fde5caf8df37ce8751fc4329e1fe95a128285b81ded80b77ff78a",
+      "compressed_bytes": 2849,
+      "compressed_sha256": "aa6c0596b9c15bdad3ece1135f5fefb5a58802ce175899125528f70a8f582ccc"
+    },
+    {
+      "original": "probes/identity-candidate.json",
+      "stored": "probes/identity-candidate.json.gz",
+      "uncompressed_bytes": 49251,
+      "uncompressed_sha256": "ca53f177ca0cc3f9a96c246d009cbb4101e3c456170ad8283601d57c2182901a",
+      "compressed_bytes": 4627,
+      "compressed_sha256": "a62c14ff4b2e81c16bddb13017bb34cb7bdaac1e1707f78efeeb0160271c58cd"
+    },
+    {
+      "original": "probes/identity-final-native-s2.json",
+      "stored": "probes/identity-final-native-s2.json.gz",
+      "uncompressed_bytes": 49255,
+      "uncompressed_sha256": "e3533c267e827bebaf8f547843ad5ece3de2e6ceafd7e3f9054f1ebd90fcfcb8",
+      "compressed_bytes": 4628,
+      "compressed_sha256": "3f26bdbae31fae4ce649242ba0c77e8b03fe5d447c92deb52d1a601b9a7c5229"
+    },
+    {
+      "original": "probes/identity-final-native.json",
+      "stored": "probes/identity-final-native.json.gz",
+      "uncompressed_bytes": 49258,
+      "uncompressed_sha256": "08335a446fb04682c1e5faa8b6fb6f03838aec8f61f921928540685930029dbf",
+      "compressed_bytes": 4633,
+      "compressed_sha256": "dd894281d94f39ee1d24e6a80173b77fc20bf4e68e7fbfbbea4fd7ef8f425cc7"
+    },
+    {
+      "original": "probes/identity-final-portable-s2.json",
+      "stored": "probes/identity-final-portable-s2.json.gz",
+      "uncompressed_bytes": 49257,
+      "uncompressed_sha256": "ae621436da88219f4b90cdec63d23ca79b3fc0bb819f44a234b41f77b66e1a47",
+      "compressed_bytes": 4632,
+      "compressed_sha256": "92fd2d3c1e1e8eac579562a1a36ae3ec8c78243b580c5b6a9d0286bcb37972db"
+    },
+    {
+      "original": "probes/identity-final-portable.json",
+      "stored": "probes/identity-final-portable.json.gz",
+      "uncompressed_bytes": 49260,
+      "uncompressed_sha256": "90ee94878ce9cb6c9007a7d45e6bd30aed4e16530cf344160ca8f5bf04eb1501",
+      "compressed_bytes": 4631,
+      "compressed_sha256": "1f57d17f1247dae0fb56f8e976462653787934b21d6d84a9012eb75f8b8220c3"
+    },
+    {
+      "original": "probes/khronos-candidate.json",
+      "stored": "probes/khronos-candidate.json.gz",
+      "uncompressed_bytes": 97446,
+      "uncompressed_sha256": "83e86f694bb054f96e9f792488b3904e2fc1423a84990f5ec14c4a320e1e85f0",
+      "compressed_bytes": 4754,
+      "compressed_sha256": "de41133e6db1c93b0fdb81538fe899e350974d9baad4f1217c172f82da57336f"
+    },
+    {
+      "original": "probes/khronos-final-s2.json",
+      "stored": "probes/khronos-final-s2.json.gz",
+      "uncompressed_bytes": 97446,
+      "uncompressed_sha256": "fc34ca98372aea5ca8f53343290d32eec51fd3185679ffcefe8876fed2d90ede",
+      "compressed_bytes": 4756,
+      "compressed_sha256": "e379ac2ba6b69e1170dd1328816c9e3c17c741e2567aaeee409114083d4a57e2"
+    },
+    {
+      "original": "probes/khronos-final.json",
+      "stored": "probes/khronos-final.json.gz",
+      "uncompressed_bytes": 97446,
+      "uncompressed_sha256": "a0f4e2534ccdba35681a0c1b9c129ab65c9c1cb32b2efecec7089ef25046caec",
+      "compressed_bytes": 4755,
+      "compressed_sha256": "8850faf2f1c598253d6f256e6410f2db2a514207ee82c4013d76f6938c3adba7"
+    },
+    {
+      "original": "probes/picking-candidate.json",
+      "stored": "probes/picking-candidate.json.gz",
+      "uncompressed_bytes": 85867,
+      "uncompressed_sha256": "9de1b3c15453cc5b5d322fe2ba21a26eb76768ab3c7c8fdda4713a8821b4eb23",
+      "compressed_bytes": 2906,
+      "compressed_sha256": "0246491f7f6813c8678b037c226d2eb121ce92b90e481b1a9ee56390139c7eb6"
+    },
+    {
+      "original": "probes/picking-final-s2.json",
+      "stored": "probes/picking-final-s2.json.gz",
+      "uncompressed_bytes": 85868,
+      "uncompressed_sha256": "a797a8549bf5b2936f9ac7c381c4a355f14e88ea74458def99460d1e08b6b77e",
+      "compressed_bytes": 2864,
+      "compressed_sha256": "3002591f1044017ae51465e7af897d5b2d262ad11091b628cdc5cb7ec7bcb8db"
+    },
+    {
+      "original": "probes/picking-final.json",
+      "stored": "probes/picking-final.json.gz",
+      "uncompressed_bytes": 85869,
+      "uncompressed_sha256": "bc0a24a956791cde9783a4723c846681140a44a25b1462cc5f3cf82aca9c84a6",
+      "compressed_bytes": 2920,
+      "compressed_sha256": "f7bf5944f702a6893bac5dcba91b17f466c17b6b60f51b88a278ef72137dd48b"
+    },
+    {
+      "original": "probes/sparse-table-browser-feasibility.json",
+      "stored": "probes/sparse-table-browser-feasibility.json.gz",
+      "uncompressed_bytes": 84706,
+      "uncompressed_sha256": "4c540289855ee7ec2e26bccc461390d89a98a504c9ec5de4985b93c1e6671182",
+      "compressed_bytes": 2554,
+      "compressed_sha256": "40bf793ce6066e494254ea734511ee6fb611315558010c95c36c554830fde84a"
+    },
+    {
+      "original": "probes/unchanged-model-browser-before-fix.json",
+      "stored": "probes/unchanged-model-browser-before-fix.json.gz",
+      "uncompressed_bytes": 19786,
+      "uncompressed_sha256": "c6039fd3bed93b002101ba6045f8f8d46ece7dc032e375485bccdca796a41a8b",
+      "compressed_bytes": 2989,
+      "compressed_sha256": "54d9712de8a5f501d962bc66c96b06800aa8515bdd3f38e2ddfc555cdd50be7c"
+    },
+    {
+      "original": "probes/unchanged-model-browser-final-s2.json",
+      "stored": "probes/unchanged-model-browser-final-s2.json.gz",
+      "uncompressed_bytes": 30109,
+      "uncompressed_sha256": "79f507d1a7a7f408ff341a6a29bbf0bb1392cb77a0866f46f54c648ab3d7b363",
+      "compressed_bytes": 3182,
+      "compressed_sha256": "717acf3eeec42662f05b2adb9634aa18a351eb3c15422503eb8f22ac70852afa"
+    },
+    {
+      "original": "probes/unchanged-model-browser-final.json",
+      "stored": "probes/unchanged-model-browser-final.json.gz",
+      "uncompressed_bytes": 30109,
+      "uncompressed_sha256": "4a93f9269bdf502cc3caf59fca00db657d639ec88d9e83fe4ab6f225ccc89f77",
+      "compressed_bytes": 3186,
+      "compressed_sha256": "09565dbcf5354658c59137ffff0a9def64b330bb8f72c1fbb22cf9de4af4828a"
+    },
+    {
+      "original": "probes/wrapping-final-native-s2.json",
+      "stored": "probes/wrapping-final-native-s2.json.gz",
+      "uncompressed_bytes": 40299,
+      "uncompressed_sha256": "32c1d9e34c96268b53667a87fe8729be1bfe32c0deb26924a691203a12955ff6",
+      "compressed_bytes": 3959,
+      "compressed_sha256": "38fbafef8630151661fc11b626da4f59f72e284be3d7a2b5c6d2c8c092a36d0e"
+    },
+    {
+      "original": "probes/wrapping-final-native.json",
+      "stored": "probes/wrapping-final-native.json.gz",
+      "uncompressed_bytes": 40302,
+      "uncompressed_sha256": "ba14b2b55a97065d86ca7f13f79fecc6816d804840308f535dc0e7a80db82942",
+      "compressed_bytes": 3962,
+      "compressed_sha256": "d1da4dc364c4e6161a1322e24de52411f42a5a0aa1eed65b89c57ceea8aa7b60"
+    },
+    {
+      "original": "probes/wrapping-final-portable-s2.json",
+      "stored": "probes/wrapping-final-portable-s2.json.gz",
+      "uncompressed_bytes": 40301,
+      "uncompressed_sha256": "55088e3b124ccf38aa9bca70de6ea59f4d69097a02b68fea2ba029924558f53f",
+      "compressed_bytes": 3962,
+      "compressed_sha256": "0eb3e3541947e9e24469f92f09952c3476073bf2cf6f7c71d3bc301fd8f20b04"
+    },
+    {
+      "original": "probes/wrapping-final-portable.json",
+      "stored": "probes/wrapping-final-portable.json.gz",
+      "uncompressed_bytes": 40304,
+      "uncompressed_sha256": "841f1a1436dd1a61ebc9f8719e3b81e11c6289ce7c5e4cfdd90521747be4b003",
+      "compressed_bytes": 3963,
+      "compressed_sha256": "79de9074e5fcdf53ffab9e9c1e8ce68153dfb44c0e00de4c54a0647d4152f2c1"
+    },
+    {
+      "original": "receipts/f1a-portable.json",
+      "stored": "receipts/f1a-portable.json.gz",
+      "uncompressed_bytes": 37900,
+      "uncompressed_sha256": "c938f3eca3c139232bb23e017c7677b00ffec451c5aa10eea09dabe6417c209c",
+      "compressed_bytes": 1573,
+      "compressed_sha256": "63eb2b1793689e974e34ac996df8405a4c088ce1bbf45225dae67d78bb97682a"
+    },
+    {
+      "original": "receipts/f1b-portable.json",
+      "stored": "receipts/f1b-portable.json.gz",
+      "uncompressed_bytes": 157908,
+      "uncompressed_sha256": "793604f9f1b04b24ac583fb2b7763be58eb6647cb3dcae93bf1f5ca677eb11d5",
+      "compressed_bytes": 11059,
+      "compressed_sha256": "f209fc550285798fb7607bbe2e98204c0e063633a354370709a6eac05e70f975"
+    },
+    {
+      "original": "receipts/f1b2-portable.json",
+      "stored": "receipts/f1b2-portable.json.gz",
+      "uncompressed_bytes": 193294,
+      "uncompressed_sha256": "e3660626c84218aa71113032732e8c05d3eefbe527bf279d7a16bbf381283cf2",
+      "compressed_bytes": 12288,
+      "compressed_sha256": "d3cba1b9e5f1e6f5bc841337a2af3af20ed0db5367226e7004bfe55ef8e954b4"
+    },
+    {
+      "original": "receipts/f1b3-browser.json",
+      "stored": "receipts/f1b3-browser.json.gz",
+      "uncompressed_bytes": 162962,
+      "uncompressed_sha256": "4d1224ce1640fa0aadbbdfad5ac96b612d383f9563af8b1410be5d1a492fab50",
+      "compressed_bytes": 4924,
+      "compressed_sha256": "5086629cc99e6686ea528c7d0a3d73ed3c29ea564c3db30e9e7dde36d315dd33"
+    },
+    {
+      "original": "receipts/f1b3-portable.json",
+      "stored": "receipts/f1b3-portable.json.gz",
+      "uncompressed_bytes": 204017,
+      "uncompressed_sha256": "970076c9613a8ebf619225711d4e602e1c7cd0c19d78dd3540200b62ed4a5261",
+      "compressed_bytes": 11335,
+      "compressed_sha256": "7da376c841dd52389a890c0854402cde4005d593d6138268b0e25b35f8a980d0"
+    },
+    {
+      "original": "receipts/f1c1-browser.json",
+      "stored": "receipts/f1c1-browser.json.gz",
+      "uncompressed_bytes": 76815,
+      "uncompressed_sha256": "d69f940a3073f33200ebb632e7f67ad3f795bd02c899ef917832d7d7b40ce13b",
+      "compressed_bytes": 6831,
+      "compressed_sha256": "7cd68c8e8f0b80c17370d22b6f914b86e030b3418c5417068859ca89cdc91d78"
+    },
+    {
+      "original": "receipts/f1c1-portable.json",
+      "stored": "receipts/f1c1-portable.json.gz",
+      "uncompressed_bytes": 955070,
+      "uncompressed_sha256": "8fa12d465b71e39e064870660b1def453955c3cb1c367fdfa7a1129615e94aae",
+      "compressed_bytes": 36270,
+      "compressed_sha256": "5bc830155dce2b1a61e440479725a723c3b6ded176941dcb0bc22370ce5c8718"
+    }
+  ]
+}

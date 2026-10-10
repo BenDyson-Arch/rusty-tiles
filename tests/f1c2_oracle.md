@@ -50,8 +50,11 @@ extension/source semantics; the decoder and Cesium probes supply that evidence.
 
 Executed receipts live under `bench/architecture_audit/f1c2/probes`. Each candidate
 receipt identifies the frozen binary and independent drivers, source/artifact
-hashes and exact controls. `source-artifact-binding.json` binds those executions
-to the coordinator's production-input manifest. Synthetic feasibility receipts
+hashes and exact controls. `receipts/source-artifacts.json` and
+`probes/final-browser-evidence-ledger.json` record the production-input manifest
+and final consumer receipt bindings. Historical cache paths and hashes retain
+their original meaning; the storage index does not manufacture missing archived
+cache manifests. Synthetic feasibility receipts
 are explicitly distinct from candidate acceptance. Harness corrections and
 uncaptured stale-driver identities are recorded honestly in separate receipts.
 This evidence does not establish unrelated PBR/placement/lifecycle invariants or

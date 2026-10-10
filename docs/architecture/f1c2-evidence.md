@@ -1,11 +1,14 @@
 # F1c2/W1/API removal evidence
 
-Date: 2026-10-10. Local Linux x86_64 acceptance is complete for the declared
-F1c2/W1/package-removal scopes. Platform and official Blender CI remain merge
-gates. This is not acceptance of arbitrary glTF, legacy mesh/CRS/LOD, all utility
+Date: 2026-10-10. PR #147 merged at
+`e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e` after local, supported-platform and
+official Blender acceptance for the declared F1c2/W1/package-removal scopes.
+This is not acceptance of arbitrary glTF, legacy mesh/CRS/LOD, all utility
 exports, global Job/report deletion or release.
 
 ## Identity and artifacts
+
+Verbose receipts use lossless gzip storage. The [storage index and verifier](../../bench/architecture_audit/f1c2/README.md) preserve their original byte hashes and replay instructions.
 
 Production source commit: `4e1bda6de8d9f8be9ee4f776d51671420ff8faf5`.
 The [source/artifact manifest](../../bench/architecture_audit/f1c2/receipts/source-artifacts.json)
@@ -29,14 +32,14 @@ CI supplies the supported distribution wheels. No binary is committed here.
 
 | Proof | Final evidence and result | Limits |
 | --- | --- | --- |
-| Source identity/metadata | [Portable](../../bench/architecture_audit/f1c2/probes/identity-final-portable.json) and [native](../../bench/architecture_audit/f1c2/probes/identity-final-native.json): each 26 positive cases, 11 corrupt-output controls, six source refusals and 14 oracle self-controls. Includes 100000 IDs, 65535/65536, exact 8 MiB emitted names, absent/empty names, reflection/regrouping/partition and Local/Wgs84. | Document-local authored keys, finite source/schema; no imported business metadata or future proxy association semantics. |
-| Original bytes and bounds | [Portable](../../bench/architecture_audit/f1c2/probes/wrapping-final-portable.json) and [native](../../bench/architecture_audit/f1c2/probes/wrapping-final-native.json): 22 cases with Decimal80 original-node/world references, exact resource aliases/bytes, omission-error diagonal/floor and sensitive controls. | Mathematical decoded source, raw/normalized admitted quaternion conventions; no arbitrary GPU f32 bound. |
+| Source identity/metadata | [Portable](../../bench/architecture_audit/f1c2/probes/identity-final-portable.json.gz) and [native](../../bench/architecture_audit/f1c2/probes/identity-final-native.json.gz): each 26 positive cases, 11 corrupt-output controls, six source refusals and 14 oracle self-controls. Includes 100000 IDs, 65535/65536, exact 8 MiB emitted names, absent/empty names, reflection/regrouping/partition and Local/Wgs84. | Document-local authored keys, finite source/schema; no imported business metadata or future proxy association semantics. |
+| Original bytes and bounds | [Portable](../../bench/architecture_audit/f1c2/probes/wrapping-final-portable.json.gz) and [native](../../bench/architecture_audit/f1c2/probes/wrapping-final-native.json.gz): 22 cases with Decimal80 original-node/world references, exact resource aliases/bytes, omission-error diagonal/floor and sensitive controls. | Mathematical decoded source, raw/normalized admitted quaternion conventions; no arbitrary GPU f32 bound. |
 | Separate original-source review | [Decimal100](../../bench/architecture_audit/f1c2/probes/review-original-source-final.json): five authored matrix/TRS/scene/cancellation cases and three sensitive geometry-bound controls. | Independent source evaluation rather than retiled f32 bounds. |
 | W1 alias boundary | [Exact 64 MiB and +2 bytes](../../bench/architecture_audit/f1c2/probes/review-emitted-alias-final.json): admitted exact limit, Unsupported before scratch above limit, prior output preserved; sampled RSS/FD/scratch recorded. | Measurements are finite Linux observations, not universal whole-job resource guarantees. |
-| Actual source picking | [Normal](../../bench/architecture_audit/f1c2/probes/picking-final.json) and [absent/empty names](../../bench/architecture_audit/f1c2/probes/empty-names-picking-final.json): each nine browser runs, 12 independently targeted triangles, both feature modes/default. Targeted swaps break only the affected association set. | Cesium1.146/Chromium153 actual picks; coincident surfaces do not acquire unique visual selection. |
-| Official core glTF checks | [Khronos](../../bench/architecture_audit/f1c2/probes/khronos-final.json): 23 positives with zero errors/warnings; zero STRING view produces the expected error and four excess BIN pad bytes produce the expected warning. | Validator does not certify these extension semantics; independent decoder and consumer do. |
-| Actual unchanged W1 consumer | [Browser](../../bench/architecture_audit/f1c2/probes/unchanged-model-browser-final.json): Local/Wgs84 both render two textured triangles and hit exact targets; original percent-URI buffers/image load, wrong-root/missing-alias/zero-top-error controls are sensitive. | Unmodified model/resources and ordinary SSE; finite loading/placement/render proof, no generalized shader-fidelity promise. |
-| Retained geometry/resources/placement | F1a/F1b/F1b2/F1b3/F1c1 independent oracles replayed on final portable. [World placement](../../bench/architecture_audit/f1c2/receipts/f1c1-browser.json) passes four placements and all axis/order/height/root/error controls. [Lit PBR](../../bench/architecture_audit/f1c2/receipts/f1b3-browser.json) source/output RGB delta zero, ten sensitive controls detected. | Prior bounded domains retained; no approximation or general CRS acceptance. |
+| Actual source picking | [Normal](../../bench/architecture_audit/f1c2/probes/picking-final.json.gz) and [absent/empty names](../../bench/architecture_audit/f1c2/probes/empty-names-picking-final.json.gz): each nine browser runs, 12 independently targeted triangles, both feature modes/default. Targeted swaps break only the affected association set. | Cesium1.146/Chromium153 actual picks; coincident surfaces do not acquire unique visual selection. |
+| Official core glTF checks | [Khronos](../../bench/architecture_audit/f1c2/probes/khronos-final.json.gz): 23 positives with zero errors/warnings; zero STRING view produces the expected error and four excess BIN pad bytes produce the expected warning. | Validator does not certify these extension semantics; independent decoder and consumer do. |
+| Actual unchanged W1 consumer | [Browser](../../bench/architecture_audit/f1c2/probes/unchanged-model-browser-final.json.gz): Local/Wgs84 both render two textured triangles and hit exact targets; original percent-URI buffers/image load, wrong-root/missing-alias/zero-top-error controls are sensitive. | Unmodified model/resources and ordinary SSE; finite loading/placement/render proof, no generalized shader-fidelity promise. |
+| Retained geometry/resources/placement | F1a/F1b/F1b2/F1b3/F1c1 independent oracles replayed on final portable. [World placement](../../bench/architecture_audit/f1c2/receipts/f1c1-browser.json.gz) passes four placements and all axis/order/height/root/error controls. [Lit PBR](../../bench/architecture_audit/f1c2/receipts/f1b3-browser.json.gz) source/output RGB delta zero, ten sensitive controls detected. | Prior bounded domains retained; no approximation or general CRS acceptance. |
 
 [Browser ledger](../../bench/architecture_audit/f1c2/probes/final-browser-evidence-ledger.json)
 verifies final executable/source identities and all current driver/consumer pins.
@@ -93,8 +96,13 @@ Windows because a new test compared canonical and caller path spellings.
 records a local symlink-path reproduction (one failure among 42 tests), followed
 by all 42 passing with filesystem identity assertions against the same wheel.
 All 91 production inputs remain unchanged; separate nonauthor review passed.
-Corrected platform wheel checks and pinned official Blender acceptance remain
-CI gates. Do not merge on local checks alone.
+Final head `5b3c12180bb200ae9d73f204e8f12728d17ded61` passed
+[main CI](https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/38023527519)
+and [wheel acceptance](https://github.com/BenDyson-Arch/rusty-tiles/actions/runs/38023527483),
+including all five installed-wheel platforms and all four pinned official
+Blender platforms. The merged tree equals that accepted head's tree
+(`31cd7acbdffee634c1b84605c099d0a15c5d6135`). Release acceptance and optional
+distribution Blender jobs were intentionally skipped.
 
 Broader mesh, raster pyramid and implicit rewrite retain legacy Job/report
 ownership; shared report helpers and provisional utilities have separate
