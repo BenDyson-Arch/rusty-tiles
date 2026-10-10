@@ -1,0 +1,36 @@
+{
+  "status": "independent-source-equivalence-reviewed-corrected-runtime-acceptance-pending",
+  "observed_utc": "2026-10-10T08:49:41.858360+00:00",
+  "baseline_pr_head": "ca6030245b02ce81d32afbaf10c129992045233e",
+  "reviewed_uncommitted_delta": "One index-row iterator expression only; exact byte replacement independently checked.",
+  "production_inputs_compared_to_historical_source_manifest": 93,
+  "verification_inputs_unchanged": 4,
+  "changed_production": [
+    {
+      "path": "src/archive3tz/read.rs",
+      "before_sha256": "01870325ae4e9cea52f466cab1b6b30cc14c6ef79ba0cc51a3e95c03751b4838",
+      "after_sha256": "e2ecda2cd4aa2323e3657ee43af910369d21db34db0dcd6e19368728a33fe1c0"
+    }
+  ],
+  "source_bytes_after": 58661,
+  "historical_acceptance_snapshots_preserved": [
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/review.md",
+      "sha256": "a0e199813bae8f59de4f7824cf453af35c33225f8ec187149f54bc08b4dc749f",
+      "bytes": 15457
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/accepted-source-artifact-pins.json",
+      "sha256": "4649ca35a122b0696b4ca1a8cc5182c0265afd1a1a1f6567c43ab6d5b6640709",
+      "bytes": 12702
+    }
+  ],
+  "ci_failure_log": {
+    "path": "/tmp/rusty-tiles-archive-read-wheel310-failed.log",
+    "sha256": "bee60118e3ef565b4c3b56b8cac35df7e4a784e4ac6da5d4737e678b5a8b0774",
+    "bytes": 24429,
+    "observed_cause": "Rust1.99 Clippy chunks_exact_to_as_chunks at src/archive3tz/read.rs:153, promoted to error by -Dwarnings."
+  },
+  "proof": "Checked exact index length24*(count-1), last.size equality, successful exact-size member read; remainder empty; both iterators borrow identical complete24-byte rows in identical order. Downstream offset/hash/CRC/I/O/admission/work behavior unchanged.",
+  "execution_limit": "No Cargo, product probes, builds or execution performed by this lane; original three accepted executable identities and19receipts remain bound to prior source. Corrected exact-head CI and artifacts remain required for its runtime acceptance."
+}

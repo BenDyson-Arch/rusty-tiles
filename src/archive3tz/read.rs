@@ -150,7 +150,7 @@ impl<R: Read + Seek> StoredArchive<R> {
         offsets.sort_unstable_by_key(|&i| self.members[i].local_offset);
         let mut seen = bounded_bytes(n - 1)?;
         let mut previous = None;
-        for row in bytes.chunks_exact(24) {
+        for row in bytes.as_chunks::<24>().0 {
             let key = (u64_at(row, 0), u64_at(row, 8));
             if previous.is_some_and(|previous| previous > key) {
                 return Err(malformed("3TZ index hashes are not ordered"));
