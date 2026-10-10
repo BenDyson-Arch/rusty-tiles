@@ -1,0 +1,56 @@
+{
+  "coordinator_declared_revision": "34a76152d18b02553691f472207225f116307a67",
+  "evidence": "read-only file hashes, no Git operation",
+  "files": [
+    {
+      "path": "src/convert_implicit.rs",
+      "bytes": 19547,
+      "sha256": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee"
+    },
+    {
+      "path": "src/runtime.rs",
+      "bytes": 21718,
+      "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+    },
+    {
+      "path": "src/archive3tz.rs",
+      "bytes": 25773,
+      "sha256": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649"
+    },
+    {
+      "path": "src/mesh_archive/binding.rs",
+      "bytes": 37954,
+      "sha256": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa"
+    },
+    {
+      "path": "src/validate/admission.rs",
+      "bytes": 12159,
+      "sha256": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002"
+    },
+    {
+      "path": "src/validate/json.rs",
+      "bytes": 4834,
+      "sha256": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8"
+    },
+    {
+      "path": "src/output_path.rs",
+      "bytes": 1199,
+      "sha256": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353"
+    },
+    {
+      "path": "src/main.rs",
+      "bytes": 62090,
+      "sha256": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8"
+    },
+    {
+      "path": "bindings/python/src/lib.rs",
+      "bytes": 38243,
+      "sha256": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9"
+    },
+    {
+      "path": "src/lib.rs",
+      "bytes": 2202,
+      "sha256": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc"
+    }
+  ]
+}

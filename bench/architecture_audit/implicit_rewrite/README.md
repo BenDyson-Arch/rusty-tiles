@@ -6,6 +6,25 @@ and [ownership audit](audits/ownership.md) distinguish settled ownership from
 unproved admission, numerical, format and resource choices. Existing point/vector
 use cases need explicit dispositions before their legacy operation can disappear.
 
+## Fresh continuation audits after accepted F1d2
+
+The A2 continuation at accepted merge
+`34a76152d18b02553691f472207225f116307a67` adds three bounded lanes:
+[primary semantics and authored frame/availability fixtures](a2_semantics/README.md),
+[actual point/vector byte/geometry/resource probes](a2_real_sources/README.md),
+and [captured-source/resource/lifecycle models](a2_capture_resources/README.md).
+Their individual receipts bind their own executed drivers and source/artifact
+identities. They do not overwrite or promote the historical baseline below.
+
+The finite selected design uses source-child ordinals, mandatory effective
+bounds/error metadata and decoded content/ancestor coherence. Nominal cell
+containment, center uniqueness and provenance labels do not determine truth.
+Four authored design fixtures and 22 corruption controls support the finite
+addressing/frame model; 41 separate capture/accounting models demonstrate
+admission order and explicit snapshot limitations. Actual production rewrite,
+terminal external-template interpretation/consumer proof, imported semantic
+metadata disposition and maximum Rust resources remain separately gated.
+
 ## Executed baseline observations
 
 [Compact receipt](probes/baseline-receipt.json) pins the frozen portable CLI,

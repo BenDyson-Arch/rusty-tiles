@@ -11,6 +11,68 @@ records concrete source observations. Separate [baseline probes](../../bench/arc
 exercise one current vector fixture and sensitive controls; they do not accept
 the replacement or prove this draft's broader semantic domain.
 
+### Current A2 settlement checkpoint — 2026-10-10
+
+Three fresh Sol 6.1 audit lanes operate on the byte-identical production in
+accepted PR #150 merge `34a76152d18b02553691f472207225f116307a67`:
+[semantics and independent fixtures](../../bench/architecture_audit/implicit_rewrite/a2_semantics/audit.md),
+[real-source probes](../../bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md)
+and [captured-source/resource models](../../bench/architecture_audit/implicit_rewrite/a2_capture_resources/audit.md).
+These supplement, rather than overwrite, the historical baseline evidence.
+This checkpoint does not accept a production rewrite.
+
+The four independent QUADTREE/OCTREE design fixtures each contain five source nodes,
+translated child frames, a contentless routing node and multiple content slots.
+They pass exact frame/availability/row/byte checks and reject twenty-two sensitive
+corruptions. This is design evidence; current producer execution and actual
+consumer equivalence remain separate gates.
+
+Whole child-box containment inside a nominal implicit cell is not the chosen
+truth criterion for padded-source admission. Primary spatial coherence concerns
+contained content and permits overlapping child bounding volumes. Standard
+TILE_BOUNDING_BOX metadata overrides the derived box; independently inspected
+Cesium code consumes that override directly. Several exercised current vector
+sources fail exact whole-box cell containment. Their capability must receive an
+explicit disposition, and a rounding epsilon or producer label cannot supply
+that disposition. An overlapping-box profile therefore needs every available
+tile's effective bounds, authored error and actual content/ancestor coherence
+to be independently established. The selected finite addressing profile assigns
+each source child its source-array ordinal, with at most four QUADTREE or eight
+OCTREE children. Every available tile has an explicit effective box/error row;
+coordinates identify availability rows and resources, rather than advertise
+spatial grid-query meaning. The primary specification's metadata override and
+the pinned consumer's direct use of that override justify this as a finite
+profile inference, not a universal implicit-tiling equivalence theorem. The
+independent source-order fixtures include coincident boxes/centers and sensitive
+owner swaps. Nominal cells and center uniqueness do not supply admission truth.
+
+The terminal external-link template interpretation remains a specific open
+format gate. Root-slot availability is zero in the design fixtures, and all
+external links are terminal implicit leaves; the primary text also prohibits
+external tileset content at an implicit root. The audit does not establish an
+unconditional conformance verdict for templates whose unavailable root slot
+would otherwise name JSON. Record and justify the finite interpretation, then
+prove actual consumer selection and independent format acceptance, or choose
+a different representation before implementation. Keeping the explicit
+internal skeleton and making only terminal payload leaves implicit is a
+different, partial-implicit product; it is not an automatic fallback.
+
+Effective inherited REPLACE and imported spatial metadata must be resolved
+before planning. Source tile extras serialized as a STRING have application
+meaning, not a standard tile-extras semantic. Source metadata/classes, payload
+feature metadata and extras each need their own declared preservation mapping.
+Do not infer equivalence from the production expander restoring a field.
+
+The captured-source lane executes ordinary POSIX identity/capture operations
+and bounded Python ZIP/JSON/accounting/lifecycle models, including the control
+that admits mixed bytes after same-length in-place changes with restored mtime.
+Consequently stable input during capture remains a precondition, not an atomic
+snapshot guarantee. Proposed ceilings are not measured Rust acceptance limits.
+Source capture and candidate inspection must share the actual private format
+owner through byte/handle inputs, not call a public path operation under a new
+RunControl. The existing validator's stronger child-box containment profile
+also remains distinct from a proof of decoded content spatial coherence.
+
 ## Required behavior and settled ownership
 
 The operation rewrites an admitted explicit hierarchy while preserving the
@@ -56,9 +118,12 @@ their presence must not authorize lossy typed deserialization of external data.
 
 The plan assigns each emitted root its own local frame, root bounds, content
 slots, child identities, checked child translations, generated member names and
-availability. Each child has one validated `ChildSlot`. The bounds used to
-prove that slot are the bounds of the same emitted root; a global nominal cell
-must not be substituted for a later tight local box. Root placement and child
+availability. Each child has one checked `ChildOrdinal` from source child order,
+within the declared subdivision's branching count. Addresses have no independent
+spatial-grid claim: every available row carries the source node's effective box
+and error. Frame/coherence proofs use the actual emitted root and child values;
+a global nominal cell must not be substituted for a later tight local box.
+Root placement and child
 translation are distinct values. The generated terminal link bound is expressed
 in the parent frame; the external root retains the child's transform exactly
 once. Content headers, URI templates and availability share one ordered slot
@@ -97,22 +162,23 @@ the final contract must choose how its exact bytes and references are retained.
 An unconditional boolean claiming all content/source semantics were validated
 is not a report substitute.
 
-Subdivision must resolve once at admission. A required Quadtree/Octree request
-enum would make intent explicit, but is not yet settled: actual producer shape,
-adapter ergonomics and permitted shape inference need comparison. Encoder labels
-alone must not select an unproved semantic profile. The same concern applies to
-foreign-archive refusal: producer branding is not a correctness test, while
-admitting arbitrary archives is not authorized by this proposal.
+Subdivision resolves once at admission through a required
+`ImplicitSubdivision::{Quadtree,Octree}` request value. CLI and Python must
+require the same explicit intent; encoder labels do not select it. A root's
+actual child count is checked against this branching domain once. Producer
+branding is not a correctness test. The bounded source/extension/resource
+profile must still be settled; this enum does not admit arbitrary archives.
 
-Exact child containment without recorded-padding tolerances is a useful first
-independent fixture and possible finite profile, not settled product admission.
+Exact child containment without recorded-padding tolerances remains a useful
+independent control, not the selected product admission criterion.
 Existing point/vector producers can emit rounding, quantization and minimum
 thickness padding. Their accuracy and use cases must receive explicit support,
 rewrite or retirement dispositions before a replacement entrypoint can remove
-the advertised operation. An exact fixture cannot silently waive padded source
-requirements. Recorded padding must be validated finite, nonnegative and bounded
-and independently justified against stored geometry and implicit metadata
-semantics. No default epsilon, label or source-report claim closes that proof.
+the advertised operation. The selected ordinal/override profile preserves the
+actual effective boxes rather than treating recorded padding as permission to
+violate them. Independently decoded content and ancestor coherence, complete
+effective metadata rows and actual consumer selection remain mandatory. No
+default epsilon, label or source-report claim closes that proof.
 
 Additional unresolved source admission: 1.0 versus 1.1 input/output declarations;
 inherited versus explicit REPLACE; tile/content metadata and bounding volumes;
@@ -151,6 +217,15 @@ Missing required source data and actual archive corruption are InvalidInput;
 valid irregular hierarchy is Unsupported. These categories require adapter
 parity and causal failure probes.
 
+At the selected request boundary, an existing destination symlink/nonregular
+entry is InvalidRequest; an inadmissible source leaf is InvalidInput. Malformed
+unsafe/duplicate/file-ancestor source names are InvalidInput. A valid admitted
+source name colliding with this finite profile's generated inventory is
+Unsupported; duplicate generated names after an admitted plan are InvalidState.
+These choices supersede the earlier model's provisional collision categories;
+the final model receipt records its revised gates. They are not aliases for
+publication's later Conflict outcome.
+
 ## Mandatory probes before production implementation
 
 1. Pin primary 3D Tiles/subtree/metadata semantics and independent schema sources.
@@ -164,8 +239,11 @@ parity and causal failure probes.
    without `implicit::expand_tileset`. Wrong frame/slot/translation/availability
    controls must fail the oracle while remaining plausible documents.
 3. Run actual current explicit point/vector sources through the proposed plan.
-   Establish source-derived rounding/quantization/minimum-thickness bounds;
-   prove or reject admitted padding. Cover compressed/fragmented arrays, b3dm,
+   Independently decode stored geometry, node transforms and effective metadata;
+   prove content containment in the actual source tile and ancestor frames.
+   Record source-derived rounding/quantization/minimum-thickness observations
+   separately from the rewrite's exact-byte preservation obligation. Cover
+   compressed/fragmented arrays, b3dm,
    feature metadata, nested schema resources, extras and authored error handling.
    Record every supported, replaced or deliberately retired source use case.
 4. Independently verify complete original/alias payload bytes and relative

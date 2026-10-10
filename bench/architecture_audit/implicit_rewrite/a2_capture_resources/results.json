@@ -1,0 +1,263 @@
+{
+  "evidence": "independent Python models, including actual POSIX identity/capture operations; no Rust/CLI producer execution",
+  "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "platform": "linux",
+  "pid": 690900,
+  "driver_sha256": "b4282dcab97268bf14200c1b073ec51cc4263911c5a46f52c78b04b947b2c869",
+  "fixture_sha256": "804630b548572849dccf15e16f59ed4bc81f3220a3b6393fe2989ea8561e8ecc",
+  "cases": [
+    {
+      "case": "bounded_classic_stored_zip",
+      "outcome": "admitted",
+      "entries": 2,
+      "member_bytes": 18,
+      "directory_bytes": 122
+    },
+    {
+      "case": "source_bytes_before_capture",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "source archive ceiling before capture"
+    },
+    {
+      "case": "same_path",
+      "outcome": "refused",
+      "kind": "invalid_request",
+      "reason": "path overlap"
+    },
+    {
+      "case": "hardlink_output",
+      "outcome": "refused",
+      "kind": "invalid_request",
+      "reason": "native identity overlap"
+    },
+    {
+      "case": "symlink_output_leaf",
+      "outcome": "refused",
+      "kind": "invalid_request",
+      "reason": "output symlink leaf"
+    },
+    {
+      "case": "symlink_source_leaf",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "source symlink leaf"
+    },
+    {
+      "case": "symlink_parent_same_path",
+      "outcome": "refused",
+      "kind": "invalid_request",
+      "reason": "path overlap"
+    },
+    {
+      "case": "absent_descendant_of_source",
+      "outcome": "refused",
+      "kind": "invalid_request",
+      "reason": "path overlap"
+    },
+    {
+      "case": "identity_replacement_during_capture",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "capture pathname changed"
+    },
+    {
+      "case": "growth_during_capture",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "capture grew"
+    },
+    {
+      "case": "shrink_during_capture",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "capture metadata changed"
+    },
+    {
+      "case": "post_capture_source_cwd_destination_mutation",
+      "outcome": "captured_bytes_and_absolute_output_unchanged",
+      "publication_race": "must be resolved by F0 CreateNew/Replace; not executed here"
+    },
+    {
+      "case": "metadata_restored_in_place_change",
+      "outcome": "model_admits_mixed_bytes",
+      "implication": "stable source precondition required; identity/length/mtime cannot prove atomic snapshot"
+    },
+    {
+      "case": "entry_count_before_directory",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "directory/count ceiling"
+    },
+    {
+      "case": "directory_bytes_before_directory",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "directory/count ceiling"
+    },
+    {
+      "case": "member_bytes_before_payload",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "member ceiling before payload read"
+    },
+    {
+      "case": "deflate_without_decompression",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "3TZ requires stored members; no decompression"
+    },
+    {
+      "case": "malformed_local_offset",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "local header range/signature"
+    },
+    {
+      "case": "aggregate_stored_bytes",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "aggregate member ceiling"
+    },
+    {
+      "case": "truncated_zip",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "missing end record"
+    },
+    {
+      "case": "source_subtrees_ancestor",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "alias_exact",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "alias_ancestor_forward",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "alias_ancestor_reverse",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "generated_document_ancestor",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "report_exact",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "index_exact",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "ancestor_with_intervening_sorted_name",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "exact or ancestor collision"
+    },
+    {
+      "case": "JSON_duplicate_spoof",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "duplicate JSON key"
+    },
+    {
+      "case": "JSON_depth_before_tree",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "JSON depth/items ceiling"
+    },
+    {
+      "case": "JSON_items_before_next_value",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "JSON depth/items ceiling"
+    },
+    {
+      "case": "JSON_bytes_before_decode",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "JSON byte ceiling"
+    },
+    {
+      "case": "JSON_trailing",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "trailing JSON"
+    },
+    {
+      "case": "JSON_nonfinite",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "nonfinite JSON scalar"
+    },
+    {
+      "case": "JSON_invalid_container_key",
+      "outcome": "refused",
+      "kind": "invalid_input",
+      "reason": "object key is not a string"
+    },
+    {
+      "case": "shared_payload_alias_amplification",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "alias ceiling"
+    },
+    {
+      "case": "repeated_header_amplification",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "generated document ceiling"
+    },
+    {
+      "case": "u64_count_overflow",
+      "outcome": "refused",
+      "kind": "unsupported",
+      "reason": "index overflow"
+    },
+    {
+      "case": "checked_final_bound",
+      "outcome": "bounded",
+      "final_bytes": 152906050,
+      "ceiling": 167772160,
+      "includes": "originals aliases documents report index local+central headers names EOCD"
+    },
+    {
+      "case": "serial_lifecycle_schedule",
+      "outcome": "model_pass",
+      "faulted_stages": 14,
+      "first_cause_preserved": true,
+      "cleanup_before_ready": true,
+      "no_postcommit_domain_work": true
+    },
+    {
+      "case": "small_repeated_header_python_measurement",
+      "outcome": "measured_model_only",
+      "documents": 4096,
+      "serialized_bytes": 4242346,
+      "tracemalloc_live_bytes": 4410746,
+      "tracemalloc_peak_bytes": 4412483
+    }
+  ],
+  "rss_high_water_kib_linux": 26020,
+  "open_fds_at_end": 4,
+  "limits": "proposal only; no Rust RSS/descriptor/scratch acceptance"
+}

@@ -54,3 +54,9 @@ under the coordinator. Agents may perform lightweight reading and bounded
 small probes concurrently, but must coordinate sustained expensive work.
 Inspect host load before increasing concurrency and reduce it if needed.
 Avoid repeating broad verification once applicable meaningful checks pass.
+
+Pass explicit two-worker options for operation-owned pools (for example vector
+`--jobs 2`); `RAYON_NUM_THREADS` does not override a custom pool. For broad tests
+that infer hardware concurrency, use a two-CPU process affinity where supported
+or another actual worker cap. Keep these local execution limits distinct from
+the product's supported configuration and resource acceptance claims.

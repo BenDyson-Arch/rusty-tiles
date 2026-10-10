@@ -1,0 +1,477 @@
+{
+  "controls": [
+    {
+      "cause": "document error",
+      "control": "source_order_external_owner_swap",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "terminal box frame/rank",
+      "control": "wrong_frame",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "terminal authored error",
+      "control": "wrong_error",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "terminal box frame/rank",
+      "control": "metadata_rank_swap",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "correct local slot",
+      "control": "slot_swap",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "external transform composition",
+      "control": "external_double_translation",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "payload byte identity",
+      "control": "payload_swap",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "terminal-only external links",
+      "control": "root_external_available",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "generated version",
+      "control": "version_1_0",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "unexpected child subtree",
+      "control": "child_subtree_available",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "original root-only slot",
+      "control": "content_slot_swap",
+      "rejected": true,
+      "scheme": "QUADTREE"
+    },
+    {
+      "cause": "document error",
+      "control": "source_order_external_owner_swap",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "terminal box frame/rank",
+      "control": "wrong_frame",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "terminal authored error",
+      "control": "wrong_error",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "terminal box frame/rank",
+      "control": "metadata_rank_swap",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "correct local slot",
+      "control": "slot_swap",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "external transform composition",
+      "control": "external_double_translation",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "payload byte identity",
+      "control": "payload_swap",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "terminal-only external links",
+      "control": "root_external_available",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "generated version",
+      "control": "version_1_0",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "unexpected child subtree",
+      "control": "child_subtree_available",
+      "rejected": true,
+      "scheme": "OCTREE"
+    },
+    {
+      "cause": "original root-only slot",
+      "control": "content_slot_swap",
+      "rejected": true,
+      "scheme": "OCTREE"
+    }
+  ],
+  "driver_sha256": "db09a92f4bb5b7f8f9627428d0fd55d175b6b024b7b297c612c96d629dbdfaa4",
+  "fixture_sha256": {
+    "OCTREE": "ec78244b10efb9ca564e037f51473b334ed4dbf4e4ece36feb918798e7fcee8b",
+    "QUADTREE": "23d26bc05934a203da1505b07cf31a1fd896136bcacc482dd7eaa0dbd9665637"
+  },
+  "fixtures": {
+    "OCTREE": {
+      "links": [
+        [
+          "n0",
+          "n1",
+          0,
+          1
+        ],
+        [
+          "n1",
+          "n2",
+          7,
+          1
+        ],
+        [
+          "n0",
+          "n3",
+          7,
+          2
+        ],
+        [
+          "n3",
+          "n4",
+          0,
+          1
+        ]
+      ],
+      "nodes": 5,
+      "payloads": 6,
+      "world_points": {
+        "p0": [
+          "99",
+          "201",
+          "301"
+        ],
+        "p1": [
+          "85",
+          "215",
+          "307"
+        ],
+        "p2": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ],
+        "p3": [
+          "773/8",
+          "1627/8",
+          "2419/8"
+        ],
+        "p4": [
+          "771/8",
+          "1629/8",
+          "2421/8"
+        ],
+        "p5": [
+          "179/2",
+          "421/2",
+          "611/2"
+        ]
+      }
+    },
+    "QUADTREE": {
+      "links": [
+        [
+          "n0",
+          "n1",
+          0,
+          1
+        ],
+        [
+          "n1",
+          "n2",
+          3,
+          1
+        ],
+        [
+          "n0",
+          "n3",
+          3,
+          2
+        ],
+        [
+          "n3",
+          "n4",
+          0,
+          1
+        ]
+      ],
+      "nodes": 5,
+      "payloads": 6,
+      "world_points": {
+        "p0": [
+          "99",
+          "201",
+          "301"
+        ],
+        "p1": [
+          "85",
+          "215",
+          "307"
+        ],
+        "p2": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ],
+        "p3": [
+          "773/8",
+          "1627/8",
+          "2419/8"
+        ],
+        "p4": [
+          "771/8",
+          "1629/8",
+          "2421/8"
+        ],
+        "p5": [
+          "179/2",
+          "421/2",
+          "611/2"
+        ]
+      }
+    }
+  },
+  "inspected_source_sha256": {
+    "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+    "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+    "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+    "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+    "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+    "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+    "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+    "tests/convert_implicit.rs": "54460db8cef1a107b7f041572682c989da30ded0dd815d77759e52dc9b4880c3"
+  },
+  "kind": "independent-design-model-only",
+  "limits": {
+    "control_count": 22,
+    "fixtures": 4,
+    "max_fixture_bytes": 1048576,
+    "max_seconds": 10,
+    "nodes_per_fixture": 5
+  },
+  "overlap_case": {
+    "case": "overlapping_metadata_box",
+    "content": [
+      "65/8",
+      "65/8",
+      "2"
+    ],
+    "nominal_child_xy_max": 8,
+    "nominal_clipping_control_rejected": true,
+    "parent_content_coherent": true,
+    "production_consumer_executed": false,
+    "semantic_child_xy_max": "33/4"
+  },
+  "production_executed": false,
+  "profile_cases": [
+    {
+      "case": "deep_tight_local_slot",
+      "disagree": true,
+      "global_cell_slot": 0,
+      "local_slot": 3,
+      "scheme": "QUADTREE"
+    },
+    {
+      "case": "deep_tight_local_slot",
+      "disagree": true,
+      "global_cell_slot": 4,
+      "local_slot": 7,
+      "scheme": "OCTREE"
+    },
+    {
+      "case": "midpoint_zero_extent_high",
+      "slot": 7
+    },
+    {
+      "case": "midpoint_positive_extent_crossing",
+      "cause": "child outside local cell",
+      "unsupported": true
+    }
+  ],
+  "semantic_precedence_cases": [
+    {
+      "case": "custom_property_names_use_semantics",
+      "effective_error": 5,
+      "effective_transform_translation": [
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "case": "noData_retains_original",
+      "effective_error": 17
+    },
+    {
+      "case": "inherited_replace",
+      "effective_refine": "REPLACE"
+    },
+    {
+      "case": "metadata_add_override",
+      "profile_disposition": "Unsupported"
+    },
+    {
+      "case": "missing_geometric_error",
+      "profile_disposition": "InvalidInput"
+    }
+  ],
+  "source_order_fixtures": {
+    "OCTREE": {
+      "links": [
+        [
+          "n0",
+          "n1",
+          0,
+          1
+        ],
+        [
+          "n1",
+          "n2",
+          0,
+          1
+        ],
+        [
+          "n0",
+          "n3",
+          1,
+          2
+        ],
+        [
+          "n3",
+          "n4",
+          0,
+          1
+        ]
+      ],
+      "nodes": 5,
+      "payloads": 6,
+      "world_points": {
+        "p0": [
+          "99",
+          "201",
+          "301"
+        ],
+        "p1": [
+          "85",
+          "215",
+          "307"
+        ],
+        "p2": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ],
+        "p3": [
+          "773/8",
+          "1627/8",
+          "2419/8"
+        ],
+        "p4": [
+          "771/8",
+          "1629/8",
+          "2421/8"
+        ],
+        "p5": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ]
+      }
+    },
+    "QUADTREE": {
+      "links": [
+        [
+          "n0",
+          "n1",
+          0,
+          1
+        ],
+        [
+          "n1",
+          "n2",
+          0,
+          1
+        ],
+        [
+          "n0",
+          "n3",
+          1,
+          2
+        ],
+        [
+          "n3",
+          "n4",
+          0,
+          1
+        ]
+      ],
+      "nodes": 5,
+      "payloads": 6,
+      "world_points": {
+        "p0": [
+          "99",
+          "201",
+          "301"
+        ],
+        "p1": [
+          "85",
+          "215",
+          "307"
+        ],
+        "p2": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ],
+        "p3": [
+          "773/8",
+          "1627/8",
+          "2419/8"
+        ],
+        "p4": [
+          "771/8",
+          "1629/8",
+          "2421/8"
+        ],
+        "p5": [
+          "195/2",
+          "405/2",
+          "603/2"
+        ]
+      }
+    }
+  }
+}
