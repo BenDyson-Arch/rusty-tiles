@@ -1,0 +1,22 @@
+{
+  "source_commit": "5e4dbc30ef1de1f9231e5caf323ac72c52fffdd5",
+  "archive_sha256": "a0bbf79c2a395a7e49c60b0c8f1918615a9d331b78b0c302aad0d1595def6c68",
+  "command": "cargo package --locked --allow-dirty (including verification build)",
+  "status": "passed",
+  "compiled_root_inputs_checked": 88,
+  "exact_matches": 87,
+  "lock_normalization": "Only unused Python workspace package tables removed; all retained package tables equal.",
+  "removed_workspace_packages": [
+    "portable-atomic",
+    "pyo3",
+    "pyo3-build-config",
+    "pyo3-ffi",
+    "pyo3-macros",
+    "pyo3-macros-backend",
+    "rusty-tiles-python",
+    "target-lexicon"
+  ],
+  "current_preview_regression_and_contract_included": true,
+  "log_sha256": "3731ed564aa374118119081bed4dad80fc00d33d63b3c7a8734d7b114285a5a8",
+  "limits": "Compiled inputs match production pin; docs/tests snapshot includes uncommitted acceptance files. Final receipt files added later are not claimed part of this archive."
+}

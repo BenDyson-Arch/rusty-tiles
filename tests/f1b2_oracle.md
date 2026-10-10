@@ -1,10 +1,12 @@
 # F1b2 independent local resource binding oracle
 
-Current replay asserts profile `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md); historical receipts below retain their original profile. The unsupported-attribute-before-I/O control now uses TEXCOORD_2 explicitly because authored TANGENT is admitted by the new bounded profile. New channel/UV1/color/tangent proof is documented in [f1b3_oracle.md](f1b3_oracle.md).
+Current replay uses schema4/profile `f1c1-placed-gltf-v1` with an explicit identity root transform and typed Local placement report under the [F1c1 contract](../docs/architecture/f1c1-contract.md). This remains local geometry/resource regression evidence. The separate [F1c1 oracle](f1c1_oracle.md) proves Earth placement and the full world transform chain; historical receipts below retain their original scope.
+
+The previous replay asserted profile `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md); historical receipts below retain their original profile. The unsupported-attribute-before-I/O control now uses TEXCOORD_2 explicitly because authored TANGENT is admitted by the new bounded profile. New channel/UV1/color/tangent proof is documented in [f1b3_oracle.md](f1b3_oracle.md).
 
 `f1b2_oracle.py` independently authors and interprets local JSON glTF and GLB dependencies. It uses no production URI, filesystem, decoder, encoder or validator helper. It reuses the established independent F1b Python geometry/material/PNG/JPEG/index oracle after checking original dependency bytes and logical buffer ranges itself.
 
-The report oracle now checks schema 3, profile `f1b-local-gltf-v1`, root document `source_bytes`, and unique physical dependency `external_files`/`external_bytes` excluding the document. Repeated URI, percent and hardlink aliases are counted once as physical sources. glTF image indices remain separate output identities; two logical images referencing one file can produce two correctly named, unchanged image members. Unused dependencies count in source capture while the published archive includes only the selected image closure.
+The historical F1b2 report oracle checked schema3, profile `f1b-local-gltf-v1`, root document `source_bytes`, and unique physical dependency `external_files`/`external_bytes` excluding the document. Repeated URI, percent and hardlink aliases are counted once as physical sources. glTF image indices remain separate output identities; two logical images referencing one file can produce two correctly named, unchanged image members. Unused dependencies count in source capture while the published archive includes only the selected image closure.
 
 ## Independent interpretation and fixtures
 
@@ -41,7 +43,7 @@ Callable interfaces for Rust/CLI/installed-wheel parity are:
 - `refusal_bundles() -> [(name, bundle, expected_kind), ...]` and `write_bundle(root, bundle) -> Path`.
 - `source_bundle(...)` and `bind_source(...)` for fixture authoring/accounting.
 
-`tests/f1b_oracle.py` retains embedded-source geometry/texture coverage with the schema-3 report and zero external counts. Its former valid relative URI refusal is replaced by an excluded URI form; the original F1b1 receipts remain historical records. Callback CWD/source deletion/mutation, cancellation, publication and resource boundary measurements are covered by separate producer/runtime/frontend tests, not inferred from this Python reader.
+`tests/f1b_oracle.py` retains embedded-source geometry/texture coverage with the current schema4 Local report and zero external counts. Its former valid relative URI refusal is replaced by an excluded URI form; the original F1b1 receipts remain historical records. Callback CWD/source deletion/mutation, cancellation, publication and resource boundary measurements are covered by separate producer/runtime/frontend tests, not inferred from this Python reader.
 
 ## Evidence limits and provenance
 

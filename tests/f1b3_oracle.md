@@ -1,8 +1,10 @@
 # F1b3 independent core-PBR and corner acceptance
 
+Current replay uses schema4/profile `f1c1-placed-gltf-v1` with an explicit identity root transform and typed Local placement report under the [F1c1 contract](../docs/architecture/f1c1-contract.md). This remains local geometry/resource regression evidence. The separate [F1c1 oracle](f1c1_oracle.md) proves Earth placement and the full world transform chain; historical receipts below retain their original scope.
+
 `f1b3_oracle.py` independently authors and interprets the [bounded F1b3 profile](../docs/architecture/f1b3-contract.md). It imports no production source decoder, encoder, validator or coordinate helper. It reuses the established independent F1a arithmetic/GLB/index and F1b PNG/JPEG/archive mechanics plus F1b2 physical dependency binding. Its extended scene reader, oriented corner matcher, fixture literals, image-ID binding and conformality check are independently written here.
 
-The current producer profile is `f1b-core-pbr-gltf-v1`, schema 3. This replaces the previous profile without a compatibility branch. Earlier F1b/F1b2 replay helpers now assert this profile; their old four-field scene/multiset matcher retains its established predicates. The new helper injection points in archive inspection and dependency binding reuse container mechanics without replacing old checks or projecting away the new attributes.
+Current replay expects `f1c1-placed-gltf-v1`, schema4 and Local placement. F1b3's historical producer used `f1b-core-pbr-gltf-v1`, schema3. This replaces the previous profile without a compatibility branch. Earlier F1b/F1b2 replay helpers now assert this profile; their old four-field scene/multiset matcher retains its established predicates. The new helper injection points in archive inspection and dependency binding reuse container mechanics without replacing old checks or projecting away the new attributes.
 
 ## Exact finite scope
 

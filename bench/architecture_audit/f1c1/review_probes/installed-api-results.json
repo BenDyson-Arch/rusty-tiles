@@ -1,0 +1,955 @@
+{
+  "source_commit": "3bd86c352c0a430731528040379ce1765fc11e67",
+  "extension_sha256": "c6b17e6b58b5d2824ed5cfdb80d790f4a1c4c702575ed2619c80e3b052825b86",
+  "wheel_sha256": "74306bb22bf1f11e22af4fc0f71745e46a19a4a3c625f9235ab741c9beee05a9",
+  "interpreter": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "module_path": "/home/bend/.cache/rusty-tiles-f1c1-evidence/installed/rusty_tiles/rusty_tiles.abi3.so",
+  "PATH_during_api_calls": "",
+  "compiled_inputs_verified": 90,
+  "executions": [
+    {
+      "name": "placed-callback-success",
+      "status": "passed",
+      "events": [
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 1,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 2,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 3,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 4,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "ready_to_publish",
+          "total": 4000
+        }
+      ],
+      "f64_world_error_metres": "6.3027484720247957117464090768850647647834147545518624469899135983549822423E-9"
+    },
+    {
+      "name": "callback-exception-initial",
+      "status": "passed",
+      "original_exception_identity": true,
+      "prior_preserved": true,
+      "events": [
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        }
+      ]
+    },
+    {
+      "name": "callback-exception-leaf-written",
+      "status": "passed",
+      "original_exception_identity": true,
+      "prior_preserved": true,
+      "events": [
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 1,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        }
+      ]
+    },
+    {
+      "name": "callback-exception-ready",
+      "status": "passed",
+      "original_exception_identity": true,
+      "prior_preserved": true,
+      "events": [
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 1,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 2,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 3,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 4,
+          "event": "progress",
+          "phase": "mesh_leaves",
+          "total": 4
+        },
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 0,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 1262,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2072,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 2552,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3032,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 3512,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "mesh_archive",
+          "total": 4000
+        },
+        {
+          "done": 4000,
+          "event": "progress",
+          "phase": "ready_to_publish",
+          "total": 4000
+        }
+      ]
+    },
+    {
+      "name": "callback-KeyboardInterrupt-cancel",
+      "status": "passed",
+      "original_exception_identity": true,
+      "prior_preserved": true
+    },
+    {
+      "name": "actual-SIGINT-cancel",
+      "status": "passed",
+      "prior_preserved": true
+    },
+    {
+      "name": "nested-independent-API-calls",
+      "status": "passed",
+      "nested": [
+        {
+          "state": "completed",
+          "events": [
+            {
+              "done": 0,
+              "event": "progress",
+              "phase": "mesh_leaves",
+              "total": 4
+            },
+            {
+              "done": 1,
+              "event": "progress",
+              "phase": "mesh_leaves",
+              "total": 4
+            },
+            {
+              "done": 2,
+              "event": "progress",
+              "phase": "mesh_leaves",
+              "total": 4
+            },
+            {
+              "done": 3,
+              "event": "progress",
+              "phase": "mesh_leaves",
+              "total": 4
+            },
+            {
+              "done": 4,
+              "event": "progress",
+              "phase": "mesh_leaves",
+              "total": 4
+            },
+            {
+              "done": 0,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 0,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 1262,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 1262,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 1262,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2072,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2072,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2072,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2552,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2552,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 2552,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3032,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3032,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3032,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3512,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3512,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 3512,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "mesh_archive",
+              "total": 4000
+            },
+            {
+              "done": 4000,
+              "event": "progress",
+              "phase": "ready_to_publish",
+              "total": 4000
+            }
+          ],
+          "f64_world_error_metres": "6.3027484720247957117464090768850647647834147545518624469899135983549822423E-9"
+        }
+      ],
+      "outer_f64_world_error_metres": "6.3027484720247957117464090768850647647834147545518624469899135983549822423E-9",
+      "api_call_count": 2
+    },
+    {
+      "name": "nested-request-refusal-isolation",
+      "status": "passed",
+      "nested_kind": [
+        "invalid_request"
+      ],
+      "outer_f64_world_error_metres": "6.3027484720247957117464090768850647647834147545518624469899135983549822423E-9",
+      "api_call_count": 2
+    },
+    {
+      "name": "preIO-longitude",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-longitude",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-latitude",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-latitude",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-nan-anchor",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-nan-anchor",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-zero-quaternion",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-zero-quaternion",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-orientation-no-anchor",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-orientation-no-anchor",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-offset-no-anchor",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-offset-no-anchor",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-infinite-offset",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-infinite-offset",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "invalid_request",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-cap-plus-subnormal",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "unsupported",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-cap-plus-subnormal",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "unsupported",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-distributed-budget",
+      "prior_output": false,
+      "status": "passed",
+      "kind": "unsupported",
+      "callback_events": []
+    },
+    {
+      "name": "preIO-distributed-budget",
+      "prior_output": true,
+      "status": "passed",
+      "kind": "unsupported",
+      "callback_events": []
+    },
+    {
+      "name": "exact-cap-admitted-before-missing-source",
+      "status": "passed",
+      "kind": "io"
+    }
+  ],
+  "findings": [],
+  "status": "passed",
+  "api_call_count": 29,
+  "probe_sha256": "c1cc1d8d49c06795e27129c2a8c2e7294a8aec35a7522f9d419f47fe7ba1c173",
+  "limits": [
+    "Linux installed CPython3.14.7 ABI3 extension only.",
+    "Python cancellation evidence uses KeyboardInterrupt/SIGINT delivered during callbacks; public Python API does not expose direct RunControl reuse.",
+    "Nested calls prove separate adapter-created controls, not reuse of one Rust RunControl.",
+    "No platform/native/renderer/Blender execution in this installed-API extension review."
+  ]
+}

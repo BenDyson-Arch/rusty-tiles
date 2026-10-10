@@ -1,6 +1,6 @@
 # Proposed public API contract for the subsequent mesh slice
 
-Status: design proposal for [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), based on develop `8dfd74b`; no production changes implement this document yet. Breaking API changes are acceptable before 0.4.0. Names below are illustrative, while ownership, validation order, and publication guarantees are intended acceptance requirements. See the [architecture plan](README.md) for dependency boundaries and sequencing.
+Status: historical broad design proposal for [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113), based on develop `8dfd74b`. Names below are illustrative; this document is not the implemented facade inventory or an instruction to build its broad configuration sketches. Breaking API changes are acceptable before 0.4.0. Current bounded requests follow the individual slice contracts and [public surface inventory](public-surface-inventory.md), including the [F1c1 explicit placement candidate](f1c1-contract.md). See the [architecture plan](README.md) for dependency boundaries and sequencing.
 
 The design is replacement-first. Treat current code as an untrusted reference implementation, not the definition of correct behavior. Existing algorithms, defaults, coordinate heuristics, report omissions, and packaging helpers must prove that they satisfy an independently stated requirement before retention. Rewrite them when they fail that gate; a mechanical refactor or agreement with current output is not sufficient evidence.
 

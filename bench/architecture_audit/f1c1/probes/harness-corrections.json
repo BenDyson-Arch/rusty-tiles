@@ -1,0 +1,11 @@
+{
+  "scope": "Two acceptance-harness corrections, no production placement defects",
+  "corrections": [
+    "unique scenario output filenames after correct CreateNew output_conflict",
+    "Clap arity usage transport distinguished from numeric/combination typed job refusal"
+  ],
+  "sha256": {
+    "tests/f1c1_oracle.py": "633f212b2b20f5aa0c6c50731fb16d12f8807fee2d715b36deb510d560619d2f",
+    "tests/f1c1_oracle.md": "f27a97863b557a6261dc9fc7c66c6fdf398479475a28d6bfbbee53f0051a38aa"
+  }
+}

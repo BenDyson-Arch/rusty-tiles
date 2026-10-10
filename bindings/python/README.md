@@ -48,14 +48,16 @@ assert rusty_tiles.validate(result.output)["ok"]
 ```
 
 All inputs and outputs are filesystem paths (`str` or `os.PathLike`).
-Mesh, point-cloud, vector and implicit conversions return `ConversionResult` with `output` (a `pathlib.Path`), `archive`
+Legacy mesh/wrapping and implicit conversions return `ConversionResult` with `output` (a `pathlib.Path`), `archive`
 (a boolean) and `report` (a dictionary or `None`). Existing outputs are
 preserved unless `force=True`; publication uses the Rust library's private
 staging and atomic archive replacement.
+The bounded mesh, point-cloud and vector entry points return their own typed
+results with required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `force=False`, `callback=None`; returns `MeshResult` |
+| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False` |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
@@ -64,7 +66,7 @@ staging and atomic archive replacement.
 | `convert_to_implicit(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
 
-`cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
+For legacy `mesh_to_3tz` and `glb_to_3tz`, `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
 `rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh
 `source_crs` retains `auto`, `geographic` and `epsg:3857` adapters. General
 horizontal CRS definitions require `source_axes="xyz"` (easting/northing/height)
@@ -85,16 +87,26 @@ is outside this wheel's API because it requires an external encoder.
 `vertex_classification`, `vertex_intensity` and `vertex_return_number`, retaining
 the original LAS property tables for picking and table styling.
 
-### Local static mesh foundation
+### Local static mesh foundation and explicit placement
 
 ```python
 result = rusty_tiles.mesh_local_to_3tz(
     "local.glb", "local.3tz", leaf_triangles=1000,
 )
 assert result.report["coordinates"] == "local-gltf"
+
+placed = rusty_tiles.mesh_local_to_3tz(
+    "local.glb", "placed.3tz", leaf_triangles=1000,
+    anchor=(153.02, -27.47, 25.0),
+    orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
+    scene_offset=(10.0, 2.0, -5.0),
+)
+assert placed.report["coordinates"] == "wgs84-ecef"
+assert placed.report["schema_version"] == 4
 ```
 
-`mesh_local_to_3tz(input, output, *, leaf_triangles, force=False, callback=None)`
+`mesh_local_to_3tz(input, output, *, leaf_triangles, force=False, anchor=None,
+orientation_xyzw=None, scene_offset=None, callback=None)`
 requires a positive explicit per-leaf triangle limit and interprets the input
 as local metre/Y-up geometry. The bounded [core PBR profile](../../docs/architecture/f1b3-contract.md)
 accepts static GLB/glTF, confined local buffers and PNG/JPEG images, all five core
@@ -106,10 +118,36 @@ excluded semantics are refused before staging. There is no coarse approximation,
 atlas, generated tangent basis or coordinate guessing. Source resource limits and
 capture rules follow the [F1b2 contract](../../docs/architecture/f1b2-contract.md).
 
+The [F1c1 placement contract](../../docs/architecture/f1c1-contract.md) defines a
+development candidate pending independent review and final consumer/platform
+acceptance. `anchor` is `(longitude_degrees, latitude_degrees,
+ellipsoidal_height_metres)` on WGS84. Omission keeps local output. An anchor
+permits `orientation_xyzw`, a near-unit right-handed active ENU quaternion
+(scalar W last), and `scene_offset`, a glTF Y-up metre translation after the
+source node chain and before orientation. Their omissions mean identity and zero;
+either without an anchor raises `InvalidRequestError`. The quaternion norm must
+be within 1e-12 of one and is normalized once. Longitude/latitude must be in
+[-180,180]/[-90,90]; nonfinite values are invalid. The finite magnitude ceiling
+is specified in the contract and exceeding it raises `UnsupportedError` before
+source I/O. These domain decisions are shared with Rust/CLI.
+
+The frame uses cartographic latitude/longitude at the ellipsoidal anchor,
+including elevated anchors and poles; supplied longitude defines the pole
+meridian. Placement is an f64 rigid root transform. Source GLB coordinates,
+normal/tangent frames, UVs, colors and resource associations stay local. Offset
+does not restore a projected E/N/A shift, infer source CRS, or correct a geoid.
+Schema 4/profile `f1c1-placed-gltf-v1` records `source_coordinates="local-gltf"`,
+output `coordinates`, tagged `placement` with normalized parameters, and exact
+`root_transform`, along with existing counters. Names are descriptive labels;
+this API does not expose picking. F1c2 will carry authored node/instance/primitive
+identity through partition and regrouping before proving metadata/picking.
+
 It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
 dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.
 The limit bounds triangles per leaf, not process memory or output bytes. This
 entry point is separate from `mesh_to_3tz`; unsupported sources do not fall back.
+Broader legacy CRS/LOD/node-feature APIs remain pending their separate migrations;
+this bounded placement candidate does not authorize their deletion.
 It shares packaging's fallible precommit callback and typed domain-error contract,
 including preservation of the original callback exception when that cause wins.
 Python result materialization and external asynchronous exceptions remain outside
@@ -206,9 +244,9 @@ Conversions release the GIL. A callback can run on a Rust worker thread;
 Blender callers should queue events for their main thread before changing
 Blender state. The first callback exception is saved, later callbacks are
 skipped, and the original exception is raised after Rust finishes. A callback
-exception does not cancel the legacy mesh/point converters, so their output may already exist.
+exception does not cancel the legacy mesh/wrapping converters, so their output may already exist.
 
-Packaging, local mesh, raster directory and vector conversion use a fallible
+Packaging, bounded mesh, point-cloud, raster directory and vector conversion use a fallible
 synchronous callback. Every callback for these operations finishes
 before sealing and installation, including `ready_to_publish`. A callback
 exception aborts before publication and preserves the existing destination,
@@ -225,10 +263,10 @@ Rust failures raise subclasses of `TilesError`: `DataError`, `ResourceLimitError
 Invalid Python arguments raise `TypeError` or `ValueError`. Original callback
 exceptions are preserved.
 
-Packaging additionally raises `InvalidRequestError` for invalid choices or
+Foundation operations additionally raise `InvalidRequestError` for invalid choices or
 reserved names, `CancelledError` for cancellation and `ObserverError` when no
 original Python exception is available. These are `TilesError` subclasses.
-Package domain errors carry `kind`, `secondary_diagnostics` and `retained_paths`.
+Their domain errors carry `kind`, `secondary_diagnostics` and `retained_paths`.
 Stable kinds are `invalid_request`, `invalid_input`, `unsupported`, `io`,
 `output_conflict`, `cancelled`, `observer_failure` and `invalid_state`.
 Invalid source content maps to `DataError`, source/storage I/O to `TilesIOError`

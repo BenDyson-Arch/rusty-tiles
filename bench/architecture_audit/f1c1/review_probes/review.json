@@ -1,0 +1,151 @@
+{
+  "role": "Separate nonauthor review. No production, tests, CI or shared documentation authored or modified. No Cargo/build/commit executed.",
+  "source_commit": "3bd86c352c0a430731528040379ce1765fc11e67",
+  "binary_sha256": "b0f2031f3f951018f6e19e682d62e86e1699dd15e382ca2d275300d30c7f99e5",
+  "decision": "No blocker found in the reviewed production source, portable CLI artifact or frozen installed Python API. Remaining broader CI/platform/native/browser/Blender executions must retain their own artifact-bound evidence; this review does not claim those executions.",
+  "static_observations": [
+    {
+      "area": "Numerical ownership",
+      "observation": "MeshPlacement request resolves once into private ResolvedPlacement before source binding. Quaternion finite/range/norm admission, normalization, ENU rotation, declared cartographic frame and conservative exact magnitude comparison belong to this pure owner."
+    },
+    {
+      "area": "Budget",
+      "observation": "General TwoSum grow-expansion carries at most five terms for four nonnegative components and negative cap. Individual cap guards prevent overflow; final most significant nonzero expansion term decides exact sign. Independent Decimal90 verifies cap is greatest admitted f64 below the real budget."
+    },
+    {
+      "area": "Manifest/report",
+      "observation": "Both archive extensions use one writer with explicit root matrix and transform-free children. Report and manifest use the same resolved transform. No placement choice enters leaf/resource encoding; bounds use B-space and content runtime applies B once."
+    },
+    {
+      "area": "Preflight/lifecycle",
+      "observation": "Core request and placement resolution plus platform admission precede binding. Existing Attempt checkpoints, fallible observations, workspace ownership, staging/sealing/publication path remain explicit. New placement adds no source alias, callback or publication bypass."
+    },
+    {
+      "area": "Independent acceptance",
+      "observation": "Final oracle imports prior independent local PBR/resource readers through a strict request expectation seam; it checks local source truth separately and uses Decimal/Hamilton forward arithmetic for world truth. Prior local bounds checks were strengthened from epsilon to exact containment. Viewer uses independent fixed world targets/cameras and keeps presentation modelMatrix identity; sensitive changed-root controls are explicit."
+    },
+    {
+      "area": "Added target Rust reference gate",
+      "observation": "tests/mesh_archive.rs adds 42 real API conversions from 21 previously authored frozen Decimal/cardinal anchor strings, identity and independently frozen rational Hamilton rotation rows. Expected translation uses fixed B(offset)=[5,-11,7], verifies homogeneous row, and evaluates target-native trig/root generation against frozen references. This review inspected the source; it did not execute Cargo or claim any CI OS result."
+    },
+    {
+      "area": "Corrected resource measurement",
+      "observation": "Final resource probe uses one fresh stdlib worker per case that never generates fixtures or hashes binaries. It records launcher RSS/HWM and explicitly distinguishes raw wait4 child high water including launch floor from sampled converter VmHWM. Original large-parent-HWM accounting is superseded; sampled observations still cannot establish universal/transient peaks or asymptotic overhead."
+    },
+    {
+      "area": "Final acceptance harness corrections/CI",
+      "observation": "Unique candidate names avoid source/output alias false negatives in the shared oracle. Partial CLI arity is now asserted as pre-producer Clap usage transport rather than a core typed InvalidRequest. CI resource invocation supplies mandatory --binary-sha256; artifact digests remain explicit."
+    }
+  ],
+  "executed_defects": [],
+  "executed_proof": {
+    "artifact_verification": "All 90 compiled-input digests independently match both Git source pin and current worktree; frozen binary SHA verified before and after runtime probes.",
+    "candidate_invocations": 109,
+    "handcrafted_sources": "Literal hierarchical translation/nonuniform scale/integer axis rotation with directly calculated f32 node-baked coordinates; a degenerate line with mixed-magnitude/subnormal source data. No production or existing oracle helper imports.",
+    "placed_cases": 22,
+    "precision_boundary_cases": 76,
+    "source_axes_order": "Direct source decoded POSITION multiplicity equals literal fixture truth, emitted root applies B exactly once, rotated offsets precede root serialization.",
+    "world_precision": {
+      "serialized_matrix_decimal_error_metres": "7.8043173974891358747805088429992984660144925843644627436449522462027765546E-9",
+      "actual_f64_coordinate_evaluation_error_metres": "1.13234000894053890996979634880369495280262113343644627436449522462027765546E-8",
+      "admission_limit_metres": "1e-6"
+    },
+    "bounds": "Exact rational decoded-local containment plus independent Decimal world target vs transformed OBB center/basis checks, including zero extents.",
+    "format_report": "Returned CLI report equals conversion.json and root_transform equals emitted root matrix; local/placed GLB bytes unchanged; .3tz and .3dtiles.zip member bytes equal.",
+    "preflight": "Missing source distinguishes admitted budget as IO from over-budget Unsupported; nonfinite/domain/combination/quaternion errors are InvalidRequest. No outputs or work retained.",
+    "source_output_alias": "--force input/output same file gives InvalidRequest and preserves source bytes.",
+    "sensitive_controls": [
+      {
+        "control": "translation",
+        "detected_error_metres": "0.9999999974310206299894986124466614401691392482598977007077678949696191775602190440"
+      },
+      {
+        "control": "transpose",
+        "detected_error_metres": "830086.8751334141336628514066497489600829317091043374202061208663340615430256949929453617"
+      },
+      {
+        "control": "double-B",
+        "detected_error_metres": "568169.3713389343809413359883052372945913648956254543145852007077678949696191775602190440"
+      },
+      {
+        "control": "undersized-local-box",
+        "detected": true
+      }
+    ]
+  },
+  "proof_limits": [
+    "Own executed runtime proof covers the frozen portable CLI and Linux installed CPython3.14.7 API; it does not include native/browser/Blender or non-Unix execution.",
+    "Own fixture has POSITION only; authored PBR/resource truth requires separate evidence.",
+    "No universal geodetic/platform/transcendental or renderer precision proof; bounded sampled arithmetic cases establish these executions only.",
+    "Initial handcrafted fixture omitted required POSITION min/max and was correctly refused; reviewer corrected the fixture. This was a harness defect, not a production defect.",
+    "Linux installed CPython3.14.7 ABI3 extension only.",
+    "Python cancellation evidence uses KeyboardInterrupt/SIGINT delivered during callbacks; public Python API does not expose direct RunControl reuse.",
+    "Nested calls prove separate adapter-created controls, not reuse of one Rust RunControl.",
+    "No platform/native/renderer/Blender execution in this installed-API extension review."
+  ],
+  "reviewed_file_sha256": {
+    "AGENTS.md": "eeca6a4e55e7cbd3beb84df63dafdfbc599006b8f38bdab7fb1d2fb30a7f70bc",
+    "docs/architecture/f1c1-contract.md": "6a51ed27a389087eac5b353a0f0f663e082ff3e22fafaa6269d78c6932c1ebaa",
+    "src/mesh_archive.rs": "047b33338b5e3608cd4a00551e41c082665db66bc27d5a2f6075d45edb12f28e",
+    "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+    "src/mesh_archive/binding.rs": "83ecb73fd0451a4c9447672c931d5a759801495c5fde91a3fef725a0ffb2293c",
+    "src/mesh_archive/partition.rs": "bfab1931c251b10a2a4442345535524091a92230c4d72bb07f0f1459b25e5594",
+    "src/mesh_archive/encode.rs": "6ed9c69f4392bbaab9e29628fbf007cf08a8338f04373112f12aafe0d1b75b61",
+    "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+    "src/lib.rs": "5a1e09a838c9d893c664dae053cb31947bd479387d7fed1309a853356bf3751c",
+    "src/main.rs": "d8f04486048869202c94ffec28b734c59cf021b37255e046c2d542f6ec8e2ea7",
+    "bindings/python/src/lib.rs": "592bb78ce582c0b94f2c3f384db2d986caac782d24c0babe5102150e320e9016",
+    "tests/f1c1_oracle.py": "633f212b2b20f5aa0c6c50731fb16d12f8807fee2d715b36deb510d560619d2f",
+    "tests/f1c1_viewer.py": "7b097980a5275c9c227b58424ee91dfba86eb5917321f73a31a100fd80a02e9b",
+    "tests/fixtures/f1c1_viewer.cjs": "510ebee973c6ece764a801f5741392964a75f1d1ef9ca1cd690e7cb54bbf29f7",
+    "tests/f1c1_wheel.py": "9c6f54c752694e962450a44bbf12f4da7c09b29c7abc0e52533358ef9cf46d76",
+    "tests/f1a_oracle.py": "ffd74ae36f4344edfe8e8a316d3c474612f91b2722cd6bf7e445a9874894c854",
+    "tests/f1b_oracle.py": "0980f25b640717589fe824d06455b43b44d0436be9e8827ee8405deb05b7a9b4",
+    "tests/f1b2_oracle.py": "a9aa6aeb8a6e5a822124fd8bf6fbf1b348ec4ba2b288bb4bee0cd8f1d5303440",
+    "tests/f1b3_oracle.py": "2391f0ce304cdd962d9f439640686e143e65aa7ce7911d2cd5065bc6a0121555",
+    ".github/workflows/ci.yml": "89d3e455ac28cec5ffd67ba7cf78bdbb24f461a5bc0ec254303108906ce5fcc3",
+    "bench/architecture_audit/f1c1/resource_probe.py": "1ea2dd38792c9a751559d3e3bf57b4a25127c9f0e4f03d2cd7fb2d816d6ecbe0",
+    "bench/architecture_audit/f1c1/spatial-disposition.md": "a7aa203f42dfeebc18b99674c46a9444bde59258c8d9629c9fd556a3c4aa20c8",
+    "tests/mesh_archive.rs": "f4fc40d7546780a7a62f7600de4f434a897c0cbfc696bcf035bfc39180460f0c",
+    "tests/fixtures/f1c1/analytic-references.json": "e84279522d82c503049c5ae927c56263ace5c4c0f7cb3cbdbba53975a0d68160"
+  },
+  "own_runtime_evidence": "fresh-review-results.json",
+  "own_probe": "fresh_review.py",
+  "installed_python_proof": {
+    "source_commit": "3bd86c352c0a430731528040379ce1765fc11e67",
+    "extension_sha256": "c6b17e6b58b5d2824ed5cfdb80d790f4a1c4c702575ed2619c80e3b052825b86",
+    "wheel_sha256": "74306bb22bf1f11e22af4fc0f71745e46a19a4a3c625f9235ab741c9beee05a9",
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "module_path": "/home/bend/.cache/rusty-tiles-f1c1-evidence/installed/rusty_tiles/rusty_tiles.abi3.so",
+    "compiled_inputs_verified": 90,
+    "api_calls": 29,
+    "PATH_during_api_calls": "",
+    "status": "passed",
+    "checks": [
+      "Handcrafted placed source matches independent decoded-node truth, Decimal world target, world OBB and manifest/report parity.",
+      "Original RuntimeError object returns unchanged at first progress, after first leaf write and ready-to-publish; prior output preserved.",
+      "Original KeyboardInterrupt object preserved; actual SIGINT during a callback aborts before publication and preserves prior output.",
+      "Nested independently controlled public API call completes without deadlock; nested invalid request does not poison enclosing conversion.",
+      "Eighteen typed invalid/unsupported requests reject before missing-source I/O, output-parent creation or callback events. Exact conservative cap admits placement and then correctly fails missing source as IO.",
+      "No retained workspace or staging files; extension matches both frozen wheel member and installed module before and after execution."
+    ],
+    "receipt": "installed-api-results.json",
+    "probe": "installed_api_review.py"
+  },
+  "scratch_preservation": {
+    "archive_directory": "/home/bend/.cache/rusty-tiles-f1c1-nonauthor-review-3bd86c3-6alof97f",
+    "directories": [
+      "runs",
+      "api-runs",
+      "fixtures"
+    ],
+    "receipt_paths": "Original invocation paths are preserved verbatim; generated runtime files were subsequently moved intact to this cache directory. Reproduce by running fresh_review.py first, then installed_api_review.py."
+  },
+  "freeze_time_utc": "2026-10-10T01:15:13.246119+00:00",
+  "own_evidence_sha256": {
+    "fresh_review.py": "74784dd4d46c6788fb5cc01396db8177c7253d622ba453e67b37e1861c1f0a82",
+    "fresh-review-results.json": "ac5262e6c6fa649de53a8318259b3af57948dae74efeb40758b63c4f23f9076a",
+    "installed_api_review.py": "c1cc1d8d49c06795e27129c2a8c2e7294a8aec35a7522f9d419f47fe7ba1c173",
+    "installed-api-results.json": "c989fcb6517d38446854321a949495e81b6b856a542817f395f8121bffd7f12c"
+  }
+}

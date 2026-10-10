@@ -1,5 +1,7 @@
 # F1a independent fixture and acceptance oracles
 
+Current replay uses schema4/profile `f1c1-placed-gltf-v1` with an explicit identity root transform and typed Local placement report under the [F1c1 contract](../docs/architecture/f1c1-contract.md). This remains local geometry/resource regression evidence. The separate [F1c1 oracle](f1c1_oracle.md) proves Earth placement and the full world transform chain; historical receipts below retain their original scope.
+
 These scripts inspect the bounded profile in [the contract](../docs/architecture/f1a-contract.md). They use Python's standard library to write and read GLB/ZIP bytes and calculate transforms; they never import the Rust loader, writer, validator, hierarchy reader or coordinate helpers. Passing proves the exercised cases, not the entire glTF/3D Tiles universe.
 
 The mathematical checks follow the primary [glTF2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html): column-major transforms, local T*R*S and parent*local composition, and global-determinant front-face orientation. The raw reader checks actual buffer/view/accessor ranges and index references. Authored normals use an independently written cofactor inverse transpose. Literal analytical goldens check reflected nonuniform and nested positions, normals and orientation before the reader serves as a source oracle.

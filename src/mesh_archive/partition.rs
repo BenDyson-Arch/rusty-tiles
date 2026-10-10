@@ -1,5 +1,5 @@
 //! Serial deterministic spatial membership; no output or publication ownership.
-use super::source::Triangle;
+use super::{placement::to_tile, source::Triangle};
 use crate::{JobError, JobErrorKind};
 
 pub(super) struct Leaf {
@@ -19,8 +19,8 @@ impl Bounds {
         }
     }
     pub fn include(&mut self, triangle: &Triangle) {
-        for [x, y, z] in triangle.positions {
-            let point = [f64::from(x), -f64::from(z), f64::from(y)];
+        for position in triangle.positions {
+            let point = to_tile(position.map(f64::from));
             for (axis, value) in point.into_iter().enumerate() {
                 self.min[axis] = self.min[axis].min(value);
                 self.max[axis] = self.max[axis].max(value);

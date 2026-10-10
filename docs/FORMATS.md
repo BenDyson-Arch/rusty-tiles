@@ -1,6 +1,6 @@
 # Mesh, point cloud and imagery guide
 
-This page explains what `mesh-to-3tz`, `point-cloud` and `raster` produce, and where their limits are. It is for users choosing settings for their own data. Every option and default is in the [command reference](CLI.md). Vector and terrain have their own guides: [vector](VECTOR.md) and [terrain](TERRAIN.md).
+This page explains what the mesh, point-cloud and raster commands produce and where their limits are. It is for users choosing settings for their own data. Every option and default is in the [command reference](CLI.md). Vector and terrain have their own guides: [vector](VECTOR.md) and [terrain](TERRAIN.md).
 
 **Build choice:** mesh and point-cloud conversion work in the standard package for local/manual placement and verified grid-free CRS operations. Other eligible horizontal CRS operations need the native-geospatial build. Imagery conversion always needs native-geospatial. The standard CLI downloads and Python wheels do not include that feature; use the [native container or source build](INSTALL.md#native-geospatial-cli).
 
@@ -9,6 +9,24 @@ Standard GeoJSON/GeoPackage vector conversion shares the grid-free CRS tier and 
 The commands below use placeholder file names. Replace them with your own data.
 
 ## Meshes
+
+For the bounded core PBR source profile and full-detail leaves, use
+`mesh-local-to-3tz --leaf-triangles N`. It interprets source geometry as local
+metres/Y-up and preserves selected PNG/JPEG bytes, all five core PBR texture
+bindings and admitted vertex companions. Its F1c1 rigid placement is a development
+candidate pending independent review and final consumer/platform acceptance:
+give `--anchor LON LAT ELLIPSOIDAL_HEIGHT` and optional ENU
+`--orientation-xyzw X Y Z W` / post-node Y-up metre `--scene-offset X Y Z`.
+The cartographic ENU frame uses declared latitude/longitude, including elevated
+anchors and longitude-defined pole meridians. One f64 root matrix transforms
+local geometry and conservative oriented boxes; no Earth-sized values are baked
+into f32 positions. See the [exact frame/limits](architecture/f1c1-contract.md)
+and [command/report reference](CLI.md#mesh-local-to-3tz). No arbitrary source CRS,
+geoid correction, coarse approximation or picking is admitted by that placement.
+
+The remaining mesh sections describe the broader legacy `mesh-to-3tz` route.
+It remains advertised pending separate support/migration decisions; the bounded
+placement candidate does not establish its CRS/approximation correctness.
 
 ```sh
 rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg

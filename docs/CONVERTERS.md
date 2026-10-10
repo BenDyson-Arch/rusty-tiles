@@ -5,7 +5,7 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | Input and goal | Command | Build and limits |
 | --- | --- | --- |
 | Static textured GLB/glTF needing spatial tiles and coarser geometry | `mesh-to-3tz` | Standard for local/manual or grid-free placement; other eligible CRS operations need native-geospatial. Supported triangle geometry and base-colour materials only |
-| Local static GLB/glTF with PNG/JPEG core PBR textures and full-detail leaves | `mesh-local-to-3tz` | Bounded foundation: explicit local metres/Y-up, exact shared resources, UV0/UV1, authored tangents/colors; normal maps require authored companions and conformal accumulated transforms. No coarse LOD. See the [profile](architecture/f1b3-contract.md) |
+| Local static GLB/glTF with PNG/JPEG core PBR textures and full-detail leaves | `mesh-local-to-3tz` | Local source metres/Y-up; optional explicit WGS84 anchor/quaternion/metre offset, standard build. Exact shared resources, UV0/UV1, authored tangents/colors; normal maps require authored companions and conformal accumulated transforms. No coarse LOD/picking. [Placement candidate](architecture/f1c1-contract.md), pending acceptance; [source profile](architecture/f1b3-contract.md) |
 | Existing GLB/glTF to preserve, without creating LOD | `glb-to-3tz` | Standard; bundles supported local resources and preserves source content |
 | Existing tileset directory to package | `convert` | Standard; packages existing content without generating geometry or LOD |
 | Eligible rusty-tiles explicit point/vector archive to migrate | `convert-to-implicit` | Standard; requires a regular tree and valid existing content, retains payload bytes; see [eligibility](CLI.md#convert-to-implicit) |
@@ -20,12 +20,13 @@ The three spatial tilers write 3D Tiles 1.1 implicit hierarchies by default. The
 
 ## Choose placement before conversion
 
-- **Meshes:** place local model coordinates with `--cartographic-position-degrees`, or select a general horizontal CRS with explicit source axes, height offset and optional shift. Geographic and EPSG:3857 adapters retain their existing conventions. General placement follows the shared grid-free/native CRS policy; see [mesh placement](FORMATS.md#mesh-placement).
+- **Bounded mesh foundation:** `mesh-local-to-3tz` keeps local output unless `--anchor LON LAT ELLIPSOIDAL_HEIGHT` is explicit. Optional `--orientation-xyzw X Y Z W` and `--scene-offset X Y Z` require that anchor. Orientation rotates cartographic ENU vectors; offset is post-node source Y-up metres before orientation, not projected coordinates or a geoid correction. See [exact frame, limits and report](architecture/f1c1-contract.md).
+- **Legacy broader meshes:** `mesh-to-3tz` uses `--cartographic-position-degrees` or a general horizontal CRS with explicit axes/height/shift. These existing routes remain pending migration; rigid local placement does not establish their numerical acceptance. See [mesh placement](FORMATS.md#mesh-placement).
 - **Point clouds:** choose `--source-crs local` for metre XYZ, `header` for a LAS CRS, or an explicit supported CRS. Georeferenced conversion requires an explicit offset to ellipsoidal metre heights. Use zero only if the source already has those heights.
 - **Vectors:** GeoJSON defaults to longitude/latitude; GeoPackage uses its layer CRS. Select layers and decide height handling explicitly. The standard build refuses CRS definitions outside its verified grid-free tier. See [vector requirements](VECTOR.md#requirements).
 - **Imagery and terrain:** use the native build and locally installed CRS resources. Terrain additionally requires metre heights, an explicit height offset and a fill height; see the [terrain guide](TERRAIN.md).
 
-General mesh and point-cloud placement share the horizontal CRS resolver, but converter-specific height and input restrictions still apply. Native vector support for compound/three-axis CRS does not extend that support to mesh or point-cloud input. The [Python API](../bindings/python/README.md) lists the standard functions it exposes; the wheel does not include every CLI command.
+General legacy mesh and point-cloud placement share the horizontal CRS resolver, but converter-specific height and input restrictions still apply. Native vector support for compound/three-axis CRS does not extend that support to mesh or point-cloud input. The [Python API](../bindings/python/README.md) lists the standard functions it exposes; the wheel does not include every CLI command.
 
 ## Preserve or generate content
 

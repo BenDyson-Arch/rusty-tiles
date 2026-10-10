@@ -307,6 +307,10 @@ Vector and point-cloud conversion use the foundation error categories: `invalid_
 
 ## mesh-local-to-3tz
 
+F1c1 explicit placement is a development implementation candidate pending
+independent review and final consumer/platform acceptance. The bounded source
+profile remains [F1b3](architecture/f1b3-contract.md).
+
 `mesh-local-to-3tz -i local.glb -o local.3tz --leaf-triangles 1000` converts the
 bounded static GLB/glTF profile, explicitly interpreted as local
 metres with Y up. `--leaf-triangles` is required and positive; it limits each
@@ -316,6 +320,27 @@ with full-detail leaf geometry and source-faithful PNG/JPEG core PBR
 textures. Each used image is delivered once in the archive; UV0/UV1 bindings,
 authored tangent frames, linear vertex colors, material factors, alpha masking
 and sampler settings are preserved. There is no coarse LOD or guessed CRS.
+
+| Placement option | Meaning |
+| --- | --- |
+| `--anchor LON LAT HEIGHT` | WGS84 longitude/latitude degrees and explicit ellipsoidal height metres. Omission keeps local output. |
+| `--orientation-xyzw X Y Z W` | Right-handed active ENU quaternion, scalar W last; requires anchor. Omission means identity. |
+| `--scene-offset X Y Z` | Post-node glTF Y-up metre translation before orientation; requires anchor. Omission means zero. |
+
+```sh
+rusty-tiles mesh-local-to-3tz -i local.glb -o placed.3tz --leaf-triangles 1000 \
+  --anchor 153.02 -27.47 25 --orientation-xyzw 0 0 0 1 --scene-offset 10 2 -5
+```
+
+The cartographic ENU basis uses declared latitude/longitude at the anchor;
+supplied longitude fixes the meridian at a pole. Quaternion norm must differ
+from one by at most 1e-12 and is normalized once. Longitude/latitude are bounded
+to [-180,180]/[-90,90]. Invalid/nonfinite parameters fail before source I/O;
+the [finite forward-magnitude limit](architecture/f1c1-contract.md#precision-and-limits)
+is Unsupported before source I/O. Placement uses one f64 root transform; leaves
+retain local Y-up geometry and every companion/resource association. Offset is
+not a projected E/N/A shift, source CRS conversion or geoid correction. Picking
+and source identity propagation remain the F1c2 follow-on.
 
 Relative local buffers and images are captured before callbacks. Network, data,
 absolute and escaping resource URIs and dependency symlinks are refused.
@@ -329,7 +354,10 @@ is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 
 `--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. Schema 3 counts the root document
+`conversion.json`, plus `cleanupDiagnostics`. Schema 4/profile
+`f1c1-placed-gltf-v1` records `source_coordinates="local-gltf"`, output
+`coordinates` (`local-gltf` or `wgs84-ecef`), tagged `placement` with normalized
+parameters, and the exact emitted `root_transform`. It counts the root document
 as `source_bytes`; `external_files` and `external_bytes` count unique captured
 dependencies, including unused ones. The output is its resolved
 absolute installation path. `--progress json` uses fallible precommit domain

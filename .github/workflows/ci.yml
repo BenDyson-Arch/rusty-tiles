@@ -62,6 +62,16 @@ jobs:
           python3 -B bench/architecture_audit/f1b1/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-resources.json"
           python3 -B bench/architecture_audit/f1b2/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-local-resource-bounds.json"
           python3 -B bench/architecture_audit/f1b3/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-core-pbr-bounds.json"
+      - name: Independently verify explicit placement and world bounds
+        run: |
+          python3 -B tests/f1c1_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c1-placement.json"
+          python3 -B bench/architecture_audit/f1c1/resource_probe.py --binary target/debug/rusty-tiles --binary-sha256 "$(sha256sum target/debug/rusty-tiles | cut -d ' ' -f 1)" --output "${{ runner.temp }}/f1c1-resources.json"
+      - name: Retain placement evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c1-placement-evidence
+          path: ${{ runner.temp }}/f1c1-*.json
+          if-no-files-found: error
       - name: Retain mesh texture evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -306,6 +316,21 @@ jobs:
             --three-dir target/terrain-browser/node_modules/three \
             --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
             --json-output "${{ runner.temp }}/f1b-core-pbr-appearance.json"
+      - name: Prove emitted Earth placement without viewer corrections
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/f1c1_viewer.py --binary target/debug/rusty-tiles \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1c1-browser.json"
+      - name: Retain placed mesh consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1c1-browser-evidence
+          path: ${{ runner.temp }}/f1c1-browser.json
+          if-no-files-found: error
       - name: Retain mesh consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

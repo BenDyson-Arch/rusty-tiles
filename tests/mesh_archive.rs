@@ -1,7 +1,7 @@
 //! External facade consumer: source admission and lifecycle, without private imports.
 use rusty_tiles::{
-    mesh_to_archive, JobError, JobErrorKind, MeshRequest, Observer, OutputPolicy, RunControl,
-    RunEvent,
+    mesh_to_archive, JobError, JobErrorKind, MeshPlacement, MeshRequest, Observer, OutputPolicy,
+    RunControl, RunEvent,
 };
 use serde_json::{json, Value};
 use std::{fs, path::Path, sync::Arc};
@@ -610,4 +610,209 @@ fn callback_chdir_cannot_redirect_bound_output() {
     assert_eq!(result.output, original.join("out.3tz"));
     assert_eq!(fs::read(other.join("out.3tz")).unwrap(), b"protected");
     std::env::set_current_dir(std::env::temp_dir()).unwrap();
+}
+
+#[test]
+fn placement_admission_precedes_source_io_and_cannot_replace_prior_output() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("missing.glb");
+    let existing = work.path().join("prior.3tz");
+    fs::write(&existing, b"previous artifact").unwrap();
+    for (anchor, orientation, offset, expected) in [
+        (
+            [181., 0., 0.],
+            [0., 0., 0., 1.],
+            [0.; 3],
+            JobErrorKind::InvalidRequest,
+        ),
+        ([0.; 3], [0.; 4], [0.; 3], JobErrorKind::InvalidRequest),
+        (
+            [0., 0., f64::NAN],
+            [0., 0., 0., 1.],
+            [0.; 3],
+            JobErrorKind::InvalidRequest,
+        ),
+        (
+            [0., 0., 60_000_000.],
+            [0., 0., 0., 1.],
+            [0.; 3],
+            JobErrorKind::Unsupported,
+        ),
+    ] {
+        for output in [&existing, &work.path().join("absent/out.3tz")] {
+            let failure = mesh_to_archive(
+                MeshRequest::local_gltf(&input, output, 1)
+                    .with_policy(OutputPolicy::Replace)
+                    .with_placement(MeshPlacement::Wgs84 {
+                        anchor_degrees_metres: anchor,
+                        orientation_xyzw: orientation,
+                        scene_offset_metres: offset,
+                    }),
+                &RunControl::default(),
+            )
+            .unwrap_err();
+            assert_eq!(failure.error.kind(), expected);
+            assert!(failure.secondary.is_empty());
+            assert!(failure.retained_paths.is_empty());
+            assert!(failure.recovery.is_none());
+            assert_eq!(fs::read(&existing).unwrap(), b"previous artifact");
+            assert!(!work.path().join("absent").exists());
+        }
+    }
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn placement_is_per_request_and_keeps_encoded_geometry_local() {
+    use std::io::Read;
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("source.glb");
+    write_source(&input);
+    let placements = [
+        MeshPlacement::Local,
+        MeshPlacement::Wgs84 {
+            anchor_degrees_metres: [153., -27., 42.],
+            orientation_xyzw: [0., 0., 0., 1.],
+            scene_offset_metres: [5., 7., 11.],
+        },
+        MeshPlacement::Wgs84 {
+            anchor_degrees_metres: [73., 90., 42.],
+            orientation_xyzw: [1., 0., 0., 0.],
+            scene_offset_metres: [0.; 3],
+        },
+    ];
+    let results = std::thread::scope(|scope| {
+        placements
+            .into_iter()
+            .enumerate()
+            .map(|(index, placement)| {
+                let input = &input;
+                let output = work.path().join(format!("placed-{index}.3tz"));
+                scope.spawn(move || {
+                    mesh_to_archive(
+                        MeshRequest::local_gltf(input, output, 1).with_placement(placement),
+                        &RunControl::default(),
+                    )
+                    .unwrap()
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let mut geometry = Vec::new();
+    for result in &results {
+        assert_eq!(result.report.schema_version, 4);
+        assert_eq!(result.report.profile, "f1c1-placed-gltf-v1");
+        assert_eq!(result.report.source_coordinates, "local-gltf");
+        let mut archive = zip::ZipArchive::new(fs::File::open(&result.output).unwrap()).unwrap();
+        let manifest: Value =
+            serde_json::from_reader(archive.by_name("tileset.json").unwrap()).unwrap();
+        assert_eq!(
+            manifest["root"]["transform"],
+            json!(result.report.root_transform)
+        );
+        let report: Value =
+            serde_json::from_reader(archive.by_name("conversion.json").unwrap()).unwrap();
+        assert_eq!(report, json!(result.report));
+        let mut leaves = std::collections::BTreeMap::new();
+        for index in 0..archive.len() {
+            let mut member = archive.by_index(index).unwrap();
+            if member.name().ends_with(".glb") {
+                let mut bytes = Vec::new();
+                member.read_to_end(&mut bytes).unwrap();
+                leaves.insert(member.name().to_owned(), bytes);
+            }
+        }
+        geometry.push(leaves);
+    }
+    assert_eq!(geometry[0], geometry[1]);
+    assert_eq!(geometry[0], geometry[2]);
+    assert_eq!(results[0].report.coordinates, "local-gltf");
+    assert!(results[1..]
+        .iter()
+        .all(|result| result.report.coordinates == "wgs84-ecef"));
+    assert_ne!(
+        results[0].report.root_transform,
+        results[1].report.root_transform
+    );
+    assert_ne!(
+        results[1].report.root_transform,
+        results[2].report.root_transform
+    );
+}
+
+#[test]
+fn frozen_independent_cartographic_and_rational_frames_hold_on_this_target() {
+    // Authored independently before candidate execution (Decimal80/cardinals
+    // and exact Hamilton action); no production coordinate helper supplies truth.
+    let references: Value =
+        serde_json::from_str(include_str!("fixtures/f1c1/analytic-references.json")).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("source.glb");
+    write_source(&input);
+    let rotations = [
+        ([0., 0., 0., 1.], [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]),
+        (
+            [1., 2., 3., 4.].map(|x| x / 30_f64.sqrt()),
+            [
+                [2. / 15., -2. / 3., 11. / 15.],
+                [14. / 15., 1. / 3., 2. / 15.],
+                [-1. / 3., 2. / 3., 2. / 3.],
+            ],
+        ),
+    ];
+    for (index, anchor) in references["anchors"].as_array().unwrap().iter().enumerate() {
+        let parse = |value: &Value| value.as_str().unwrap().parse::<f64>().unwrap();
+        let parameters = std::array::from_fn(|i| parse(&anchor["anchor_strings"][i]));
+        let origin: [f64; 3] = std::array::from_fn(|i| parse(&anchor["origin_ecef_decimal"][i]));
+        let columns: [[f64; 3]; 3] = std::array::from_fn(|i| {
+            std::array::from_fn(|j| parse(&anchor["enu_columns_decimal"][i][j]))
+        });
+        for (orientation_index, (quaternion, rotation)) in rotations.into_iter().enumerate() {
+            let expected: [[f64; 3]; 3] = std::array::from_fn(|row| {
+                std::array::from_fn(|column| {
+                    (0..3)
+                        .map(|axis| columns[axis][row] * rotation[axis][column])
+                        .sum()
+                })
+            });
+            let result = mesh_to_archive(
+                MeshRequest::local_gltf(
+                    &input,
+                    work.path().join(format!("{index}-{orientation_index}.3tz")),
+                    1,
+                )
+                .with_placement(MeshPlacement::Wgs84 {
+                    anchor_degrees_metres: parameters,
+                    orientation_xyzw: quaternion,
+                    scene_offset_metres: [5., 7., 11.],
+                }),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let matrix = result.report.root_transform;
+            for row in 0..3 {
+                for column in 0..3 {
+                    assert!(
+                        (matrix[4 * column + row] - expected[row][column]).abs() <= 1e-14,
+                        "{} orientation {orientation_index}",
+                        anchor["name"]
+                    );
+                }
+                let translation = origin[row] + expected[row][0] * 5. - expected[row][1] * 11.
+                    + expected[row][2] * 7.;
+                assert!(
+                    (matrix[12 + row] - translation).abs() <= 1e-6,
+                    "{} orientation {orientation_index}",
+                    anchor["name"]
+                );
+            }
+            assert_eq!(
+                [matrix[3], matrix[7], matrix[11], matrix[15]],
+                [0., 0., 0., 1.]
+            );
+        }
+    }
 }

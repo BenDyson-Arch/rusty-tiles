@@ -32,6 +32,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | Only for CRS operations outside the grid-free tier |
+| Local metre/Y-up GLB/glTF with core PBR and full-detail leaves | `mesh-local-to-3tz` | Explicit `.3tz`, optionally rigidly placed at a WGS84 anchor | No; F1c1 placement is a development candidate |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
@@ -186,6 +187,7 @@ Every converter takes `-i` for input and `-o` for output. The file names below a
 | Data | Example | Build and details |
 | --- | --- | --- |
 | Mesh | `rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz` | Standard; [mesh placement](docs/FORMATS.md#meshes) may need native CRS support |
+| Bounded core PBR mesh | `rusty-tiles mesh-local-to-3tz -i local.glb -o output/local.3tz --leaf-triangles 1000` | Standard; local source metres/Y-up and full-detail leaves; [explicit placement](docs/CLI.md#mesh-local-to-3tz) |
 | Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | Standard; [point-cloud guide](docs/FORMATS.md#point-clouds) |
 | Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
 | Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
@@ -247,12 +249,15 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 | Input | Rule |
 | --- | --- |
-| Mesh | Place local models with `--cartographic-position-degrees lon lat height`, or use a horizontal CRS with explicit `--source-axes` and `--height-offset`. General placement shares the point-cloud CRS policy; legacy geographic/EPSG:3857 adapters remain compatible. See [mesh placement](docs/FORMATS.md#mesh-placement). |
+| Bounded mesh foundation | `mesh-local-to-3tz` accepts local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. See the [placement contract](docs/architecture/f1c1-contract.md). |
+| Legacy broader mesh | `mesh-to-3tz` uses `--cartographic-position-degrees` or a horizontal CRS with explicit axes/height offset. These distinct source-conversion routes remain advertised pending migration; bounded rigid placement does not certify or replace them. See [mesh placement](docs/FORMATS.md#mesh-placement). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. In the standard package, meshes, point clouds and vectors use pure Rust for verified grid-free CRS definitions, including WGS84 geographic, UTM and Mercator, and supported local projections with explicit Helmert parameters. In the native-geospatial build, mesh and point-cloud placement can fall back to strict native PROJ; vectors use the native GDAL/GEOS/PROJ backend throughout. The standard package refuses operations outside its supported tier. Switching builds does not remove converter-specific limits: mesh and point-cloud general placement still require a horizontal CRS and explicit ellipsoidal-metre heights. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Legacy general mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
+
+The F1c1 mesh placement implementation is a development candidate pending independent review and final consumer/platform acceptance. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. Schema 4, profile `f1c1-placed-gltf-v1`, reports source/output coordinates, normalized placement and the exact root matrix. Picking/source identity remains the F1c2 follow-on; no broad legacy mesh API deletion or release acceptance is implied.
 
 ## Library use
 
