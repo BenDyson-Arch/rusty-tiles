@@ -267,3 +267,28 @@ rerun the redesigned candidate's portable/native, installed wheel, official
 Blender, strict browser and resource acceptance. Historical release evidence,
 this fan-out, and F0 by themselves do not satisfy that gate. 3D Tiles 2.0 features
 remain in their existing roadmap, downstream of the foundations.
+
+## Current next operation: #126 A2 after #147
+
+F1c1 merged through #143 and F1c2/W1/package facade removal merged through
+#147 at `e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e`. The latter's accepted
+head passed main CI, all five installed-wheel platforms and all four pinned
+official Blender platforms. Those bounded migrations do not accept broader
+mesh approximation, legacy raster pyramid or implicit rewrite semantics.
+
+User directed continued work on #126. Three Sol 6.1 audits cover the current
+explicit-to-implicit operation's ownership/representation, independent
+availability/resource evidence and lossless audit-storage compaction. The
+[implicit rewrite contract draft](implicit-rewrite-contract.md) records the
+next real operation and its unresolved proof gates. Existing checks share the
+production implicit expander and cannot independently establish semantic
+metadata or availability correctness. Source provenance labels cannot supply
+topology, coordinate or padding truth. A replacement must resolve those owners
+before adapting Rust/CLI/Python to one F0 run and deleting the legacy family.
+
+This operation rewrites eligible point/vector archives. It is independent of
+future mesh implicit delivery, which still follows justified approximation
+under #121. Existing retained point/vector use cases, including padded cells,
+translations and content arrays, need evidence-backed support or explicit
+disposition; an exact-cell pilot alone does not replace the advertised route.
+Parent #113/#120/#121/#125/#126 and release gates remain open.

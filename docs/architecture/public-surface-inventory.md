@@ -34,7 +34,7 @@ advertised route in that adapter.
 | `raster::{RasterOptions,raster_to_directory,raster_with_options,raster_reported}` / raster.rs | `raster` / — | COG and styled PNG pyramid directory, native backend; legacy Job/report | Raster producer + D1/D2; #124/#120/#125/#126 | Rework individually bounded pyramid contract; distinguish from root raster_to_directory new facade. Remove old module family only after caller migration and independent raster equivalence/publication proof. |
 | `tile::{MeshTo3tzOptions,TextureFormat,mesh_to_3tz,mesh_to_3tz_reported,DEFAULT_*}` / tile.rs | `mesh-to-3tz` / `mesh_to_3tz` | Legacy broader mesh splitting/textures/CRS/HLOD; Job/report owner | Mesh producer #121; #120 kernels/#125 codecs/#126 lifecycle | Rework with finite input/LOD/source policies. F1a does not replace all exposed use cases. Remove old family after supported uses have typed replacements and proof. |
 | `model_to_archive,model_to_manifest,ModelWrapRequest,ModelWrapResult,ModelManifestRequest,ModelManifestResult,ModelReport` (root exports; private mesh_archive/model.rs) | `createTilesetJson`, `glb-to-3tz` / `model_to_manifest`, `glb_to_3tz` | W1 bounded static local metre/Y-up source, original-node conservative bounds, exact captured archive bytes or fixed sibling reference manifest; one F0 Attempt | #145/#126; source/placement owners #120/#125 | Replaces public legacy wrapping/manifest APIs. Directory/multimodel, arbitrary manifest output, animation/skin/morph/imported extensions, data URI and oversized sources deliberately retired at this boundary. Final independent review/consumer/wheel/platform evidence required. Private tileset.rs remains only for legacy broader mesh shortcuts; it is not public or W1 accepted. |
-| `convert_implicit::{ConvertToImplicitOptions,convert_to_implicit,convert_to_implicit_reported}` / convert_implicit.rs | `convert-to-implicit` / `convert_to_implicit` | Rewrite eligible explicit point/vector archive; legacy Job/report | Dedicated operation #126 + implicit/archive codecs #125/#133 | Rework typed request/result, resource inventory, finite hierarchy semantics, source preservation. Remove old family after equivalence and failure/cancellation/publication proof. |
+| `convert_implicit::{ConvertToImplicitOptions,convert_to_implicit,convert_to_implicit_reported}` / convert_implicit.rs | `convert-to-implicit` / `convert_to_implicit` | Rewrite eligible explicit point/vector archive; legacy Job/report | Dedicated operation #126 + implicit/archive codecs #125/#133 | Next #126 operation: [A2 ownership/contract draft](implicit-rewrite-contract.md). Replacement must share one admitted cell/resource plan and one F0 run; independent availability, semantic metadata, transforms and existing-use dispositions precede implementation. Current legacy operation remains until those gates and caller migration pass; a typed wrapper alone is insufficient. |
 | `vector_encoding::compress_file` / vector_encoding.rs | `encode-vector-content` / — | In-place content mutation/compression, independent output policy bypass | Dedicated replacement operation #126 + codec #125 | Rework replacement/source-preservation contract before public facade acceptance. Gate removal on independent decoded equivalence and failed replacement checks. |
 | `pack::{list_zip_names,validate_3tz,TZ_INDEX_NAME}` / pack.rs | CLI convert / Python convert_to_3tz both use package | Read-only archive utilities; private tree inventory remains for legacy consumers | package F0 facade owns mutations; archive codec #125/#133; #146/#126 export disposition | Removed PackOptions, convert_to_3tz, convert_to_3tz_reported and pack_named_files after Rust caller migration. convert_implicit composes typed package for its private candidate, retaining its own legacy outer Job/report gate. Read utilities do not gain broader codec acceptance. |
 | `validate::inspect(ValidationRequest)` / validate.rs | `validate` / `validate` | Read-only bounded archive/payload inspection; typed report, InvalidInput/Unsupported/ResourceLimit/Io failures; no external subprocess | C1 #133/#125, #126 tool capability | Core payload ranges/values/indices, explicit extension dispositions and honest checks/notInspected; acceptance requires independent corruption/resource controls and adapter parity. Broader metadata/material/source-fidelity and decoded world-content bounds remain unclaimed. |
@@ -182,3 +182,25 @@ be checked before final API narrowing.
 | `src/mesh_archive/placement.rs` | `MeshPlacement`, `from_parameters`, `MeshPlacementReport`; resolved representation and frame math remain private |
 | `src/raster_directory.rs` | `RasterDirectoryRequest`, `web_mercator_rgb`, `with_policy`, `RasterDirectoryReport`, `RasterDirectoryResult`, `raster_to_directory` |
 | `src/glb.rs` | `MetadataGlb`, `new`, `from_parts`, `view`, `accessor`, `replace_view`, `compact_views`, `encoded_len`, `into_parts`, `finish` |
+
+## A2 next operation after #147
+
+F1c2/W1 and mutating packaging facade retirement merged in #147 at
+`e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e`, with final-head platform wheel
+and official Blender checks passing. The next #126 operation is the
+[explicit-to-implicit rewrite foundation](implicit-rewrite-contract.md).
+Its ownership audit and baseline probes do not accept the current converter.
+
+The replacement must delete ConvertToImplicitOptions, the two legacy Rust
+entry points, this operation's Reporter/ConversionResult adaptation, outer
+output::Job and the nested package run/candidate repack after all retained
+uses migrate. The CLI/Python spellings may select the new operation directly;
+no compatibility mutation facade is required. Shared report/output definitions
+still serve broader mesh, raster pyramid and other helpers, so this operation
+alone cannot delete them.
+
+Parallel evidence compaction changes only storage: verbose F1c2 receipts become
+verbatim gzip archives with an original-byte identity index. It does not rerun
+or broaden their domain acceptance. Next #126 gates remain in-place vector
+replacement/compression, read-only tooling contracts and intentional utility
+export disposition; mesh/raster migrations retain their separate owners.
