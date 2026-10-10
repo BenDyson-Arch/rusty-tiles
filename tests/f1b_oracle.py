@@ -22,7 +22,7 @@ import f1a_oracle as geometry
 
 OracleError = geometry.OracleError
 require = geometry.require
-PROFILE = 'f1b-local-gltf-v1'
+PROFILE = 'f1b-core-pbr-gltf-v1'
 PIXELS = ((255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 0),
           (255, 255, 0, 64), (255, 0, 255, 255), (0, 255, 255, 192))
 # A prebuilt JPEG and its independently decoded Pillow RGB manifest are appended
@@ -164,7 +164,7 @@ def accessor(doc, binary, index):
     item = doc['accessors'][index]
     require('sparse' not in item, 'oracle sparse exclusion')
     codes = {5121: ('B', 1), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}
-    widths = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3}
+    widths = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
     require(item['componentType'] in codes and item['type'] in widths, 'accessor encoding')
     code, size = codes[item['componentType']]
     width = widths[item['type']]
@@ -177,10 +177,20 @@ def accessor(doc, binary, index):
     values = [struct.unpack_from('<' + code * width, binary, view.get('byteOffset', 0) + start + i * stride) for i in range(count)]
     require(all(geometry.finite(value) for value in values), 'nonfinite accessor')
     if item.get('normalized', False):
-        require(item['type'] == 'VEC2' and item['componentType'] in (5121, 5123), 'normalized UV encoding')
+        require(item['type'] in ('VEC2', 'VEC3', 'VEC4') and item['componentType'] in (5121, 5123), 'normalized unsigned UV/color encoding')
         scale = 255 if item['componentType'] == 5121 else 65535
         values = [tuple(channel / scale for channel in value) for value in values]
     return [value[0] for value in values] if width == 1 else values
+
+
+def texture_infos(material):
+    """Independent core slot enumeration; never infer closure from base color."""
+    for key in ('baseColorTexture', 'metallicRoughnessTexture'):
+        if key in material.get('pbrMetallicRoughness', {}):
+            yield material['pbrMetallicRoughness'][key]
+    for key in ('normalTexture', 'occlusionTexture', 'emissiveTexture'):
+        if key in material:
+            yield material[key]
 
 
 def resources(doc, binary, resolver=None):
@@ -216,9 +226,7 @@ def resources(doc, binary, resolver=None):
     materials = []
     for material in doc.get('materials', []):
         fields = {key: copy.deepcopy(value) for key, value in material.items() if key != 'name'}
-        pbr = fields.get('pbrMetallicRoughness', {})
-        if 'baseColorTexture' in pbr:
-            info = pbr['baseColorTexture']
+        for info in texture_infos(fields):
             texture_index = info.pop('index')
             require(type(texture_index) is int and 0 <= texture_index < len(textures), 'material texture reference')
             info['texture'] = textures[texture_index]
@@ -228,8 +236,7 @@ def resources(doc, binary, resolver=None):
 
 def used_resource_ids(doc, primitives):
     materials = {p['material'] for p in primitives if 'material' in p}
-    textures = {doc['materials'][i]['pbrMetallicRoughness']['baseColorTexture']['index'] for i in materials
-                if 'baseColorTexture' in doc['materials'][i].get('pbrMetallicRoughness', {})}
+    textures = {info['index'] for i in materials for info in texture_infos(doc['materials'][i])}
     images = {doc['textures'][i]['source'] for i in textures}
     samplers = {doc['textures'][i]['sampler'] for i in textures if 'sampler' in doc['textures'][i]}
     return materials, textures, images, samplers
@@ -505,10 +512,14 @@ def shared_uv_fixture(primitives=4096, vertices=300000):
     doc['buffers'][0]['byteLength'] = len(binary)
     return encode_glb(doc, bytes(binary))
 
-def inspect(source, archive, leaf_limit, *, source_model=None):
+def inspect(source, archive, leaf_limit, *, source_model=None, scene_reader=None,
+            triangle_matcher=None, triangle_positions=None):
+    reader = scene_triangles if scene_reader is None else scene_reader
+    matcher = match_triangles if triangle_matcher is None else triangle_matcher
+    positions_of = (lambda triangle: triangle[0]) if triangle_positions is None else triangle_positions
     source_data = Path(source).read_bytes()
     if source_model is None:
-        expected, source_used, source_images, source_raw = scene_triangles(source_data)
+        expected, source_used, source_images, source_raw = reader(source_data)
         external_files, external_bytes = 0, 0
     else:
         expected = source_model['triangles']
@@ -559,14 +570,14 @@ def inspect(source, archive, leaf_limit, *, source_model=None):
                 require(bytes_ == source_raw[image_id], 'exact encoded source image forwarding')
                 return bytes_, source_images[image_id]['mime']
 
-            triangles, _, _, _ = scene_triangles(z.read(uri), resolver, output=True)
+            triangles, _, _, _ = reader(z.read(uri), resolver, output=True)
             require(0 < len(triangles) <= leaf_limit, 'leaf triangle ceiling')
             child_box = child['boundingVolume']['box']
             for bits in range(8):
                 corner = tuple(child_box[i] + (-1 if bits & (1 << i) else 1) * child_box[3 + 4 * i] for i in range(3))
                 require(geometry.box_contains(box, corner, 1e-9), 'root encloses descendant box')
-            for positions, _, _, _ in triangles:
-                for point in positions:
+            for triangle in triangles:
+                for point in positions_of(triangle):
                     require(geometry.box_contains(box, point, 1e-9) and geometry.box_contains(child_box, point, 1e-9), 'stored vertex bounds')
             actual.extend(triangles)
         require(used_names == expected_members, 'exact selected source image closure')
@@ -581,7 +592,7 @@ def inspect(source, archive, leaf_limit, *, source_model=None):
             require(type(report.get(field)) is int and report[field] >= 0, 'typed nonnegative integer report field ' + field)
         require(geometry.close_value(report, expected_report, 1e-10 * max(1, error)), 'typed report facts/fields')
         geometry.check_index(z, Path(archive).read_bytes())
-        match_triangles(expected, actual)
+        matcher(expected, actual)
         return {'source_triangles': len(expected), 'leaves': len(leaf_uris), 'published_images': sorted(expected_members),
                 'members': sorted(names), 'report': report, 'source_sha256': digest(source_data),
                 'archive_sha256': digest(Path(archive).read_bytes())}
@@ -635,13 +646,15 @@ def rejection_fixtures():
         ('image-uri-data', lambda d, b: d['images'].__setitem__(0, {'uri': 'data:image/png;base64,AAAA'})),
         ('buffer-uri-scheme', lambda d, b: d['buffers'].append({'byteLength': 1, 'uri': 'https://example.invalid/data.bin'})),
         ('blend', lambda d, b: d['materials'][0].__setitem__('alphaMode', 'BLEND')),
-        ('normal-texture', lambda d, b: d['materials'][0].__setitem__('normalTexture', {'index': 0})),
-        ('metallic-roughness-texture', lambda d, b: d['materials'][0]['pbrMetallicRoughness'].__setitem__('metallicRoughnessTexture', {'index': 0})),
-        ('occlusion-texture', lambda d, b: d['materials'][0].__setitem__('occlusionTexture', {'index': 0})),
-        ('emissive-texture', lambda d, b: d['materials'][0].__setitem__('emissiveTexture', {'index': 0})),
-        ('texcoord-one', lambda d, b: d['materials'][0]['pbrMetallicRoughness']['baseColorTexture'].__setitem__('texCoord', 1)),
-        ('tangent', lambda d, b: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('TANGENT', 0)),
-        ('uv1', lambda d, b: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('TEXCOORD_1', 0)),
+        # F1b3 supersedes the old blanket exclusions with explicit remaining
+        # profile boundaries. New admitted positives live in f1b3_oracle.py.
+        ('normal-texture-without-tangent', lambda d, b: d['materials'][0].__setitem__('normalTexture', {'index': 0})),
+        ('metallic-roughness-extension', lambda d, b: d['materials'][0]['pbrMetallicRoughness'].__setitem__('extensions', {'KHR_materials_specular': {}})),
+        ('occlusion-texture-transform', lambda d, b: d['materials'][0].__setitem__('occlusionTexture', {'index': 0, 'extensions': {'KHR_texture_transform': {}}})),
+        ('emissive-texture-transform', lambda d, b: d['materials'][0].__setitem__('emissiveTexture', {'index': 0, 'extensions': {'KHR_texture_transform': {}}})),
+        ('texcoord-two', lambda d, b: d['materials'][0]['pbrMetallicRoughness']['baseColorTexture'].__setitem__('texCoord', 2)),
+        ('color-one', lambda d, b: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('COLOR_1', 0)),
+        ('uv2', lambda d, b: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('TEXCOORD_2', 0)),
         ('extensions-required', lambda d, b: d.__setitem__('extensionsRequired', ['KHR_texture_transform'])),
         ('extensions-used', lambda d, b: d.__setitem__('extensionsUsed', ['KHR_texture_transform'])),
         ('unused-image-extras', lambda d, b: d['images'][1].__setitem__('extras', {'ignored': True})),

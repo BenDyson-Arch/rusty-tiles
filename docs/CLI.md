@@ -312,16 +312,19 @@ bounded static GLB/glTF profile, explicitly interpreted as local
 metres with Y up. `--leaf-triangles` is required and positive; it limits each
 leaf's triangle count, not archive bytes, memory or geometric error. `--force`
 uses completed-file replacement. This operation emits an explicit hierarchy
-with full-detail leaf geometry and source-faithful PNG/JPEG base-color
-textures. Each used image is delivered once in the archive; UVs, material factors,
-alpha masking and sampler settings are preserved. There is no coarse LOD or guessed CRS.
+with full-detail leaf geometry and source-faithful PNG/JPEG core PBR
+textures. Each used image is delivered once in the archive; UV0/UV1 bindings,
+authored tangent frames, linear vertex colors, material factors, alpha masking
+and sampler settings are preserved. There is no coarse LOD or guessed CRS.
 
 Relative local buffers and images are captured before callbacks. Network, data,
 absolute and escaping resource URIs and dependency symlinks are refused.
-Unsupported source semantics, including additional PBR texture
-channels, alpha blending, animation, extensions and
-extras, fail consistently before output staging. See the [finite source,
-numerical and admission contract](architecture/f1b2-contract.md). This command
+Normal maps require authored normals and tangents. Tangent-bearing instances
+require a uniform absolute scale with an orthogonal accumulated transform,
+including reflections; arbitrary nonuniform tangent baking is refused.
+Unsupported source semantics, including alpha blending, animation, extensions
+and extras, fail consistently before output staging. See the [finite source,
+numerical and admission contract](architecture/f1b3-contract.md). This command
 is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 

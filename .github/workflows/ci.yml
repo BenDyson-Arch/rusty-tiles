@@ -58,8 +58,10 @@ jobs:
         run: |
           python3 -B tests/f1b_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-textures.json"
           python3 -B tests/f1b2_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-local-resources.json"
+          python3 -B tests/f1b3_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-core-pbr.json"
           python3 -B bench/architecture_audit/f1b1/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-resources.json"
           python3 -B bench/architecture_audit/f1b2/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-local-resource-bounds.json"
+          python3 -B bench/architecture_audit/f1b3/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-core-pbr-bounds.json"
       - name: Retain mesh texture evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -263,10 +265,17 @@ jobs:
           node-version: '22'
       - name: Install pinned terrain consumer
         run: |
-          npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
+          npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 three@0.180.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
           target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Independently verify validator positive geometry controls
         run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
+      - name: Validate independent core PBR sources and emitted leaves with Khronos
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/f1b3_khronos.py --binary target/debug/rusty-tiles \
+            --validator-modules target/terrain-browser/node_modules --source-commit "${{ github.sha }}" \
+            --json-output "${{ runner.temp }}/f1b-core-pbr-khronos.json"
       - name: Prove terrain rendering, queries, clamping and imagery draping
         shell: bash -el {0}
         run: |
@@ -293,6 +302,10 @@ jobs:
             --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
             --node-modules target/terrain-browser/node_modules \
             --json-output "${{ runner.temp }}/f1b-resource-appearance.json"
+          python3 -B tests/f1b3_viewer.py --binary target/debug/rusty-tiles \
+            --three-dir target/terrain-browser/node_modules/three \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1b-core-pbr-appearance.json"
       - name: Retain mesh consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

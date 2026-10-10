@@ -217,13 +217,15 @@ shared image closure under F0. It forwards source bytes without invoking legacy
 atlas, LOD or encoder paths. This deliberately advances the existing operation
 and report profile rather than maintaining an F1a compatibility mode.
 
-The next slice, [F1b2](f1b2-contract.md), defines bounded local glTF/GLB resource
-binding and source stability, with a pure decoder and consumer-owned capture.
-Then settle additional material/attribute support,
-placement and identity requirements, followed by an independently justified
-coarse approximation/error contract. Implicit delivery follows the accepted
-geometry/resource contract. These remain #121/#120/#125 obligations; no legacy
-mesh/report API can be deleted merely because this embedded-image slice passes.
+[F1b2](f1b2-contract.md) merged through #139 with bounded local glTF/GLB
+resource binding, source stability, a pure decoder and consumer-owned capture.
+The next implementation slice is [F1b3 #140](f1b3-contract.md): five core PBR
+texture bindings and authored UV1/tangent/color companions, with exact resource
+closure and a proved bounded tangent-frame bake profile. Then settle placement
+and identity requirements, followed by an independently justified coarse
+approximation/error contract. Implicit delivery follows accepted geometry and
+resource contracts. These remain #121/#120/#125 obligations; the new local
+producer does not alone authorize deletion of all broader legacy mesh/report APIs.
 
 After P1 acceptance, scope terrain's real directory migration under #124 using
 D1/D2, then broader mesh/resources/LOD under #121 and remaining utility operations

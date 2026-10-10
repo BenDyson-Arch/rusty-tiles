@@ -129,7 +129,7 @@ class WheelAPI(unittest.TestCase):
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
                                               callback=observe)
         self.assertEqual(result.report["schema_version"], 3)
-        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["external_files"], 1)
         self.assertEqual(result.report["external_bytes"], 108)
@@ -172,6 +172,46 @@ class WheelAPI(unittest.TestCase):
                     self.assertFalse(output.parent.exists())
                     self.assertEqual(source.read_bytes(), data)
 
+    def test_core_pbr_mesh_independent_corner_and_resource_oracle(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1b3_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        for external, variants, limits in (
+            (False, oracle.VARIANTS, (1, 3, 1000)),
+            (True, oracle.EXTERNAL_VARIANTS, (1, 1000)),
+        ):
+            for variant in variants:
+                name = ("external-" if external else "embedded-") + variant
+                source = oracle.write_fixture(self.root / name, variant, external=external)
+                before = {p.relative_to(source.parent): p.read_bytes()
+                          for p in source.parent.rglob("*") if p.is_file()}
+                for limit in limits:
+                    with self.subTest(variant=variant, external=external, leaf_triangles=limit):
+                        output = self.root / (name + "-" + str(limit) + ".3tz")
+                        value = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+                        self.assertEqual(value.report, oracle.inspect(source, output, limit)["report"])
+                        self.assertEqual(value.report["profile"], "f1b-core-pbr-gltf-v1")
+                self.assertEqual(before, {p.relative_to(source.parent): p.read_bytes()
+                                         for p in source.parent.rglob("*") if p.is_file()})
+        for name, bundle, kind in oracle.refusal_bundles():
+            source = oracle.binding.write_bundle(self.root / "refusal-sources" / name, bundle)
+            before = {p.relative_to(source.parent): p.read_bytes()
+                      for p in source.parent.rglob("*") if p.is_file()}
+            for limit in (1, 1000):
+                with self.subTest(refusal=name, leaf_triangles=limit):
+                    output = self.root / "absent-output" / name / (str(limit) + ".3tz")
+                    expected = {"unsupported": rusty_tiles.UnsupportedError,
+                                "invalid_input": rusty_tiles.DataError,
+                                "io": rusty_tiles.TilesIOError}[kind]
+                    with self.assertRaises(expected) as caught:
+                        rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+                    self.assertEqual(caught.exception.kind, kind)
+                    self.assertFalse(output.parent.exists())
+                    self.assertEqual(before, {p.relative_to(source.parent): p.read_bytes()
+                                             for p in source.parent.rglob("*") if p.is_file()})
+
     def test_local_textured_mesh_forwards_one_prepared_image(self):
         source = self.root / "textured.glb"
         original = (ROOT / "tests/fixtures/f1b/basecolor.glb").read_bytes()
@@ -188,7 +228,7 @@ class WheelAPI(unittest.TestCase):
 
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
         self.assertEqual(result.report["schema_version"], 3)
-        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["triangles"], 8)
         self.assertEqual(result.report["leaf_tiles"], 8)
@@ -261,7 +301,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1b-local-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))

@@ -21,7 +21,7 @@ import f1b_oracle as texture
 require = texture.require
 OracleError = texture.OracleError
 MIB = 1024 * 1024
-PROFILE = 'f1b-local-gltf-v1'
+PROFILE = 'f1b-core-pbr-gltf-v1'
 
 
 class SourceError(OracleError):
@@ -156,7 +156,7 @@ def read_stable(path, maximum, *, dependency=False):
     return data, (before.st_dev, before.st_ino)
 
 
-def bind_source(source):
+def bind_source(source, *, scene_reader=None):
     """Own actual dependency bytes, then independently rebase a virtual GLB.
 
     Rebasing is solely an oracle bridge to the independently authored geometry
@@ -231,7 +231,8 @@ def bind_source(source):
             image.update(bufferView=view, mimeType=detected)
     virtual['buffers'] = [{'byteLength': len(rebased)}]
     data = texture.encode_glb(virtual, bytes(rebased))
-    triangles, used_images, images, raw_images = texture.scene_triangles(data)
+    reader = texture.scene_triangles if scene_reader is None else scene_reader
+    triangles, used_images, images, raw_images = reader(data)
     return {'triangles': triangles, 'used_images': used_images, 'images': images, 'raw_images': raw_images,
             'external_files': len(physical), 'external_bytes': sum(len(item['data']) for item in physical.values()),
             'physical': sorted((str(item['path'].relative_to(base)), len(item['data']), item['sha256']) for item in physical.values()),
@@ -456,7 +457,7 @@ def refusal_bundles():
         ('all-uris-before-open', lambda d: d['images'][0].__setitem__('uri', 'https://example.invalid/a.png'), 'unsupported'),
         ('unsupported-extensions-before-open', lambda d: d.__setitem__('extensionsRequired', ['KHR_texture_transform']), 'unsupported'),
         ('unsupported-unused-extras-before-open', lambda d: d['images'][1].__setitem__('extras', {}), 'unsupported'),
-        ('unsupported-attribute-before-open', lambda d: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('TANGENT', 0), 'unsupported'),
+        ('unsupported-attribute-before-open', lambda d: d['meshes'][0]['primitives'][0]['attributes'].__setitem__('TEXCOORD_2', 0), 'unsupported'),
     ):
         bundle = source_bundle()
         bundle['files'].pop('geom/a.bin')

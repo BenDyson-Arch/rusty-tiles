@@ -96,12 +96,15 @@ assert result.report["coordinates"] == "local-gltf"
 
 `mesh_local_to_3tz(input, output, *, leaf_triangles, force=False, callback=None)`
 requires a positive explicit per-leaf triangle limit and interprets the input
-as local metre/Y-up geometry. It accepts the finite embedded static untextured
-GLB profile in the [F1a contract](../../docs/architecture/f1a-contract.md),
-including declared material factors and node transforms. Textures, extras,
-extensions, animation and other unsupported semantics are rejected before output
-staging. The operation produces actual spatial leaves without a small-file wrap
-bypass, coarse approximation, texture processing or coordinate guessing.
+as local metre/Y-up geometry. The bounded [core PBR profile](../../docs/architecture/f1b3-contract.md)
+accepts static GLB/glTF, confined local buffers and PNG/JPEG images, all five core
+texture bindings, UV0/UV1, vertex colors and authored normals/tangents. It preserves
+selected image bytes and material bindings across spatial leaves. Normal textures
+require authored normals and tangents; tangent-bearing geometry permits accumulated
+rotation, uniform scale and reflection. Extras, extensions, animation and other
+excluded semantics are refused before staging. There is no coarse approximation,
+atlas, generated tangent basis or coordinate guessing. Source resource limits and
+capture rules follow the [F1b2 contract](../../docs/architecture/f1b2-contract.md).
 
 It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
 dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.

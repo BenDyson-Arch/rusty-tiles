@@ -1,0 +1,119 @@
+{
+  "archived_by": "root",
+  "purpose": "Preserve complete executed JSON receipts verbatim while keeping the source review readable. Decompressed hashes retain independent provenance identities. Original receipt names in provenance are logical names resolved by this index.",
+  "encoding": "Deterministic gzip, mtime=0; every compressed receipt round-trip checked byte-for-byte. No results or predicates edited.",
+  "entries": [
+    {
+      "original": "independent-khronos-final.json",
+      "archive": "receipts/independent-khronos-final.json.gz",
+      "original_bytes": 958144,
+      "original_sha256": "797ac9cc06e85ec6f483769443f4b3c50e8139980ffe8ed0c5442d001c08820c",
+      "gzip_bytes": 26526,
+      "gzip_sha256": "080e66677ede11acf9ef74ef56c6e00f0ae6f14dba445fbecb9b431a4a020f73"
+    },
+    {
+      "original": "independent-lit-viewer-final.json",
+      "archive": "receipts/independent-lit-viewer-final.json.gz",
+      "original_bytes": 162616,
+      "original_sha256": "31f333e3e1a6525ba1d510816c25ab673b04ff14b18981374301533bd41aff18",
+      "gzip_bytes": 4868,
+      "gzip_sha256": "5bdcd68cec6ea4979baf915e14d18504a4ccd7daeca52ab1a80b615d2da06e57"
+    },
+    {
+      "original": "native-embedded.json",
+      "archive": "receipts/native-embedded.json.gz",
+      "original_bytes": 121428,
+      "original_sha256": "0a711d1938350bc14cf0a9cd680ce34b7e71c5c63f061aec7f6c2d7e0c6ff81f",
+      "gzip_bytes": 10709,
+      "gzip_sha256": "6a0510b01d872491669f6c9e25416d2bed9f927328e164120fe862af3ccd118b"
+    },
+    {
+      "original": "native-external.json",
+      "archive": "receipts/native-external.json.gz",
+      "original_bytes": 163324,
+      "original_sha256": "c269f4c8db6f9eeb7d13ab89b188602e02359bae56fd9481e1cedeba8da63bf9",
+      "gzip_bytes": 11896,
+      "gzip_sha256": "756045038dcf8998c41c165fb4df5c26f55f4f6856d560259fa6e7cb29e38223"
+    },
+    {
+      "original": "native-oracle-full.json",
+      "archive": "receipts/native-oracle-full.json.gz",
+      "original_bytes": 163197,
+      "original_sha256": "83e22e67529a89d232f43e2043cabe40cebaf7f41c64583948a6cdbcbdbe8890",
+      "gzip_bytes": 10918,
+      "gzip_sha256": "13821fa4ece583db0c15315f2b6cafd602c56585619efb9e72628e7a54b293e6"
+    },
+    {
+      "original": "portable-embedded.json",
+      "archive": "receipts/portable-embedded.json.gz",
+      "original_bytes": 121430,
+      "original_sha256": "272d77bc50537bc36987bcca08a00321a4b337b0b320424558fb5189dae19681",
+      "gzip_bytes": 10707,
+      "gzip_sha256": "71bf31524a9623963354414d5ed3c89cdbe96b934155e88e07a6067a5d546854"
+    },
+    {
+      "original": "portable-external.json",
+      "archive": "receipts/portable-external.json.gz",
+      "original_bytes": 163326,
+      "original_sha256": "439b95285438e9980acb8bd0c84652368b6fd78e60d503cdd932bc39e236e84b",
+      "gzip_bytes": 11899,
+      "gzip_sha256": "27d946fdfdf35c297823e006180c9b1429c8fcdb2c6a5be374c68273965c6304"
+    },
+    {
+      "original": "portable-geometry-final.json",
+      "archive": "receipts/portable-geometry-final.json.gz",
+      "original_bytes": 23556,
+      "original_sha256": "48d6ed3ebd88c6e96e2884cda234c55950f9ac8e501c83a3b786c5cc6f767cce",
+      "gzip_bytes": 1426,
+      "gzip_sha256": "81a515d8f1afc9013d7c0832618e582db48c3ecfe7dde7f5ea0da6e74ceb08ad"
+    },
+    {
+      "original": "portable-oracle-full.json",
+      "archive": "receipts/portable-oracle-full.json.gz",
+      "original_bytes": 163199,
+      "original_sha256": "fdb09eaf09e9e8041fbd6dffe50bd03e71c594f8872672396b9a61ddae148b33",
+      "gzip_bytes": 10920,
+      "gzip_sha256": "cc9ed627d921a2be89856d4dbebf97a36f480ceacb0c8ffcfcb01cb374adf0ba"
+    },
+    {
+      "original": "resource-embedded-final.json",
+      "archive": "receipts/resource-embedded-final.json.gz",
+      "original_bytes": 76948,
+      "original_sha256": "e14ac767d4946970e7416ae7c94b9c09bf86aea2d96dc93e1ffa79e4274701d1",
+      "gzip_bytes": 5555,
+      "gzip_sha256": "28c540c3dc3f9cb51c94d0005f831f69a8f3ec777e714b67d36752c9ae2f47b6"
+    },
+    {
+      "original": "static-final.json",
+      "archive": "receipts/static-final.json.gz",
+      "original_bytes": 22905,
+      "original_sha256": "8d8eaef5d4ee5fb1f8bef268207d44ac76bcf96aec3ae73e5ce49c3bef44c14b",
+      "gzip_bytes": 3029,
+      "gzip_sha256": "a1ec2b4f1b36f7fb88fd9bd9f1bb20b49305c500a3f70b835a75f7c317e58f96"
+    },
+    {
+      "original": "wheel-core-final.json",
+      "archive": "receipts/wheel-core-final.json.gz",
+      "original_bytes": 68591,
+      "original_sha256": "64b1842733fc578d79ef9e39f7f4ea268bb05e1309b5de125bd1b6f14566f450",
+      "gzip_bytes": 2633,
+      "gzip_sha256": "a5a484b49b28de913cd25129d342435ea7444dae48b52b118580242c189edfed"
+    },
+    {
+      "original": "wheel-embedded-final.json",
+      "archive": "receipts/wheel-embedded-final.json.gz",
+      "original_bytes": 54037,
+      "original_sha256": "d2a009af2db82b74440e38732bd977b53e1bfcb019b6134eea45034ae43c19bb",
+      "gzip_bytes": 2130,
+      "gzip_sha256": "b75602060a94eb6d760fee80a2fad0cd226ed0f14b85a5ffdfe751780a46d8ed"
+    },
+    {
+      "original": "wheel-external-final.json",
+      "archive": "receipts/wheel-external-final.json.gz",
+      "original_bytes": 51551,
+      "original_sha256": "fadc02d0a0b404f786d34b2fbf8c2e2dbde3a93f092ae807fd459aa1fef0213b",
+      "gzip_bytes": 2269,
+      "gzip_sha256": "7a5ca9f0260297d811656501ece6f21172727faffbc3471cbdf4e695cdda86aa"
+    }
+  ]
+}

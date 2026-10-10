@@ -1,0 +1,175 @@
+{
+  "binary": "/home/bend/.cache/rusty-tiles-f1b3-portable-92c7e02",
+  "binary_sha256": "e8ac65740cf396bd8d1d79327a54a7ed98817466a202b067d37c23dc024f1960",
+  "cases": [
+    {
+      "case": "all-slots-normalized",
+      "expected_kind": "success",
+      "pass": true
+    },
+    {
+      "case": "color-uint-unnormalized-before-I-O",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "uv-uint-unnormalized-before-I-O",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "unused-signed-byte-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-signed-short-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-scalar-float-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-matrix-float-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-matrix-u8-padded-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-matrix-u16-padded-before-I-O",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "unused-normalized-float-before-I-O",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "unused-normalized-u32-before-I-O",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "normalized-rgb-alpha",
+      "expected_kind": "success",
+      "pass": true
+    },
+    {
+      "case": "finite-color-bounded-refusal",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "nonfinite-color",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "mixed-triangle-handedness",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "reflection-permutation",
+      "expected_kind": "success",
+      "pass": true
+    },
+    {
+      "case": "nonconformal",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "accumulated-conformal",
+      "expected_kind": "success",
+      "pass": true
+    },
+    {
+      "case": "accumulated-nonconformal",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "raw-fourth-extrema-mismatch",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "bound-uv-missing",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "unselected-bound-uv-missing",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "shared-indices-unselected-short-position",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "accessor-semantic-role-reuse",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "metadata-before-missing-image",
+      "expected_kind": "Unsupported",
+      "pass": true
+    },
+    {
+      "case": "invalid-scalar-before-missing-image",
+      "expected_kind": "InvalidInput",
+      "pass": true
+    },
+    {
+      "case": "authored-nonorthogonal",
+      "expected_kind": "success",
+      "pass": true
+    }
+  ],
+  "controls": [
+    {
+      "control": "uv-swap",
+      "detected": true
+    },
+    {
+      "control": "tangent-handedness",
+      "detected": true
+    },
+    {
+      "control": "color-alpha",
+      "detected": true
+    },
+    {
+      "control": "lost-color",
+      "detected": true
+    },
+    {
+      "control": "slot-swap",
+      "detected": true
+    },
+    {
+      "control": "binding-uv",
+      "detected": true
+    },
+    {
+      "control": "normal-scalar",
+      "detected": true
+    },
+    {
+      "control": "occlusion-scalar",
+      "detected": true
+    }
+  ]
+}

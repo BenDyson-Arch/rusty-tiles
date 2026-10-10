@@ -2,7 +2,7 @@
 //! No filesystem, source discovery, or publication policy.
 use super::{
     partition::Leaf,
-    source::{Geometry, Image},
+    source::{Geometry, Image, Triangle},
 };
 use serde_json::{json, Value};
 use std::{
@@ -19,7 +19,7 @@ pub(super) enum EncodeError<E> {
     #[error("encoding checkpoint failed")]
     Checkpoint(E),
 }
-fn append_vec3(buffer: &mut Vec<u8>, values: [f32; 3]) {
+fn append_vector<const N: usize>(buffer: &mut Vec<u8>, values: [f32; N]) {
     for value in values {
         buffer.extend_from_slice(&value.to_le_bytes());
     }
@@ -34,14 +34,6 @@ fn index<E>(value: &Value) -> Result<usize, EncodeError<E>> {
         .as_u64()
         .and_then(|n| usize::try_from(n).ok())
         .ok_or(EncodeError::Invalid("resource index"))
-}
-
-fn material_texture<E>(material: &Value) -> Result<Option<usize>, EncodeError<E>> {
-    material
-        .get("pbrMetallicRoughness")
-        .and_then(|pbr| pbr.get("baseColorTexture"))
-        .map(|info| index(&info["index"]))
-        .transpose()
 }
 
 fn texture_image<E>(geometry: &Geometry, texture_id: usize) -> Result<usize, EncodeError<E>> {
@@ -71,11 +63,67 @@ pub(super) fn used_images(geometry: &Geometry) -> Result<Vec<usize>, EncodeError
             .materials
             .get(material_id)
             .ok_or(EncodeError::Invalid("material index"))?;
-        if let Some(texture_id) = material_texture(material)? {
-            image_ids.insert(texture_image(geometry, texture_id)?);
+        for binding in material.bindings() {
+            image_ids.insert(texture_image(geometry, binding.texture)?);
         }
     }
     Ok(image_ids.into_iter().collect())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct AttributeLayout {
+    normals: bool,
+    tangents: bool,
+    texcoords: [bool; 2],
+    colors: bool,
+}
+impl AttributeLayout {
+    fn of(triangle: &Triangle) -> Self {
+        Self {
+            normals: triangle.normals.is_some(),
+            tangents: triangle.tangents.is_some(),
+            texcoords: triangle.texcoords.map(|set| set.is_some()),
+            colors: triangle.colors.is_some(),
+        }
+    }
+}
+
+/// One encoding path for every prepared companion attribute. The group layout
+/// guarantees consistent channel presence, and every channel follows the same
+/// expanded corner order as POSITION.
+fn write_attribute<E, const N: usize>(
+    geometry: &Geometry,
+    triangles: &[usize],
+    buffer: &mut Vec<u8>,
+    views: &mut Vec<Value>,
+    accessors: &mut Vec<Value>,
+    values: impl Fn(&Triangle) -> Option<[[f32; N]; 3]>,
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<usize, EncodeError<E>> {
+    let kind = match N {
+        2 => "VEC2",
+        3 => "VEC3",
+        4 => "VEC4",
+        _ => return Err(EncodeError::Invalid("attribute width")),
+    };
+    let offset = buffer.len();
+    for &index in triangles {
+        check().map_err(EncodeError::Checkpoint)?;
+        let corners =
+            values(&geometry.triangles[index]).ok_or(EncodeError::Invalid("attribute group"))?;
+        for corner in corners {
+            append_vector(buffer, corner);
+        }
+    }
+    let view = views.len();
+    views.push(
+        json!({"buffer":0,"byteOffset":offset,"byteLength":buffer.len()-offset,"target":34962}),
+    );
+    let accessor = accessors.len();
+    accessors.push(
+        json!({"bufferView":view,"componentType":5126,"count":triangles.len()*3,"type":kind}),
+    );
+    Ok(accessor)
 }
 
 pub(super) fn leaf<E>(
@@ -83,7 +131,7 @@ pub(super) fn leaf<E>(
     leaf: &Leaf,
     mut check: impl FnMut() -> Result<(), E>,
 ) -> Result<Vec<u8>, EncodeError<E>> {
-    let mut groups: BTreeMap<(Option<usize>, bool, bool), Vec<usize>> = BTreeMap::new();
+    let mut groups: BTreeMap<(Option<usize>, AttributeLayout), Vec<usize>> = BTreeMap::new();
     for &index in &leaf.triangles {
         check().map_err(EncodeError::Checkpoint)?;
         let triangle = geometry
@@ -91,17 +139,13 @@ pub(super) fn leaf<E>(
             .get(index)
             .ok_or(EncodeError::Invalid("triangle index"))?;
         groups
-            .entry((
-                triangle.material,
-                triangle.normals.is_some(),
-                triangle.texcoords.is_some(),
-            ))
+            .entry((triangle.material, AttributeLayout::of(triangle)))
             .or_default()
             .push(index);
     }
     let material_ids: BTreeMap<_, _> = groups
         .keys()
-        .filter_map(|(id, _, _)| *id)
+        .filter_map(|(id, _)| *id)
         .collect::<BTreeSet<_>>()
         .into_iter()
         .enumerate()
@@ -114,8 +158,8 @@ pub(super) fn leaf<E>(
             .materials
             .get(*source)
             .ok_or(EncodeError::Invalid("material index"))?;
-        if let Some(texture) = material_texture(material)? {
-            texture_sources.insert(texture);
+        for binding in material.bindings() {
+            texture_sources.insert(binding.texture);
         }
     }
     let texture_ids: BTreeMap<_, _> = texture_sources
@@ -148,12 +192,11 @@ pub(super) fn leaf<E>(
         .collect();
     let mut materials = Vec::with_capacity(material_ids.len());
     for source in material_ids.keys() {
-        let mut material = geometry.materials[*source].clone();
-        if let Some(texture) = material_texture(&material)? {
-            material["pbrMetallicRoughness"]["baseColorTexture"]["index"] =
-                json!(texture_ids[&texture]);
-        }
-        materials.push(material);
+        materials.push(
+            geometry.materials[*source]
+                .remap(&texture_ids)
+                .map_err(|_| EncodeError::Invalid("material texture remapping"))?,
+        );
     }
     let mut textures = Vec::with_capacity(texture_ids.len());
     for source in texture_ids.keys() {
@@ -176,15 +219,15 @@ pub(super) fn leaf<E>(
     let mut views = Vec::new();
     let mut accessors = Vec::new();
     let mut primitives = Vec::new();
-    for ((material, normals, texcoords), triangles) in groups {
-        if !texcoords
-            && material.is_some_and(|source| {
-                geometry.materials[source]
-                    .get("pbrMetallicRoughness")
-                    .is_some_and(|pbr| pbr.get("baseColorTexture").is_some())
-            })
-        {
-            return Err(EncodeError::Invalid("textured primitive lacks TEXCOORD_0"));
+    for ((material, layout), triangles) in groups {
+        if material.is_some_and(|source| {
+            geometry.materials[source]
+                .bindings()
+                .any(|binding| !layout.texcoords[binding.texcoord])
+        }) {
+            return Err(EncodeError::Invalid(
+                "textured primitive lacks bound UV set",
+            ));
         }
         let count = triangles
             .len()
@@ -200,7 +243,7 @@ pub(super) fn leaf<E>(
                     minimum[axis] = minimum[axis].min(position[axis]);
                     maximum[axis] = maximum[axis].max(position[axis]);
                 }
-                append_vec3(&mut buffer, position);
+                append_vector(&mut buffer, position);
             }
         }
         let view = views.len();
@@ -210,43 +253,51 @@ pub(super) fn leaf<E>(
         let position = accessors.len();
         accessors.push(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC3","min":minimum,"max":maximum}));
         let mut attributes = json!({"POSITION":position});
-        if normals {
-            let offset = buffer.len();
-            for &index in &triangles {
-                check().map_err(EncodeError::Checkpoint)?;
-                let values = geometry.triangles[index]
-                    .normals
-                    .ok_or(EncodeError::Invalid("normal group"))?;
-                for normal in values {
-                    append_vec3(&mut buffer, normal);
-                }
-            }
-            let view = views.len();
-            views.push(json!({"buffer":0,"byteOffset":offset,"byteLength":buffer.len()-offset,"target":34962}));
-            let normal = accessors.len();
-            accessors
-                .push(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC3"}));
-            attributes["NORMAL"] = json!(normal);
+        if layout.normals {
+            attributes["NORMAL"] = json!(write_attribute(
+                geometry,
+                &triangles,
+                &mut buffer,
+                &mut views,
+                &mut accessors,
+                |t| t.normals,
+                &mut check
+            )?);
         }
-        if texcoords {
-            let offset = buffer.len();
-            for &index in &triangles {
-                check().map_err(EncodeError::Checkpoint)?;
-                let values = geometry.triangles[index]
-                    .texcoords
-                    .ok_or(EncodeError::Invalid("texcoord group"))?;
-                for texcoord in values {
-                    for value in texcoord {
-                        buffer.extend_from_slice(&value.to_le_bytes());
-                    }
-                }
+        if layout.tangents {
+            attributes["TANGENT"] = json!(write_attribute(
+                geometry,
+                &triangles,
+                &mut buffer,
+                &mut views,
+                &mut accessors,
+                |t| t.tangents,
+                &mut check
+            )?);
+        }
+        for (set, present) in layout.texcoords.into_iter().enumerate() {
+            if present {
+                attributes[format!("TEXCOORD_{set}")] = json!(write_attribute(
+                    geometry,
+                    &triangles,
+                    &mut buffer,
+                    &mut views,
+                    &mut accessors,
+                    |t| t.texcoords[set],
+                    &mut check
+                )?);
             }
-            let view = views.len();
-            views.push(json!({"buffer":0,"byteOffset":offset,"byteLength":buffer.len()-offset,"target":34962}));
-            let texcoord = accessors.len();
-            accessors
-                .push(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC2"}));
-            attributes["TEXCOORD_0"] = json!(texcoord);
+        }
+        if layout.colors {
+            attributes["COLOR_0"] = json!(write_attribute(
+                geometry,
+                &triangles,
+                &mut buffer,
+                &mut views,
+                &mut accessors,
+                |t| t.colors,
+                &mut check
+            )?);
         }
         let mut primitive = json!({"attributes":attributes,"mode":4});
         if let Some(material) = material {
@@ -254,7 +305,7 @@ pub(super) fn leaf<E>(
         }
         primitives.push(primitive);
     }
-    let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles F1b1"},
+    let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles F1b3"},
         "buffers":[{"byteLength":buffer.len()}],"bufferViews":views,"accessors":accessors,
         "meshes":[{"primitives":primitives}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0});
     if !materials.is_empty() {

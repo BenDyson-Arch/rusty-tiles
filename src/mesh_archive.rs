@@ -311,7 +311,7 @@ fn produce(
     )?);
     let report = MeshReport {
         schema_version: 3,
-        profile: "f1b-local-gltf-v1",
+        profile: "f1b-core-pbr-gltf-v1",
         coordinates: "local-gltf",
         source_bytes: prepared.source_bytes,
         external_files: prepared.external_files,

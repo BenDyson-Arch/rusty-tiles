@@ -1,0 +1,48 @@
+{
+  "verdict": "No blocking acceptance-driver or CI integration issue found in the inspected final worktree.",
+  "review_scope": "Read-only code/CI review; independently executed lightweight oracle self-test and syntax/static manifest checks. No production/main-oracle edits, no Cargo or builds, and no full suite/browser/wheel rerun.",
+  "files_sha256": {
+    ".github/workflows/ci.yml": "131785e112d83b88ae43d67c9c832bffd651bbce1e7f4cbec26518cfe7bd7257",
+    "bindings/python/tests/test_api.py": "76e1bbae9ef38ce6f92515e67cb881d367c8725df392fcab69004507685c4839",
+    "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+    "tests/f1b2_wheel.py": "710172dd70f0d5a57c6ea640c2cd0920781032339c1b13746245aaf575be5662",
+    "tests/f1b3_oracle.py": "60ecd865586edf3d602cb462648923fa0f36a0ab20ebd25b6ce4a5ef39390062",
+    "tests/f1b3_oracle.md": "e7f610708a06f28c1706d758b06e0307cdde17c7b23d86fe673fcd2507f9be4b",
+    "tests/f1b3_viewer.py": "e107034f32c624dcff63d0c3c96ddccd3ab459ba045b02486d2a8095eb7e41e3",
+    "tests/f1b3_khronos.py": "1d0664fd607d6983fc3fe05fdc9f6708c7a15297dc4d2b3e9fd346ac9b86fa88",
+    "tests/fixtures/f1b3_viewer.cjs": "2a8f8f96a0392ecb77f8085981bafd3a8604d95141ced4bf8efcf6cb4e41f024",
+    "tests/fixtures/f1b3_validate.cjs": "f27566e2d161beabda769bd8576c2f199f06a12bc2b3bf94e2206f66e736123e",
+    "bench/architecture_audit/f1b3/resource_probe.py": "bf73eac0666f8361cf149a4977e035c24d8dc30224db29814649e93b6ce891fc"
+  },
+  "checks": [
+    "Mainoracle --binary executes self_test first. Fresh self-test passes all 25 mutations, including missing/nonbase/orphan/image bytes, slot/UV/scalars, equal-byte logical image identity, reflected tangent/corner and companion presence.",
+    "Extended matcher compares every authored companion and material meaning as one oriented triangle, allows only common cyclic corner rotation, exact W and component-specific storage tolerances. No projection removes newly admitted channels.",
+    "Shared archive inspector checks finite decoded payload, CRC/index/inventory, exact local and global closure, exact bytes/MIME/image identities, source physical resource counts, profile/schema/report fields, per-leaf triangle limit and stored/ancestor bounds.",
+    "Refusal matrix expects InvalidInput for malformed encoding and Unsupported for stated finite policy. Both CLI exit code/kind and installed typed exception/kind are checked; output parents must remain absent.",
+    "Installed empty-PATH API directly exercises 94 positive scenarios and 140 refusals with independently inspected output and source preservation; the --core-pbr adapter additionally checks CLI/extension report and archive-member byte parity.",
+    "Pinned Three viewer uses standard GLTFLoader and MeshStandardMaterial without shader/material overrides. It compares 36 analytical sample pixels across six panels, requires visible reference panels and real draw calls, detects all ten wrong UV/slot/frame/texture/scalar/color controls above the same threshold, and rejects request/page failures.",
+    "Three extracted-leaf viewing deliberately shares the glTF coordinate frame. Claims remain scoped to pinned renderer/lighting/samples; separate Cesium traversal and independent reflection/nested/nonorthogonal arithmetic are retained.",
+    "Revised CI runs f1b3_khronos.py on the freshly built native binary with conda library path. Harness first applies complete independent inspection, then extracts every emitted leaf, validates all 26 sources and complete 104-leaf inventory through the official helper, resolves external images and rejects errors/truncation/warnings. This closes the initial source-only CI coverage gap.",
+    "Validator helper confines real resolved source/resource paths to its supplied root, performs one component decoding pass, disallows schemes/fragments/queries/separator escapes, and records URI/path/byte/hash callbacks. CI installs exact validator2.0.0-dev.3.10, Three0.180.0, Cesium1.146.0 and Playwright1.63.0; Chromium installation and paths are supplied.",
+    "Resource probe uses distinct literal 100000-triangle single/many-leaf and shared-six-attribute/4096-primitive workloads; overlimit refuses before sampled scratch. Its wait4 RSS and sampled descriptors/children/scratch limitations are stated rather than presented as universal hard bounds."
+  ],
+  "executed_lightweight_evidence": {
+    "oracle_self_test_controls": 25,
+    "fixture_count": 26,
+    "manifest_assets_hash_and_length_checked": 81,
+    "python_AST_parse": true,
+    "node_driver_syntax_check": true,
+    "khronos_harness_provenance_hash_match": true
+  },
+  "archived_receipt_inspection": {
+    "official_results": 130,
+    "external_resource_callbacks": 248,
+    "errors": 0,
+    "note": "Examined existing final receipt; not a new independent validator execution."
+  },
+  "proof_limits": [
+    "Current glTF accessor helper is a semantic fidelity oracle and is not a complete general JSON/schema validator. Revised official source-and-generated-leaf CI checks provide that complementary validation.",
+    "No live hosted CI result is asserted. Workflow commands, dependency placement, source/leaf harness and assertion paths were inspected; local final receipts are separate executed evidence.",
+    "Source-preservation assertions are strongest for positive installed API/adapter cases. Refusal source preservation is also independently exercised by the fresh 27-case review; current mainoracle refusal driver principally checks classification and absent output work."
+  ]
+}

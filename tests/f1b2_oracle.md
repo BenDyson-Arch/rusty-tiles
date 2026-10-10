@@ -1,5 +1,7 @@
 # F1b2 independent local resource binding oracle
 
+Current replay asserts profile `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md); historical receipts below retain their original profile. The unsupported-attribute-before-I/O control now uses TEXCOORD_2 explicitly because authored TANGENT is admitted by the new bounded profile. New channel/UV1/color/tangent proof is documented in [f1b3_oracle.md](f1b3_oracle.md).
+
 `f1b2_oracle.py` independently authors and interprets local JSON glTF and GLB dependencies. It uses no production URI, filesystem, decoder, encoder or validator helper. It reuses the established independent F1b Python geometry/material/PNG/JPEG/index oracle after checking original dependency bytes and logical buffer ranges itself.
 
 The report oracle now checks schema 3, profile `f1b-local-gltf-v1`, root document `source_bytes`, and unique physical dependency `external_files`/`external_bytes` excluding the document. Repeated URI, percent and hardlink aliases are counted once as physical sources. glTF image indices remain separate output identities; two logical images referencing one file can produce two correctly named, unchanged image members. Unused dependencies count in source capture while the published archive includes only the selected image closure.

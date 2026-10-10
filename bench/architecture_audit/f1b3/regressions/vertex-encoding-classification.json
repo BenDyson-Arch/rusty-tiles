@@ -1,0 +1,10 @@
+{
+  "executed_by": "root",
+  "source_commit": "de0f334f61930b33bb77252c17c294a9786ee542",
+  "binary_sha256": "7107d4cc4dac14b340f88b636ac40dc17eb820a8e5a21a7bc9ae91caa5005c1c",
+  "observed_defect": "Unnormalized unsigned integer COLOR_0 returned Unsupported instead of InvalidInput before dependency I/O.",
+  "original_execution_log": "Traceback (most recent call last):\n  File \"/home/bend/.cache/rusty-tiles-f1b3-semantics/tests/f1b3_oracle.py\", line 475, in <module>\n    if __name__=='__main__': main()\n                             ~~~~^^\n  File \"/home/bend/.cache/rusty-tiles-f1b3-semantics/tests/f1b3_oracle.py\", line 467, in main\n    if args.binary: result['candidate']=run_binary(args.binary)\n                                        ~~~~~~~~~~^^^^^^^^^^^^^\n  File \"/home/bend/.cache/rusty-tiles-f1b3-semantics/tests/f1b3_oracle.py\", line 441, in run_binary\n    require(completed.returncode=={'unsupported':2,'invalid_input':3,'io':1}[kind] and summary.get('ok') is False and summary['error']['kind']==kind,'refusal '+name+': '+completed.stdout+completed.stderr)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/bend/.cache/rusty-tiles-f1b3-semantics/tests/f1a_oracle.py\", line 27, in require\n    raise OracleError(message)\nf1a_oracle.OracleError: refusal color-integer-unnormalized: {\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"accessor component/shape/normalization outside the supported mesh profile\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n\n",
+  "log_sha256": "d717bdf30bdd077342e4ca40b7b5579ba04449747ed147f88301f84057f75639",
+  "fixed_source_commit": "92c7e02433efc2031df835290cd05d72a392ebdc",
+  "verification": "Final portable/native full oracle and independent fresh review preserve expected InvalidInput; root did not weaken expected kind."
+}
