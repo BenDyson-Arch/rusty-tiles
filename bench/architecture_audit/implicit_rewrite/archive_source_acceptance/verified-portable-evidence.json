@@ -1,0 +1,139 @@
+{
+  "status": "portable-evidence-independently-verified-native-and-durable-retention-pending",
+  "verified_utc": "2026-10-10T08:35:22.286303+00:00",
+  "source_commit": "5c68f7b52b72e2f6e72096e930f85d27f2897448",
+  "source_tree": "9b813ec13fb232b857f545b22f0b69e201b58201",
+  "production_paths_checked_current_and_git_blob": 93,
+  "acceptance_paths_checked_current_and_git_blob": 4,
+  "frozen_binary": {
+    "path": "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+    "sha256": "3328487c2920e07b291eebec8072954f11b0d20a39181ccbc0c4287e2f765524",
+    "bytes": 21033912
+  },
+  "source_pin_sha256": "913e15540cfe4b387905fdaf00aff270614285ba88d9e12acfe4ffccaa18aa13",
+  "receipts_and_logs": [
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/portable-build.json",
+      "sha256": "d591ba2443574e7c4dca6c564a11744aac3dae79cb7b05b1468c7acb67bbf4a0",
+      "bytes": 1272
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/source-pin.json",
+      "sha256": "913e15540cfe4b387905fdaf00aff270614285ba88d9e12acfe4ffccaa18aa13",
+      "bytes": 10056
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/portable-build-final.log",
+      "sha256": "8dc17194e60e1c6efd4caf883f774cf341e8a2c1888624142628783d315b6da6",
+      "bytes": 138
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+      "sha256": "950b6085802eb1d684f021396111afe3a51b83ac5a75c8e0f8a404e5cd32a485",
+      "bytes": 277
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/archive-io-final.log",
+      "sha256": "61106bcfc4f7f2a09b15c28340f9cef2e0977bbd83e35e906fcb7abf83c8ed65",
+      "bytes": 3502
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/library-final.log",
+      "sha256": "e1484cc4b232e69ea956a0ae700915e942a94ae4193f097c5c77aa113613cc19",
+      "bytes": 31942
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/c1-package-final.log",
+      "sha256": "d3bcf8f1d107138d045a76c88a184905492abf5f3c3dd1d458d3559208228777",
+      "bytes": 2186
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-candidate-5c68f7b/receipt.json",
+      "sha256": "513ea7bb320f51d75060a88f0cf7bb4dc6ba90567acd2683266d9a9503fe14c7",
+      "bytes": 218434
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/ci-runner-45.json",
+      "sha256": "f2ed7a1ac0c235b32abc199c9014541b7bc71df0dc5160ab58c2b44144d26d76",
+      "bytes": 45402
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/original-controls-10.json",
+      "sha256": "4d117f439b0d0e624a84dfdc8a4bfc524127987908e35b8df2939a9b6b2cdcda",
+      "bytes": 11895
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-catalog-5c68f7b/receipt.json",
+      "sha256": "9336257de09fe2ef05b53af40ecca7ae4638798babd97f2e5b92ff8612130c8f",
+      "bytes": 23306
+    },
+    {
+      "path": "/tmp/rusty-tiles-archive-read-final-evidence/c1-resources.json",
+      "sha256": "478c671e7369ea0291c0876a8318c061d4069128cc1f9e5f37254c12332fb331",
+      "bytes": 17330
+    },
+    {
+      "path": "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/duplicate-name-before.json",
+      "sha256": "44dbda39ee12b70088b2ccd5f542bcb8ca950dac269a5d0bb8b205b104b0f883",
+      "bytes": 4282
+    },
+    {
+      "path": "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/identity-override-before.json",
+      "sha256": "afd70d3a99bc72588f9abee65fa42fb6b3bcc70499bd0a7831a127643b2e7773",
+      "bytes": 6046
+    },
+    {
+      "path": "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/archive_final_review/fallback-before.json",
+      "sha256": "674d85cedb4730cb4062af06483d9d1ed607f648707dfe199001d03d3a2f2266",
+      "bytes": 4618
+    },
+    {
+      "path": "/tmp/rusty-tiles-a2-semantics-settlement/bench/architecture_audit/implicit_rewrite/a2_settlement_coordinator/overlap-before.json",
+      "sha256": "63ab94e024407e22861ae319494d836d86e89220373a3edbb8678d336916de49",
+      "bytes": 1985
+    }
+  ],
+  "candidate_45_categories_exit_codes_archives_agree": true,
+  "ordinary_checkout_same_45_agree": true,
+  "original_10_control_bytes_match_historical_receipts": true,
+  "catalog_records": [
+    {
+      "entries": 2,
+      "rss_kib": 63260,
+      "seconds": 0.040921561001596274,
+      "category": "admitted",
+      "semantic_unused_gate": false
+    },
+    {
+      "entries": 3,
+      "rss_kib": 63080,
+      "seconds": 0.04031125699839322,
+      "category": "invalid_input",
+      "semantic_unused_gate": true
+    },
+    {
+      "entries": 1024,
+      "rss_kib": 64212,
+      "seconds": 0.040304648002347676,
+      "category": "invalid_input",
+      "semantic_unused_gate": true
+    },
+    {
+      "entries": 65536,
+      "rss_kib": 93704,
+      "seconds": 0.22094976100197528,
+      "category": "invalid_input",
+      "semantic_unused_gate": true
+    },
+    {
+      "entries": 65537,
+      "rss_kib": 59376,
+      "seconds": 0.020425320999493124,
+      "category": "resource_limit",
+      "semantic_unused_gate": false
+    }
+  ],
+  "c1_resource_20_categories_and_exit_codes_agree": true,
+  "limits": "Coordinator compiler/execution receipts with independently verified byte identities; not a reproducible-build experiment, isolated allocator proof, universal RSS bound, A2 acceptance or release authorization.",
+  "actual_rust_reader_gate_io_tests_32_pass_log_read": true
+}

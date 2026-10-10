@@ -245,7 +245,11 @@ Passing inspection means the listed checks completed within that profile.
 `hierarchyBounds` checks declared child volumes; decoded world-space content
 containment, source fidelity, geometric-error accuracy and metadata/material
 semantics are not implied. Optional extensions retain explicit inspection gaps;
-unknown required extensions fail as unsupported.
+unknown required extensions fail as unsupported. The `archiveStoredRecordLayout`
+check admits one disjoint stored-record layout and one directory interpretation.
+Coherent nested records, alternate name encodings and unsupported ZIP64 descriptor
+declarations receive `unsupported`; duplicate names and malformed records receive
+`invalid_input`. The [validation profile](VALIDATION.md) gives the finite domain.
 
 Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit`
 (exit 3), or `io` (exit 1). Oversized inputs receive a resource-limit outcome

@@ -1,0 +1,299 @@
+{
+  "classification": "fresh separate nonauthor preimplementation/read-only checkpoint review; no production retention",
+  "coordinator_supplied_baseline": "9d2973db06967f87d759c87c34d8fdd0921c86ed; no Git verification by this lane",
+  "archive_prerequisite": "implementation-ready only under reviewed finite contract",
+  "full_a2_production": "HELD; literal unavailable-root external-template exemption unproved",
+  "sources": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+      "review_scope": "complete architecture/authorization/CPU instructions"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/README.md",
+      "bytes": 6552,
+      "sha256": "726c2718424bbbbc26b762626e0a532e212ce93d53d071f8575f95e4e81439c1",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/artifact-manifest.json",
+      "bytes": 20057,
+      "sha256": "9df3bfe8e3f782d0c133042d48162ae8fe61a46765498b32604e94e5e42e4f11",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/audit.md",
+      "bytes": 12989,
+      "sha256": "5ae1b8f7b1711dae435d9025ae94f84035e415a90635e375f06e58a57a551b39",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/client-results.json",
+      "bytes": 45946,
+      "sha256": "27bff03619c5fbfcb40ee209c864b101ab4c2dc8a9309cdfd54b53a6c2386f77",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/primary-sources.json",
+      "bytes": 6211,
+      "sha256": "1cf50fd05a7903cacd52d2b6ab3fc9b9cfc8264bf768239ee3748a4cf621b8e0",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/reader-results.json",
+      "bytes": 2361,
+      "sha256": "b5409c82133233af11632e806c183de2a76fd19f07258f89b7a439f2adb7dd62",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "bytes": 7055,
+      "sha256": "71a3fbec450f4c1724cb7217a37dadae427b1f4fa3441041195b85a8912ea696",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/README.md",
+      "bytes": 2021,
+      "sha256": "701bec8712e01e2d9a01c8b075af9a4cefc72e530241e0faea719a076bba90b7",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/audit.md",
+      "bytes": 24021,
+      "sha256": "5acf34dc9de93838cd548a129c620f88582dcfd44055121271d650b845970d23",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/inventory-results.json",
+      "bytes": 2532,
+      "sha256": "446b12d629b0cfceb7bc3f2d462476ca104671dd0eec976808c7ef7e3fb077b3",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/inventory_probe.py",
+      "bytes": 8815,
+      "sha256": "13727de58d9c5d635e606c5b3fece81b61d9d3ba67c3b48fbdd5db46b6ed35f0",
+      "review_scope": "complete inventory model; independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/results.json",
+      "bytes": 281510,
+      "sha256": "11ae4f67827d969d8f766904887c1daf4a267508c05debd752345faeacf3657b",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/source-identities.json",
+      "bytes": 1823,
+      "sha256": "3fc6f6a11843ae2ea6d9db98e0d7f5f170f600dc38b94dcd3fe43f4f0a21b3d3",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/README.md",
+      "bytes": 1657,
+      "sha256": "5b5a99a17aab726f0d0f0fdec191c5a3a61e2ad5922a7a331525dad5a51064b9",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/audit.md",
+      "bytes": 17998,
+      "sha256": "ecb9f243df13294c9555eebc8e756f1cf4bbfaacabff56a5b103996ed565162c",
+      "review_scope": "audit/checkpoint complete prose"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/native-results.json",
+      "bytes": 8629,
+      "sha256": "53c05bee4b21af40f5b4d0c283a3c4887b49045a2ce7d10dafadf6f91ef4966a",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/portable-results.json",
+      "bytes": 8629,
+      "sha256": "ea416cb8df5b8d00338b316adfd20b6ce0ab9de187178e29b5c16c9db1b08770",
+      "review_scope": "hashed and parsed checkpoint JSON; principal result/claim review and explicit receipt-binding checks only, not every input algorithm or artifact independently replayed"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/probe.py",
+      "bytes": 25771,
+      "sha256": "adcddbd0fec566da95c6ba5f0cd8f86dbfe22c5b7637f196f778b13b3d9ea62a",
+      "review_scope": "fact/scene/numeric implementation and case definitions; no independent payload replay"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_settlement_coordinator/overlap-before.json",
+      "bytes": 1985,
+      "sha256": "63ab94e024407e22861ae319494d836d86e89220373a3edbb8678d336916de49",
+      "review_scope": "complete original receipt"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/a2_settlement_coordinator/overlap_probe.py",
+      "bytes": 3303,
+      "sha256": "b3dc88628c6ffa423fc63d818a9ab2bcb0729b37c1fce41b7fc1001810f550e1",
+      "review_scope": "complete tiny archive driver; independently replayed"
+    },
+    {
+      "path": "docs/architecture/README.md",
+      "bytes": 18975,
+      "sha256": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80",
+      "review_scope": "complete foundation gate"
+    },
+    {
+      "path": "docs/architecture/archive-read-foundation-contract.md",
+      "bytes": 7613,
+      "sha256": "1dcf1773421038fdc4023a8b48837227248b0924508d0139b6c009c3dddbd03c",
+      "review_scope": "complete final proposed prerequisite contract"
+    },
+    {
+      "path": "docs/architecture/implicit-rewrite-contract.md",
+      "bytes": 20379,
+      "sha256": "e9aff36c1321ab9d18be3eaa001b01a16d42015431b09925f396141c12c47ca8",
+      "review_scope": "A2 checkpoint sections, lines 1-110"
+    },
+    {
+      "path": "docs/architecture/next-foundation-scopes.md",
+      "bytes": 23286,
+      "sha256": "c0351ac0f2b46ec7243f61dc6782c0e68dd49ffbea4a585e0b706967c3abc62e",
+      "review_scope": "A2 dependency checkpoint/search context only"
+    },
+    {
+      "path": "src/archive3tz.rs",
+      "bytes": 25773,
+      "sha256": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+      "review_scope": "codec implementation through validate_open_3tz; tests not reviewed"
+    },
+    {
+      "path": "src/validate.rs",
+      "bytes": 41536,
+      "sha256": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+      "review_scope": "imports/error/read_member, inspector flow and relevant references; not complete geometry/test review"
+    },
+    {
+      "path": "src/validate/admission.rs",
+      "bytes": 12159,
+      "sha256": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+      "review_scope": "complete current envelope reader"
+    },
+    {
+      "path": "src/validate/types.rs",
+      "bytes": 3219,
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+      "review_scope": "complete public limits/error/report types"
+    }
+  ],
+  "receipt_binding_checks": [
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/client.mjs",
+      "sha256": "7d8c3bc3e368347fa7b5446a84b83b90978a05c4ad38cf955d81019df0f8ac35",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/prepare.py",
+      "sha256": "32860a244316628c5a3c9ca504d7c5b655f7b3d463a524fe55c20755195fe8a1",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/probe.py",
+      "sha256": "3c02dffcb5399a66446cf944591cad11603757c61c70da4c7bfb37eba36462e6",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/read.py",
+      "sha256": "ad310acbe296796fa67d9ea2d6f02fadac2631796d4d27172d9c30946ef80867",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/client-results.json",
+      "sha256": "27bff03619c5fbfcb40ee209c864b101ab4c2dc8a9309cdfd54b53a6c2386f77",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/artifact-manifest.json",
+      "sha256": "9df3bfe8e3f782d0c133042d48162ae8fe61a46765498b32604e94e5e42e4f11",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_format_settlement/reader-results.json",
+      "sha256": "b5409c82133233af11632e806c183de2a76fd19f07258f89b7a439f2adb7dd62",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/probe.py",
+      "sha256": "3c084d69a831ab4f5dd5d69c993dea463bf371207118775547b5d13826d8bb2a",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/inventory-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/inventory_probe.py",
+      "sha256": "13727de58d9c5d635e606c5b3fece81b61d9d3ba67c3b48fbdd5db46b6ed35f0",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/inventory-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/probe.py",
+      "sha256": "3c084d69a831ab4f5dd5d69c993dea463bf371207118775547b5d13826d8bb2a",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/portable-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/probe.py",
+      "sha256": "adcddbd0fec566da95c6ba5f0cd8f86dbfe22c5b7637f196f778b13b3d9ea62a",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/portable-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/meshopt.mjs",
+      "sha256": "9e3addc7360e015e799791f0c10403ed6bf290cc6bd144465fb6f21899249165",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/native-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/probe.py",
+      "sha256": "adcddbd0fec566da95c6ba5f0cd8f86dbfe22c5b7637f196f778b13b3d9ea62a",
+      "matched": true
+    },
+    {
+      "receipt": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/native-results.json",
+      "input": "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/meshopt.mjs",
+      "sha256": "9e3addc7360e015e799791f0c10403ed6bf290cc6bd144465fb6f21899249165",
+      "matched": true
+    }
+  ],
+  "independent_executions": [
+    {
+      "receipt": "overlap-replay.json",
+      "sha256": "21624641f32e745c46ccc4276ae6429caf99b3f0f27f8f9cda67c22ccbec0b07",
+      "original_binary_driver_and_archive_hashes_match": true,
+      "new_artifact_directory": "/tmp/rusty-tiles-archive-prereq-review-overlap-20261010",
+      "cases": 2,
+      "nice": 10,
+      "worker_environment": 2
+    },
+    {
+      "receipt": "inventory-replay.json",
+      "sha256": "446b12d629b0cfceb7bc3f2d462476ca104671dd0eec976808c7ef7e3fb077b3",
+      "frozen_receipt_byte_identical": true,
+      "new_output": "/tmp/rusty-tiles-archive-prereq-review-inventory-20261010.json",
+      "cases": 11,
+      "nice": 10,
+      "worker_environment": 2
+    }
+  ],
+  "nonexecuted": [
+    "Cargo/build/test",
+    "producer/converter",
+    "browser/render/selection/picking",
+    "official validator",
+    "payload checkpoint replay",
+    "production format/resource/lifecycle acceptance"
+  ],
+  "final_source_acceptance_required": true,
+  "production_source_phase": "Preimplementation bytes inspected and hashed before coordinator began authorized implementation; do not rebind these source hashes to later worktree edits.",
+  "legacy_standalone_validate_3tz": "Ungated ZIP allocation outside bounded C1 profile; later resource/admission disposition open; do not introduce arbitrary codec default limits."
+}

@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "name": "pr151-final.json.gz",
+      "raw_bytes": 4172,
+      "raw_sha256": "4253aad85f63a1e9b15efcf39b5661e7ca138b4cc476d8f9c97ac2769cf9d30b",
+      "stored_bytes": 677,
+      "stored_sha256": "b792363483410beeda644b02ca08e03b6673807ef7799c3aeb4778a85aa0bccf",
+      "origin": "gh PR151 exact-head merge review/checkpoint"
+    },
+    {
+      "name": "pr151-merge.json.gz",
+      "raw_bytes": 174,
+      "raw_sha256": "0a845a0f55a5a14e1dbf00d0c6c7a0acdf6da559a2c6f4be2ba28122a7ad9c01",
+      "stored_bytes": 162,
+      "stored_sha256": "d7dd9fd46c5bdf4a61ff5a683822987265a8abe7f81ebeb6e14ffcf5f4cc571e",
+      "origin": "gh PR151 exact-head merge review/checkpoint"
+    },
+    {
+      "name": "pr151-review-threads.json.gz",
+      "raw_bytes": 70,
+      "raw_sha256": "62cf4a2a96701dd234684b3ab49f9a68f28dd80998835f4866a381eeb07210c6",
+      "stored_bytes": 77,
+      "stored_sha256": "ed275f20af41d201c6f24266ee7a8f2d0ca1dccb3889f47127a4bd48ec46bd0b",
+      "origin": "gh PR151 exact-head merge review/checkpoint"
+    }
+  ],
+  "reviewed_head": "e4d90897518d2b569fb5e99b876581523e4c418c",
+  "merge": "9d2973db06967f87d759c87c34d8fdd0921c86ed",
+  "merge_tree_equals_reviewed_tree": true,
+  "main_ci_run": 38034185958,
+  "applicable_active_jobs_success": 12,
+  "release_acceptance": "intentional skip",
+  "wheel_acceptance_workflow": "path-filtered for docs/bench-only change;93 production files unchanged",
+  "scope": "bounded preparation; no production acceptance or release"
+}

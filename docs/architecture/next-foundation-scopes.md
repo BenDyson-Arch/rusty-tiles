@@ -320,3 +320,19 @@ candidate; #113 and release PR #110 retain their final redesigned-candidate
 gates. Local heavy work follows the [two-worker, lower-priority, serial CPU
 policy](../../AGENTS.md). No main merge, tag, publication or release follows
 from this continuation authority.
+
+
+### 2026-10-10 A2 dependency checkpoint
+
+F1d2 #150 and bounded A2 preparation #151 are merged with independent review,
+exact-tree pins and applicable CI. The proposed owned-root implicit rewrite has
+an unresolved literal external-template standards gate. Its tolerant-client
+materialization is bounded interoperability evidence only; no easier different
+partial-implicit product is selected as a fallback. See the updated
+[A2 proposal](implicit-rewrite-contract.md).
+
+Proceed independently with the [stored-archive reader prerequisite](archive-read-foundation-contract.md)
+under #125/#126, using the existing C1 inspector as a real consumer. The concrete
+physical-overlap reproduction, finite disjointness profile, typed read causes,
+bounded envelope/index ownership and independent acceptance precede production
+retention. This is dependency progress, not A2 acceptance or removal authority.

@@ -73,6 +73,35 @@ owner through byte/handle inputs, not call a public path operation under a new
 RunControl. The existing validator's stronger child-box containment profile
 also remains distinct from a proof of decoded content spatial coherence.
 
+### Format settlement and dependency-ready work — 2026-10-10
+
+Accepted preparation PR #151 merged as
+`9d2973db06967f87d759c87c34d8fdd0921c86ed`, with an exact reviewed merge tree
+and all twelve applicable CI jobs successful. Its scope remains preparation.
+The new [format/client decision](../../bench/architecture_audit/implicit_rewrite/a2_format_settlement/audit.md)
+executes tiny QUADTREE/OCTREE materialization and sensitive controls. The client
+preserves the owned-root frames and all slots, but also tolerates forbidden
+root external occupancy and ignores present TILE_TRANSFORM metadata. Its
+success therefore cannot settle the literal unavailable-root JSON-template
+prohibition. The full A2 production replacement remains held at that gate;
+the different partial-implicit product is not selected automatically.
+
+The [metadata/provenance decision](../../bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/audit.md)
+settles exact root snapshots, application extras, incoming overwritten-control
+reference refusal and historical-only vector state. Trusted admitted inventory
+roles must receive real payload/reference/shape checks; report labels cannot
+exempt arbitrary files. Current public C1 acceptance of those new roles remains
+a separate integration gate. The decoded-payload lane settles a bounded exact
+coherence profile; its probes do not establish production acceptance.
+
+The next separately reviewable production prerequisite is the
+[bounded stored-archive reader](archive-read-foundation-contract.md), with
+current C1 as its real consumer. A tiny exact-binary control reproduces acceptance
+of nested physical member records. Fixing that finite admission/ownership gap
+and admitting owned Read+Seek inputs does not close the A2 standards gate or
+remove any legacy operation. Final source/resources/lifecycle/viewer and
+roadmap obligations below remain required.
+
 ## Required behavior and settled ownership
 
 The operation rewrites an admitted explicit hierarchy while preserving the

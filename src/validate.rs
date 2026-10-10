@@ -1,6 +1,5 @@
 //! Read-only validation of self-contained explicit and native implicit 3TZ packages.
 use crate::archive3tz::TZ_INDEX_NAME;
-mod admission;
 mod json;
 mod payload;
 mod types;
@@ -11,7 +10,6 @@ type Error = ValidationFailure;
 #[cfg(test)]
 use serde_json::json;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fs::File,
@@ -19,7 +17,7 @@ use std::{
     path::Path,
 };
 
-type Archive = zip::ZipArchive<File>;
+type Archive = crate::archive3tz::StoredArchive<File>;
 fn invalid(message: impl Into<String>) -> Error {
     Error::InvalidInput(message.into())
 }
@@ -74,15 +72,26 @@ fn archive_read_error(e: std::io::Error) -> ValidationFailure {
         _ => ValidationFailure::Io(e),
     }
 }
+// Native archive reads preserve their typed format/I/O origins before the
+// retained generic crate/ZIP conversions above can reinterpret an I/O kind.
+fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFailure {
+    use crate::archive3tz::ReadError;
+    match error {
+        ReadError::InvalidInput(message) => Error::InvalidInput(message),
+        ReadError::Unsupported(message) => Error::Unsupported(message),
+        ReadError::ResourceLimit(message) => Error::ResourceLimit(message),
+        ReadError::Io(error) => Error::Io(error),
+        ReadError::MissingMember(name) => invalid(format!("missing archive member: {name}")),
+    }
+}
 fn read_member(
-    zip: &mut Archive,
+    archive: &mut Archive,
     name: &str,
     bytes_read: &mut u64,
     limits: &ValidationLimits,
     maximum: u64,
 ) -> Result<Vec<u8>, Error> {
-    let mut entry = zip.by_name(name)?;
-    let size = entry.size();
+    let size = archive.member(name).map_err(archive_admission_error)?.size;
     if size > maximum {
         return Err(Error::limit(format!(
             "member exceeds admitted byte limit: {name}"
@@ -92,23 +101,9 @@ fn read_member(
         .checked_add(size)
         .filter(|&n| n <= limits.total_bytes_read)
         .ok_or_else(|| Error::limit("member reads exceed 2 GiB work limit"))?;
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(
-            usize::try_from(size).map_err(|_| Error::limit("member exceeds host address range"))?,
-        )
-        .map_err(|_| Error::limit("member allocation unavailable"))?;
-    entry
-        .by_ref()
-        .take(size + 1)
-        .read_to_end(&mut bytes)
-        .map_err(archive_read_error)?;
-    if bytes.len() as u64 != size {
-        return Err(invalid(format!(
-            "member length differs from directory: {name}"
-        )));
-    }
-    Ok(bytes)
+    archive
+        .read_member(name, maximum)
+        .map_err(archive_admission_error)
 }
 fn uri(base: &str, value: &str) -> Result<String, Error> {
     if value.is_empty() || value.contains('\\') {
@@ -304,7 +299,7 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
     }
 }
 struct ArchiveResources<'a> {
-    zip: &'a mut Archive,
+    archive: &'a mut Archive,
     names: HashSet<String>,
     used: HashSet<String>,
     limits: ValidationLimits,
@@ -314,7 +309,7 @@ struct ArchiveResources<'a> {
 impl ArchiveResources<'_> {
     fn read_json(&mut self, name: &str) -> Result<Value, Error> {
         let bytes = read_member(
-            self.zip,
+            self.archive,
             name,
             &mut self.bytes_read,
             &self.limits,
@@ -370,7 +365,7 @@ impl Check<'_> {
             return Ok(report.clone());
         }
         let bytes = read_member(
-            self.resources.zip,
+            self.resources.archive,
             name,
             &mut self.resources.bytes_read,
             &self.resources.limits,
@@ -381,7 +376,7 @@ impl Check<'_> {
             let resource = uri(name, value)?;
             self.resources.reference(resource.clone())?;
             read_member(
-                self.resources.zip,
+                self.resources.archive,
                 &resource,
                 &mut self.resources.bytes_read,
                 &self.resources.limits,
@@ -532,7 +527,7 @@ impl Check<'_> {
                         resources.limits.member_bytes
                     };
                     let bytes = read_member(
-                        resources.zip,
+                        resources.archive,
                         &source,
                         &mut resources.bytes_read,
                         &resources.limits,
@@ -621,7 +616,13 @@ impl Check<'_> {
                 }
             }
             bytes = bytes
-                .checked_add(self.resources.zip.by_name(&name)?.size())
+                .checked_add(
+                    self.resources
+                        .archive
+                        .member(&name)
+                        .map_err(archive_admission_error)?
+                        .size,
+                )
                 .ok_or_else(|| invalid("tile byte count overflow"))?;
             if name.ends_with(".json") {
                 descendants.push(ValidationTask::Tileset {
@@ -729,43 +730,41 @@ fn open_archive(path: &Path) -> Result<File, Error> {
 /// Success certifies the named checks, not uninspected scene/source semantics.
 pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
     let path = request.input();
-    let mut source = open_archive(path)?;
+    let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
     let limits = ValidationLimits::default();
-    admission::admit(&mut source, &limits)?;
-    crate::archive3tz::validate_open_3tz(source.try_clone()?).map_err(crate::Error::from)?;
-    let mut zip = Archive::new(source.try_clone()?)?;
-    let mut bytes_read = 0u64;
+    let archive_limits = crate::archive3tz::ReadLimits {
+        source_archive_bytes: limits.source_archive_bytes,
+        central_directory_bytes: limits.central_directory_bytes,
+        archive_entries: limits.archive_entries,
+        member_bytes: limits.member_bytes,
+        archive_stored_bytes: limits.archive_stored_bytes,
+    };
+    let mut archive = Archive::new(source.try_clone()?, before.len(), &archive_limits)
+        .map_err(archive_admission_error)?;
+    // Count the exact index bytes already consumed by the format owner. Later
+    // index/member hashing and repeated content reads consume this same budget.
+    let mut bytes_read = archive.index_read_bytes();
     let mut names = HashSet::new();
     let mut hashes = HashMap::new();
-    for i in 0..zip.len() {
-        let mut entry = zip.by_index(i)?;
-        let name = entry.name().to_owned();
+    for i in 0..archive.len() {
+        let member = archive.member_at(i).map_err(archive_admission_error)?;
+        let name = member.name.clone();
+        let size = member.size;
         if name.split('/').any(|v| matches!(v, "" | "." | ".."))
             || name.starts_with('/')
             || name.contains('\\')
-            || !names.insert(name.clone())
         {
-            return Err(invalid(format!("unsafe or duplicate archive path: {name}")));
+            return Err(invalid(format!("unsafe archive path: {name}")));
         }
-        if entry.size() > limits.member_bytes {
-            return Err(Error::limit("archive member exceeds 64 MiB"));
-        }
+        names.insert(name.clone());
         bytes_read = bytes_read
-            .checked_add(entry.size())
+            .checked_add(size)
             .filter(|&n| n <= limits.total_bytes_read)
             .ok_or_else(|| Error::limit("archive hash reads exceed work limit"))?;
-        let mut digest = Sha256::new();
-        let mut buffer = [0u8; 65536];
-        loop {
-            let n = entry.read(&mut buffer).map_err(archive_read_error)?;
-            if n == 0 {
-                break;
-            }
-            digest.update(&buffer[..n]);
-        }
-        let hash = format!("{:x}", digest.finalize());
+        let digest = archive.hash_member(i).map_err(archive_admission_error)?;
+        let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -777,7 +776,7 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
     }
     let report = if names.contains("conversion.json") {
         json::parse(&read_member(
-            &mut zip,
+            &mut archive,
             "conversion.json",
             &mut bytes_read,
             &limits,
@@ -793,7 +792,7 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
         )
         .with_json_parser(|bytes| json::parse(bytes).map_err(crate::Error::from)),
         resources: ArchiveResources {
-            zip: &mut zip,
+            archive: &mut archive,
             names,
             used: HashSet::from([TZ_INDEX_NAME.into()]),
             limits,
@@ -884,6 +883,7 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
         checks: [
             "archiveIndex",
             "archiveCrc",
+            "archiveStoredRecordLayout",
             "contentHashes",
             "tilesetSchema",
             "payloadEnvelope",
@@ -905,6 +905,89 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Debug)]
+    struct InjectedReadFailure;
+    impl std::fmt::Display for InjectedReadFailure {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("injected reader failure")
+        }
+    }
+    impl std::error::Error for InjectedReadFailure {}
+
+    fn map_reader_io(error: std::io::Error) -> ValidationFailure {
+        archive_admission_error(crate::archive3tz::ReadError::Io(error))
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_real_os_io_causes() {
+        let work = tempfile::tempdir().unwrap();
+        {
+            let error = File::open(work.path().join("missing.3tz")).unwrap_err();
+            let kind = error.kind();
+            let os_code = error.raw_os_error();
+            let message = error.to_string();
+            assert_eq!(kind, std::io::ErrorKind::NotFound);
+            assert!(os_code.is_some());
+            let failure = map_reader_io(error);
+            assert_eq!(failure.category(), ("io", 1));
+            let Error::Io(error) = failure else {
+                panic!("lost actual I/O origin");
+            };
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.raw_os_error(), os_code);
+            assert_eq!(error.to_string(), message);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_preserves_injected_invalid_data_and_eof_io() {
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            {
+                let failure = map_reader_io(std::io::Error::new(kind, InjectedReadFailure));
+                assert_eq!(failure.category(), ("io", 1));
+                let Error::Io(error) = failure else {
+                    panic!("reclassified actual {kind:?} as malformed input");
+                };
+                assert_eq!(error.kind(), kind);
+                assert!(error
+                    .get_ref()
+                    .is_some_and(|cause| cause.is::<InjectedReadFailure>()));
+            }
+        }
+    }
+    #[test]
+    fn archive_admission_mapping_keeps_typed_categories_without_message_matching() {
+        use crate::archive3tz::ReadError;
+        for (error, category) in [
+            (
+                ReadError::InvalidInput("I/O-looking malformed input".into()),
+                ("invalid_input", 3),
+            ),
+            (
+                ReadError::Unsupported("CRC-looking unsupported profile".into()),
+                ("unsupported", 2),
+            ),
+            (
+                ReadError::ResourceLimit("package missing tileset.json".into()),
+                ("resource_limit", 3),
+            ),
+        ] {
+            assert_eq!(archive_admission_error(error).category(), category);
+        }
+    }
+    #[test]
+    fn archive_reader_mapping_distinguishes_missing_member_and_detected_crc() {
+        use crate::archive3tz::ReadError;
+        let missing = archive_admission_error(ReadError::MissingMember("tileset.json".into()));
+        assert_eq!(missing.category(), ("invalid_input", 3));
+        assert_eq!(missing.to_string(), "missing archive member: tileset.json");
+        let crc = archive_admission_error(ReadError::InvalidInput(
+            "detected index CRC mismatch".into(),
+        ));
+        assert_eq!(crc.category(), ("invalid_input", 3));
+        assert_eq!(crc.to_string(), "detected index CRC mismatch");
+    }
     fn tile(radius: f64, error: f64) -> Value {
         json!({"boundingVolume":{"sphere":[0.,0.,0.,radius]},"geometricError":error,"refine":"REPLACE"})
     }

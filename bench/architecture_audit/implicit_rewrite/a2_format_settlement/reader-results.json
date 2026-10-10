@@ -1,0 +1,64 @@
+{
+  "cases": {
+    "octree-candidate": {
+      "accepted": true,
+      "all_content_inside_own_and_ancestor_boxes": true,
+      "client_frames_equal_independent_fraction_reference": true,
+      "five_source_roots_exact": true,
+      "four_terminal_links_exact": true,
+      "six_payload_slots_exact": true
+    },
+    "octree-double-child-transform": {
+      "accepted": false,
+      "expected_sensitive_rejection": "source_world_frame_mismatch"
+    },
+    "octree-metadata-transform": {
+      "accepted": true,
+      "client_ignores_semantic": true,
+      "independent_semantic_matrix_present": true
+    },
+    "octree-root-external-available": {
+      "accepted": false,
+      "expected_sensitive_rejection": "forbidden_root_external_occupancy"
+    },
+    "quadtree-candidate": {
+      "accepted": true,
+      "all_content_inside_own_and_ancestor_boxes": true,
+      "client_frames_equal_independent_fraction_reference": true,
+      "five_source_roots_exact": true,
+      "four_terminal_links_exact": true,
+      "six_payload_slots_exact": true
+    },
+    "quadtree-double-child-transform": {
+      "accepted": false,
+      "expected_sensitive_rejection": "source_world_frame_mismatch"
+    },
+    "quadtree-metadata-transform": {
+      "accepted": true,
+      "client_ignores_semantic": true,
+      "independent_semantic_matrix_present": true
+    },
+    "quadtree-root-external-available": {
+      "accepted": false,
+      "expected_sensitive_rejection": "forbidden_root_external_occupancy"
+    }
+  },
+  "client_results_sha256": "27bff03619c5fbfcb40ee209c864b101ab4c2dc8a9309cdfd54b53a6c2386f77",
+  "driver_sha256": "ad310acbe296796fa67d9ea2d6f02fadac2631796d4d27172d9c30946ef80867",
+  "manifest_sha256": "9df3bfe8e3f782d0c133042d48162ae8fe61a46765498b32604e94e5e42e4f11",
+  "reader_only_controls": {
+    "octree-candidate-actual-json-cycle": {
+      "expected_sensitive_rejection": "external_document_cycle"
+    },
+    "octree-candidate-json-link-has-glb-bytes": {
+      "expected_sensitive_rejection": "resource_role_external_json"
+    },
+    "quadtree-candidate-actual-json-cycle": {
+      "expected_sensitive_rejection": "external_document_cycle"
+    },
+    "quadtree-candidate-json-link-has-glb-bytes": {
+      "expected_sensitive_rejection": "resource_role_external_json"
+    }
+  },
+  "scope": "finite_interoperability_profile_not_general_conformance"
+}

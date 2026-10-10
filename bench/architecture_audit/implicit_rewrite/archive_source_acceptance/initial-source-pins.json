@@ -1,0 +1,50 @@
+{
+  "status": "initial-static-observation-not-execution-or-acceptance",
+  "observed_utc": "2026-10-10T08:21:03.237122+00:00",
+  "worktree": "/tmp/rusty-tiles-a2-semantics-settlement",
+  "head": "ce971b6ce59e46d6a9ea39c3e20c187f6b7f6e37",
+  "branch": "feat/c1-owned-archive-reader",
+  "source": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+      "bytes": 3752
+    },
+    {
+      "path": "docs/architecture/archive-read-foundation-contract.md",
+      "sha256": "77eac818b0bc3090d4096b7ec71b8081276592fa708136ca30cb8f77e7166748",
+      "bytes": 9722
+    },
+    {
+      "path": "docs/architecture/archive-read-implementation.md",
+      "sha256": "1300cd2814cb9b0d1c677b0136b4f2176896190a52d0e2fb532165224b1e8482",
+      "bytes": 5002
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_prereq_review/2026-10-10-selected-directory-owner.md",
+      "sha256": "9e4798eb5c2b0fce6425512fd86ed6ea545af04c2e711981d882411baa62f4d9",
+      "bytes": 6201
+    },
+    {
+      "path": "src/archive3tz.rs",
+      "sha256": "02cf420d342057ac106e7f1bac9f4b891e361fa969b54ce788ad9584b74d84ef",
+      "bytes": 27278
+    },
+    {
+      "path": "src/archive3tz/read.rs",
+      "sha256": "2fb7f354a88dd42b36f27ae7b1225d1f9fe42e01889f4d93b466bf39fb38b454",
+      "bytes": 54623
+    },
+    {
+      "path": "src/validate.rs",
+      "sha256": "9772bfb1f0a14b96db1cfd49818c545635dbc8f83041e224b33e94745baf36ff",
+      "bytes": 45574
+    },
+    {
+      "path": "src/validate/types.rs",
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+      "bytes": 3219
+    }
+  ],
+  "removed_path_absent": true
+}
