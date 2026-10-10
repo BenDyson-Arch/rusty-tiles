@@ -363,11 +363,11 @@ jobs:
           python3 -B bench/architecture_audit/f1c2/review_probes/unchanged_model_browser.py \
             --binary target/debug/rusty-tiles --node-modules target/terrain-browser/node_modules \
             --chromium "$CHROMIUM" --output "${{ runner.temp }}/f1c2-wrapping-browser.json"
-      - name: Retain source picking evidence
+      - name: Retain source identity and model consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: f1c2-browser-evidence
-          path: ${{ runner.temp }}/f1c2-*browser.json
+          path: ${{ runner.temp }}/f1c2-*.json
           if-no-files-found: error
       - name: Retain placed mesh consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

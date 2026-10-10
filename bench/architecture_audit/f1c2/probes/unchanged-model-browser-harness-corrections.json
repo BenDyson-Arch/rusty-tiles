@@ -29,7 +29,10 @@
   },
   "final_actual_candidate": {
     "receipt": "bench/architecture_audit/f1c2/probes/unchanged-model-browser-final.json",
-    "receipt_sha256": "79f507d1a7a7f408ff341a6a29bbf0bb1392cb77a0866f46f54c648ab3d7b363",
-    "scope": "Fresh final binary; exact original archive/member bytes and selected ordinary consumer controls."
+    "receipt_sha256": "4a93f9269bdf502cc3caf59fca00db657d639ec88d9e83fe4ab6f225ccc89f77",
+    "scope": "Fresh final S3 binary; exact original archive/member bytes and selected ordinary consumer controls. S2 receipt preserved with appended-s2 filename.",
+    "stage": "S3",
+    "binary_sha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1",
+    "production_sha256": "22f4b82e6379d889441be2f0f9e364aa51570ec6f391b3c98c95be58ef0d8444"
   }
 }

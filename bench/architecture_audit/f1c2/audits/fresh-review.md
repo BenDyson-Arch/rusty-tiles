@@ -7,22 +7,41 @@ owned Cargo/builds. Review followed AGENTS.md, the architecture gate, and the
 F1c2, W1 and package-removal contracts. This record supersedes neither the
 preimplementation audits nor the broader foundation/release gates.
 
-**Status: final source and independent portable controls reviewed; final source
-commit and native/wheel/platform integration bindings pending.** No source defect
-remains open in the reviewed corrected implementation. Final acceptance is not
-claimed while those bindings remain pending.
+**Status: local PASS; final S3 source, independent controls, native tests,
+consumer replays and installed-wheel acceptance reviewed.** No blocking source
+or local evidence finding remains open in the reviewed implementation. The final lint cleanup binds the
+private identity Plan to its original immutable Geometry and moves the model
+test module after production functions; static review found no representation
+change. S2 receipts are preserved separately with an `-s2` suffix.
+Official Blender and platform CI are explicit PR gates, not local executions.
 
 ## Exact candidate
 
 The corrected portable executable is
-`/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-portable-final`, SHA256
-`92815505d581b8df3aa2a53bd388ca84b9cab394fb35cd6c925524d6e7fa6d79`.
-The coordinator's final-source-artifacts.json records 91 production inputs,
+`/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-portable-verified`, SHA256
+`6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1`.
+The coordinator's verified-source-artifacts.json records 91 production inputs,
 aggregate SHA256
-`8598d166ceb88796f02553cacfd28debc783d0b65131b2003145d794875ff7b0`.
+`22f4b82e6379d889441be2f0f9e364aa51570ec6f391b3c98c95be58ef0d8444`.
 The reviewer independently checked all 91 current file hashes against that
 inventory; all matched. Probe drivers check executable identity before/after
-their executions. Final source commit: pending coordinator pin.
+their executions. Final source commit:
+`4e1bda6de8d9f8be9ee4f776d51671420ff8faf5`. The reviewer checked HEAD and all
+production input hashes before replay. Review/provenance additions after that
+commit do not modify the frozen production inputs.
+
+The final native-geospatial/native-jpeg executable is
+`/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-native-verified`, SHA256
+`9f7378c7bf2a81fb8f04a9fc667b2e55a4778f96bf51388262b995ea80a337b7`,
+with the same production-input identity. The installed Linux x86_64 abi3 wheel
+has SHA256 `3aa409052ab798588a9ca0056a307bb77662bddbd2af823593f89ecb26b35225`.
+The reviewer independently checked the portable, native and wheel artifact hashes
+against the [durable source/artifact manifest](../receipts/source-artifacts.json).
+All matched. The packaged Rust source archive has SHA256
+`5cc5f6e6c0da5a8fc19e79261f6e951e039b8cebf05f2610d5e4abe2fd502619`;
+the reviewer independently checked all 87 production core source, preview and
+build files against the worktree. Cargo-normalized package metadata and the
+separate wheel binding are outside that exact-core-file comparison.
 
 Earlier failing executions used executable SHA256
 `d461c38d88cdab3ae643a16bec8b261c982940b9392a362d93fee9986c7c9bbb`,
@@ -96,8 +115,8 @@ unsupported input elsewhere.
   controls reject f32-only bounds, normalized-only bounds and wrong-scene bounds.
 - [Alias/resource boundary](../probes/review-emitted-alias-final.json): exactly
   64 MiB emitted payload passes; two bytes above fails Unsupported before scratch.
-  Linux observed RSS is 57,780/56,868 KiB, sampled descriptors 5/4, sampled scratch
-  133,105,561/0 bytes. These are executions with 10 ms sampling, not total memory,
+  Linux observed RSS is 62,904/62,480 KiB, sampled descriptors 6/4, sampled scratch
+  129,566,617/0 bytes. These are executions with 10 ms sampling, not total memory,
   scratch or descriptor promises for every admitted model.
 - [Actual unchanged textured browser](../probes/unchanged-model-browser-final.json):
   eight ordinary Cesium 1.146.0/Chromium 153.0.8010.12 Local/Wgs84 runs. Both good
@@ -106,11 +125,59 @@ unsupported input elsewhere.
   Wrong-root, missing-alias and zero-omission-error controls render/pick none.
   Independent Decimal100 checks the omission error against all eight signed
   box-axis combinations. No shader or modelMatrix repair is used.
+- [Final identity reader](../probes/identity-final-portable.json) and its
+  [native replay](../probes/identity-final-native.json): 26 positives, 11 sensitive
+  artifact controls, six source refusals and independent decoder self-controls.
+  Includes 100,000 authored triangles, IDs above 65535, exact 8 MiB names,
+  selected/sole scenes and empty-name sentinel semantics.
+- [Normal picking](../probes/picking-final.json) and
+  [all-empty-label picking](../probes/empty-names-picking-final.json): each nine
+  mode/variant runs with twelve independent triangle targets. Affected set
+  swaps retain geometry and picks while producing zero correct associations;
+  unaffected sets retain all twelve correct queries. Sparse rows exceed each
+  primitive's featureCount while remaining within the shared table count.
+- [Khronos](../probes/khronos-final.json): 23 admitted source/leaf/synthetic
+  positives have zero errors/warnings; two negative padding/STRING controls
+  produce their expected diagnostic. This checks core format, not extension
+  association truth.
+- [W1 independent author reader](../probes/wrapping-final-portable.json) and
+  [native replay](../probes/wrapping-final-native.json): 22 cases, Decimal80
+  original geometry/placement, exact complete resource bytes/aliases, report
+  agreement, sibling URI authority and explicit exclusions. Its omission-error,
+  refinement, bounds, transform, alias and collision controls are sensitive.
 
-Final identity, Khronos, primitive/triangle picking, source/placement replay and
-coordinator-owned lifecycle/frontend/package test bindings are being consolidated
-with final native/wheel evidence. Their earlier passed receipts remain separate
-from this corrected-artifact review.
+The [final consumer ledger](../probes/final-browser-evidence-ledger.json), SHA256
+`ddd06b601cd62dad4c14986542d688bc728e3f0da2694b61f03e8820c2ee3c36`,
+binds all six final consumer executions and current drivers to the source commit,
+91 input hashes and portable executable. It also records the replayed F1c1
+four-world-placement Cesium controls and F1b3 pinned Three PBR comparison:
+source/output RGB delta zero with ten deliberately changed channel/companion
+controls producing deltas 28–143. Those finite appearance/placement checks retain
+their original scopes.
+
+Coordinator-owned final-source tests passed: portable 275 library cases plus
+four CLI, fourteen mesh and fourteen W1 cases; native 319 library cases plus
+five CLI, fourteen mesh and fourteen W1 cases. Both workspace/all-target
+default/native Clippy runs passed with warnings denied; two Python Rust
+error/recovery cases passed. The reviewer read the logs and verified the
+source/artifact binding. Full portable/native S2 integration suites also passed;
+their earlier executions remain labeled separately from final-source focused
+tests and independent replays.
+
+[Installed Python](../receipts/wheel-python.json) passed all 42 API cases under
+Python 3.12.13 with empty PATH; the installation also passed the independent C1
+fixture runner. [Installed distro Blender](../receipts/wheel-blender.json) passed
+the same 42 cases under Blender 5.2.2 LTS, build `d13f752e3b9c`, Python 3.14.7,
+with empty PATH. Both receipts bind the final wheel hash and record fresh
+installed package locations. The reviewer inspected the successful receipts
+and compressed logs. Distro Blender is supplemental local evidence and does
+not satisfy the official Blender 4.5.14 CI gate.
+
+The reviewer also checked the final implementation and evidence documents,
+current public-surface inventory, migration/removal contracts and their gate
+statements against the implementation and receipts. The records distinguish
+removed public APIs from retained private legacy paths and preserve the broader
+release gates.
 
 ## Proof limits and final disposition
 
@@ -123,7 +190,8 @@ Imported extras/extensions, animation and other excluded source capabilities do
 not gain acceptance by exact byte copying. Sampled resource evidence is not a
 whole-job bound. Reference manifests require stable live resources.
 
-Final native/wheel, official Blender, platform CI and source-commit bindings:
-pending coordinator evidence. The broader #113/#120/#121/#125/#126 gates remain
+Official Blender and platform CI must pass
+on the final PR candidate; they have not been executed by this local review.
+The broader #113/#120/#121/#125/#126 gates remain
 open. This review authorizes no release, general legacy deletion or acceptance
 outside the declared slices.

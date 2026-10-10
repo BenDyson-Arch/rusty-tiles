@@ -67,6 +67,8 @@ remain proposals wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
+- [F1c2/W1 implementation and remaining removal gates](f1c2-implementation.md)
+- [F1c2/W1 evidence](f1c2-evidence.md)
 - [F1c2 source identity and picking contract](f1c2-contract.md)
 - [Static model wrapping and sibling manifest contract](model-wrapping-contract.md)
 - [Packaging facade removal contract](pack-api-removal-contract.md)

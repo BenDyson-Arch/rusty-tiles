@@ -2,8 +2,8 @@
   "schema_version": 1,
   "profile": "w1-static-model-v1",
   "binary": {
-    "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-portable-verified",
-    "sha256": "6f26363b4f9fd5270a5faf186fbaab8b3b139ebf13c9c788bb52d368eb1ea4f1"
+    "path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-native-final",
+    "sha256": "a3b0e2ff24eea92ed2a3e284f6ec0f699b62745023d428ed16d01a5495ca1c2c"
   },
   "oracle_sha256": "a61db9ad650dcb26f97740d8c667849c5a6234d12172a10652a2688c686ccdc9",
   "decimal_precision": 80,

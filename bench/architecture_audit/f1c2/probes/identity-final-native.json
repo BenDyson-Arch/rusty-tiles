@@ -101,8 +101,8 @@
     "scope": "Oracle and representation feasibility only; no candidate binary execution."
   },
   "candidate": {
-    "binary": "/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-native-final",
-    "binary_sha256": "a3b0e2ff24eea92ed2a3e284f6ec0f699b62745023d428ed16d01a5495ca1c2c",
+    "binary": "/home/bend/.cache/rusty-tiles-f1c2-evidence/rusty-tiles-native-verified",
+    "binary_sha256": "9f7378c7bf2a81fb8f04a9fc667b2e55a4778f96bf51388262b995ea80a337b7",
     "positive_cases": [
       {
         "source_sha256": "21b1763da786039345f0811f604ea7699b8da015da1eeb9dc4fcccce17b16643",
