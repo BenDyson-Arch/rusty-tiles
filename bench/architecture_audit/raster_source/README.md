@@ -93,3 +93,26 @@ passed using the same accepted native binary under a PATH without Python.
 Source08 production remains byte-identical and the script is separately pinned.
 Index SHA-256: `b072cb45f79d5e8de11f67a4d04def6448a6762b13a81498da2acc4d94d533bc`. This current-host check does not establish Docker
 or network isolation; the exact-head container job remains required.
+
+[First CI and owning corrections](production_evidence/20261011-ci-corrections/index.json)
+retain the exact original c376 package review and failed CI: both GDAL jobs
+passed 478 library tests before the stale raster no-count CLI assertion failed;
+the offline runtime correctly refused directory publication on Docker overlay.
+Nine other applicable CI jobs and nine wheel/official Blender jobs passed on
+that original head. Downloaded ZIP/wheel hashes and all ten Python/four official
+Blender receipt pairs reconciled; these historical successes do not accept
+its failed CI or a subsequent head. ZIP/wheel bytes remain external identities.
+
+The CLI correction asserts literal four-tile summaries and real published
+report/PNG inventory plus exact JSON locator/report/count/settings agreement.
+All five corrected CLI tests, formatting and focused native lint passed with
+unchanged production112 source and before/after-bound test artifacts. CI now
+mounts a bounded 256 MiB tmpfs for its runtime output; Docker functional proof
+remains a fresh remote gate, while the exact extracted shell step passed syntax.
+The independent scoped correction verdict is
+`8a0ae47997c5f55f6704623c2419ae5f0c8faeef9d455d5103dc0298ee770391`.
+The earlier single stale facade validation-manifest entry is retained verbatim;
+actual execution artifacts and the refreshed source09 test manifest bind its
+committed `0c1d0506` bytes. Index SHA-256: `2df8ef9a65e7405900867f6114f037eff76b447875e0ded15229e0b7bd7f7802`.
+Exact final-head CI, container, wheel and official Blender results are required
+before develop merge; parents remain open and no release is authorized.

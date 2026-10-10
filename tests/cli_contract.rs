@@ -61,8 +61,66 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
             "glb-to-3tz" | "createTilesetJson" => {
                 assert!(first.ends_with(" (1152 triangles)"), "{first}")
             }
-            // Directories without counts name only the path.
-            "raster" => assert_eq!(first, &format!("raster: wrote {}", output.display())),
+            "raster" => {
+                // Both literal WGS84 fixtures cover four requested z9..11 tiles.
+                assert_eq!(
+                    first,
+                    &format!("raster: wrote {} (4 tiles)", output.display())
+                );
+                let report: Value =
+                    serde_json::from_slice(&std::fs::read(output.join("report.json")).unwrap())
+                        .unwrap();
+                assert_eq!(report["profile"], "r2-source-cog-direct-nearest-pyramid");
+                assert_eq!(report["tiles"], 4);
+                let pngs = walkdir::WalkDir::new(output.join("tiles"))
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|entry| entry.file_type().is_file())
+                    .collect::<Vec<_>>();
+                assert_eq!(pngs.len(), 4);
+                assert!(pngs
+                    .iter()
+                    .all(|entry| entry.path().extension().is_some_and(|x| x == "png")));
+                assert!(output.join("source.cog.tif").is_file());
+                assert!(output.join("tilejson.json").is_file());
+                assert!(!output.join("conversion.json").exists());
+
+                let json_outputs = outputs.join("machine summary");
+                std::fs::create_dir_all(&json_outputs).unwrap();
+                let machine = run(&recipe, &inputs, &json_outputs, &["--json"]);
+                assert!(
+                    machine.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&machine.stderr)
+                );
+                assert!(!String::from_utf8_lossy(&machine.stderr).contains("next:"));
+                let summary: Value = serde_json::from_slice(&machine.stdout).unwrap();
+                let json_output = json_outputs.join(recipe.output);
+                let published: Value = serde_json::from_slice(
+                    &std::fs::read(json_output.join("report.json")).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(summary["ok"], true);
+                assert_eq!(summary["rasterReport"], published);
+                assert_eq!(
+                    summary["conversionReport"],
+                    serde_json::json!({
+                        "path": json_output.join("report.json").to_string_lossy()
+                    })
+                );
+                assert_eq!(
+                    summary["counts"],
+                    serde_json::json!({
+                        "tiles": 4, "sourceBands": if recipe.name == "raster-gray" { 1 } else { 3 }
+                    })
+                );
+                assert_eq!(
+                    summary["settings"],
+                    serde_json::json!({
+                        "minZoom": 9, "maxZoom": 11, "workers": 2
+                    })
+                );
+            }
             // Single files without counts report their size.
             _ => assert!(first.ends_with(" MiB)"), "{first}"),
         }
