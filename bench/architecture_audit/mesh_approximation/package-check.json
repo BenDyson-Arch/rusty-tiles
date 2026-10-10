@@ -1,0 +1,29 @@
+{
+  "command": "CARGO_TARGET_DIR=/home/bend/.cache/rusty-tiles-115-target cargo package --locked --no-verify",
+  "exit_code": 0,
+  "packaged_git_commit": "3f178df1f2866fe13f2fcd4640d4b107d260d7c5",
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "package_path": "/home/bend/.cache/rusty-tiles-115-target/package/rusty-tiles-0.4.0.crate",
+  "package_bytes": 3127471,
+  "package_sha256": "06821b7929101a7739f27bbd443bc309b0681928c189826ee39d481fb03ee35c",
+  "log_sha256": "c632697b00fae23d66825535248dc9064393ba8c4638936fe49fbfef702f843b",
+  "packaged_production_files_checked": 89,
+  "production_files_excluded_from_root_crate": [
+    "bindings/python/Cargo.toml",
+    "bindings/python/src/lib.rs"
+  ],
+  "package_lock_sha256": "a0f3da4afb1161dfc6b735f4167e63f39b63dc4faf5a1a5ed95fbacbf4189c74",
+  "package_lock_unchanged_retained_entries": 288,
+  "package_lock_removed_python_only_entries": [
+    "portable-atomic",
+    "pyo3",
+    "pyo3-build-config",
+    "pyo3-ffi",
+    "pyo3-macros",
+    "pyo3-macros-backend",
+    "rusty-tiles-python",
+    "target-lexicon"
+  ],
+  "summary": "Packaged 1168 files, 11.5MiB (3.0MiB compressed)",
+  "scope": "Source package creation and production byte identity only. Cargo.toml.orig matches the workspace manifest; Cargo normalizes the packaged manifest and removes Python-only workspace lock entries. --no-verify does not rebuild/test the extracted crate; portable/native builds and installed wheel checks are separate receipts. Receipt is recorded after the clean packaging commit, so is not included in this pinned archive."
+}
