@@ -474,6 +474,18 @@ impl Drop for EventAdmission<'_> {
     }
 }
 
+/// Pure platform admission, available before a producer reads or stages data.
+pub(crate) fn file_publication_supported() -> Result<(), JobError> {
+    if cfg!(any(unix, windows)) {
+        Ok(())
+    } else {
+        Err(JobError::new(
+            JobErrorKind::Unsupported,
+            "file publication is supported only on Unix and Windows",
+        ))
+    }
+}
+
 /// Writable storage accessible only to the private producer via scoped borrows.
 pub(crate) struct Staging<'a> {
     file: NamedTempFile,
@@ -483,12 +495,7 @@ pub(crate) struct Staging<'a> {
 impl<'a> Staging<'a> {
     pub(crate) fn create(output: &Path, attempt: &'a Attempt) -> Result<Self, JobFailure> {
         attempt.check().map_err(|error| attempt.fail(error))?;
-        if !cfg!(any(unix, windows)) {
-            return Err(attempt.fail(JobError::new(
-                JobErrorKind::Unsupported,
-                "file publication is supported only on Unix and Windows",
-            )));
-        }
+        file_publication_supported().map_err(|error| attempt.fail(error))?;
         let parent = output
             .parent()
             .filter(|path| !path.as_os_str().is_empty())

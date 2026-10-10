@@ -1,4 +1,4 @@
-//! One bounded local glTF mesh producer under the F0 file lifecycle.
+//! One bounded local glTF mesh producer with explicit rigid placement under F0.
 //! Broader legacy mesh conversion is a separate, unreviewed operation.
 use crate::{
     archive3tz::{self, CodecError, WriteFailure},
@@ -6,7 +6,6 @@ use crate::{
     CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl, RunEvent,
 };
 use serde::Serialize;
-use serde_json::json;
 use std::{
     fs::{self, File},
     io::Write,
@@ -16,7 +15,11 @@ use std::{
 mod binding;
 mod encode;
 mod partition;
+mod placement;
 mod source;
+
+use placement::ResolvedPlacement;
+pub use placement::{MeshPlacement, MeshPlacementReport};
 
 #[derive(Clone, Debug)]
 pub struct MeshRequest {
@@ -24,6 +27,7 @@ pub struct MeshRequest {
     output: PathBuf,
     leaf_triangles: usize,
     policy: OutputPolicy,
+    placement: MeshPlacement,
 }
 impl MeshRequest {
     pub fn local_gltf(
@@ -36,10 +40,15 @@ impl MeshRequest {
             output: output.into(),
             leaf_triangles,
             policy: OutputPolicy::CreateNew,
+            placement: MeshPlacement::Local,
         }
     }
     pub fn with_policy(mut self, policy: OutputPolicy) -> Self {
         self.policy = policy;
+        self
+    }
+    pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
+        self.placement = placement;
         self
     }
 }
@@ -47,7 +56,10 @@ impl MeshRequest {
 pub struct MeshReport {
     pub schema_version: u64,
     pub profile: &'static str,
+    pub source_coordinates: &'static str,
     pub coordinates: &'static str,
+    pub placement: MeshPlacementReport,
+    pub root_transform: [f64; 16],
     pub source_bytes: u64,
     pub external_files: u64,
     pub external_bytes: u64,
@@ -66,7 +78,10 @@ pub struct MeshResult {
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
 struct PreparedMesh {
-    request: MeshRequest,
+    output: PathBuf,
+    policy: OutputPolicy,
+    leaf_triangles: usize,
+    placement: ResolvedPlacement,
     geometry: source::Geometry,
     source_bytes: u64,
     external_files: u64,
@@ -174,15 +189,23 @@ fn validate(request: &MeshRequest) -> Result<(), JobError> {
 }
 
 fn prepare(
-    mut request: MeshRequest,
+    request: MeshRequest,
     attempt: &Attempt,
     operations: &mut impl ProducerOperations,
 ) -> Result<PreparedMesh, JobError> {
     attempt.check()?;
     validate(&request)?;
-    let snapshot = binding::load(&request.input, &request.output, || attempt.check())?;
-    request.input = snapshot.input.clone();
-    request.output = snapshot.output.clone();
+    let MeshRequest {
+        input,
+        output,
+        leaf_triangles,
+        policy,
+        placement,
+    } = request;
+    let placement = ResolvedPlacement::resolve(&placement)?;
+    crate::runtime::file_publication_supported()?;
+    let snapshot = binding::load(&input, &output, || attempt.check())?;
+    let output = snapshot.output.clone();
     operations.stage(ProducerStage::Decode)?;
     let geometry = source::decode(
         &snapshot.document,
@@ -196,7 +219,7 @@ fn prepare(
     drop(snapshot);
     let (leaves, bounds) = partition::plan(
         &geometry.triangles,
-        request.leaf_triangles,
+        leaf_triangles,
         source::MAX_LEAVES,
         || attempt.check(),
     )?;
@@ -207,7 +230,10 @@ fn prepare(
         )
     })?;
     Ok(PreparedMesh {
-        request,
+        output,
+        policy,
+        leaf_triangles,
+        placement,
         geometry,
         source_bytes,
         external_files,
@@ -270,7 +296,6 @@ fn produce(
             )?);
         }
     }
-    let mut children = Vec::with_capacity(prepared.leaves.len());
     for (id, leaf) in prepared.leaves.iter().enumerate() {
         attempt.check()?;
         operations.stage(ProducerStage::EncodeLeaf)?;
@@ -282,11 +307,10 @@ fn produce(
                     format!("encode validated mesh leaf: {other}"),
                 ),
             })?;
-        let name = format!("t/{id}.glb");
+        let name = encode::leaf_name(id);
         operations.stage(ProducerStage::WriteLeaf)?;
         members.push(write_member(workspace, &name, &bytes, attempt, operations)?);
         drop(bytes);
-        children.push(json!({"boundingVolume":{"box":leaf.bounds.box_values()},"geometricError":0.0,"content":{"uri":name}}));
         attempt.emit(&RunEvent::Progress {
             phase: "mesh_leaves",
             done: (id + 1) as u64,
@@ -294,13 +318,19 @@ fn produce(
         })?;
     }
     let routing_error = prepared.bounds.diagonal().max(1.0);
-    let tileset = json!({"asset":{"version":"1.1"},"geometricError":routing_error,
-        "root":{"boundingVolume":{"box":prepared.bounds.box_values()},"geometricError":routing_error,"refine":"REPLACE","children":children}});
-    let manifest = serde_json::to_vec(&tileset).map_err(|e| {
-        invalid(
+    let manifest = encode::tileset(
+        &prepared.leaves,
+        prepared.bounds,
+        prepared.placement.transform(),
+        routing_error,
+        || attempt.check(),
+    )
+    .map_err(|e| match e {
+        encode::EncodeError::Checkpoint(error) => error,
+        other => invalid(
             JobErrorKind::InvalidState,
-            format!("serialize mesh manifest: {e}"),
-        )
+            format!("encode validated mesh manifest: {other}"),
+        ),
     })?;
     members.push(write_member(
         workspace,
@@ -310,15 +340,18 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 3,
-        profile: "f1b-core-pbr-gltf-v1",
-        coordinates: "local-gltf",
+        schema_version: 4,
+        profile: "f1c1-placed-gltf-v1",
+        source_coordinates: "local-gltf",
+        coordinates: prepared.placement.coordinates(),
+        placement: prepared.placement.report(),
+        root_transform: prepared.placement.transform(),
         source_bytes: prepared.source_bytes,
         external_files: prepared.external_files,
         external_bytes: prepared.external_bytes,
         triangles: prepared.geometry.triangles.len() as u64,
         leaf_tiles: prepared.leaves.len() as u64,
-        leaf_triangles: prepared.request.leaf_triangles as u64,
+        leaf_triangles: prepared.leaf_triangles as u64,
         images: prepared.images.len() as u64,
         image_bytes: prepared
             .images
@@ -395,7 +428,7 @@ fn mesh_to_archive_with_operations(
             total: Some(prepared.leaves.len() as u64),
         })
         .map_err(|e| attempt.fail(e))?;
-    let workspace = Workspace::create(&prepared.request.output).map_err(|e| attempt.fail(e))?;
+    let workspace = Workspace::create(&prepared.output).map_err(|e| attempt.fail(e))?;
     let (members, report) = match produce(&prepared, &workspace, &attempt, operations) {
         Ok(value) => value,
         Err(e) => return Err(cleanup_failure(attempt.fail(e), workspace)),
@@ -405,7 +438,7 @@ fn mesh_to_archive_with_operations(
         members,
         report,
     };
-    let mut staging = match Staging::create(&prepared.request.output, &attempt) {
+    let mut staging = match Staging::create(&prepared.output, &attempt) {
         Ok(value) => value,
         Err(failure) => return Err(cleanup_failure(failure, completed.workspace)),
     };
@@ -434,7 +467,7 @@ fn mesh_to_archive_with_operations(
     if let Err(e) = encoded {
         let e = match e {
             WriteFailure::Checkpoint(e) => e,
-            WriteFailure::Codec(e) => codec_error(e, &prepared.request.output),
+            WriteFailure::Codec(e) => codec_error(e, &prepared.output),
         };
         return Err(cleanup_failure(staging.fail(e), completed.workspace));
     }
@@ -459,9 +492,7 @@ fn mesh_to_archive_with_operations(
     {
         return Err(staging.fail(e));
     }
-    let published = staging
-        .seal()?
-        .publish(&prepared.request.output, prepared.request.policy)?;
+    let published = staging.seal()?.publish(&prepared.output, prepared.policy)?;
     Ok(MeshResult {
         output: published.output,
         report: completed.report,
@@ -472,6 +503,7 @@ fn mesh_to_archive_with_operations(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     fn fixture() -> Vec<u8> {
         let positions = [
             [0_f32, 0., 0.],

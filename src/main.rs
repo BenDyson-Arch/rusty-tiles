@@ -16,8 +16,8 @@ use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
 use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshRequest, MeshResult, Observer, OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult,
-    Reporter, RunControl, RunEvent,
+    MeshPlacement, MeshRequest, MeshResult, Observer, OutputPolicy, RasterDirectoryRequest,
+    RasterDirectoryResult, Reporter, RunControl, RunEvent,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -523,6 +523,23 @@ struct LocalMeshArgs {
     /// Positive maximum triangle count per leaf; not a byte or memory budget
     #[arg(long = "leaf-triangles")]
     leaf_triangles: usize,
+    /// WGS84 longitude/latitude degrees and ellipsoidal height metres
+    #[arg(long, num_args = 3, allow_hyphen_values = true)]
+    anchor: Vec<f64>,
+    /// Active ENU unit quaternion XYZW; requires --anchor
+    #[arg(long, num_args = 4, allow_hyphen_values = true)]
+    orientation_xyzw: Vec<f64>,
+    /// Post-node source Y-up translation metres; requires --anchor
+    #[arg(long, num_args = 3, allow_hyphen_values = true)]
+    scene_offset: Vec<f64>,
+}
+
+fn optional_components<const N: usize>(values: Vec<f64>) -> Option<[f64; N]> {
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.try_into().expect("clap enforces component count"))
+    }
 }
 
 /// What a successful command produced.
@@ -1066,8 +1083,20 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             } else {
                 OutputPolicy::CreateNew
             };
+            let placement = MeshPlacement::from_parameters(
+                optional_components(a.anchor),
+                optional_components(a.orientation_xyzw),
+                optional_components(a.scene_offset),
+            )
+            .map_err(|error| rusty_tiles::JobFailure {
+                error,
+                secondary: Vec::new(),
+                retained_paths: Vec::new(),
+                recovery: None,
+            })?;
             let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
-                .with_policy(policy);
+                .with_policy(policy)
+                .with_placement(placement);
             Outcome::Mesh(mesh_to_archive(request, &run)?)
         }
         Command::MeshTo3tz(a) => {

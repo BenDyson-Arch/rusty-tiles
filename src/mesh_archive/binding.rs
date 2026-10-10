@@ -33,7 +33,6 @@ fn changed(path: &Path) -> JobError {
 }
 
 pub(super) struct Snapshot {
-    pub input: PathBuf,
     pub output: PathBuf,
     pub document: source::Document,
     root: Arc<Vec<u8>>,
@@ -644,7 +643,6 @@ pub(super) fn load(
     drop(captures);
     check()?;
     Ok(Snapshot {
-        input,
         output: output.path,
         document,
         source_bytes: root.len() as u64,

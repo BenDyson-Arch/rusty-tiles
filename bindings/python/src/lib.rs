@@ -18,8 +18,8 @@ use tiles_core::{
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, CreateTilesetOptions, Error, Event, EventSink, JobError, JobErrorKind,
-    JobFailure, MeshRequest, MeshTo3tzOptions, Observer, OutputPolicy, Reporter, RunControl,
-    RunEvent, SourceAxes,
+    JobFailure, MeshPlacement, MeshRequest, MeshTo3tzOptions, Observer, OutputPolicy, Reporter,
+    RunControl, RunEvent, SourceAxes,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -273,15 +273,19 @@ impl MeshResult {
     }
 }
 
-/// Convert the bounded local GLB profile with embedded base-color textures in local metre/Y-up coordinates.
+/// Convert bounded core-PBR local metre/Y-up glTF with optional rigid WGS84 placement.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, leaf_triangles, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, leaf_triangles, force=false, anchor=None, orientation_xyzw=None, scene_offset=None, callback=None))]
+#[allow(clippy::too_many_arguments)]
 fn mesh_local_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
     leaf_triangles: usize,
     force: bool,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<MeshResult> {
     let policy = if force {
@@ -289,7 +293,25 @@ fn mesh_local_to_3tz(
     } else {
         OutputPolicy::CreateNew
     };
-    let request = MeshRequest::local_gltf(input, output, leaf_triangles).with_policy(policy);
+    let placement = MeshPlacement::from_parameters(
+        anchor.map(|(x, y, z)| [x, y, z]),
+        orientation_xyzw.map(|(x, y, z, w)| [x, y, z, w]),
+        scene_offset.map(|(x, y, z)| [x, y, z]),
+    )
+    .map_err(|error| {
+        job_failure_to_python(
+            py,
+            JobFailure {
+                error,
+                secondary: Vec::new(),
+                retained_paths: Vec::new(),
+                recovery: None,
+            },
+        )
+    })?;
+    let request = MeshRequest::local_gltf(input, output, leaf_triangles)
+        .with_policy(policy)
+        .with_placement(placement);
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_archive(request, run)
     })?;

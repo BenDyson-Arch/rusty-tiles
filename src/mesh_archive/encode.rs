@@ -1,7 +1,7 @@
 //! Uncompressed GLB geometry with prepared shared image references.
 //! No filesystem, source discovery, or publication policy.
 use super::{
-    partition::Leaf,
+    partition::{Bounds, Leaf},
     source::{Geometry, Image, Triangle},
 };
 use serde_json::{json, Value};
@@ -27,6 +27,42 @@ fn append_vector<const N: usize>(buffer: &mut Vec<u8>, values: [f32; N]) {
 
 pub(super) fn image_name(source_id: usize, image: &Image) -> String {
     format!("textures/{source_id}.{}", image.extension)
+}
+
+pub(super) fn leaf_name(id: usize) -> String {
+    format!("t/{id}.glb")
+}
+
+/// One explicit hierarchy in tile-local metres. Placement is already resolved;
+/// root transforms apply to both content and conservative local box half axes.
+pub(super) fn tileset<E>(
+    leaves: &[Leaf],
+    bounds: Bounds,
+    root_transform: [f64; 16],
+    routing_error: f64,
+    mut check: impl FnMut() -> Result<(), E>,
+) -> Result<Vec<u8>, EncodeError<E>> {
+    let mut children = Vec::with_capacity(leaves.len());
+    for (id, leaf) in leaves.iter().enumerate() {
+        check().map_err(EncodeError::Checkpoint)?;
+        children.push(json!({
+            "boundingVolume": {"box": leaf.bounds.box_values()},
+            "geometricError": 0.0,
+            "content": {"uri": leaf_name(id)}
+        }));
+    }
+    let document = json!({
+        "asset": {"version": "1.1"},
+        "geometricError": routing_error,
+        "root": {
+            "boundingVolume": {"box": bounds.box_values()},
+            "transform": root_transform,
+            "geometricError": routing_error,
+            "refine": "REPLACE",
+            "children": children
+        }
+    });
+    serde_json::to_vec(&document).map_err(EncodeError::Json)
 }
 
 fn index<E>(value: &Value) -> Result<usize, EncodeError<E>> {

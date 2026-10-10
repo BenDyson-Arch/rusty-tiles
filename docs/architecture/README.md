@@ -29,6 +29,21 @@ compatibility obligations.
 
 ## Foundation-first scope
 
+Every later foundation slice follows the same gate: independently define the
+required invariants and domain, assign one owner to each decision, audit the
+existing code and oracle, record retain/rework/replace/remove dispositions, and
+settle the representation and evidence plan before implementation. Resolve a
+failed proof by correcting its owner or explicitly narrowing the declared
+domain, rather than adding a permissive fallback. Build the resulting vertical
+slice, then require an independent nonauthor review and final-artifact checks.
+These are engineering steps within authorized work, not extra approval pauses.
+
+Future development should build on validated representations and clear
+dependencies. A feature field or module move is insufficient when an underlying
+coordinate, identity, failure or ownership contract remains implicit. Bounded
+acceptance is useful only when its remaining obligations are explicit; passing
+an old suite must not silently promote those obligations to accepted behavior.
+
 The first implementation scope is **F0: the shared job/publication plumbing used
 by a real package-conversion path through Rust, CLI and Python**, tracked in
 [implementation issue #115](https://github.com/BenDyson-Arch/rusty-tiles/issues/115). The full mesh
