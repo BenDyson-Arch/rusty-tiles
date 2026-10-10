@@ -1,10 +1,22 @@
 //! Local, read-only preview of explicitly selected outputs and a Cesium IIFE runtime.
 use crate::Error;
+use futures_util::TryStreamExt;
+use http_body_util::{combinators::BoxBody, BodyExt, Full, StreamBody};
+use hyper::body::{Bytes, Frame, Incoming};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Method, Request, Response};
+use hyper_util::rt::TokioIo;
 use serde_json::{json, Map, Value};
-use std::fs::File;
-use std::io::{Read, Write};
+use std::convert::Infallible;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
-use tiny_http::{Header, Method, Request, Response, Server};
+use std::sync::Arc;
+use tokio::fs::File;
+use tokio::net::TcpListener;
+use tokio_util::io::ReaderStream;
+
+type Body = BoxBody<Bytes, io::Error>;
 
 pub const MANIFESTS: [(&str, &str); 5] = [
     ("point-cloud", "tileset.json"),
@@ -68,74 +80,76 @@ impl Preview {
         None
     }
 
-    fn respond(&self, request: Request) {
-        if !matches!(request.method(), Method::Get | Method::Head) {
-            let _ = request.respond(
-                headers(
-                    Response::from_string("Method not allowed").with_status_code(405),
-                    "text/plain",
-                )
-                .with_header(header("Allow", "GET, HEAD")),
-            );
-            return;
+    async fn respond(&self, request: Request<Incoming>) -> Response<Body> {
+        if !matches!(*request.method(), Method::GET | Method::HEAD) {
+            let mut response = full(405, "text/plain", "Method not allowed");
+            response
+                .headers_mut()
+                .insert("Allow", "GET, HEAD".parse().unwrap());
+            return response;
         }
-        let encoded = request.url().split(['?', '#']).next().unwrap_or("");
-        let Ok(path) = percent_encoding::percent_decode_str(encoded).decode_utf8() else {
-            let _ = request.respond(headers(Response::empty(400), "text/plain"));
-            return;
+        let Ok(path) = percent_encoding::percent_decode_str(request.uri().path()).decode_utf8()
+        else {
+            return full(400, "text/plain", Bytes::new());
         };
         match path.as_ref() {
-            "/" | "/index.html" => {
-                let _ = request.respond(headers(
-                    Response::from_data(include_bytes!("../preview/index.html").as_slice()),
-                    "text/html; charset=utf-8",
-                ));
-            }
-            "/config.json" => {
-                let _ = request.respond(headers(
-                    Response::from_data(self.config.as_slice()),
-                    "application/json",
-                ));
-            }
+            "/" | "/index.html" => full(
+                200,
+                "text/html; charset=utf-8",
+                Bytes::from_static(include_bytes!("../preview/index.html")),
+            ),
+            "/config.json" => full(200, "application/json", self.config.clone()),
             path => {
                 if let Some(target) = self.file(path) {
-                    if let Ok(file) = File::open(&target) {
-                        let _ = request.respond(headers(Response::from_file(file), mime(&target)));
-                        return;
+                    if let Ok(file) = File::open(&target).await {
+                        if let Ok(metadata) = file.metadata().await {
+                            // The body owns the file; Hyper polls it only as the
+                            // socket can accept bytes. HEAD retains its length
+                            // and Hyper suppresses the body without reading it.
+                            let body = StreamBody::new(ReaderStream::new(file).map_ok(Frame::data))
+                                .boxed();
+                            return response(200, mime(&target), metadata.len(), body);
+                        }
                     }
                 }
-                let _ = request.respond(headers(Response::empty(404), "text/plain"));
+                full(404, "text/plain", Bytes::new())
             }
         }
     }
 
-    /// Bind only after every directory selection has been validated. Four
-    /// file-streaming workers avoid loading tile payloads into memory.
+    /// Each accepted socket owns an independent HTTP/1 task. Idle or persistent
+    /// clients yield the executor instead of occupying shared reader workers.
     pub fn serve(self, host: &str, port: u16, json_output: bool) -> Result<(), Error> {
-        let server = Server::http((host, port))
-            .map_err(|error| Error::Environment(format!("cannot bind preview: {error}")))?;
-        let address = server
-            .server_addr()
-            .to_ip()
-            .ok_or_else(|| Error::Environment("preview has no TCP address".into()))?;
-        let url = format!("http://{address}/");
-        if json_output {
-            let config: Value = serde_json::from_slice(&self.config)?;
-            println!("{}", json!({"ok":true,"url":url,"layers":config}));
-        } else {
-            println!("Preview: {url}");
-        }
-        std::io::stdout().flush()?;
-        std::thread::scope(|scope| {
-            for _ in 0..4 {
-                scope.spawn(|| {
-                    for request in server.incoming_requests() {
-                        self.respond(request);
-                    }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()?;
+        runtime.block_on(async move {
+            let listener = TcpListener::bind((host, port))
+                .await
+                .map_err(|error| Error::Environment(format!("cannot bind preview: {error}")))?;
+            let url = format!("http://{}/", listener.local_addr()?);
+            if json_output {
+                let config: Value = serde_json::from_slice(&self.config)?;
+                println!("{}", json!({"ok":true,"url":url,"layers":config}));
+            } else {
+                println!("Preview: {url}");
+            }
+            std::io::stdout().flush()?;
+            let preview = Arc::new(self);
+            loop {
+                let (stream, _) = listener.accept().await?;
+                let preview = Arc::clone(&preview);
+                tokio::spawn(async move {
+                    let service = service_fn(|request| async {
+                        Ok::<_, Infallible>(preview.respond(request).await)
+                    });
+                    // A disconnected or malformed client ends its own task.
+                    let _ = http1::Builder::new()
+                        .serve_connection(TokioIo::new(stream), service)
+                        .await;
                 });
             }
-        });
-        Ok(())
+        })
     }
 }
 
@@ -155,13 +169,21 @@ fn selected_root(name: &str, path: &Path, manifest: &str) -> Result<PathBuf, Err
     Ok(root)
 }
 
-fn header(name: &str, value: &str) -> Header {
-    Header::from_bytes(name, value).expect("static HTTP header")
+fn full(status: u16, content_type: &'static str, bytes: impl Into<Bytes>) -> Response<Body> {
+    let bytes = bytes.into();
+    let length = bytes.len() as u64;
+    let body = Full::new(bytes).map_err(|never| match never {}).boxed();
+    response(status, content_type, length, body)
 }
-fn headers<R: Read>(response: Response<R>, content_type: &str) -> Response<R> {
-    response
-        .with_header(header("Content-Type", content_type))
-        .with_header(header("Cache-Control", "no-cache"))
+
+fn response(status: u16, content_type: &'static str, length: u64, body: Body) -> Response<Body> {
+    Response::builder()
+        .status(status)
+        .header("Content-Type", content_type)
+        .header("Content-Length", length)
+        .header("Cache-Control", "no-cache")
+        .body(body)
+        .expect("static HTTP response headers")
 }
 fn mime(path: &Path) -> &'static str {
     match path
