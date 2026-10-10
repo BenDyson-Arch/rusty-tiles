@@ -84,3 +84,12 @@ accepted the bounded local implementation with no identified material blocker.
 The final formatting check passed on the same 112-file production source pin.
 Exact remote CI, installed wheel, official Blender and final package/tree gates
 remain required before merging into develop.
+
+[Packaging check migration](production_evidence/20261011-packaged-check/index.json)
+retains the original failure and corrected real script execution. The script
+now requires R2 `report.json`; its original `conversion.json` assertion failed
+after successful raster publication. With that sole filename change the script
+passed using the same accepted native binary under a PATH without Python.
+Source08 production remains byte-identical and the script is separately pinned.
+Index SHA-256: `b072cb45f79d5e8de11f67a4d04def6448a6762b13a81498da2acc4d94d533bc`. This current-host check does not establish Docker
+or network isolation; the exact-head container job remains required.
