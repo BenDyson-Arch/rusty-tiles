@@ -1426,23 +1426,36 @@ pub(crate) mod tests {
     }
     #[test]
     fn selected_directory_read_and_seek_faults_are_not_retried_or_reclassified() {
-        let bytes = indexed(&[Record::stored(b"tileset.json", b"{}")]);
+        let mut manifest = Record::stored(b"tileset.json", b"{}");
+        manifest.central_extra = extra(0x9999, b"opaque");
+        let bytes = indexed(&[manifest]);
         let length = bytes.len();
-        let offset = directory(&bytes) as u64;
-        for seek_fault in [false, true] {
-            let source = DirectoryFault {
-                inner: Cursor::new(bytes.clone()),
-                offset,
-                seek_fault,
-            };
-            let expected = if seek_fault {
-                io::ErrorKind::PermissionDenied
-            } else {
-                io::ErrorKind::InvalidData
-            };
-            assert!(
-                matches!(StoredArchive::new(source, length as u64, &natural_limits(length)), Err(ReadError::Io(e)) if e.kind() == expected)
-            );
+        let directory = directory(&bytes) as u64;
+        // Separate actual reads/seeks of the fixed header, raw name, and a
+        // nonempty framed extra must all retain their underlying I/O cause.
+        for offset in [
+            directory,
+            directory + 46,
+            directory + 46 + b"tileset.json".len() as u64,
+        ] {
+            for seek_fault in [false, true] {
+                let source = DirectoryFault {
+                    inner: Cursor::new(bytes.clone()),
+                    offset,
+                    seek_fault,
+                };
+                let (expected_kind, expected_cause) = if seek_fault {
+                    (
+                        io::ErrorKind::PermissionDenied,
+                        "actual directory seek cause",
+                    )
+                } else {
+                    (io::ErrorKind::InvalidData, "actual directory read cause")
+                };
+                assert!(
+                    matches!(StoredArchive::new(source, length as u64, &natural_limits(length)), Err(ReadError::Io(e)) if e.kind() == expected_kind && e.to_string() == expected_cause)
+                );
+            }
         }
     }
 

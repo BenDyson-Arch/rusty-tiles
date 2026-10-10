@@ -46,6 +46,7 @@ jobs:
           python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"
           python3 -B bench/architecture_audit/c1/resource_probe.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-resources" --output "${{ runner.temp }}/c1-resources.json"
           python3 -B tests/c1_producer_alignment.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-producer" --output "${{ runner.temp }}/c1-producer.json"
+          python3 -B tests/archive_read_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/archive-read-corpus" --output "${{ runner.temp }}/c1-archive-read.json"
       - name: Retain validation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
