@@ -1,5 +1,7 @@
 //! Private, bounded format meaning. Callers own paths, policy and causal I/O.
 pub(crate) mod json;
+pub(crate) mod meshopt;
+pub(crate) mod numbers;
 pub(crate) mod payload;
 
 #[derive(Clone, Copy, Debug)]

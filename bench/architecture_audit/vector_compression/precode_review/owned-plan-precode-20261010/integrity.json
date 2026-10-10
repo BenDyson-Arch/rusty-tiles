@@ -1,0 +1,21 @@
+{
+  "immutableAdditiveSourceReview": true,
+  "files": {
+    "decisions.json": {
+      "sha256": "b4943cc8b7920c1db4cb64dd72dbd2a45dda23bf324c19e6c9549baf6ca6b57c",
+      "bytes": 1108
+    },
+    "input-pins.json": {
+      "sha256": "ad72547d3230ad6a8497d0c656ede8cabdc9e7ffaa9ae85ddd26dcadbe3e365c",
+      "bytes": 2787
+    },
+    "review.md": {
+      "sha256": "3e4a17fb9303b05491ecbd0a2210ba77bb4f3336e5141defa96ad2df068ef53f",
+      "bytes": 7113
+    },
+    "static-check.json": {
+      "sha256": "8543896518b12ceb1f78659f1dcb2a73aa988ce13888a039329d88d08bce4e52",
+      "bytes": 692
+    }
+  }
+}

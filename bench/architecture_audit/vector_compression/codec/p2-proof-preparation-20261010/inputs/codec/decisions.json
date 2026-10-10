@@ -1,0 +1,195 @@
+{
+  "record": "Small concrete vector GLB compression owner contract decisions",
+  "status": "PRECODE DRAFT; coordinator asked for proposals, not implementation approval. C1 acceptance and independent whole-slice review remain gates.",
+  "source_commit": "2ebfb749e9d71fdb72507fd1203472b226f23156 (coordinator provided)",
+  "created_at_utc": "2026-10-10T11:11:56.686758+00:00",
+  "support_domain": {
+    "mandatory_generated": [
+      "Unquantized FLOAT VEC3 stride12",
+      "normalized U16 VEC3 stride8 including padding and authored dequantization node",
+      "padded U16/f32 SCALAR feature IDs and exact feature/table associations",
+      "POINTS/LINE_STRIP/TRIANGLES and U32 restart/polygon offset/loop streams",
+      "fill-only GLB core material/unlit properties",
+      "BOOLEAN/INT64/FLOAT64/UTF8+UINT32 stringOffsets/noData",
+      "GeoJSON/native list_fields=json array strings preserving order/exact integers/null",
+      "currently generated optional meshopt ATTRIBUTES/NONE output accepted by identity branch after bounded stream integrity"
+    ],
+    "independent_external_preservation": [
+      "One embedded buffer uncompressed GLBs within declared core/extension profile; no generator trust",
+      "Repeated compatible view/accessor references with differing counts/offsets",
+      "Interleaved vertex attributes with explicit core stride and finite valid windows",
+      "SCALAR,VEC2/3/4,MAT2/3/4 with core component layouts including final matrix-column padding omission",
+      "Raw fixed/variable structural arrays, UINT64, metadata shared references and complete raw schema/extras values",
+      "Already-compressed one embedded buffer + canonical no-URI fallback profile, ATTRIBUTES/NONE only, copied bit-identically after bounded stream decode"
+    ],
+    "claim_boundary": "Lossless admitted bufferView bytes/order and unchanged declared core/known-extension associations; structural/range admission and compressed stream integrity. Not complete glTF/material/metadata/source fidelity validation, no geometry reordering/quantization/error promise, no interpretation of arbitrary application byte-offset protocols in extras."
+  },
+  "extension_profile": [
+    "EXT_mesh_features (pinned draft)",
+    "EXT_structural_metadata (pinned draft)",
+    "EXT_mesh_polygon (pinned draft)",
+    "KHR_mesh_primitive_restart (pinned draft)",
+    "KHR_mesh_quantization",
+    "KHR_materials_unlit",
+    "EXT_meshopt_compression"
+  ],
+  "shape_decisions": [
+    {
+      "case": "Source buffers",
+      "decision": "Uncompressed input exactly one no-URI embedded buffer0. Already-compressed identity profile embeds buffer0 plus one no-URI fallback buffer1 with no external bytes, all placeholder references covered by declared EXT_meshopt. External/data-URI/additional buffers Unsupported; nonexistent/out-of-range references InvalidInput."
+    },
+    {
+      "case": "Containers",
+      "decision": "GLB2 JSON then BIN with exact envelope/known padding. Core-only padding has zero BIN slack0..3; declared EXT_structural_metadata uses the explicit absolute8-byte boundary policy below and zero BIN slack0..7. Identity input must already satisfy its selected policy. Unknown extra chunks Unsupported before transform, not silently dropped; malformed envelope/missing declared embedded BIN InvalidInput. No b3dm/gltf source mode in codec."
+    },
+    {
+      "case": "Sparse accessors",
+      "decision": "Valid sparse representation Unsupported in first profile; neither generated builder emits it. Do not conflate this deliberate source disposition with missing ordinary viewless zero-initialized accessors, which can remain unchanged if another admitted BIN/view gives this operation a resource consumer."
+    },
+    {
+      "case": "Metadata",
+      "decision": "All property values/stringOffsets/arrayOffsets refs identify raw views. Metadata-only or metadata+accessor shared views are raw; every referenced index/range/declared component alignment remains checked. No reauthoring of schema/count/class/noData/default/offset/scale/enum/application list encoding."
+    },
+    {
+      "case": "Repeated/overlapping views",
+      "decision": "Repeated references to one view charge/plan once. Distinct overlapping view objects are preserved separately and charge each logical length once; aggregate cap bounds duplication. Do not equate aliasing with corruption."
+    },
+    {
+      "case": "Physical stream selection",
+      "decision": "Raw after valid accessor-window checks if no dense accessor-backed consumer, if metadata/image role present, if effective strides disagree, if selected stride S is not positive/divisible4/<=256, or if whole view length not divisible by selected stride. Otherwise ATTRIBUTES/NONE: explicit parent stride or one agreed effective reference stride, count=whole_length/stride. This deterministic eligibility is codec policy, not a glTF validity rule or runtime fallback after a failed codec."
+    },
+    {
+      "case": "Shared/interleaved/matrices",
+      "decision": "Valid windows may have different count/offset but retain agreed physical stride; interleaving uses explicit parent stride. Tight matrices use padded column footprint as effective stride, occupied bytes separately; partial last padding remains raw. Heterogeneous natural strides without parent stride remain raw and are preserved, not rejected as malformed."
+    },
+    {
+      "case": "Existing compressed",
+      "decision": "If any compressed views exist, require canonical finite ATTRIBUTES/NONE identity profile and validate every compressed bitstream within decoded aggregate budget, then return original GLB bytes unchanged. Mixed raw metadata stays unchanged. No reading virtual fallback bytes, no decompression/recompression or new layout. Other valid modes/filters/noncanonical buffer graphs Unsupported."
+    },
+    {
+      "case": "Unknown extensions",
+      "decision": "Unknown declared extensions and unknown actual extensions at applicable core object positions Unsupported before mutation, not merely buffer/view scans. Known extension bodies and opaque schema/extras retain raw values; do not classify arbitrary application keys inside them as glTF extension occurrences. Any image.uri (including data URI) and metadata.schemaUri Unsupported in this first self-contained profile; embedded bufferView images and inline schemas retain admitted associations. This excludes no currently generated source. Valid input must obey declared core/extension profile; no hidden undeclared extension or application raw-byte-offset protocol preservation claim."
+    },
+    {
+      "case": "All raw",
+      "decision": "If no view is eligible for compression, identity output; no synthetic meshopt declaration or buffer rewrite. This preserves valid external matrices/metadata-only cases and reports zero newly encoded views."
+    }
+  ],
+  "representation": {
+    "input": "Immutable GLB bytes owned by caller. Check envelope, call accepted post-C1 json::admit with explicit limits and borrow CheckedDocument raw. Decode only consumed field names/types and exact unsigned scalar dimensions/references; opaque raw values never materialize through Value.",
+    "plan": "Private non-clone consumed Plan borrowing input, bounded root/buffer/view raw field pairs, one ViewPlan per actual view, checked accessor window/role summaries and counts; no public IR/context/registry. Typed choice Identity or Repack is representation state, not compatibility switch.",
+    "rewrite": "RawValue-backed custom root/buffer/view serializers. Replaced keys only buffers/bufferView.buffer and byteOffset plus EXT_meshopt bookkeeping/extensionsUsed/Required; preserve other original raw value subtrees. Original buffer0 name/extras retained. Serialize first through bounded CountWriter, then directly into exact-reserved final GLB; no separate output JSON Vec. Both passes borrow settled actual encoded range facts and invoke no user callbacks during serialization.",
+    "numeric_owner": "After C1 acceptance, review moving/exposing its exact unsigned lexeme interpreter privately at consumed common boundary. It is payload-private now and earns no new reuse acceptance by this draft. No duplicated float-based parser, no public exact-number utility.",
+    "producer": "Existing producer may serialize authored Value+BIN once into this same raw planner; extra byte owner and allocation accounted explicitly. Implement small producer bridge, not independent source interpretation. Producer never invokes standalone path operation."
+  },
+  "interface": {
+    "signature": "prepare<E>(input:&[u8], limits:ValidatedCompressionLimits, checkpoint:impl FnMut()->Result<(),E>) -> Result<Plan,CodecError<E>>; encode<E>(plan:Plan, checkpoint:impl FnMut()->Result<(),E>) -> Result<Encoded,CodecError<E>>",
+    "errors": "CodecError<E> = Format(InvalidInput/Unsupported/ResourceLimit), Checkpoint(E), EncodingFailure(stage). Preserve original callback cause; no runtime imports or string matching. Corrupt decoder bitstream InvalidInput; zero/invalid encoder result under admitted plan EncodingFailure, not invented bad-source evidence. Standalone EncodingFailure maps to JobError InvalidState retaining codec cause. Producer malformed/Unsupported authored source maps to internal InvalidState; ResourceLimit remains typed ResourceLimit through fits_feature and final encode, never FeatureRejected or skip_invalid. Checkpoint preserves the original causal error and the existing Attempt.",
+    "checkpoints": "Before/after bounded JSON admission; each view/decoder/encoder work unit; before/after counted serialization and final materialization. Native per-view codec and <=1MiB JSON scan are admitted indivisible stages. Caller owns cancellation/first cause and final publication.",
+    "result": "Owned candidate bytes + finite facts actually consumed by report: before/after bytes, views/raw/newly compressed/already compressed counts, accessors and admitted logical/decoded work. No scene/bounds/metadata facts or unused prepared A2 framework."
+  },
+  "defaults": [
+    {
+      "field": "source_bytes",
+      "proposed_default": 33554432,
+      "rationale": "32MiB finite captured GLB; ordinary generated vector target is4MiB, headroom for precompression and metadata. Caller may choose other finite values; no current-generated semantic use is excluded by shape.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "json_bytes",
+      "proposed_default": 1048576,
+      "rationale": "1MiB raw document covers generated schemas/primitive bookkeeping; array values are binary UTF8 strings, not duplicated JSON in this document. Large field/metadata corpus still needs probe.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "json_depth",
+      "proposed_default": 64,
+      "rationale": "Finite recursion-independent admitted nesting; intentionally matches familiar shallow profile but independently selected for this operation, no nested C1 default call.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "json_value_nodes",
+      "proposed_default": 65536,
+      "rationale": "Finite raw structural traversal/field/reference work, including opaque extras; source/node bound storage, not allocator/RSS promise.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "views",
+      "proposed_default": 4096,
+      "rationale": "Finite physical plans; sufficient proposed headroom for generated metadata columns and three geometry batches, needs many-field controls.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "accessors",
+      "proposed_default": 4096,
+      "rationale": "Finite accessor descriptors/reference-window work, separate from view count; no unused geometry facts or component scanning.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "aggregate_view_bytes",
+      "proposed_default": 33554432,
+      "rationale": "Sum logical lengths of each unique view object once, including decoded compressed lengths and raw metadata. Stops overlapping source ranges multiplying work/output while allowing references to one view without repeated charge.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "output_glb_bytes",
+      "proposed_default": 67108864,
+      "rationale": "64MiB permits incompressible encoded data and per-view overhead; no promise compression reduces size.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    },
+    {
+      "field": "estimated_requested_working_bytes",
+      "proposed_default": 134217728,
+      "rationale": "128MiB threshold on explicitly documented engineering requested-storage model; combines phase costs, not a process memory guarantee. Coefficients must be audited against actual structures before acceptance.",
+      "status": "DRAFT, no executed admission/resource acceptance"
+    }
+  ],
+  "formulae": {
+    "matrix": "w in1/2/4; rows/cols from shape; column=align4(rows*w) for matrix else rows*w; effective_tight=cols*column; occupied=(cols-1)*column+rows*w; window=offset+(count-1)*effective_stride+occupied. Check source absolute/component/vertex alignment and range separately.",
+    "generic_attributes_bound": "S positive divisible4 <=256; b=min(256,16*floor(8192/(16*S))); c=ceil(N/b); h=ceil(b/64); B=1+c*S*(S/4+h+b)+max(32,S+S/4). Checked arithmetic, host/isize/u32 domain, ceil via quotient/remainder. Current4/8/12 gives1+ceil(N/256)*S*(S/4+260)+32. Actual meshopt0.6.2 vendor pin in audit.json.",
+    "binary_bound": "U<=sum(raw lengths)+sum(B per eligible physical view)+7*V, before final selected chunk padding. T_upper includes final core align4 or metadata align8; checked7-byte metadata slack must not be charged as only3. Compute fallback virtual size separately from aligned original compressed view lengths; do not allocate placeholder.",
+    "json_delta_bound": "J_out<=J_in+512*V+1024 proposed conservative targeted replacement bound for fixed meshopt/buffer fields and bounded numeric decimal widths; audit exact serializer/string-key behavior and verify CountWriter against actual bytes before retention. Never take this as proven current encode_glb behavior.",
+    "glb": "Core-only T=28+align4(J_out_actual)+align4(BIN_actual). Declared EXT_structural_metadata: j8=align8(20+J_out_actual)-20, BIN payload start=28+j8 divisible8, BIN padded length=align8(BIN_actual), T=28+j8+align8(BIN_actual). JSON chunk end20+j8 and final GLB end are absolute8-byte aligned; core chunk lengths remain multiples4. This is the proposed owning interpretation of pinned structural metadata Binary Data Storage lines523\u2013528, requiring sensitive absolute-offset controls before retention. Count actual postencode JSON before final allocation; reject checked output limit beforehand using the matching conservative formula and confirm actual limits afterward. No retroactive claim that C1 inspects/adopts metadata padding.",
+    "decoder": "D=N*S per actual compressed stream; total unique logical view lengths <=aggregate_view_bytes. Existing C1 aligned-word decode helper allocates4*ceil(D/4)+D <=2D+3 requested bytes if both backing and copy coexist. Use a narrow actual-consumed stream helper after C1 accepted, not its full payload inspector or a retained decoded-array framework. Proposed postacceptance extraction may validate then discard backing without copy, but no reduction is accepted before source/ABI review. Release scratch before next view; no allocator/RSS guarantee.",
+    "working_estimate": "E_JSON=8J+256K+65536; E_PLAN=2J+128K+256(V+A), D_stage<=2Dmax+3. E_peak=max(I+65536,I+E_JSON,I+E_PLAN+D_stage+65536,I+E_PLAN+U+T_upper+65536)+1024+actual caller path storage+live producer bridge bytes. No separate output JSON Vec. Explicit coefficients are draft engineering estimates, not hard mathematical memory guarantees; prove actual capacity accounting before code/acceptance."
+  },
+  "primary_basis": "See audit.json primary_invariants and exact primary/primary-receipt.json. Core1124-1141 binds effective accessor windows; meshopt73-87 binds parent stride only when defined and decoded whole length. Agreed reference stride is this codec policy, not a primary mandatory equality.",
+  "C1_stride_gate": "Root reproduced absent-parent packed unused SCALAR refusal at2ebfb749 and is independently adjudicating. This draft must not justify/retain C1 redundant effective-stride equality. Proposed agreed stream records retain efficient actual generated layouts for their own byte-preserving codec rationale; normative defect/fix acceptance remains separate.",
+  "sensitive_acceptance": "Audit.json G1-G9 plus newly required identity-compressed corrupt-bitstream/refusal controls, heterogeneous/partial-tail raw-preservation controls, padding-sensitive matrices/interleaving, exact physical count distinct from accessor count, CountWriter-vs-materialized JSON, default/raised-cap interactions and callbacks per view. Independent input/output struct/Decimal/table readers; pinned external decoder with documented shared kernel lineage and literal upstream golden vectors.",
+  "disposition": {
+    "retain": "Full source-generated semantics, bounded accepted C1 raw/codec helpers only after actual consumed reuse review, ATTRIBUTES/NONE and8-byte metadata placement after controls.",
+    "rework": "Physical view plan/ranges/roles, exact lexemes, raw rewrite serializers, existing compressed identity validation, requested capacity/resource accounting and producer bridge.",
+    "replace": "Last accessor wins, Value roundtrip for raw source, buffer selector assumptions, unchecked FFI/output bounds, destructive extension object replacement.",
+    "remove": "Superseded source codec transform/classifier after both callers migrate; old public mutator/hidden adapter paths under separate lifecycle ownership."
+  },
+  "genuine_blockers_before_implementation": [
+    "C1 final acceptance/merge, including new stride question.",
+    "Independent whole-slice precode review of identity-compressed inclusion/decoder extraction and external preservation domain.",
+    "Exact parser/plan requested capacity source audit; engineer estimate coefficients/default corpus/resource probes cannot yet be called proved.",
+    "Raw output serializer/count/bound and producer bridge ownership proved on small controls before production representation retained.",
+    "Finalize runtime typed resource/codec/checkpoint cause mapping and source/path/lifecycle/adapters with other lane."
+  ],
+  "approval_status": "No field/default/profile/helper extraction is implementation-approved by this file. These are concrete reviewable proposed contract decisions; source/primary observations distinguished from unexecuted controls and acceptance.",
+  "pointers": {
+    "read_audit": "audit.json",
+    "primary": "primary/primary-receipt.json",
+    "lifecycle": "../lifecycle/contract-draft.md",
+    "controls": "/tmp/rusty-tiles-payload-stride-controls (frozen separate additive C1 lane; not codec acceptance)"
+  },
+  "precode_review_corrections": {
+    "status": "Concrete revised DRAFT decisions, no production or execution acceptance",
+    "basis": "Separate nonauthor precode review requested by coordinator",
+    "decisions": [
+      "Codec eligibility S positive/divisible4/<=256 else Raw",
+      "Owning metadata absolute8-byte chunk boundary/padding formula and0..7 BIN slack",
+      "Self-contained image URI/schema URI Unsupported and actual extension-position scan",
+      "Narrow consumed stream helper, no full payload inspector reuse",
+      "Producer ResourceLimit/checkpoint causal propagation and internal EncodingFailure mapping"
+    ],
+    "gates": [
+      "Focused byte-offset padding controls",
+      "Actual raw rewrite and requested capacity proof",
+      "C1 acceptance and whole-slice independent review"
+    ]
+  }
+}

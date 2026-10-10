@@ -1,0 +1,18 @@
+{
+  "status": "STATIC_NONAUTHOR_PREEXECUTION_SCOPE_APPROVAL_ONLY",
+  "recorded_at_utc": "2026-10-10T13:17:07.025500+00:00",
+  "reviewer_task": "/root/vector_p3_nonauthor_review",
+  "root_coordinator": "soletwo-core/nice10",
+  "read_only_repository": "/tmp/rusty-tiles-vector-codec-foundation",
+  "target_or_oracle_executions": 0,
+  "repository_edits": 0,
+  "git_operations": 0,
+  "production_source_count": 97,
+  "production_source_mismatches": [],
+  "review_files_sha256": {
+    "review.md": "55d606035572ee36246753f282e57bf238fd336d2410e70eb70ca06e83a75551",
+    "decisions.json": "54bcf8147dd3680ee62f40cb93416bbd372b53c74c76cb26bea46df6f5a6c19a",
+    "input-pin.json": "f7631b908e1bb1e8d4f374c383f57938577b82866a1869098572f22cc40f90fb"
+  },
+  "later_final_executed_review_requires_new_epoch": true
+}

@@ -1,0 +1,150 @@
+{
+  "status": "18 model-only exact/max+1 descriptors; not source corpus/default/actual owner acceptance",
+  "cases": [
+    {
+      "field": "source_bytes",
+      "testedCap": 33554432,
+      "value": 33554432,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "source_bytes",
+      "testedCap": 33554432,
+      "value": 33554433,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_bytes",
+      "testedCap": 1048576,
+      "value": 1048576,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_bytes",
+      "testedCap": 1048576,
+      "value": 1048577,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_depth",
+      "testedCap": 64,
+      "value": 64,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_depth",
+      "testedCap": 64,
+      "value": 65,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_value_nodes",
+      "testedCap": 65536,
+      "value": 65536,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "json_value_nodes",
+      "testedCap": 65536,
+      "value": 65537,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "views",
+      "testedCap": 4096,
+      "value": 4096,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "views",
+      "testedCap": 4096,
+      "value": 4097,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "accessors",
+      "testedCap": 4096,
+      "value": 4096,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "accessors",
+      "testedCap": 4096,
+      "value": 4097,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "aggregate_view_bytes",
+      "testedCap": 33554432,
+      "value": 33554432,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "aggregate_view_bytes",
+      "testedCap": 33554432,
+      "value": 33554433,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "output_glb_bytes",
+      "testedCap": 67108864,
+      "value": 67108864,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "output_glb_bytes",
+      "testedCap": 67108864,
+      "value": 67108865,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "estimated_requested_working_bytes",
+      "testedCap": 134217728,
+      "value": 134217728,
+      "expected": "model_admitted",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    },
+    {
+      "field": "estimated_requested_working_bytes",
+      "testedCap": 134217728,
+      "value": 134217729,
+      "expected": "model_resource_refusal",
+      "otherCaps": "Raise other operation caps explicitly in future valid-source/native controls; descriptor alone proves only this inequality",
+      "actualExecution": false
+    }
+  ],
+  "zeroCases": "Zero depth restrictive valid; zero positive byte/cardinality policies invalid request. Host/u32/isize overflow must refuse before allocation; future actual owner probe required."
+}

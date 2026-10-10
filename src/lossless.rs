@@ -1,7 +1,7 @@
 //! Tile serialization. Meshopt is a byte codec here, never a quantizer.
 use crate::{
     error::Error,
-    glb::{self, FallbackOffsets, MeshoptLayout, MeshoptStream},
+    glb::{self, MeshoptLayout, MeshoptStream},
     glb_write::{self, TilePrimitive},
 };
 use serde_json::{json, Value};
@@ -10,7 +10,6 @@ use serde_json::{json, Value};
 /// `NONE` filter on every compressed view.
 const MESH_MESHOPT: MeshoptLayout = MeshoptLayout {
     align: 4,
-    fallback: FallbackOffsets::Source,
     explicit_filter: true,
 };
 

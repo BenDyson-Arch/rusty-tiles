@@ -1,0 +1,13 @@
+{
+  "status":"Independently authored unexecuted source/expected logical rows, not producer acceptance",
+  "source":"p4-producer.geojson",
+  "request_choices":{"source_crs":"local","list_fields":"json","jobs":2,"meshopt":true,"quantize_cases":[false,true],"skip_invalid":true,"lod_levels":1},
+  "expected_geometry":[[1,2,3],[4,5,6]],
+  "expected_properties":[
+    {"source_id":"source-a","label":"alpha","enabled":true,"integer":1152921504606846979,"real":0.125,"ordered_json_semantics":[9007199254740993,null,2]},
+    {"source_id":"source-b","label":"beta🚀","enabled":false,"integer":-1152921504606846979,"real":-0.25,"ordered_json_semantics":[2,1]}
+  ],
+  "probe":"Inject only one reached typed codec failure at fitting or final encode from p4_cases; this valid source must not itself generate rejected-feature warnings",
+  "reference":"Compare actual full decoded table IDs/rows and points independently, preserving integer/list order/null/UTF8. Quantized coordinate allowance belongs to existing producer certificate; compression itself must keep authored candidate bytes.",
+  "proof_limits":"This tiny source does not cover polygon/line/restart/full G1-G9, schema noData, source geometry fidelity or all producer defaults. It supplies a concrete input for bounded ResourceLimit/error/bridge probes without large generation."
+}

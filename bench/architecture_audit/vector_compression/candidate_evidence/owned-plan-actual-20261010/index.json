@@ -1,0 +1,962 @@
+{
+  "scope": "actual bounded owned Plan prototype only;52focusedcommands+checker18controls, production/semantics/defaultempirical/wholeP2-P5 held",
+  "records": [
+    {
+      "retainedMember": "execution/checked-capacity-controls.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/checked-capacity-controls.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0000.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/checked-capacity-controls.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/checked-capacity-controls.stdout",
+      "bytes": 97,
+      "sha256": "79f5d42b6cf54014d3970e5d825cb87b32ddf8d6dedfd1cba07d7a2d729202eb",
+      "retainedFile": "0001.gz",
+      "gzipSha256": "28a143a8ed0c754d209f97c453dd553698419355e78615f80f6c49936d979414"
+    },
+    {
+      "retainedMember": "execution/compile-owned-plan.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/compile-owned-plan.stderr",
+      "bytes": 25768,
+      "sha256": "d0e21c1dd42a71161cebdb0e4500758a99e7118c6eded78981cf4094794521d3",
+      "retainedFile": "0002.gz",
+      "gzipSha256": "5e2074725a6cfc282562be6f280965ba528c4eed257b91fe975d8438c7637c3a"
+    },
+    {
+      "retainedMember": "execution/compile-owned-plan.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/compile-owned-plan.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0003.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/declarations-already-present.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-already-present.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0004.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/declarations-already-present.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-already-present.stdout",
+      "bytes": 5060,
+      "sha256": "a76c7411d8e79b5f58240ec80601ab0e0d2c52720ccf7ca46086bc4180c775e3",
+      "retainedFile": "0005.gz",
+      "gzipSha256": "4360530dd0e21e41b759360ff426258368fe885ba303d3beb2cda214aa91ae8e"
+    },
+    {
+      "retainedMember": "execution/declarations-missing.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-missing.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0006.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/declarations-missing.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-missing.stdout",
+      "bytes": 5059,
+      "sha256": "21627c08779171a2d2b53f00d5b3190eabb6b5fb062a5856119f49257e846a2b",
+      "retainedFile": "0007.gz",
+      "gzipSha256": "df005856ee933b37f4d714743c3e3987ecd0b2a55889bc28ea40e552b5b10f53"
+    },
+    {
+      "retainedMember": "execution/declarations-other-required.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-other-required.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0008.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/declarations-other-required.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-other-required.stdout",
+      "bytes": 5059,
+      "sha256": "336a76b252c901161a0ee1d1fe6ce22f698d47dc38b1ab151de4d8f97f689f10",
+      "retainedFile": "0009.gz",
+      "gzipSha256": "718c34ec04ead609008ace50850b9970633e896d32930a8a9a954bec558df955"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling-exact-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-exact-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0010.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling-exact-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-exact-work.stdout",
+      "bytes": 28530,
+      "sha256": "2e6962bd4e6f01a949dbcff8235f26e0045d75e1fe0494a47aca1581f7e423bf",
+      "retainedFile": "0011.gz",
+      "gzipSha256": "e45b17acb8ae23e94ab0d93a58a4f51f0ae9d84027d2279ac7b1f3dbaae6ef02"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling-one-below-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-one-below-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0012.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling-one-below-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-one-below-work.stdout",
+      "bytes": 712,
+      "sha256": "31ef62b9c105ccd0a091bfad916f7f1075381b18925342f782024f585d7f12a7",
+      "retainedFile": "0013.gz",
+      "gzipSha256": "0f490fe044e85b5f98eec04d96f41f62e40205fd39929ed7acc3762acd9afa03"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0014.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/deep-chain-wide-sibling.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling.stdout",
+      "bytes": 28530,
+      "sha256": "30ff9b686306ad45bc92c0af74d60844a3b3ba5793fd951b9b31eee26c6ab3e9",
+      "retainedFile": "0015.gz",
+      "gzipSha256": "0776049095f27b5d3f22ecce36d17f999a2c161fcf8310ac04ba00913d696fd1"
+    },
+    {
+      "retainedMember": "execution/distinct-overlapping-physical-views.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/distinct-overlapping-physical-views.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0016.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/distinct-overlapping-physical-views.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/distinct-overlapping-physical-views.stdout",
+      "bytes": 3873,
+      "sha256": "5bdc8323c5523e7ae576248183f7a29b43b82190ffc2b50f89f5dd15bab70630",
+      "retainedFile": "0017.gz",
+      "gzipSha256": "dda6e34e5b741e9c85603894a38cc48dd5bd5d29171cb830de4086bbf9f0071d"
+    },
+    {
+      "retainedMember": "execution/escaped-key-cardinality.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-key-cardinality.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0018.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/escaped-key-cardinality.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-key-cardinality.stdout",
+      "bytes": 5124,
+      "sha256": "fcbeb6c1098a309f90fc4cb95482d7be9e9f9ce150bfe938c33b882002329edb",
+      "retainedFile": "0019.gz",
+      "gzipSha256": "058c6c34395f2d86309bedf6518242cbf80c95edd1af299383af892e69e8e0bf"
+    },
+    {
+      "retainedMember": "execution/escaped-keys.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-keys.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0020.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/escaped-keys.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-keys.stdout",
+      "bytes": 5061,
+      "sha256": "ee00cb0fefa6ba3337809ce6bab77f530792a59ddd3969951305267cb338da84",
+      "retainedFile": "0021.gz",
+      "gzipSha256": "2ad4d5fb43a2a4efa06a4a670038b07cf3a972c873d42d8622b678e360ff95b0"
+    },
+    {
+      "retainedMember": "execution/fixture-selected-identity.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-identity.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0022.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/fixture-selected-identity.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-identity.stdout",
+      "bytes": 3622,
+      "sha256": "bbef834f7ff20376da0856890c7af3d0f0e8b5627caffa0d8a32c36ed3a078dd",
+      "retainedFile": "0023.gz",
+      "gzipSha256": "e86f37a69232f1986aac35d36ebb21a36ec332546225f067630b51ebd79accc4"
+    },
+    {
+      "retainedMember": "execution/fixture-selected-raw.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-raw.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0024.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/fixture-selected-raw.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-raw.stdout",
+      "bytes": 3617,
+      "sha256": "b9540b420df835bdd3a556e074a1a3283c02937f4a0c664e010df0f6737b4a61",
+      "retainedFile": "0025.gz",
+      "gzipSha256": "c05eb68e1d6224c7a4ea96e6ecad49e366098b4f3263bb861098747cffa6a5ae"
+    },
+    {
+      "retainedMember": "execution/forced-arena.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-arena.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0026.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-arena.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-arena.stdout",
+      "bytes": 719,
+      "sha256": "1eddc8cb47f3ea44047ac2fad3dce2efb769b4b8c93a5fe6ee454676275e86be",
+      "retainedFile": "0027.gz",
+      "gzipSha256": "40fd06698815cb17109edb14a57f6c79fdfae518dbf24b21f01568bf26064197"
+    },
+    {
+      "retainedMember": "execution/forced-candidate.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-candidate.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0028.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-candidate.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-candidate.stdout",
+      "bytes": 5053,
+      "sha256": "931fb5e8bf8026b638d642f6cacd9048c11f729bd4fbbe405bf876e5590fd5ed",
+      "retainedFile": "0029.gz",
+      "gzipSha256": "6297e6b591aa74f4bd3dc3b4e708a38ef3f6b4545b6e9df89e01c105bd0db6ac"
+    },
+    {
+      "retainedMember": "execution/forced-edits.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-edits.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0030.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-edits.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-edits.stdout",
+      "bytes": 3486,
+      "sha256": "3c374fc1f23b94f7e3c888029468a38418a69f2e272622ae0ebb82febb6898c3",
+      "retainedFile": "0031.gz",
+      "gzipSha256": "2d28c4101b2463a5afcbbe216f0781d8ec603903eef7263ab36801c1c0b563e2"
+    },
+    {
+      "retainedMember": "execution/forced-owned_key.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-owned_key.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0032.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-owned_key.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-owned_key.stdout",
+      "bytes": 2280,
+      "sha256": "21260d55d24e725c0697bb04e5c9ecef068c13a20effd7a87783ee27902f8e3b",
+      "retainedFile": "0033.gz",
+      "gzipSha256": "db0fc18a1d73b36ebfe9e6d0635f4285a787d30bfa6fc1ecfb2a282c5d68ba5e"
+    },
+    {
+      "retainedMember": "execution/forced-refs.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-refs.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0034.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-refs.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-refs.stdout",
+      "bytes": 1840,
+      "sha256": "f99fc8c71eaa4ea80555f60a06ac03e10cf2a28a87458000e728e26325447943",
+      "retainedFile": "0035.gz",
+      "gzipSha256": "59b479443ff051a03f5b6097b5ab73d94927ebf3fbfb4f48e0a6c3670c543d9b"
+    },
+    {
+      "retainedMember": "execution/forced-views.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-views.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0036.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/forced-views.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-views.stdout",
+      "bytes": 2944,
+      "sha256": "73930dae568f5829a16a5b5c494b23c17966521eb04a768865fff7eaa9cf47e4",
+      "retainedFile": "0037.gz",
+      "gzipSha256": "1513ea890ffa17b83c967a7fdfac7e6ccc4fe5a5866d1df57a365b9e70174f47"
+    },
+    {
+      "retainedMember": "execution/high-J-low-K.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-J-low-K.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0038.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/high-J-low-K.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-J-low-K.stdout",
+      "bytes": 4295,
+      "sha256": "b70c7f4c67322664a5667cc211e2ecb31f5b6b9b41e17cecded3cf1e41285bc4",
+      "retainedFile": "0039.gz",
+      "gzipSha256": "d44b31cbe2f1e7d50aab9cdec32d2627e90d2a52325b133d61556816172cfe0e"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality-exact-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-exact-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0040.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality-exact-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-exact-work.stdout",
+      "bytes": 1394730,
+      "sha256": "d507b3c4aada36024663df271ee7b207ec7429f3bc3adb59a77c16053fb81440",
+      "retainedFile": "0041.gz",
+      "gzipSha256": "1f350ce520d842eb4e590e2027c4e95a43e2ddaf75e8e1f4ed84535a724d3dcf"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality-one-below-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-one-below-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0042.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality-one-below-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-one-below-work.stdout",
+      "bytes": 728,
+      "sha256": "c81ced677b84ada1bb32a29b4ded30c18bd717e5830b316f80bc2dd471e5ad2c",
+      "retainedFile": "0043.gz",
+      "gzipSha256": "eb2988c0253f24aad1ecc2290ea0ab62250c60efe5cc36d72f1d581405159301"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0044.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/high-view-cardinality.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality.stdout",
+      "bytes": 1394730,
+      "sha256": "c86459fc04cba1eb043f8485e4a33fadf8eb8adad553175686018d5631de0c98",
+      "retainedFile": "0045.gz",
+      "gzipSha256": "f5d4c706dd572e3f602b352eeabbed753ab6c3e5e2ace72e3f126cb2ecce816b"
+    },
+    {
+      "retainedMember": "execution/independent-record-check.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/independent-record-check.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0046.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/independent-record-check.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/independent-record-check.stdout",
+      "bytes": 1991,
+      "sha256": "b38b95914599767ea6a1fd12022eb89208fe219d195ec1865da08d5150d13aaf",
+      "retainedFile": "0047.gz",
+      "gzipSha256": "42c6344c3d9e921bd0711cfd61b6125cd6dc30d0a9c05b86c9fbd82854c849a2"
+    },
+    {
+      "retainedMember": "execution/long-buffer-key-late-escape.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-buffer-key-late-escape.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0048.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/long-buffer-key-late-escape.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-buffer-key-late-escape.stdout",
+      "bytes": 4429,
+      "sha256": "b3cb2f0948c2d617fc04602d6bb9f11f866b2ded327230c75d2dc930c2611eee",
+      "retainedFile": "0049.gz",
+      "gzipSha256": "b4eedf27347dbbe659c109406ac2f0e19489c7bbe76d5643d73ef229c4804781"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape-exact-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-exact-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0050.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape-exact-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-exact-work.stdout",
+      "bytes": 5531,
+      "sha256": "fe5bec3c5df833ad0e74b9bbdd532a12928bed85f52ec963bcd377776f52b662",
+      "retainedFile": "0051.gz",
+      "gzipSha256": "2543ddceefda7c9ee3722ddde9e79d7e2752108d7930ca1c47ea9f0df29cef51"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape-one-below-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-one-below-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0052.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape-one-below-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-one-below-work.stdout",
+      "bytes": 719,
+      "sha256": "362588d671d2dd64f4c2d1cda45255ec080d7ce8a96116bdf5d8f72420cca0e4",
+      "retainedFile": "0053.gz",
+      "gzipSha256": "d49fa8f74419b755c598a9b0f09b90b8ebac8b6e99deb38f52834313b92a8919"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0054.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/long-root-key-late-escape.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape.stdout",
+      "bytes": 5531,
+      "sha256": "e71064477067b2156687b29d421b803fc202cba6ec530280f7052adea9dbe239",
+      "retainedFile": "0055.gz",
+      "gzipSha256": "4ee1efe3c939037558ec5d523e892099f9561fbf348e3ffff11517954e5a37fc"
+    },
+    {
+      "retainedMember": "execution/long-view-key-late-escape.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-view-key-late-escape.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0056.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/long-view-key-late-escape.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-view-key-late-escape.stdout",
+      "bytes": 4429,
+      "sha256": "3206b7ebc24ee683336cbab5ad0ef8256eaf8c0a274fdde5435b28c92bd6aa99",
+      "retainedFile": "0057.gz",
+      "gzipSha256": "ff49fe8dc8085af464bf6cc82058816982b04f4823a53a4e56d9a495c2905764"
+    },
+    {
+      "retainedMember": "execution/low-J-high-K.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/low-J-high-K.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0058.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/low-J-high-K.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/low-J-high-K.stdout",
+      "bytes": 5180,
+      "sha256": "01bec44b708ee7abae6f2a8eb208da034d47bb1aa31ea6aa248056db62ce3124",
+      "retainedFile": "0059.gz",
+      "gzipSha256": "da84fc42ce050d1c28100737ede0eb440fc76998adb23c8b87e93f94bc40b80f"
+    },
+    {
+      "retainedMember": "execution/metadata-j0-u0.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j0-u0.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0060.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/metadata-j0-u0.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j0-u0.stdout",
+      "bytes": 5059,
+      "sha256": "de3d6278e248d511d1968c530f3d15fc6a98122740dff3c903fb5ed57be27169",
+      "retainedFile": "0061.gz",
+      "gzipSha256": "c48c1ccdf75f4e654dd14cb597f2bfd57f3422749a08fe824870bdaac4243a2f"
+    },
+    {
+      "retainedMember": "execution/metadata-j7-u7.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j7-u7.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0062.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/metadata-j7-u7.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j7-u7.stdout",
+      "bytes": 5059,
+      "sha256": "2419d826a717bacd675e6615911405f598f1b7c1a2fb00a9824a744535999214",
+      "retainedFile": "0063.gz",
+      "gzipSha256": "c0e932a4f769ab95537047528cd89edff3379760aaff6def68347183a815544c"
+    },
+    {
+      "retainedMember": "execution/opaque-token-and-marker.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/opaque-token-and-marker.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0064.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/opaque-token-and-marker.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/opaque-token-and-marker.stdout",
+      "bytes": 5391,
+      "sha256": "09a3237e120ee7925ff1deb49183c039b4b051978c6712ba7e9ef26501fba8a0",
+      "retainedFile": "0065.gz",
+      "gzipSha256": "3b94b20be5d7203858216891eb1bc174f1eb68e358deba50b9cd7e691b3aa827"
+    },
+    {
+      "retainedMember": "execution/parser-table-m1-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0066.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m1-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-exact-nodes.stdout",
+      "bytes": 549,
+      "sha256": "458529340043b0e9cbd758f9c9535973f8cdb6f71bfed91b16f7b3a8a3bfa313",
+      "retainedFile": "0067.gz",
+      "gzipSha256": "1d666e20f0a0f1215fc72c887c490c77126afd33c90945a7d5ae094c4d10c725"
+    },
+    {
+      "retainedMember": "execution/parser-table-m1-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0068.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m1-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-one-below-nodes.stdout",
+      "bytes": 534,
+      "sha256": "53aaab2ef619ac90464c49812d80906c38d8b4e918f1e622748f23e08acec71f",
+      "retainedFile": "0069.gz",
+      "gzipSha256": "4f2c3462b69a8af4a66cddce8fbb68303f6b8131a3c3ec70826aa4ece959a3d6"
+    },
+    {
+      "retainedMember": "execution/parser-table-m14-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0070.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m14-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-exact-nodes.stdout",
+      "bytes": 553,
+      "sha256": "d096227c8ec5c3eec7eddc7f7280e7bd1163689c43b25e90aa30ee7a0c413268",
+      "retainedFile": "0071.gz",
+      "gzipSha256": "582cfe4e53efad80001c21d2911b4033a5bcd3afa3be99e1dd9d6702d468bef1"
+    },
+    {
+      "retainedMember": "execution/parser-table-m14-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0072.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m14-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-one-below-nodes.stdout",
+      "bytes": 536,
+      "sha256": "3046a7023f529724b4a824c0a8ad9b834433582c449129d76bb91c089ebfd859",
+      "retainedFile": "0073.gz",
+      "gzipSha256": "d8cc0757d04968a096c468d7b005b48dbd36a1db95504677fdfcf38270d838ec"
+    },
+    {
+      "retainedMember": "execution/parser-table-m15-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0074.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m15-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-exact-nodes.stdout",
+      "bytes": 553,
+      "sha256": "31d236491a0a22ac0724947e3d5cb48e18e937ba785657c1f598f89ad574691d",
+      "retainedFile": "0075.gz",
+      "gzipSha256": "4e9e901c3005487ef37647f473b4f78c8ddc9603e040858f931727ca104bfa66"
+    },
+    {
+      "retainedMember": "execution/parser-table-m15-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0076.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m15-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-one-below-nodes.stdout",
+      "bytes": 536,
+      "sha256": "a9284834779c70cf81a370561e5236e9978ef849e42fa7222ebc35e7dcd50222",
+      "retainedFile": "0077.gz",
+      "gzipSha256": "2613ab954b9b9a378d54f7278f181ee36aa665f4bcf44922c9309092fd0a71fe"
+    },
+    {
+      "retainedMember": "execution/parser-table-m3-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0078.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m3-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-exact-nodes.stdout",
+      "bytes": 550,
+      "sha256": "6e7a3c185d924bb57aa47afbc1b073f6b86b8c05ca9e168325fb147dd60f83b2",
+      "retainedFile": "0079.gz",
+      "gzipSha256": "cd08db638763d59e6e0ebc48b492460c85d3be20311635a37886041beb3cfca9"
+    },
+    {
+      "retainedMember": "execution/parser-table-m3-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0080.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m3-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-one-below-nodes.stdout",
+      "bytes": 535,
+      "sha256": "2e24704a144f39b040cd473154202923735c9513d2ea01d4fa7a2b4a49b9d3d8",
+      "retainedFile": "0081.gz",
+      "gzipSha256": "8277800eb69bc1ac0b318be3b3afd5c13bcd048328931f24e45d85d81e32c9fc"
+    },
+    {
+      "retainedMember": "execution/parser-table-m4-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0082.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m4-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-exact-nodes.stdout",
+      "bytes": 550,
+      "sha256": "d965bf6e89230cb13b035020b2175320373da31e2b136cb1d1c125fd208da1c9",
+      "retainedFile": "0083.gz",
+      "gzipSha256": "638f550746ce9c608d04a67b8f87070e7be2ed86196e376b814dd1896544b1f0"
+    },
+    {
+      "retainedMember": "execution/parser-table-m4-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0084.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m4-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-one-below-nodes.stdout",
+      "bytes": 535,
+      "sha256": "5afd713901fb5c69f6d0b0a34e668be13bd194752fc5480c95da06312abe4a06",
+      "retainedFile": "0085.gz",
+      "gzipSha256": "950ce13a1d570b5f4a7a20025e0be6a130c416e835b58742dd0f533e361b1aea"
+    },
+    {
+      "retainedMember": "execution/parser-table-m7-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0086.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m7-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-exact-nodes.stdout",
+      "bytes": 550,
+      "sha256": "bdd99b33d71e65bc0479d777a73b0eb796fd21ff3b918b53f4940c9eba0684b3",
+      "retainedFile": "0087.gz",
+      "gzipSha256": "4000f555ff37c5db12d522b8e97db2306fa45d938f3847065858079cb639a2d1"
+    },
+    {
+      "retainedMember": "execution/parser-table-m7-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0088.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m7-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-one-below-nodes.stdout",
+      "bytes": 535,
+      "sha256": "75dce049618d47cc26cde2606807f255a478d433d64e8a67a357b83ea7f5e5e6",
+      "retainedFile": "0089.gz",
+      "gzipSha256": "a5d55804ad3019ec824adb7b9de539ad6676b6a5ec31ca33164442d619f74b85"
+    },
+    {
+      "retainedMember": "execution/parser-table-m8-exact-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-exact-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0090.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m8-exact-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-exact-nodes.stdout",
+      "bytes": 550,
+      "sha256": "c3d922492ffd080a658d2ac294249f8f96b40084e00b18a672915fd407639218",
+      "retainedFile": "0091.gz",
+      "gzipSha256": "373ecd09b770e12f749a7f8a16410cafeca476ba8502b041137bd660ce552a1f"
+    },
+    {
+      "retainedMember": "execution/parser-table-m8-one-below-nodes.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-one-below-nodes.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0092.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/parser-table-m8-one-below-nodes.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-one-below-nodes.stdout",
+      "bytes": 535,
+      "sha256": "3111514ae5387d1a244f888ee21fba839a1d8610369a0cf7f377395a8982fcc3",
+      "retainedFile": "0093.gz",
+      "gzipSha256": "a60f984250cf27bc76716d31b6bd0a4cae15c17d25a6b89efd3544c33605406a"
+    },
+    {
+      "retainedMember": "execution/pending-overlap-one-below.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/pending-overlap-one-below.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0094.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/pending-overlap-one-below.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/pending-overlap-one-below.stdout",
+      "bytes": 544,
+      "sha256": "32d40736cdea4072a83aea0b62e88e697b3182642e94675036568e3b6fa9a77b",
+      "retainedFile": "0095.gz",
+      "gzipSha256": "1a1183562ce89c8a6b9de939e8976925c08e4f11ec4b75a4205b1ab804fa07cc"
+    },
+    {
+      "retainedMember": "execution/receipt.json",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/receipt.json",
+      "bytes": 33800,
+      "sha256": "8aee1a48d08d305cfa0d325ba88edeadab1eabc01dfdb82dc31d87a2b6d969d6",
+      "retainedFile": "0096.gz",
+      "gzipSha256": "c20b557139dd972804ff09a6bafe6a4b868293d248bbd5678c5a1b588a89e33a"
+    },
+    {
+      "retainedMember": "execution/rustc-vV.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/rustc-vV.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0097.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/rustc-vV.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/rustc-vV.stdout",
+      "bytes": 196,
+      "sha256": "3975d062e234a9f3921955bf6ae5b90f5819df94fa825d057f76b34a35ed0f4d",
+      "retainedFile": "0098.gz",
+      "gzipSha256": "ef2045890c36ffd3410e3ab523e5cc17c36337ed6d7a5fdbc9d1d33fc7dc2887"
+    },
+    {
+      "retainedMember": "execution/shared-descriptor-four-references.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/shared-descriptor-four-references.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0099.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/shared-descriptor-four-references.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/shared-descriptor-four-references.stdout",
+      "bytes": 3953,
+      "sha256": "a8e172546212b319cbc0f8ec818662fe33c59d19d075868affcf667fbd092164",
+      "retainedFile": "0100.gz",
+      "gzipSha256": "9988a8a653089c81566072befd15c4c20631b6c01b69452a5d0fbf3c2b7d3b55"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit-exact-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-exact-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0101.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit-exact-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-exact-work.stdout",
+      "bytes": 3434,
+      "sha256": "958fb6cb4e993cb7e1c9a7a244d99223d2af57f23312e5f35b2d559c9240a7d9",
+      "retainedFile": "0102.gz",
+      "gzipSha256": "e069cdeaf71ac642bc9a5296261c728a8f3a774a11ab8ed97682e8fdda428266"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit-one-below-work.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-one-below-work.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0103.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit-one-below-work.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-one-below-work.stdout",
+      "bytes": 702,
+      "sha256": "1b7ffac9d9c72814906d66bf5da8a17722ef7e10759cbdbc46026f92f90fb32f",
+      "retainedFile": "0104.gz",
+      "gzipSha256": "d24bc0b85fae5f18e5943ad84921d42497095eb0b760fd49b71f01fe170d8387"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0105.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/tiny-no-views-huge-configured-limit.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit.stdout",
+      "bytes": 3434,
+      "sha256": "2e5261afd09cce5169d52d4216087c83e09df5c0df313a234edcaad9cba0498d",
+      "retainedFile": "0106.gz",
+      "gzipSha256": "a188d2e506cdcb3afe44f2581ac35dfd5df5144a76bf07c0669b7c28d37c4701"
+    },
+    {
+      "retainedMember": "execution/unknown-declaration-long-late-escape.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-long-late-escape.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0107.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/unknown-declaration-long-late-escape.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-long-late-escape.stdout",
+      "bytes": 1489,
+      "sha256": "9118af6f7e1f93ab8e7f3c314d931baadf2f4e6336f053ae8af6e496e2c3e000",
+      "retainedFile": "0108.gz",
+      "gzipSha256": "7aff47ff78f3946dac6995c3283f811addbf65ba850385fc12fcd700fea4eb4b"
+    },
+    {
+      "retainedMember": "execution/unknown-declaration-short.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-short.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0109.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "execution/unknown-declaration-short.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-short.stdout",
+      "bytes": 1131,
+      "sha256": "bf4e6351a06832d38b37123f5c6c90a48a5d475864f0dcb1cb59fe2e434c5aed",
+      "retainedFile": "0110.gz",
+      "gzipSha256": "0dc96fd01a5c3e167125a8af062fcbd5a18f8e19dfe3e267b6b13c9de91049c3"
+    },
+    {
+      "retainedMember": "binding/after.json",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/after.json",
+      "bytes": 13161,
+      "sha256": "ea5fe7429ce44417a3889cd2ea52e10f66435acce1d0baf385e7e5210b46c3bd",
+      "retainedFile": "0111.gz",
+      "gzipSha256": "d850af2374b9188cf30f9b36a80441151eeb970537edcfb1e26e683035265055"
+    },
+    {
+      "retainedMember": "binding/before.json",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/before.json",
+      "bytes": 34461,
+      "sha256": "0a49bab1766760ca61c87507a98f14111637470a841a4eb5aec569d72d294314",
+      "retainedFile": "0112.gz",
+      "gzipSha256": "918474e8243cea3c9a53b8f5e9e0b575f89d296da2e17e07367a24a0bb029e56"
+    },
+    {
+      "retainedMember": "binding/runner.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/runner.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0113.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "binding/runner.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/runner.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0114.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "retainedMember": "link-trace/link-1564468-command.json",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-link-trace-20261010/link-1564468-command.json",
+      "bytes": 11147,
+      "sha256": "bee9e8e84e6f1348367d32da60113fcf342362a6ab939addfef6162b515556d9",
+      "retainedFile": "0115.gz",
+      "gzipSha256": "2c1b40c3755817f4f8de790db7684b3cc6a7bdddc6c9a7a10f2c07a4ee0e3c6a"
+    },
+    {
+      "retainedMember": "link-trace/link-1564468.stderr",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-link-trace-20261010/link-1564468.stderr",
+      "bytes": 8601,
+      "sha256": "226b436559dbfc4cbda2bdaba4438c56e91ccc021ed25ee8daa44aa5afaf1b62",
+      "retainedFile": "0116.gz",
+      "gzipSha256": "1b70e0ddf2d58305d5828fcdd518e2c08e68e857a8de43a96394ca1408c0215a"
+    },
+    {
+      "retainedMember": "link-trace/link-1564468.stdout",
+      "sourcePath": "/tmp/rusty-tiles-codec-owned-plan-link-trace-20261010/link-1564468.stdout",
+      "bytes": 7830,
+      "sha256": "097f4a13adc94fd244459ff344a31388176f1acf5cbc43d7d93a956ffffad90d",
+      "retainedFile": "0117.gz",
+      "gzipSha256": "bd6dd241e49e61c3a4b51045eeb1516fbd3684a167de8e43fdee1b8171b9c774"
+    },
+    {
+      "retainedMember": "coordinator/rusty-tiles-run-owned-plan-context.py",
+      "sourcePath": "/tmp/rusty-tiles-run-owned-plan-context.py",
+      "bytes": 4007,
+      "sha256": "3f634c6c85c9d4155f274dac2ec33b2430b9bb70ac744e2548780be09cba3a17",
+      "retainedFile": "0118.gz",
+      "gzipSha256": "8f899d3a5c427af72c1974ac876e99e8726d08bdb66498b30049d30346419ffd"
+    }
+  ],
+  "externalBinary": {
+    "path": "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/owned_plan_probe",
+    "sha256": "c762ef151c3b059f8984b43a3d8f8216f9cc0a24ac6d93912aee2ea8c93328d7",
+    "retained": false
+  }
+}

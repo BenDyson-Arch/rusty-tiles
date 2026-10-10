@@ -1,0 +1,44 @@
+{
+  "status": "FROZEN_EXPECTATIONS_NOT_EXECUTION",
+  "prerequisite": "Accepted corrected C1 exact-head develop merge, matched helper/dependency/toolchain artifacts, independent source/expectation review",
+  "counts": {
+    "admission": 10,
+    "serializer": 78,
+    "streams": 424,
+    "generated-domain": 15
+  },
+  "knownModelRecords": {
+    "ledgers": 6,
+    "defaultBoundaries": 18,
+    "metadataResidues": 64,
+    "wrongCoreMetadataFramingRejects": 48
+  },
+  "actualRawRecords": {
+    "admissionCategories": "match frozen10 positive/InvalidInput/ResourceLimit categories and admitted node counts",
+    "serializer": "all78 exact independently authored JSON/GLB outputs and lengths; count atactual-1 fails; owned candidate distinct; no extra outputJSONVec",
+    "capacity": "all stage baseline/peak/live/calls/capacities/type sizes recorded; snapshot/candidate and conservative old+new accounted",
+    "coefficientHypothesis": "late-escape witness may invalidate E_PLAN2J as a stage term; no unconditional PASS expectation, whole envelope separately reconciled"
+  },
+  "actualFfiRecords": {
+    "cases": 424,
+    "nativeBound": "equals frozen Python integer model",
+    "encoder": "positive length<=B, sourceoffset1, initialized destinations, intact32-byte guards, capacity1 rejects",
+    "decoder": "alignedu32 guards, every authored byte exact including padding",
+    "literalGolden": "85 encoded/48 expected exact; same-kernel roundtrip supplemental",
+    "malformed": "header0=-1,header-only=-2 from pinned vendor preconditions",
+    "wrongCount": "3/5 recorded; no universal rejection assumption, decodable length/span mismatch still independently detected",
+    "validByteMutation": "decode0 but original oracle differs",
+    "noUnsafeInvalidDomain": true
+  },
+  "heldAfterAnyScaffoldPass": [
+    "actual production plan/accessor/role/edit/path/receipt type/capacity reconciliation",
+    "complete growth/serde/hash-key/scratch proof and graceful allocator proof limits",
+    "all nine actual owner defaults, max/max+1 with other caps adjusted and host/u32/isize arithmetic",
+    "complete raw rewrite bound over actual admitted variants, field/key/declaration graph positions",
+    "pinned external decoder/primary consumer framing interpretation and actual full generated corpus",
+    "legacy/generated metadata identity classification and actual helper/FFI ABI retention",
+    "actual producer bridge/ValueBIN/geometry lifetimes and fatal cause/checkpoint/fits/final consumers",
+    "platform source/permission/recheck/Replace controls",
+    "fresh independent whole-slice precode adjudication before production implementation"
+  ]
+}

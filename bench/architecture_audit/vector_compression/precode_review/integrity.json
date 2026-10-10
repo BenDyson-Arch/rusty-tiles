@@ -1,0 +1,26 @@
+{
+  "status": "Independent precode review final freeze; HELD, not implementation approval",
+  "captured_at_utc": "2026-10-10T11:22:15.747996+00:00",
+  "files": {
+    "review.md": {
+      "bytes": 15443,
+      "sha256": "17ae5e13a9df36adefd08d65166b6b493ce39b38251b2f766bf3a492b4b2171e"
+    },
+    "decisions.json": {
+      "bytes": 3880,
+      "sha256": "a746904a74d524b0c14536728cbe88087a4244fcebbc845a23ec161826e03cfa"
+    },
+    "source-pin.json": {
+      "bytes": 12711,
+      "sha256": "9b06639bad91f80cae638901543f52664a24aac8fa925cf641f4a554eb6d846b"
+    },
+    "input-pin.json": {
+      "bytes": 2050,
+      "sha256": "214e29fe94d59c25ef2068f2226de7ee93f0e440cd87e4d630b052afb1c148d8"
+    },
+    "arithmetic.json": {
+      "bytes": 4849,
+      "sha256": "988827ba5b8ac4a498f8c087f374dd9a0bfa7129ca6dc49bde952bcb98ac3f81"
+    }
+  }
+}

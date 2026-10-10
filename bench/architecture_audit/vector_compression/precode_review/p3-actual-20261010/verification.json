@@ -1,0 +1,1724 @@
+{
+  "status": "INDEPENDENT_ACTUAL_ARTIFACT_CHECKS_PASS_BOUNDED_BASELINE_ONLY",
+  "pairs": [
+    {
+      "label": "typed-metadata",
+      "mode": "portable",
+      "variant": "raw",
+      "slots": 1,
+      "views": 18,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 2696,
+            "json_absolute_end": 2716,
+            "bin_start": 2724,
+            "glb_end": 4272,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 3244,
+            "json_absolute_end": 3264,
+            "bin_start": 3272,
+            "glb_end": 4812,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": null
+    },
+    {
+      "label": "geometry",
+      "mode": "portable",
+      "variant": "quantized",
+      "slots": 1,
+      "views": 16,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 3268,
+            "json_absolute_end": 3288,
+            "bin_start": 3296,
+            "glb_end": 4040,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 4980,
+            "json_absolute_end": 5000,
+            "bin_start": 5008,
+            "glb_end": 5852,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": {
+        "raw": {
+          "\"point\"": {
+            "points": 2,
+            "line_lengths": [],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"line\"": {
+            "points": 0,
+            "line_lengths": [
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"restart\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"hole\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4,
+                4
+              ]
+            ],
+            "triangle_area": "28633348307/477204025"
+          },
+          "\"multiple\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4
+              ],
+              [
+                4
+              ]
+            ],
+            "triangle_area": "393204/21845"
+          }
+        },
+        "decoded": {
+          "\"point\"": {
+            "points": 2,
+            "line_lengths": [],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"line\"": {
+            "points": 0,
+            "line_lengths": [
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"restart\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"hole\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4,
+                4
+              ]
+            ],
+            "triangle_area": "28633348307/477204025"
+          },
+          "\"multiple\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4
+              ],
+              [
+                4
+              ]
+            ],
+            "triangle_area": "393204/21845"
+          }
+        }
+      }
+    },
+    {
+      "label": "fragmented-fill",
+      "mode": "portable",
+      "variant": "raw",
+      "slots": 16,
+      "views": 160,
+      "fill_wrapper_slots": 8,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/children/0/children/0/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/0/contents/1",
+          "raw": {
+            "json_length": 1712,
+            "json_absolute_end": 1732,
+            "bin_start": 1740,
+            "glb_end": 1852,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": {
+        "raw": {
+          "\"fill-source\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "128"
+          }
+        },
+        "decoded": {
+          "\"fill-source\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "128"
+          }
+        }
+      }
+    },
+    {
+      "label": "large-ids-65537",
+      "mode": "portable",
+      "variant": "raw",
+      "slots": 1,
+      "views": 7,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 1488,
+            "json_absolute_end": 1508,
+            "bin_start": 1516,
+            "glb_end": 3136200,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2068,
+            "json_absolute_end": 2088,
+            "bin_start": 2096,
+            "glb_end": 1895632,
+            "metadata8_all_three": true
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": {
+        "rows": 65537,
+        "id_component": 5126,
+        "min": 0.0,
+        "max": 65536.0,
+        "source_ids_complete": true,
+        "one_leaf_point_primitive": true
+      },
+      "independent_topology_metrics": null
+    },
+    {
+      "label": "typed-metadata",
+      "mode": "native",
+      "variant": "raw",
+      "slots": 1,
+      "views": 18,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 2696,
+            "json_absolute_end": 2716,
+            "bin_start": 2724,
+            "glb_end": 4272,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 3244,
+            "json_absolute_end": 3264,
+            "bin_start": 3272,
+            "glb_end": 4812,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": null
+    },
+    {
+      "label": "geometry",
+      "mode": "native",
+      "variant": "quantized",
+      "slots": 1,
+      "views": 16,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 3268,
+            "json_absolute_end": 3288,
+            "bin_start": 3296,
+            "glb_end": 4040,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 4980,
+            "json_absolute_end": 5000,
+            "bin_start": 5008,
+            "glb_end": 5852,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": {
+        "raw": {
+          "\"point\"": {
+            "points": 2,
+            "line_lengths": [],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"line\"": {
+            "points": 0,
+            "line_lengths": [
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"restart\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"hole\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4,
+                4
+              ]
+            ],
+            "triangle_area": "28633348307/477204025"
+          },
+          "\"multiple\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4
+              ],
+              [
+                4
+              ]
+            ],
+            "triangle_area": "393204/21845"
+          }
+        },
+        "decoded": {
+          "\"point\"": {
+            "points": 2,
+            "line_lengths": [],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"line\"": {
+            "points": 0,
+            "line_lengths": [
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"restart\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              3
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "0"
+          },
+          "\"hole\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4,
+                4
+              ]
+            ],
+            "triangle_area": "28633348307/477204025"
+          },
+          "\"multiple\"": {
+            "points": 0,
+            "line_lengths": [],
+            "polygon_sizes": [
+              [
+                4
+              ],
+              [
+                4
+              ]
+            ],
+            "triangle_area": "393204/21845"
+          }
+        }
+      }
+    },
+    {
+      "label": "fragmented-fill",
+      "mode": "native",
+      "variant": "raw",
+      "slots": 16,
+      "views": 160,
+      "fill_wrapper_slots": 8,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/children/0/children/0/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/0/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/0/children/1/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/0/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/0/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/0/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2260,
+            "json_absolute_end": 2280,
+            "bin_start": 2288,
+            "glb_end": 2500,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/1/contents/0",
+          "raw": {
+            "json_length": 1920,
+            "json_absolute_end": 1940,
+            "bin_start": 1948,
+            "glb_end": 2088,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2464,
+            "json_absolute_end": 2484,
+            "bin_start": 2492,
+            "glb_end": 2712,
+            "metadata8_all_three": false
+          },
+          "wrapper": {
+            "magic": "b3dm",
+            "version": 1,
+            "feature_json_bytes": 20,
+            "feature_binary_bytes": 0,
+            "batch_json_bytes": 0,
+            "batch_binary_bytes": 0,
+            "feature_json_sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892",
+            "feature_json_hex": "7b2242415443485f4c454e475448223a307d2020",
+            "inner_offset": 48
+          }
+        },
+        {
+          "address": "tileset/root/children/1/children/1/children/1/contents/1",
+          "raw": {
+            "json_length": 1716,
+            "json_absolute_end": 1736,
+            "bin_start": 1744,
+            "glb_end": 1856,
+            "metadata8_all_three": true
+          },
+          "meshopt": {
+            "json_length": 2264,
+            "json_absolute_end": 2284,
+            "bin_start": 2292,
+            "glb_end": 2504,
+            "metadata8_all_three": false
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": null,
+      "independent_topology_metrics": {
+        "raw": {
+          "\"fill-source\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "128"
+          }
+        },
+        "decoded": {
+          "\"fill-source\"": {
+            "points": 0,
+            "line_lengths": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "polygon_sizes": [],
+            "triangle_area": "128"
+          }
+        }
+      }
+    },
+    {
+      "label": "large-ids-65537",
+      "mode": "native",
+      "variant": "raw",
+      "slots": 1,
+      "views": 7,
+      "fill_wrapper_slots": 0,
+      "framing_and_wrapper": [
+        {
+          "address": "tileset/root/content",
+          "raw": {
+            "json_length": 1488,
+            "json_absolute_end": 1508,
+            "bin_start": 1516,
+            "glb_end": 3136200,
+            "metadata8_all_three": false
+          },
+          "meshopt": {
+            "json_length": 2068,
+            "json_absolute_end": 2088,
+            "bin_start": 2096,
+            "glb_end": 1895632,
+            "metadata8_all_three": true
+          },
+          "wrapper": null
+        }
+      ],
+      "large_id": {
+        "rows": 65537,
+        "id_component": 5126,
+        "min": 0.0,
+        "max": 65536.0,
+        "source_ids_complete": true,
+        "one_leaf_point_primitive": true
+      },
+      "independent_topology_metrics": null
+    }
+  ],
+  "typed_control_causes": [
+    {
+      "control": "int64_low_bit",
+      "binary_diffs": [
+        {
+          "bin_offset": 320,
+          "before": 0,
+          "after": 1
+        }
+      ],
+      "independent_cause": {
+        "before": -9223372036854775808,
+        "after": -9223372036854775807
+      },
+      "recorded_cause": "('\"p0\"', 'integer', -9223372036854775807, -9223372036854775808)"
+    },
+    {
+      "control": "boolean_unused_tail_bit",
+      "binary_diffs": [
+        {
+          "bin_offset": 313,
+          "before": 1,
+          "after": 129
+        }
+      ],
+      "independent_cause": {
+        "row_count": 9,
+        "tail_bits": 64,
+        "logical_boolean_values_unchanged": true,
+        "owning_extractor_line": 57
+      },
+      "recorded_cause": ""
+    },
+    {
+      "control": "utf8_string_offset_shift",
+      "binary_diffs": [
+        {
+          "bin_offset": 1324,
+          "before": 2,
+          "after": 3
+        }
+      ],
+      "independent_cause": {
+        "first_offset_before": 2,
+        "first_offset_after": 3,
+        "mutation_cuts_following_utf8_scalar": true
+      },
+      "recorded_cause": "'utf-8' codec can't decode byte 0xe9 in position 2: unexpected end of data"
+    },
+    {
+      "control": "list_large_integer_rounding",
+      "binary_diffs": [
+        {
+          "bin_offset": 410,
+          "before": 51,
+          "after": 50
+        }
+      ],
+      "independent_cause": {
+        "exact_integer_before": 9007199254740993,
+        "exact_integer_after": 9007199254740992
+      },
+      "recorded_cause": "('list', '[0,9007199254740992,18446744073709551615,null,\"\u00e9\",false,[3,2,1]]', [0, 9007199254740993, 18446744073709551615, None, '\u00e9', False, [3, 2, 1]])"
+    },
+    {
+      "control": "source_identity_changed",
+      "binary_diffs": [
+        {
+          "bin_offset": 1,
+          "before": 112,
+          "after": 113
+        }
+      ],
+      "independent_cause": {
+        "identity_before": "p0",
+        "identity_after": "q0"
+      },
+      "recorded_cause": "('unknown source identity', '\"q0\"')"
+    },
+    {
+      "control": "feature_id_padding_bit",
+      "binary_diffs": [
+        {
+          "bin_offset": 1474,
+          "before": 0,
+          "after": 1
+        }
+      ],
+      "independent_cause": {
+        "first_u16_id_unchanged": 0,
+        "first_padding_before_hex": "0000",
+        "first_padding_after_hex": "0100",
+        "owning_extractor_line": 145
+      },
+      "recorded_cause": ""
+    },
+    {
+      "control": "wrong_property_table",
+      "binary_diffs": [],
+      "independent_cause": {
+        "table_inventory_count": 1,
+        "before_table": 0,
+        "after_table": 1,
+        "only_semantic_doc_change": true,
+        "owning_extractor_line": 150
+      },
+      "recorded_cause": ""
+    }
+  ],
+  "literal_topology_metrics": [
+    {
+      "name": "points",
+      "independent_metrics": {
+        "\"points\"": {
+          "points": 2,
+          "line_lengths": [],
+          "polygon_sizes": [],
+          "triangle_area": "0"
+        }
+      }
+    },
+    {
+      "name": "lines",
+      "independent_metrics": {
+        "\"lines\"": {
+          "points": 0,
+          "line_lengths": [
+            2,
+            3
+          ],
+          "polygon_sizes": [],
+          "triangle_area": "0"
+        }
+      }
+    },
+    {
+      "name": "hole",
+      "independent_metrics": {
+        "\"hole\"": {
+          "points": 0,
+          "line_lengths": [],
+          "polygon_sizes": [
+            [
+              4,
+              4
+            ]
+          ],
+          "triangle_area": "60"
+        }
+      }
+    },
+    {
+      "name": "multiple",
+      "independent_metrics": {
+        "\"multiple\"": {
+          "points": 0,
+          "line_lengths": [],
+          "polygon_sizes": [
+            [
+              4
+            ],
+            [
+              4
+            ]
+          ],
+          "triangle_area": "8"
+        }
+      }
+    },
+    {
+      "name": "fill",
+      "independent_metrics": {
+        "\"fill\"": {
+          "points": 0,
+          "line_lengths": [],
+          "polygon_sizes": [],
+          "triangle_area": "4"
+        }
+      }
+    }
+  ],
+  "topology_mutation_diffs": [
+    {
+      "name": "restart-joined-line",
+      "baseline": "lines",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 96,
+          "before": 255,
+          "after": 0
+        },
+        {
+          "offset": 97,
+          "before": 255,
+          "after": 0
+        },
+        {
+          "offset": 98,
+          "before": 255,
+          "after": 0
+        },
+        {
+          "offset": 99,
+          "before": 255,
+          "after": 0
+        }
+      ]
+    },
+    {
+      "name": "restart-declaration-missing",
+      "baseline": "lines",
+      "same_semantic_document": false,
+      "semantic_document_diffs": [
+        {
+          "path": "/extensionsRequired",
+          "before": [
+            "KHR_mesh_primitive_restart"
+          ],
+          "after": "<ABSENT>"
+        }
+      ],
+      "binary_diffs": []
+    },
+    {
+      "name": "wrong-feature-id",
+      "baseline": "points",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 24,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    {
+      "name": "wrong-table-association",
+      "baseline": "points",
+      "same_semantic_document": false,
+      "semantic_document_diffs": [
+        {
+          "path": "/meshes/0/primitives/0/extensions/EXT_mesh_features/featureIds/0/propertyTable",
+          "before": 0,
+          "after": 1
+        }
+      ],
+      "binary_diffs": []
+    },
+    {
+      "name": "wrong-finite-position",
+      "baseline": "lines",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 14,
+          "before": 0,
+          "after": 64
+        }
+      ]
+    },
+    {
+      "name": "wrong-position-minmax",
+      "baseline": "points",
+      "same_semantic_document": false,
+      "semantic_document_diffs": [
+        {
+          "path": "/accessors/0/max/0",
+          "before": 2,
+          "after": 3
+        }
+      ],
+      "binary_diffs": []
+    },
+    {
+      "name": "wrong-loop-vertex-order",
+      "baseline": "hole",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 236,
+          "before": 1,
+          "after": 3
+        }
+      ]
+    },
+    {
+      "name": "wrong-triangle-offset-association",
+      "baseline": "multiple",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 180,
+          "before": 6,
+          "after": 3
+        }
+      ]
+    },
+    {
+      "name": "triangle-omission-degenerate",
+      "baseline": "hole",
+      "same_semantic_document": true,
+      "semantic_document_diffs": [],
+      "binary_diffs": [
+        {
+          "offset": 132,
+          "before": 1,
+          "after": 0
+        }
+      ]
+    }
+  ],
+  "topology_control_tracebacks": [
+    {
+      "name": "points",
+      "exit_code": 0,
+      "last_stderr_lines": []
+    },
+    {
+      "name": "lines",
+      "exit_code": 0,
+      "last_stderr_lines": []
+    },
+    {
+      "name": "hole",
+      "exit_code": 0,
+      "last_stderr_lines": []
+    },
+    {
+      "name": "multiple",
+      "exit_code": 0,
+      "last_stderr_lines": []
+    },
+    {
+      "name": "fill",
+      "exit_code": 0,
+      "last_stderr_lines": []
+    },
+    {
+      "name": "restart-joined-line",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 149, in check",
+        "    assert sorted(map(len,got['lines']))==sorted(map(len,state['lines'])),('source line partition',sid)",
+        "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: ('source line partition', '\"lines\"')"
+      ]
+    },
+    {
+      "name": "restart-declaration-missing",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 124, in check",
+        "    if R in indices:assert 'KHR_mesh_primitive_restart' in doc.get('extensionsRequired',[]),'restart required declaration missing'",
+        "                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: restart required declaration missing"
+      ]
+    },
+    {
+      "name": "wrong-feature-id",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 113, in check",
+        "    assert all(int(x)==x and 0<=x<len(sids) for x in fids)",
+        "           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError"
+      ]
+    },
+    {
+      "name": "wrong-table-association",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 115, in check",
+        "    assert f['featureCount']==len(sids) and f['propertyTable']==0 and f['attribute']==0,'wrong feature-table association'",
+        "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: wrong feature-table association"
+      ]
+    },
+    {
+      "name": "wrong-finite-position",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 150, in check",
+        "    if not quantized:assert sorted(edges(x,False) for x in got['lines'])==sorted(edges(x,False) for x in state['lines']),('source line edge metric',sid)",
+        "                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: ('source line edge metric', '\"lines\"')"
+      ]
+    },
+    {
+      "name": "wrong-position-minmax",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 109, in check",
+        "    if key in ac:assert list(map(exact,ac[key]))==[op(exact(v[i]) for v in positions) for i in range(3)],'wrong POSITION min/max'",
+        "                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: wrong POSITION min/max"
+      ]
+    },
+    {
+      "name": "wrong-loop-vertex-order",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 139, in check",
+        "    assert rings and all(len(r)>=3 and len(set(r))==len(r) for r in rings)",
+        "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError"
+      ]
+    },
+    {
+      "name": "wrong-triangle-offset-association",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 145, in check",
+        "    assert tri_area==loop_area,'polygon triangle-offset area differs from its loop association'",
+        "           ^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: polygon triangle-offset area differs from its loop association"
+      ]
+    },
+    {
+      "name": "triangle-omission-degenerate",
+      "exit_code": 1,
+      "last_stderr_lines": [
+        "                           ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/tmp/rusty-tiles-vector-p3-sensitive-preparation/topology.py\", line 145, in check",
+        "    assert tri_area==loop_area,'polygon triangle-offset area differs from its loop association'",
+        "           ^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: polygon triangle-offset area differs from its loop association"
+      ]
+    }
+  ],
+  "retained_original_large_id_partitions": [
+    {
+      "variant": "raw",
+      "parts": [
+        {
+          "table_rows": 16385,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        }
+      ]
+    },
+    {
+      "variant": "meshopt",
+      "parts": [
+        {
+          "table_rows": 16385,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        },
+        {
+          "table_rows": 16384,
+          "id_component": 5123
+        }
+      ]
+    }
+  ],
+  "all_97_production_hashes_unchanged": true,
+  "lossless_retention_verification": {
+    "index_sha256": "7da201fc5d2e95785a76899b20dc18e199bed4aff26fadab437290a40573ef1e",
+    "bundle_sha256": "f1396f4a0bd870e1ec8d40cdf1e7c4ef79df66f29800189fd5cdf1004702a924",
+    "indexed_actual_files": 2603,
+    "unique_blobs": 687,
+    "all_source_bytes_equal_full_retained_blobs": true,
+    "semantic_acceptance_not_derived_from_storage": true
+  },
+  "limits": "No producer/decoder/compiler/author-oracle execution. Logical byte equality recomputed against root decoded artifacts; same upstream codec kernel lineage. No world/coverage/quantization accuracy or selected metadata8 admission approval."
+}

@@ -1,0 +1,140 @@
+{
+  "status": "ACCEPT_BOUNDED_EXISTING_PRODUCER_P3_OBSERVATIONS_AND_SENSITIVE_CONTROLS_ONLY",
+  "review_kind": "fresh separate nonauthor actual evidence and direct artifact inspection",
+  "scope": {
+    "pairs": 8,
+    "paired_content_slots": 38,
+    "complete_logical_views": 402,
+    "fill_wrappers_per_mode_per_variant": 8,
+    "literal_topology_positives": 5,
+    "intended_topology_negatives": 9,
+    "intended_typed_mutations": 7,
+    "quantized_geometry_source_topology_cases": 4,
+    "revised_large_id_targets": 4
+  },
+  "accepted": [
+    "Exact finite topology-address-associated logical view preservation including all padding bits, covered association semantics and selected raw JSON value lexemes across eight raw/meshopt or quantized/quantized-meshopt pairs",
+    "Authored typed metadata states including INT64 extremes and exact integers beyond2^53, BOOLEAN tail padding, UTF8 offsets/nulls/noData and JSON list integer/string states in portable/native cases",
+    "Actual finite scene/node/mesh linkage, sparse absence, unique source identities per table, positive finite diagonal scale/translation and accessor finite/minmax/profile facts independently checked",
+    "Five literal topology positives have independently recomputed source cardinalities/line partition/polygon associations and triangle-area sums60,8,4; nine mutations show intended byte/document changes and source-line rejection locations",
+    "Four actual quantized source topology cases preserve counts, feature ownership, polygon ring association and triangle-to-loop area; exact raw/decoded view equality separate from coordinate accuracy",
+    "All seven typed mutations independently identified; blank BOOLEAN/U16-padding/propertyTable assertion causes established from exact raw fields and frozen source lines57/145/150",
+    "Both portable/native revised large-ID raw/meshopt pairs contain actual one-leaf POINTS primitive,65537metadata rows and exact f32 feature IDs0..65536 plus complete source identities",
+    "Core-fill exact feature JSON bytes and invariant b3dm header fields preserved; total length separately correct for each actual output",
+    "All97 current production hashes match frozen accepted source pin",
+    "Lossless retention checkpoint has2603actual indexed files,687unique content-addressed blobs; every decompressed blob/hash/length/source byte independently verified"
+  ],
+  "dispositions": {
+    "existing_source_baseline": "RETAIN for explicitly exercised finite observations and future adversarial fixtures",
+    "address_pairing": "RETAIN finite authored ordinal/source association approach; original ambiguous selector failure retained",
+    "source_fidelity_oracles": "RETAIN declared cardinality/metric/area/sensitivity scope only; complete source/world geometry is unproved",
+    "ordinary_and_fill_metadata_framing": "REWORK writer boundary for selected absolute8 contract; total-length alignment does not certify JSON/BIN boundaries",
+    "large_id_recipe": "RETAIN additive maxBytes128MiB producer estimate correction; original32MiB leaves/f32 expectation failure retained",
+    "CommonJS_decoder": "RETAIN exact observed artifact/NPM lineage for independent consumption; whole module Gitrevision and independent codec-kernel proof remain unproved",
+    "future_codec_and_source_classifier": "HELD; no new production semantics or classifications validated"
+  },
+  "concrete_remaining_requirements": [
+    "Separately gate and implement selected absolute8 writer bridge before claiming generated-source admission; never silently repair frozen identity sources",
+    "Actual owned Plan/serializer implementation, classifier semantics, admission/resource arithmetic and allocation tests remain required beyond accepted baseline/P2 mechanisms",
+    "P4/P5/final native/platform/installed-wheel/official-Blender/fullA2/default acceptance require their own final-source evidence",
+    "Full winding/triangle union/no-overlap/coverage, world/CRS placement, arbitrary scenes/resources/extensions and quantization error bound remain unproved",
+    "Do not infer public product rejection semantics from focused source-oracle failures",
+    "Root modified documentation/new repository copies are not final-source/PR acceptance in this review"
+  ],
+  "framing_observations": [
+    {
+      "case": "typed-metadata",
+      "mode": "portable",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 0,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "geometry",
+      "mode": "portable",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 1,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "fragmented-fill",
+      "mode": "portable",
+      "slots": 16,
+      "raw_all_three_metadata8_pass": 7,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "large-ids-65537",
+      "mode": "portable",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 0,
+      "meshopt_all_three_metadata8_pass": 1
+    },
+    {
+      "case": "typed-metadata",
+      "mode": "native",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 0,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "geometry",
+      "mode": "native",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 1,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "fragmented-fill",
+      "mode": "native",
+      "slots": 16,
+      "raw_all_three_metadata8_pass": 8,
+      "meshopt_all_three_metadata8_pass": 0
+    },
+    {
+      "case": "large-ids-65537",
+      "mode": "native",
+      "slots": 1,
+      "raw_all_three_metadata8_pass": 0,
+      "meshopt_all_three_metadata8_pass": 1
+    }
+  ],
+  "fill_metadata8_defect": {
+    "raw": {
+      "json_length": 1920,
+      "absolute_json_end": 1940,
+      "absolute_bin_start": 1948,
+      "glb_end": 2088
+    },
+    "meshopt": {
+      "json_length": 2464,
+      "absolute_json_end": 2484,
+      "absolute_bin_start": 2492,
+      "glb_end": 2712
+    },
+    "b3dm_inner_offset": 48,
+    "owner": "src/glb.rs align_glb_eight only checks total bytes multiple8 at early return; vector fill caller invokes it; ordinary encode_glb uses core4",
+    "scope": "observed selected absolute8 profile mismatch, not retrospective C1 failure or compression-preservation failure"
+  },
+  "excluded_archive_facts": [
+    "Tileset asset extras vectorBuildStateSha256 is codec-request-dependent and changes between variants",
+    "Tile extras encodedBytes changes with serialized output size; remaining exercised tile frame/slot facts compared independently",
+    "Whole archive/document byte identity is not asserted"
+  ],
+  "historical_epochs": {
+    "preexecution_receipt_sha256": "240b532b352d05546d3104cb8ce6d506a651a997dcff2fb32424bd6f4bd09b1a",
+    "original_preparation_pin_sha256": "b2990c02787ab5eec4fece845b03b8ef7fee3ac07ef8d0e9cc34bbab32062beb",
+    "additive_preparation_pin_sha256": "3f6c8a4772e3b77c324c99a7e1308b0496b54aa5863c22c5caa89eaf9acd7b2f",
+    "historical_root2031_inventory": "ee35... is earlier inventory; not rebound to completed phases",
+    "current_retention_index_sha256": "7da201fc5d2e95785a76899b20dc18e199bed4aff26fadab437290a40573ef1e"
+  },
+  "held": [
+    "New production codec",
+    "Selected metadata8 P3codec/source admission completion",
+    "Actual Plan prototype implementation",
+    "P2-P5 completion",
+    "FullA2",
+    "Default choices",
+    "Release/main/tag/publication"
+  ]
+}

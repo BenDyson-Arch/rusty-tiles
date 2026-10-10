@@ -1,0 +1,43 @@
+{
+  "status": "ACCEPT_BOUNDED_EXISTING_PRODUCER_P3_OBSERVATIONS_AND_SENSITIVE_CONTROLS_ONLY",
+  "recorded_at_utc": "2026-10-10T13:28:10.480002+00:00",
+  "reviewer_task": "/root/vector_p3_nonauthor_review",
+  "preexecution_receipt_sha256": "240b532b352d05546d3104cb8ce6d506a651a997dcff2fb32424bd6f4bd09b1a",
+  "reviewer_computation": {
+    "argv": [
+      "nice",
+      "-n",
+      "10",
+      "python3",
+      "-B",
+      "/tmp/rusty-tiles-vector-p3-actual-review/inspect_actual.py"
+    ],
+    "exit_code": 0,
+    "observed_tool_wall_time_seconds": 0.975968859,
+    "final_stdout": {
+      "status": "INDEPENDENT_ACTUAL_ARTIFACT_CHECKS_PASS_BOUNDED_BASELINE_ONLY",
+      "pairs": 8,
+      "views": 402,
+      "typed_controls": 7,
+      "pinned_files": 2721
+    },
+    "script_sha256": "93cc212f366468a51fe6ab106f68b6c649504254740e450815b12d028032de52",
+    "reviewer_development_corrections": [
+      "Initially used .3tz.extracted spelling; corrected to actual .extracted folders",
+      "Initial whole-tileset comparison included codec-request build-state hash and encodedBytes; narrowed explicitly to declared frame/content facts",
+      "Initial polygon segment split rejected a separator at range end; corrected against pinned polygon offset/separator semantics"
+    ],
+    "target_producer_decoder_compiler_cargo_git_author_oracle_invocations": 0
+  },
+  "repository_edits": 0,
+  "external_review_epoch_only": "/tmp/rusty-tiles-vector-p3-actual-review",
+  "review_files_sha256": {
+    "review.md": "5af3d8a096094c34e3123958f19e105bf907fcd4f5188eaf9f5d261a290a7acd",
+    "decisions.json": "cf601bfc162a9bcf9a77dd764113b34a7979673c2637b66e65524f84a9076ecf",
+    "input-pin.json": "ee687641832b93d545f7bfec76724fc3f469f71ff28de72bf6d3cba1cdd4be29",
+    "verification.json": "935c96bccc9d6a52ecf2a20904c1414ab44754152d1835e24cfb19545294e04a",
+    "inspect_actual.py": "93cc212f366468a51fe6ab106f68b6c649504254740e450815b12d028032de52"
+  },
+  "accepted_scope": "finite existing-producer baseline/control/artifact observations only",
+  "root_final_docs_pr_head_not_reviewed": true
+}

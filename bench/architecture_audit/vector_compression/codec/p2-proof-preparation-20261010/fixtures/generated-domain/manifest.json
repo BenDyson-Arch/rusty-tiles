@@ -1,0 +1,619 @@
+{
+  "status": "Independent authored raw roles/associations, oracle sensitivity only; neither codec nor actual producer/domain acceptance",
+  "cases": [
+    {
+      "name": "positions-f32",
+      "role": "mandatory generated unquantized",
+      "path": "positions-f32",
+      "files": {
+        "positions.bin": {
+          "bytes": 48,
+          "sha256": "d1209481d37b00a392b0dd6b604a2c6cec452dde659aa8a305797df1406d36e1"
+        },
+        "associations.json": {
+          "bytes": 118,
+          "sha256": "ca3fa4504d3dd1cc600fb91de6c8759558ac65403040c15feef7eb10b2e77144"
+        }
+      },
+      "independentExpectedMeaning": {
+        "bits": [
+          0,
+          2147483648,
+          1065353216,
+          3212836864,
+          1056964608,
+          1073741824,
+          1077936128,
+          1082130432,
+          3229614080,
+          1048576000,
+          1065353216,
+          0
+        ],
+        "count": 4,
+        "stride": 12
+      },
+      "associations": {
+        "POSITION": 0,
+        "componentType": 5126,
+        "type": "VEC3",
+        "count": 4,
+        "nodeRaw": "{\"translation\":[17,19,23],\"scale\":[1,1,1]}"
+      },
+      "proofScope": "Independent explicit bit words, whole byte preservation including negative0; geometry/source CRS correctness outside scope",
+      "sensitiveMutation": "change signed-zero word or reorder positions"
+    },
+    {
+      "name": "positions-normalized-u16",
+      "role": "mandatory generated quantized",
+      "path": "positions-normalized-u16",
+      "files": {
+        "positions.bin": {
+          "bytes": 32,
+          "sha256": "2a85460dc543fa8f4a0cc5ea31d0aaa8c77b17cceac7976ded8d01472995fa8e"
+        },
+        "associations.json": {
+          "bytes": 183,
+          "sha256": "1468602147e8aceb509b472f319cb9b837efa94a9e5f112f5b620d8e4ffec445"
+        }
+      },
+      "independentExpectedMeaning": {
+        "raw": [
+          [
+            0,
+            65535,
+            32768
+          ],
+          [
+            1,
+            32767,
+            65534
+          ],
+          [
+            65535,
+            0,
+            0
+          ],
+          [
+            30000,
+            40000,
+            50000
+          ]
+        ],
+        "count": 4,
+        "stride": 8,
+        "paddingHex": "a53c",
+        "normalizedDenominator": 65535
+      },
+      "associations": {
+        "POSITION": 0,
+        "componentType": 5123,
+        "type": "VEC3",
+        "normalized": true,
+        "byteStride": 8,
+        "extension": "KHR_mesh_quantization",
+        "nodeRaw": "{\"translation\":[17,19,23],\"scale\":[100,200,300]}"
+      },
+      "proofScope": "Nonzero padding and authored dequantization node preserved; does not prove source quantizer error",
+      "sensitiveMutation": "drop/zero padding or change node scale/normalization"
+    },
+    {
+      "name": "feature-ids-padded-u16",
+      "role": "mandatory generated IDs <=65536 rows",
+      "path": "feature-ids-padded-u16",
+      "files": {
+        "ids.bin": {
+          "bytes": 12,
+          "sha256": "26ff4a751a9c9d3ca20313e9197274bb11278c8316afd2a1f23a708e0f7ebd11"
+        },
+        "associations.json": {
+          "bytes": 93,
+          "sha256": "0aeeceb82739c647238c14ececeebfdc0b54bd2e9018e06d285b6577b0ede077"
+        }
+      },
+      "independentExpectedMeaning": {
+        "ids": [
+          0,
+          1,
+          65535
+        ],
+        "stride": 4,
+        "paddingHex": "b64d"
+      },
+      "associations": {
+        "_FEATURE_ID_0": 1,
+        "propertyTable": 0,
+        "featureCount": 65536,
+        "componentType": 5123,
+        "attribute": 0
+      },
+      "proofScope": "Boundary raw encoding and exact feature/table associations; actual65536-row producer remains future",
+      "sensitiveMutation": "change ID padding/featureCount/propertyTable"
+    },
+    {
+      "name": "feature-ids-f32",
+      "role": "mandatory generated IDs >65536 up to16777217 rows",
+      "path": "feature-ids-f32",
+      "files": {
+        "ids.bin": {
+          "bytes": 16,
+          "sha256": "5a391f82cece75b729243659186e3161fff41f2bb269f99cf24c3ff82b50ed28"
+        },
+        "associations.json": {
+          "bytes": 96,
+          "sha256": "990ec6dbd519499a17ed3db974cfcc0c77f8e0e2ffce17fe769ff3349a7442d8"
+        }
+      },
+      "independentExpectedMeaning": {
+        "ids": [
+          0,
+          1,
+          65536,
+          16777216
+        ],
+        "stride": 4
+      },
+      "associations": {
+        "_FEATURE_ID_0": 1,
+        "propertyTable": 0,
+        "featureCount": 16777217,
+        "componentType": 5126,
+        "attribute": 0
+      },
+      "proofScope": "Exact representable f32 IDs; actual65537-row producer path and upper rejection unexecuted",
+      "sensitiveMutation": "change componentType/propertyTable or one ID byte"
+    },
+    {
+      "name": "line-restart",
+      "role": "mandatory POINTS/LINE_STRIP stream semantics",
+      "path": "line-restart",
+      "files": {
+        "indices.bin": {
+          "bytes": 20,
+          "sha256": "08e1a7764b7f9be065a59767177ef9998fa47d94d4ff45437478612852118553"
+        },
+        "associations.json": {
+          "bytes": 96,
+          "sha256": "d6c6014e03eca72f13e34dc49bd668d369f9134c8f3d3dc4fbe9bda53b16699b"
+        }
+      },
+      "independentExpectedMeaning": {
+        "indices": [
+          0,
+          1,
+          4294967295,
+          2,
+          3
+        ],
+        "segments": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ]
+        ]
+      },
+      "associations": {
+        "mode": 3,
+        "indices": 2,
+        "restartExtension": "KHR_mesh_primitive_restart",
+        "restartIndex": 4294967295
+      },
+      "proofScope": "Order/restart raw bytes, not TRIANGLES reorder codec; point mode0 remains complete generated-corpus gate",
+      "sensitiveMutation": "remove/move restart or change mode"
+    },
+    {
+      "name": "polygon-loops-offsets",
+      "role": "mandatory polygon exterior/holes/multiple polygon raw streams",
+      "path": "polygon-loops-offsets",
+      "files": {
+        "loops.bin": {
+          "bytes": 44,
+          "sha256": "4d4753c830f2fe0b6d91b891ab03827882231c89b86a853843ce0e4d9242cc42"
+        },
+        "offsets.bin": {
+          "bytes": 12,
+          "sha256": "e26adf78d7a1efc64b246fc8470d8c8eb78ae84fc5ab3921cb03ab8d69e94c3a"
+        },
+        "associations.json": {
+          "bytes": 87,
+          "sha256": "7a626750b314c66e43300bd6bea3289f235c749ef236cb2fa19027be883e5230"
+        }
+      },
+      "independentExpectedMeaning": {
+        "loops": [
+          0,
+          1,
+          2,
+          3,
+          0,
+          4294967295,
+          4,
+          5,
+          6,
+          7,
+          4
+        ],
+        "offsets": [
+          0,
+          6,
+          11
+        ],
+        "exterior": [
+          0,
+          1,
+          2,
+          3,
+          0
+        ],
+        "hole": [
+          4,
+          5,
+          6,
+          7,
+          4
+        ]
+      },
+      "associations": {
+        "extension": "EXT_mesh_polygon",
+        "indices": 2,
+        "polygonOffsetAccessor": 3,
+        "featureTable": 0
+      },
+      "proofScope": "Independent raw arrays/topology association witness; full actual authored multiple polygon/fill semantics require producer corpus/primary walk",
+      "sensitiveMutation": "alter polygon offset/restart/hole link"
+    },
+    {
+      "name": "fill-triangles-material",
+      "role": "mandatory fill-only generated GLB",
+      "path": "fill-triangles-material",
+      "files": {
+        "indices.bin": {
+          "bytes": 24,
+          "sha256": "fe78c65211dd0b56a97024fb61111e686ef1fe054aa132ba58e2891ac496f1ee"
+        },
+        "associations.json": {
+          "bytes": 176,
+          "sha256": "bd61b1e92392fd93a156bed554bcd0ee3b1fe0f3b88fd4bb8d0a1aaf9a48e2bf"
+        }
+      },
+      "independentExpectedMeaning": {
+        "indices": [
+          0,
+          1,
+          2,
+          0,
+          2,
+          3
+        ]
+      },
+      "associations": {
+        "mode": 4,
+        "materialRaw": "{\"doubleSided\":true,\"pbrMetallicRoughness\":{\"baseColorFactor\":[0.1,0.2,0.3,0.4]},\"extensions\":{\"KHR_materials_unlit\":{}}}",
+        "propertyTable": 0
+      },
+      "proofScope": "Raw TRIANGLES order and exact material/table associations; b3dm wrapping belongs outside codec",
+      "sensitiveMutation": "change factor/material/unlit/table link or index order"
+    },
+    {
+      "name": "metadata-boolean-bitset",
+      "role": "mandatory raw BOOLEAN",
+      "path": "metadata-boolean-bitset",
+      "files": {
+        "values.bin": {
+          "bytes": 2,
+          "sha256": "6e185fc6f992a89751ce8beebd60154efda05eb5ceab8f184813f62fb4fbb92f"
+        },
+        "associations.json": {
+          "bytes": 85,
+          "sha256": "d776dcd18c0c0bd8f49a38811ecb88b74821af8256d018f9f8e8da0ff608b90f"
+        }
+      },
+      "independentExpectedMeaning": {
+        "rows": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          true
+        ],
+        "count": 11
+      },
+      "associations": {
+        "className": "c",
+        "propertyName": "enabled",
+        "valuesView": 0,
+        "type": "BOOLEAN",
+        "count": 11
+      },
+      "proofScope": "Bit boundaries across two bytes, raw metadata stays raw",
+      "sensitiveMutation": "flip bit8 or count/table association"
+    },
+    {
+      "name": "metadata-int64-nodata",
+      "role": "mandatory raw signed64/noData",
+      "path": "metadata-int64-nodata",
+      "files": {
+        "values.bin": {
+          "bytes": 32,
+          "sha256": "5d76a66fb26e28b26ef899d4eb925a5056a47e5603a500361bf710483762fb60"
+        },
+        "associations.json": {
+          "bytes": 101,
+          "sha256": "782ffd0463c1138e6f5d7ceceb629a6efc48778f403aa839ba637f1c64022eff"
+        }
+      },
+      "independentExpectedMeaning": {
+        "raw": [
+          -9223372036854775808,
+          -9007199254740993,
+          9007199254740993,
+          9223372036854775807
+        ],
+        "rows": [
+          null,
+          -9007199254740993,
+          9007199254740993,
+          9223372036854775807
+        ],
+        "noData": -9223372036854775808
+      },
+      "associations": {
+        "valuesView": 0,
+        "componentType": "INT64",
+        "noDataRaw": "-9223372036854775808",
+        "className": "c",
+        "count": 4
+      },
+      "proofScope": "Exact integer extrema and noData association; current writer sentinel selection separately tested with real data",
+      "sensitiveMutation": "change >2^53 low bit or noData/class/count"
+    },
+    {
+      "name": "metadata-float64",
+      "role": "mandatory raw FLOAT64",
+      "path": "metadata-float64",
+      "files": {
+        "values.bin": {
+          "bytes": 32,
+          "sha256": "a4a1155eb2edbf04f803516ae44d57eb15b69dfb09096959ed0f202777cf9e58"
+        },
+        "associations.json": {
+          "bytes": 52,
+          "sha256": "3a9d3b0f51d81f0f08eb238abf62e71dd41fb1d86d70040714b4a7c80a0e3f6f"
+        }
+      },
+      "independentExpectedMeaning": {
+        "bits": [
+          9223372036854775808,
+          4591870180066957722,
+          4614256656552045848,
+          13860109328209412096
+        ]
+      },
+      "associations": {
+        "valuesView": 0,
+        "componentType": "FLOAT64",
+        "count": 4
+      },
+      "proofScope": "Exact IEEE64 bits including negative0, no narrowing through f32",
+      "sensitiveMutation": "truncate64-bit value or zero signed0"
+    },
+    {
+      "name": "metadata-utf8-array-string",
+      "role": "mandatory STRING and list_fields=json arrays",
+      "path": "metadata-utf8-array-string",
+      "files": {
+        "values.bin": {
+          "bytes": 44,
+          "sha256": "86b2cd4782f1b8d72de0007116b9487e3f423c8f01d07cbbfffd68258b6aca3f"
+        },
+        "stringOffsets.bin": {
+          "bytes": 20,
+          "sha256": "ce73e1575b0b7fcda6c51eda3d02c68de7d935365cfa7ec3e49fd3ee756ec0d9"
+        },
+        "associations.json": {
+          "bytes": 113,
+          "sha256": "ef86b8b4a2fb9c33477efee380c8b1d728ab76d98fa4177b1f8b53011b0aee56"
+        }
+      },
+      "independentExpectedMeaning": {
+        "rows": [
+          "",
+          "\u00e9\ud83e\udd89",
+          "plain",
+          "[9007199254740993,null,\"x\",[1,2]]"
+        ],
+        "stringOffsets": [
+          0,
+          0,
+          6,
+          11,
+          44
+        ],
+        "listMeaning": [
+          9007199254740993,
+          null,
+          "x",
+          [
+            1,
+            2
+          ]
+        ]
+      },
+      "associations": {
+        "valuesView": 0,
+        "stringOffsetsView": 1,
+        "stringOffsetType": "UINT32",
+        "className": "c",
+        "count": 4,
+        "list_fields": "json"
+      },
+      "proofScope": "Unicode/empty strings and exact ordered heterogeneous list-as-STRING, not native structural array authoring",
+      "sensitiveMutation": "change UTF8/string offset/null/order/exact integer token"
+    },
+    {
+      "name": "external-uint64",
+      "role": "independent external raw domain, not current writer authoring",
+      "path": "external-uint64",
+      "files": {
+        "values.bin": {
+          "bytes": 24,
+          "sha256": "c0689d422c3dd455464a62c4e8ed1b55c00d4e949da94767929c354a77109da5"
+        },
+        "associations.json": {
+          "bytes": 51,
+          "sha256": "7b1934a4b9b7eefe5e353934c30aba0fb7a7bcca15f6c4730536c0f11afb42f1"
+        }
+      },
+      "independentExpectedMeaning": {
+        "rows": [
+          0,
+          9007199254740993,
+          18446744073709551615
+        ]
+      },
+      "associations": {
+        "valuesView": 0,
+        "componentType": "UINT64",
+        "count": 3
+      },
+      "proofScope": "Independent raw preservation extension; signed writer does not emit this domain",
+      "sensitiveMutation": "change high/low64 bit or componentType"
+    },
+    {
+      "name": "external-structural-array-shared",
+      "role": "independent fixed/variable structural arrays/shared metadata",
+      "path": "external-structural-array-shared",
+      "files": {
+        "values.bin": {
+          "bytes": 32,
+          "sha256": "69599c59d9a4c38b055747b1d04c57633cef9caf0ccdcd8728683342d14e8ae3"
+        },
+        "arrayOffsets.bin": {
+          "bytes": 16,
+          "sha256": "78c1f43ab6f856dfb12c9e73f27ee7883763e8a6a3d27f49a8e89a74de3dd84a"
+        },
+        "associations.json": {
+          "bytes": 123,
+          "sha256": "851fc98efc8ed6f858474f7dfd4acee2218555e45d451ec0463589fc25bbc043"
+        }
+      },
+      "independentExpectedMeaning": {
+        "variableRows": [
+          [
+            1,
+            2
+          ],
+          [],
+          [
+            3,
+            9007199254740993
+          ]
+        ],
+        "fixedRows": [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            9007199254740993
+          ]
+        ]
+      },
+      "associations": {
+        "valuesView": 0,
+        "arrayOffsetsView": 1,
+        "arrayOffsetType": "UINT32",
+        "variableCount": 3,
+        "fixedArrayCount": 2,
+        "sharedValuesView": 0
+      },
+      "proofScope": "Native array preservation is independent external fixture; list-string current source stays mandatory separately",
+      "sensitiveMutation": "swap values view or change offsets/shared reference"
+    },
+    {
+      "name": "external-interleaved-matrix-partial",
+      "role": "independent core shared/interleaved/padded matrices",
+      "path": "external-interleaved-matrix-partial",
+      "files": {
+        "interleaved.bin": {
+          "bytes": 48,
+          "sha256": "4dbdc2b2b62cb00749785bc84202236dbc3777d74660611b8e58812f0cfde6c3"
+        },
+        "mat3-u8-occupied11.bin": {
+          "bytes": 11,
+          "sha256": "fa1a3fd11eef4b245a890163d17beef297528e6ebcafb6f89993ea733b2bcb0e"
+        },
+        "associations.json": {
+          "bytes": 91,
+          "sha256": "09a310a6fc4291a115326b581cdef4d83ad4e51dae207f55de07bf3b06e11c3a"
+        }
+      },
+      "independentExpectedMeaning": {
+        "interleavedStride": 24,
+        "positionOffset": 0,
+        "otherOffset": 12,
+        "counts": [
+          2,
+          2
+        ],
+        "mat3ColumnStride": 4,
+        "mat3Occupied": 11,
+        "mat3EffectiveTight": 12
+      },
+      "associations": {
+        "view0": 0,
+        "sharedRefs": [
+          0,
+          1
+        ],
+        "view1": 1,
+        "matrixType": "MAT3",
+        "componentType": 5121,
+        "count": 1
+      },
+      "proofScope": "Physical views once; partial final matrix padding remains Raw after valid window; bytes preserve nonzero padding",
+      "sensitiveMutation": "repack count from last accessor, compress11-byte partial view, or zero column padding"
+    },
+    {
+      "name": "opaque-source-json",
+      "role": "mandatory raw JSON preservation",
+      "path": "opaque-source-json",
+      "files": {
+        "associations.json": {
+          "bytes": 130,
+          "sha256": "a27d8e5dde895ba9224bf930a384f2a8af76e8e3446e957c654ab60f91d70f3e"
+        }
+      },
+      "independentExpectedMeaning": {
+        "raw": "{\"n\":9007199254740993,\"u\":18446744073709551615,\"x\":1e400,\"m\":{\"$serde_json::private::Number\":\"1e400\"}}"
+      },
+      "associations": {
+        "extrasRaw": "{\"n\":9007199254740993,\"u\":18446744073709551615,\"x\":1e400,\"m\":{\"$serde_json::private::Number\":\"1e400\"}}"
+      },
+      "proofScope": "Exact raw token/subtree witness; custom key whitespace normalization outside raw subtrees is allowed",
+      "sensitiveMutation": "Value roundtrip/marker interpretation/token normalization"
+    }
+  ],
+  "mandatoryActualCorpusGates": [
+    "portable/native default and raised caps",
+    "quantized/unquantized point/line/polygon exterior+holes/multiple polygons/fill-only",
+    "actual65536/65537 feature-ID branch and exact upper representation refusal",
+    "signed64/float64/boolean/UTF8/null/list_fields=json source field columns",
+    "shared/interleaved/partialmatrix raw disposition",
+    "canonical compressed+raw metadata identity/repeated invocation and all-raw identity",
+    "absentparent packedSCALAR vs physical12; explicitparent mismatch; real range negative",
+    "legacy metadata envelope disposition plus selected-framing producer bridge",
+    "tablePicking pinned browser consumer and unchanged feature/schema/class/table/topology/node associations"
+  ]
+}

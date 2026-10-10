@@ -1,0 +1,26 @@
+{
+  "decision": "ACCEPT_RETENTION_CHECKPOINT_ONLY",
+  "whole_precode": "HELD_P2_P3_P4_P5",
+  "implementation_ready": false,
+  "checkpoint_doc_sha256": "02addfcb8ae1217d14a2f758be4f25494e8186b01595d989e2a78cb235f269c4",
+  "accepted_C1_prerequisite": {
+    "head": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+    "merge": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+    "tree": "57095507d251e4f2fcb826cee367fa72bd306158",
+    "mergedAt": "2026-10-10T12:29:33Z",
+    "proof": "Retained original remote-review/merge records; current97 selected production bytes match accepted pin. No Git/remote reexecution here."
+  },
+  "verified_counts": {
+    "retained_files": 997,
+    "P2_integrity_files": 957,
+    "C1_lossless_records": 97,
+    "C1_review_files": 4,
+    "P2_failed_model_records": 8,
+    "current_production_files_equal_accepted_pin": 97
+  },
+  "mismatches": [],
+  "failed_original_model_lane_retained": true,
+  "static_toolchain_closure_acceptance_held": true,
+  "authority": "Documentation/evidence retention only; no source/default/coefficient/helper/framework/implementation/fullA2/issueclosure/main/tag/release approval",
+  "executed_by_reviewer": "Lightweight reads/hash/JSON/lossless-gzip comparisons only"
+}

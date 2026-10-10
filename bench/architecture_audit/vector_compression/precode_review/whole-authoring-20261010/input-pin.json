@@ -1,0 +1,1370 @@
+{
+  "/tmp/rusty-tiles-vector-codec-foundation/AGENTS.md": {
+    "bytes": 3752,
+    "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/docs/architecture/README.md": {
+    "bytes": 18975,
+    "sha256": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/docs/architecture/vector-compression-foundation.md": {
+    "bytes": 10768,
+    "sha256": "73db500b0c6c013e5ff5656006503b29981a1b5241d94d82e7f5a60c99c2528f"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/contract-draft.md": {
+    "bytes": 18401,
+    "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/lifecycle/revision-20261010/contract-draft.md": {
+    "bytes": 24408,
+    "sha256": "637bac2fb0c85c11abc43eb370880aea7daa9aadf54953cbcded87a201a93789"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/checklist.md": {
+    "bytes": 15804,
+    "sha256": "285a9bbb1d70d1586e8c295e0d2639d390656ee8d0c5f628ad36a0e8133c36a1"
+  },
+  "/tmp/rusty-tiles-vector-proof-checkpoint-review/receipt.json": {
+    "bytes": 1599,
+    "sha256": "2e2a88498d5472f950a7e311f1a3587a85dd049fe7891fd9b6bf719c63cb896b"
+  },
+  "/tmp/rusty-tiles-vector-proof-checkpoint-review/verification.json": {
+    "bytes": 1909,
+    "sha256": "426e033726f639a43b2c961658daae219135cd08f10d1a2a0bf83636dc0f2d97"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/integrity.json": {
+    "bytes": 793,
+    "sha256": "44b7af49bc32ffc2cc17e80119514d3d43911b416989648dbcd5838a570c7826"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/decisions.json": {
+    "bytes": 2200,
+    "sha256": "da8aaa38bd8e644159f15e5bc6a993be770829ddfd2aa679b0a13e9933b4aae1"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/review.md": {
+    "bytes": 12052,
+    "sha256": "b93bb334aa432bc1b40b977a4798f5d3f4befb2aea46f17593dbfc394ea87bcf"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/input-pin.json": {
+    "bytes": 302830,
+    "sha256": "0e228b33137ac93aa490a8d76b1141f35d66583785d95ac0d93ffb414c265ba0"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/verification.json": {
+    "bytes": 5308,
+    "sha256": "0600c5826883ba7688fd125c008a75ed12f5868f82c857636683acfb4e204513"
+  },
+  "/tmp/rusty-tiles-codec-p2-actual-review/verify_records.py": {
+    "bytes": 11382,
+    "sha256": "60c701f9ee4a81dddbe9132eb7514a9a89aac36ae550b2bdad7a7f4f4f587b30"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/integrity.json": {
+    "bytes": 930,
+    "sha256": "2f4f5388a33b613def49a5f47f7a3021703ee8b3918f416e6304d62a98d47a35"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/decisions.json": {
+    "bytes": 2592,
+    "sha256": "94b1d9a64a0fa5c3d44b93454fdb2857c558aa6860ad2c4eef0ebdcd5b70058b"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/review.md": {
+    "bytes": 8065,
+    "sha256": "1189778677d4ce35d901a9796bf45f694019dc4553bdb4559dfa60804b54a48c"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/prototype-plan.md": {
+    "bytes": 9837,
+    "sha256": "7669807a4152291aa24e70d79071b0d2a5920b0e7bd625e1caafe2fddfac1188"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/input-pin.json": {
+    "bytes": 10189,
+    "sha256": "251d5e0f9d100d5ab406bfeb076fe6048befd23dcdb63f6561a20228b4a7234e"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/verification.json": {
+    "bytes": 618,
+    "sha256": "ca96fbd7526b3049f80ef720fc7a5e4dee33b8f9540959cc0a05df576923a65f"
+  },
+  "/tmp/rusty-tiles-codec-p2-allocation-review/verify_retained.py": {
+    "bytes": 4670,
+    "sha256": "ffc7475e749ed8009d6fb5e0c27ea9f406a299e155edd87d4e6dc7a8fc2b30bf"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/integrity.json": {
+    "bytes": 802,
+    "sha256": "9e93b87b60603ccccde7e87397fd70674c1433226d700caf6de58dbd8562a769"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/findings.json": {
+    "bytes": 762,
+    "sha256": "dddabe315e3d4d5d8b3b537d1d43f1c933cfaab6c22a9f44bfe7b4d293e42b38"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/review.md": {
+    "bytes": 7039,
+    "sha256": "cf28cd68202a1678e07c1ee9bd642cd22ee797a8e378fa754ab53e6e0b086d82"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/table-model-output.json": {
+    "bytes": 1189,
+    "sha256": "61a89402e86e4374f60e37a11170f831dcc66d395ad93001a186259c1bc63cf5"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/table-model.py": {
+    "bytes": 770,
+    "sha256": "1a37ee167589a79e43f58800db482494a7d45cab0ea0c8334d11a903ba1560f2"
+  },
+  "/tmp/rusty-tiles-codec-parser-coefficient-review/input-pins.json": {
+    "bytes": 5645,
+    "sha256": "4736e27496a0770cf1448b7007624b7b8262510114f0bb8dfb37d67eb44a8d64"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/receipt.json": {
+    "bytes": 2082,
+    "sha256": "73adb01505febe3b4b09d95fe995580fb6a1eb7ba04d3811d78dd32f7dd09143"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/review.md": {
+    "bytes": 5343,
+    "sha256": "5af3d8a096094c34e3123958f19e105bf907fcd4f5188eaf9f5d261a290a7acd"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/decisions.json": {
+    "bytes": 7432,
+    "sha256": "cf601bfc162a9bcf9a77dd764113b34a7979673c2637b66e65524f84a9076ecf"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/input-pin.json": {
+    "bytes": 600177,
+    "sha256": "ee687641832b93d545f7bfec76724fc3f469f71ff28de72bf6d3cba1cdd4be29"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/verification.json": {
+    "bytes": 50117,
+    "sha256": "935c96bccc9d6a52ecf2a20904c1414ab44754152d1835e24cfb19545294e04a"
+  },
+  "/tmp/rusty-tiles-vector-p3-actual-review/inspect_actual.py": {
+    "bytes": 25694,
+    "sha256": "93cc212f366468a51fe6ab106f68b6c649504254740e450815b12d028032de52"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/receipt.json": {
+    "bytes": 1519,
+    "sha256": "f5fbf4e38377ac3f42c2de7a12b9f629542324d9992126d1ebc6dd13ab49a102"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/review.md": {
+    "bytes": 3783,
+    "sha256": "362ec4bba834a8a0b2f6363ea0c97ff8312857d2f2e4822e5ca2f40d570bdf41"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/decisions.json": {
+    "bytes": 4901,
+    "sha256": "d644a6db27d972df214db1d06fbd542455f8e469d8eb37dd98141e5879eeb09b"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/input-pin.json": {
+    "bytes": 69745,
+    "sha256": "f6cf1f210064043788fb00b527c1827f674cd51e141af0518eaf6caf5abca672"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/verification.json": {
+    "bytes": 18022,
+    "sha256": "decfc84ed4dd5ced5006c9535fd22f62fe9761342801dfe015f3cd1e15287066"
+  },
+  "/tmp/rusty-tiles-vector-f0-actual-review/verify_inputs.py": {
+    "bytes": 6666,
+    "sha256": "6e004ba297e5c3053200c530dff7ef33877f8fba590ddc0487a132fcd882cf83"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-precode-review/integrity.json": {
+    "bytes": 599,
+    "sha256": "f2b9bfa0046df0fae98af0615d7ef8e994ff521a5a9f07393296ac34d8015162"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-precode-review/review.md": {
+    "bytes": 7113,
+    "sha256": "3e4a17fb9303b05491ecbd0a2210ba77bb4f3336e5141defa96ad2df068ef53f"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-precode-review/decisions.json": {
+    "bytes": 1108,
+    "sha256": "b4943cc8b7920c1db4cb64dd72dbd2a45dda23bf324c19e6c9549baf6ca6b57c"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-precode-review/static-check.json": {
+    "bytes": 692,
+    "sha256": "8543896518b12ceb1f78659f1dcb2a73aa988ce13888a039329d88d08bce4e52"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-precode-review/input-pins.json": {
+    "bytes": 2787,
+    "sha256": "ad72547d3230ad6a8497d0c656ede8cabdc9e7ffaa9ae85ddd26dcadbe3e365c"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/integrity.json": {
+    "bytes": 736,
+    "sha256": "65328ff1cb59efb4dbcec4efc0304bcd145d9156201994e50a6a156640449a81"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/decisions.json": {
+    "bytes": 996,
+    "sha256": "2457328fbc1d53b1cc8c276f345d9f98ca7f9c47d7067f44e9987af76a70a518"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/input-pins.json": {
+    "bytes": 1207,
+    "sha256": "937cd6dee1453d99b75eb1735bf8e7115f3c5b3f1c4729af25fbfb1a5b8ee9bf"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/review.md": {
+    "bytes": 7250,
+    "sha256": "f901d18d359884be858ed21ceed542f070f624bde3d0416509d5cd9845e2646b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/verification.json": {
+    "bytes": 6316,
+    "sha256": "506c6c74c49e01e43943be0c69c5891250362723191076676bccee25ec6e58ac"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-actual-review/verify_actual.py": {
+    "bytes": 9812,
+    "sha256": "ae07a1e88da5b8bdef85264129952e82d6b9229120fabce69d44495ad5b1c3c3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/integrity.json": {
+    "bytes": 11628,
+    "sha256": "4433a13ab08fc02f892f2287c246e90dbbf14f9c265742c54736c044f76ecee4"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/README.md": {
+    "bytes": 1145,
+    "sha256": "3727851b814617956a3461af66873a9dfd8ed2655345db0dce44ed217ff9fcc8"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/decisions.json": {
+    "bytes": 2166,
+    "sha256": "9543c9d5fa06d556ab75b3eb141952640fec77d37c98ed4b82cb63dd36c6de52"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/root_runner.py": {
+    "bytes": 3239,
+    "sha256": "f1832f3f83699dd56ddd6805165efb619145258e7db553ea5796014567102154"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/representation.md": {
+    "bytes": 10519,
+    "sha256": "80130ab3e2ebccc59cca547926b0c3cbd1afc0cea0c85351054ee8fddd3f341e"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/check_records.py": {
+    "bytes": 9199,
+    "sha256": "1dee4441de09faace20ea70ac773405c5cfd4ff0308b43dcffa27b1aa95c4897"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/input-pin.json": {
+    "bytes": 32621,
+    "sha256": "3d2344cc58db400d7edd7f37ed3350033fd1dc9509b9021c7c4c6fffdd7f583b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/commands.json": {
+    "bytes": 17157,
+    "sha256": "e02ae8f9a2a69fe1b09d39243d7e6da2ee056ff5b82e07e6d3e9e1d6a8d9f51e"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures.json": {
+    "bytes": 68293,
+    "sha256": "b3f678b168c4b9e54842f6b45fef81bdca9eec602e5319c0dd7b28c5b761378a"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/prepare_inputs.py": {
+    "bytes": 10122,
+    "sha256": "44ca7c3134d5c150d100e178f04f421c5f67601d89e7141faa2039eba2d97fcc"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/owned_plan_probe.rs": {
+    "bytes": 27645,
+    "sha256": "aa7561c5503e19611e2bab9f7b2388e0f18fb19d20c0a9c66444e098cfd54881"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/input.json": {
+    "bytes": 111,
+    "sha256": "59429d78929a37183c9fd3bb6de37b0bc0b3fc3f31f782a1ee70fcc69dde7c79"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/input.json": {
+    "bytes": 103,
+    "sha256": "01f5782ec6031f4193e19834f63d4b0372a9ac0ad280b6cb4a189155694c27ea"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/input.json": {
+    "bytes": 57,
+    "sha256": "c58b05445745455d4c63ebe6ea5ffe4d6b7e20dc625e1355fed8ff6522f6b08a"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/input.json": {
+    "bytes": 50,
+    "sha256": "3516315f686dbdd60178e830bf3039331eee476a18d3fd0afadbd74d79150125"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/input.json": {
+    "bytes": 29,
+    "sha256": "fa220b00279295ddbe669dd80e810b7f1756a736d8593f7696bb1ddc17646d18"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/input.json": {
+    "bytes": 22,
+    "sha256": "b1ecb53b6e0d9e36254c7cfb43810ee34ba5b9cea215b4d9751d13d4c5a83e6e"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/input.json": {
+    "bytes": 8,
+    "sha256": "fab7405a47c0231c425bb10810e191acd59fad1abe8374bf802ec44035dc64ed"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/input.json": {
+    "bytes": 65696,
+    "sha256": "e3eae249aa17616085697dad55fd9e036849ead3e3fa3979bcf989a6806fb129"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/expected.glb": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/input.json": {
+    "bytes": 161,
+    "sha256": "e098afee47fa8cf86e8dba5935a9a705b6f4b6bda3d83c7efceec88302f5ace9"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/expected.glb": {
+    "bytes": 676,
+    "sha256": "e57c0222bdb7280ec97e95da8b4a39e4c3bb465b047e50f01ad5951499212286"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/expected.json": {
+    "bytes": 640,
+    "sha256": "5660f6f82d131e73a90d4a59bc28638b53f713b4d0a584bd21bfb1dba0a0754d"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/input.json": {
+    "bytes": 176,
+    "sha256": "d7cca3b60fabce0e537d9770bd83f37ab98261f5e28dcba675f5f2ac5ca34881"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/shared_refs.json": {
+    "bytes": 23,
+    "sha256": "6b5b2b61bab53901041fbc9b6c8486b15b23b7424cc70c70552b94e291f3e26d"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/expected.glb": {
+    "bytes": 740,
+    "sha256": "3e833cf94cc8363caee4b101bc4cd6900ad8ebb71ca1fe34ff5b8aa43f5f851d"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/expected.json": {
+    "bytes": 704,
+    "sha256": "7751197e5f5ad6043b94fc4effea6ba1bafa023dd4e05480837c417f7afbd777"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/input.json": {
+    "bytes": 387,
+    "sha256": "d4567f1235238c937a525359aa33a0b6efe1a3ebd58cf28748c1b1af1db0b6b2"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/expected.glb": {
+    "bytes": 296,
+    "sha256": "9187d30a7ba4a5431208be907adfd8df827a87063c50095002a309aed946c7bc"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/expected.json": {
+    "bytes": 259,
+    "sha256": "5050f5cae8ac14ac1382e7130c0a1bbaece75a83362abd3f95bd9e0b7c64ab44"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/input.json": {
+    "bytes": 89,
+    "sha256": "05eee0e018c289f43ddea8b3e551a1aca2743a7ae63159b1d44641e074f28ebd"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/expected.glb": {
+    "bytes": 66028,
+    "sha256": "3db449540c0a827e5d358681c85e19d2321517549ce2988fafc5fdecb4d45f7b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/expected.json": {
+    "bytes": 65991,
+    "sha256": "6c329ceebd9deedee4d4a74c002d39f401430d32759d107097edebd8602c3471"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/input.json": {
+    "bytes": 65679,
+    "sha256": "9d1111c256195133505cb3841a48c8608b7cac6610ea081ffc2725882461da46"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/expected.glb": {
+    "bytes": 66028,
+    "sha256": "cb047deb9c0c909d03e057cd88bd1bfe17e884eeedfe552a73333671b58171fc"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/expected.json": {
+    "bytes": 65991,
+    "sha256": "356973bde6eca1ec347f860d2c6bd0805b5915b02f900ad4f2c2c4f02defc789"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/binary.bin": {
+    "bytes": 5,
+    "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/edits.json": {
+    "bytes": 137,
+    "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/input.json": {
+    "bytes": 65679,
+    "sha256": "478ae32a49b4b97886c373f41f677c051458bb95f9796e9db9a42d93cca11c56"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/integrity.json": {
+    "bytes": 908,
+    "sha256": "276480a171a392d3b8adbe7e012e8a3434d1c9f42dcc216096eb7cb5cdd5d595"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/README.md": {
+    "bytes": 1033,
+    "sha256": "948805949b50ef4f8cf26c105a7ad9c18a2d5e4d6dead3540926dcfd15a78e7b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/revision.json": {
+    "bytes": 1392,
+    "sha256": "63bd7974766c2c87989214518bc3e71b72a1ce556c34aabe62fb05a623814eb4"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/runner.diff": {
+    "bytes": 1003,
+    "sha256": "c6d604fc0be82c61df0005b87934571100bc9fcc83824ed32ab4766f3e8801a3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/root_runner.py": {
+    "bytes": 3327,
+    "sha256": "79fbf068782cb68a45dba1cd00e224fafc6d738028ec02fa6f3b23e31314295a"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/input-pin.json": {
+    "bytes": 32683,
+    "sha256": "ac67d429afde70aa90d30b0922e2a19065e2aeb903bb6f2478379d5cb99ee0ee"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-context-revision/vector-compression-foundation.md": {
+    "bytes": 10768,
+    "sha256": "73db500b0c6c013e5ff5656006503b29981a1b5241d94d82e7f5a60c99c2528f"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/before.json": {
+    "bytes": 34461,
+    "sha256": "0a49bab1766760ca61c87507a98f14111637470a841a4eb5aec569d72d294314"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-binding-20261010/after.json": {
+    "bytes": 13161,
+    "sha256": "ea5fe7429ce44417a3889cd2ea52e10f66435acce1d0baf385e7e5210b46c3bd"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/receipt.json": {
+    "bytes": 33800,
+    "sha256": "8aee1a48d08d305cfa0d325ba88edeadab1eabc01dfdb82dc31d87a2b6d969d6"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/independent-record-check.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/independent-record-check.stdout": {
+    "bytes": 1991,
+    "sha256": "b38b95914599767ea6a1fd12022eb89208fe219d195ec1865da08d5150d13aaf"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/checked-capacity-controls.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/checked-capacity-controls.stdout": {
+    "bytes": 97,
+    "sha256": "79f5d42b6cf54014d3970e5d825cb87b32ddf8d6dedfd1cba07d7a2d729202eb"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/pending-overlap-one-below.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/pending-overlap-one-below.stdout": {
+    "bytes": 544,
+    "sha256": "32d40736cdea4072a83aea0b62e88e697b3182642e94675036568e3b6fa9a77b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-identity.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-identity.stdout": {
+    "bytes": 3622,
+    "sha256": "bbef834f7ff20376da0856890c7af3d0f0e8b5627caffa0d8a32c36ed3a078dd"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-raw.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/fixture-selected-raw.stdout": {
+    "bytes": 3617,
+    "sha256": "b9540b420df835bdd3a556e074a1a3283c02937f4a0c664e010df0f6737b4a61"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-candidate.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-candidate.stdout": {
+    "bytes": 5053,
+    "sha256": "931fb5e8bf8026b638d642f6cacd9048c11f729bd4fbbe405bf876e5590fd5ed"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-edits.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-edits.stdout": {
+    "bytes": 3486,
+    "sha256": "3c374fc1f23b94f7e3c888029468a38418a69f2e272622ae0ebb82febb6898c3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-owned_key.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-owned_key.stdout": {
+    "bytes": 2280,
+    "sha256": "21260d55d24e725c0697bb04e5c9ecef068c13a20effd7a87783ee27902f8e3b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-refs.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-refs.stdout": {
+    "bytes": 1840,
+    "sha256": "f99fc8c71eaa4ea80555f60a06ac03e10cf2a28a87458000e728e26325447943"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-views.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-views.stdout": {
+    "bytes": 2944,
+    "sha256": "73930dae568f5829a16a5b5c494b23c17966521eb04a768865fff7eaa9cf47e4"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-arena.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/forced-arena.stdout": {
+    "bytes": 719,
+    "sha256": "1eddc8cb47f3ea44047ac2fad3dce2efb769b4b8c93a5fe6ee454676275e86be"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-one-below-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-one-below-work.stdout": {
+    "bytes": 712,
+    "sha256": "31ef62b9c105ccd0a091bfad916f7f1075381b18925342f782024f585d7f12a7"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-exact-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling-exact-work.stdout": {
+    "bytes": 28530,
+    "sha256": "2e6962bd4e6f01a949dbcff8235f26e0045d75e1fe0494a47aca1581f7e423bf"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-one-below-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-one-below-work.stdout": {
+    "bytes": 728,
+    "sha256": "c81ced677b84ada1bb32a29b4ded30c18bd717e5830b316f80bc2dd471e5ad2c"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-exact-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality-exact-work.stdout": {
+    "bytes": 1394730,
+    "sha256": "d507b3c4aada36024663df271ee7b207ec7429f3bc3adb59a77c16053fb81440"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-one-below-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-one-below-work.stdout": {
+    "bytes": 702,
+    "sha256": "1b7ffac9d9c72814906d66bf5da8a17722ef7e10759cbdbc46026f92f90fb32f"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-exact-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit-exact-work.stdout": {
+    "bytes": 3434,
+    "sha256": "958fb6cb4e993cb7e1c9a7a244d99223d2af57f23312e5f35b2d559c9240a7d9"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-one-below-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-one-below-work.stdout": {
+    "bytes": 719,
+    "sha256": "362588d671d2dd64f4c2d1cda45255ec080d7ce8a96116bdf5d8f72420cca0e4"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-exact-work.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape-exact-work.stdout": {
+    "bytes": 5531,
+    "sha256": "fe5bec3c5df833ad0e74b9bbdd532a12928bed85f52ec963bcd377776f52b662"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-one-below-nodes.stdout": {
+    "bytes": 536,
+    "sha256": "a9284834779c70cf81a370561e5236e9978ef849e42fa7222ebc35e7dcd50222"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m15-exact-nodes.stdout": {
+    "bytes": 553,
+    "sha256": "31d236491a0a22ac0724947e3d5cb48e18e937ba785657c1f598f89ad574691d"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-one-below-nodes.stdout": {
+    "bytes": 536,
+    "sha256": "3046a7023f529724b4a824c0a8ad9b834433582c449129d76bb91c089ebfd859"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m14-exact-nodes.stdout": {
+    "bytes": 553,
+    "sha256": "d096227c8ec5c3eec7eddc7f7280e7bd1163689c43b25e90aa30ee7a0c413268"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-one-below-nodes.stdout": {
+    "bytes": 535,
+    "sha256": "3111514ae5387d1a244f888ee21fba839a1d8610369a0cf7f377395a8982fcc3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m8-exact-nodes.stdout": {
+    "bytes": 550,
+    "sha256": "c3d922492ffd080a658d2ac294249f8f96b40084e00b18a672915fd407639218"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-one-below-nodes.stdout": {
+    "bytes": 535,
+    "sha256": "75dce049618d47cc26cde2606807f255a478d433d64e8a67a357b83ea7f5e5e6"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m7-exact-nodes.stdout": {
+    "bytes": 550,
+    "sha256": "bdd99b33d71e65bc0479d777a73b0eb796fd21ff3b918b53f4940c9eba0684b3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-one-below-nodes.stdout": {
+    "bytes": 535,
+    "sha256": "5afd713901fb5c69f6d0b0a34e668be13bd194752fc5480c95da06312abe4a06"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m4-exact-nodes.stdout": {
+    "bytes": 550,
+    "sha256": "d965bf6e89230cb13b035020b2175320373da31e2b136cb1d1c125fd208da1c9"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-one-below-nodes.stdout": {
+    "bytes": 535,
+    "sha256": "2e24704a144f39b040cd473154202923735c9513d2ea01d4fa7a2b4a49b9d3d8"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m3-exact-nodes.stdout": {
+    "bytes": 550,
+    "sha256": "6e7a3c185d924bb57aa47afbc1b073f6b86b8c05ca9e168325fb147dd60f83b2"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-one-below-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-one-below-nodes.stdout": {
+    "bytes": 534,
+    "sha256": "53aaab2ef619ac90464c49812d80906c38d8b4e918f1e622748f23e08acec71f"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-exact-nodes.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/parser-table-m1-exact-nodes.stdout": {
+    "bytes": 549,
+    "sha256": "458529340043b0e9cbd758f9c9535973f8cdb6f71bfed91b16f7b3a8a3bfa313"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-long-late-escape.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-long-late-escape.stdout": {
+    "bytes": 1489,
+    "sha256": "9118af6f7e1f93ab8e7f3c314d931baadf2f4e6336f053ae8af6e496e2c3e000"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-short.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/unknown-declaration-short.stdout": {
+    "bytes": 1131,
+    "sha256": "bf4e6351a06832d38b37123f5c6c90a48a5d475864f0dcb1cb59fe2e434c5aed"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/distinct-overlapping-physical-views.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/distinct-overlapping-physical-views.stdout": {
+    "bytes": 3873,
+    "sha256": "5bdc8323c5523e7ae576248183f7a29b43b82190ffc2b50f89f5dd15bab70630"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/shared-descriptor-four-references.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/shared-descriptor-four-references.stdout": {
+    "bytes": 3953,
+    "sha256": "a8e172546212b319cbc0f8ec818662fe33c59d19d075868affcf667fbd092164"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/tiny-no-views-huge-configured-limit.stdout": {
+    "bytes": 3434,
+    "sha256": "2e5261afd09cce5169d52d4216087c83e09df5c0df313a234edcaad9cba0498d"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-view-key-late-escape.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-view-key-late-escape.stdout": {
+    "bytes": 4429,
+    "sha256": "3206b7ebc24ee683336cbab5ad0ef8256eaf8c0a274fdde5435b28c92bd6aa99"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-buffer-key-late-escape.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-buffer-key-late-escape.stdout": {
+    "bytes": 4429,
+    "sha256": "b3cb2f0948c2d617fc04602d6bb9f11f866b2ded327230c75d2dc930c2611eee"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j7-u7.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j7-u7.stdout": {
+    "bytes": 5059,
+    "sha256": "2419d826a717bacd675e6615911405f598f1b7c1a2fb00a9824a744535999214"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j0-u0.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/metadata-j0-u0.stdout": {
+    "bytes": 5059,
+    "sha256": "de3d6278e248d511d1968c530f3d15fc6a98122740dff3c903fb5ed57be27169"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-other-required.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-other-required.stdout": {
+    "bytes": 5059,
+    "sha256": "336a76b252c901161a0ee1d1fe6ce22f698d47dc38b1ab151de4d8f97f689f10"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-missing.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-missing.stdout": {
+    "bytes": 5059,
+    "sha256": "21627c08779171a2d2b53f00d5b3190eabb6b5fb062a5856119f49257e846a2b"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-already-present.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/declarations-already-present.stdout": {
+    "bytes": 5060,
+    "sha256": "a76c7411d8e79b5f58240ec80601ab0e0d2c52720ccf7ca46086bc4180c775e3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-view-cardinality.stdout": {
+    "bytes": 1394730,
+    "sha256": "c86459fc04cba1eb043f8485e4a33fadf8eb8adad553175686018d5631de0c98"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/deep-chain-wide-sibling.stdout": {
+    "bytes": 28530,
+    "sha256": "30ff9b686306ad45bc92c0af74d60844a3b3ba5793fd951b9b31eee26c6ab3e9"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-key-cardinality.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-key-cardinality.stdout": {
+    "bytes": 5124,
+    "sha256": "fcbeb6c1098a309f90fc4cb95482d7be9e9f9ce150bfe938c33b882002329edb"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/low-J-high-K.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/low-J-high-K.stdout": {
+    "bytes": 5180,
+    "sha256": "01bec44b708ee7abae6f2a8eb208da034d47bb1aa31ea6aa248056db62ce3124"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/long-root-key-late-escape.stdout": {
+    "bytes": 5531,
+    "sha256": "e71064477067b2156687b29d421b803fc202cba6ec530280f7052adea9dbe239"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-J-low-K.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/high-J-low-K.stdout": {
+    "bytes": 4295,
+    "sha256": "b70c7f4c67322664a5667cc211e2ecb31f5b6b9b41e17cecded3cf1e41285bc4"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-keys.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/escaped-keys.stdout": {
+    "bytes": 5061,
+    "sha256": "ee00cb0fefa6ba3337809ce6bab77f530792a59ddd3969951305267cb338da84"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/opaque-token-and-marker.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/opaque-token-and-marker.stdout": {
+    "bytes": 5391,
+    "sha256": "09a3237e120ee7925ff1deb49183c039b4b051978c6712ba7e9ef26501fba8a0"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/compile-owned-plan.stderr": {
+    "bytes": 25768,
+    "sha256": "d0e21c1dd42a71161cebdb0e4500758a99e7118c6eded78981cf4094794521d3"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/compile-owned-plan.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/owned_plan_probe": {
+    "bytes": 5266920,
+    "sha256": "c762ef151c3b059f8984b43a3d8f8216f9cc0a24ac6d93912aee2ea8c93328d7"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/rustc-vV.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-owned-plan-execution-20261010/rustc-vV.stdout": {
+    "bytes": 196,
+    "sha256": "3975d062e234a9f3921955bf6ae5b90f5819df94fa825d057f76b34a35ed0f4d"
+  },
+  "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/source-pin.json": {
+    "bytes": 58850,
+    "sha256": "744afbee34cb3ef13955101cfd3dd17d19328e9540a4dc7d1f67af479baa7969"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/Cargo.lock": {
+    "bytes": 70262,
+    "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/Cargo.toml": {
+    "bytes": 3540,
+    "sha256": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/bindings/python/Cargo.toml": {
+    "bytes": 460,
+    "sha256": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/bindings/python/src/lib.rs": {
+    "bytes": 38243,
+    "sha256": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/build.rs": {
+    "bytes": 3213,
+    "sha256": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/archive3tz.rs": {
+    "bytes": 27278,
+    "sha256": "02cf420d342057ac106e7f1bac9f4b891e361fa969b54ce788ad9584b74d84ef"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/archive3tz/read.rs": {
+    "bytes": 58673,
+    "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/bbox.rs": {
+    "bytes": 18705,
+    "sha256": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity.rs": {
+    "bytes": 1139,
+    "sha256": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/json.rs": {
+    "bytes": 19184,
+    "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload.rs": {
+    "bytes": 66755,
+    "sha256": "9eb4d4eba8e8adf435500cecba2fe10869333b3d65cddbff2d488c1a13fd310c"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/controls.rs": {
+    "bytes": 12934,
+    "sha256": "6d2dc903ded25b409c6c1e731f3a8ace179c80bd3d9a99af8367234c37539dc1"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/numbers.rs": {
+    "bytes": 4191,
+    "sha256": "dba564337acc64201b187d569b9a1191baed7fbb3088ba63e52b4aef42b9c509"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/records.rs": {
+    "bytes": 8392,
+    "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/convert_implicit.rs": {
+    "bytes": 19547,
+    "sha256": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/crs.rs": {
+    "bytes": 135270,
+    "sha256": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/doctor.rs": {
+    "bytes": 15928,
+    "sha256": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/error.rs": {
+    "bytes": 2688,
+    "sha256": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/fixtures.rs": {
+    "bytes": 2362,
+    "sha256": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/georef.rs": {
+    "bytes": 26943,
+    "sha256": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/geospatial.rs": {
+    "bytes": 33840,
+    "sha256": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/geospatial/native.rs": {
+    "bytes": 13115,
+    "sha256": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/glb.rs": {
+    "bytes": 18129,
+    "sha256": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/glb_write.rs": {
+    "bytes": 14114,
+    "sha256": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/gpu_texture.rs": {
+    "bytes": 3464,
+    "sha256": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/grid.rs": {
+    "bytes": 15438,
+    "sha256": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/hlod.rs": {
+    "bytes": 21867,
+    "sha256": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/implicit.rs": {
+    "bytes": 13370,
+    "sha256": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/implicit/tileset.rs": {
+    "bytes": 50914,
+    "sha256": "a2e07f0f920787035329859e086b164b68fc71f27b33bf5824a4838f2da9270c"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/jpeg.rs": {
+    "bytes": 7888,
+    "sha256": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/lib.rs": {
+    "bytes": 2762,
+    "sha256": "eb497d330f426da48b54a05cefbb09a9d128eb6353d7437588173ba8fbca837a"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/lossless.rs": {
+    "bytes": 8294,
+    "sha256": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/main.rs": {
+    "bytes": 62090,
+    "sha256": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh.rs": {
+    "bytes": 18951,
+    "sha256": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive.rs": {
+    "bytes": 36944,
+    "sha256": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/approximation.rs": {
+    "bytes": 14194,
+    "sha256": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/approximation/certificate.rs": {
+    "bytes": 25165,
+    "sha256": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/binding.rs": {
+    "bytes": 37954,
+    "sha256": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode.rs": {
+    "bytes": 20154,
+    "sha256": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode/identity.rs": {
+    "bytes": 13145,
+    "sha256": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode/proxy_identity.rs": {
+    "bytes": 9173,
+    "sha256": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/model.rs": {
+    "bytes": 22687,
+    "sha256": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/partition.rs": {
+    "bytes": 8377,
+    "sha256": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/placement.rs": {
+    "bytes": 13322,
+    "sha256": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source.rs": {
+    "bytes": 59421,
+    "sha256": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/json.rs": {
+    "bytes": 3594,
+    "sha256": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/material.rs": {
+    "bytes": 12899,
+    "sha256": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/original_bounds.rs": {
+    "bytes": 10961,
+    "sha256": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/texture.rs": {
+    "bytes": 13879,
+    "sha256": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_crs.rs": {
+    "bytes": 20137,
+    "sha256": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/metadata.rs": {
+    "bytes": 17642,
+    "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/output.rs": {
+    "bytes": 15382,
+    "sha256": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/output_path.rs": {
+    "bytes": 1199,
+    "sha256": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/pack.rs": {
+    "bytes": 971,
+    "sha256": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/package.rs": {
+    "bytes": 19619,
+    "sha256": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud.rs": {
+    "bytes": 34946,
+    "sha256": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud/source.rs": {
+    "bytes": 26907,
+    "sha256": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud/tiles.rs": {
+    "bytes": 17484,
+    "sha256": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/point_sampling.rs": {
+    "bytes": 1067,
+    "sha256": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/preview.rs": {
+    "bytes": 8190,
+    "sha256": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/raster.rs": {
+    "bytes": 3670,
+    "sha256": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/raster/native.rs": {
+    "bytes": 24600,
+    "sha256": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/raster_directory.rs": {
+    "bytes": 20954,
+    "sha256": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/raster_directory/native.rs": {
+    "bytes": 11134,
+    "sha256": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/report.rs": {
+    "bytes": 6618,
+    "sha256": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/runtime.rs": {
+    "bytes": 21718,
+    "sha256": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/directory.rs": {
+    "bytes": 49206,
+    "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/directory_platform.rs": {
+    "bytes": 17255,
+    "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/tests.rs": {
+    "bytes": 19333,
+    "sha256": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/terrain.rs": {
+    "bytes": 33779,
+    "sha256": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/terrain/glb.rs": {
+    "bytes": 3305,
+    "sha256": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/terrain/raster.rs": {
+    "bytes": 25663,
+    "sha256": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/texture.rs": {
+    "bytes": 73246,
+    "sha256": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/tile.rs": {
+    "bytes": 49308,
+    "sha256": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/tileset.rs": {
+    "bytes": 7047,
+    "sha256": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/tileset/resources.rs": {
+    "bytes": 4021,
+    "sha256": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/tileset_node.rs": {
+    "bytes": 4212,
+    "sha256": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/validate.rs": {
+    "bytes": 50701,
+    "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/validate/types.rs": {
+    "bytes": 3219,
+    "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vec3.rs": {
+    "bytes": 1915,
+    "sha256": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector.rs": {
+    "bytes": 27327,
+    "sha256": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/model.rs": {
+    "bytes": 9709,
+    "sha256": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline.rs": {
+    "bytes": 3556,
+    "sha256": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/acceptance.rs": {
+    "bytes": 2218,
+    "sha256": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/aggregation.rs": {
+    "bytes": 4613,
+    "sha256": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/encoding.rs": {
+    "bytes": 28074,
+    "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry.rs": {
+    "bytes": 35536,
+    "sha256": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/countries_tests.rs": {
+    "bytes": 8244,
+    "sha256": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/native.rs": {
+    "bytes": 8339,
+    "sha256": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/portable.rs": {
+    "bytes": 31103,
+    "sha256": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/reuse.rs": {
+    "bytes": 19055,
+    "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/source.rs": {
+    "bytes": 7157,
+    "sha256": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/source_native.rs": {
+    "bytes": 36697,
+    "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/store.rs": {
+    "bytes": 56277,
+    "sha256": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/portable.rs": {
+    "bytes": 102675,
+    "sha256": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector/source_fields.rs": {
+    "bytes": 8870,
+    "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac"
+  },
+  "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding.rs": {
+    "bytes": 6397,
+    "sha256": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+  }
+}

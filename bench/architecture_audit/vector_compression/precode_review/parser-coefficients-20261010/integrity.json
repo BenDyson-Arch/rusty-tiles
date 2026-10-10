@@ -1,0 +1,30 @@
+{
+  "immutableAdditiveReview": true,
+  "files": [
+    {
+      "path": "findings.json",
+      "sha256": "dddabe315e3d4d5d8b3b537d1d43f1c933cfaab6c22a9f44bfe7b4d293e42b38",
+      "bytes": 762
+    },
+    {
+      "path": "input-pins.json",
+      "sha256": "4736e27496a0770cf1448b7007624b7b8262510114f0bb8dfb37d67eb44a8d64",
+      "bytes": 5645
+    },
+    {
+      "path": "review.md",
+      "sha256": "cf28cd68202a1678e07c1ee9bd642cd22ee797a8e378fa754ab53e6e0b086d82",
+      "bytes": 7039
+    },
+    {
+      "path": "table-model-output.json",
+      "sha256": "61a89402e86e4374f60e37a11170f831dcc66d395ad93001a186259c1bc63cf5",
+      "bytes": 1189
+    },
+    {
+      "path": "table-model.py",
+      "sha256": "1a37ee167589a79e43f58800db482494a7d45cab0ea0c8334d11a903ba1560f2",
+      "bytes": 770
+    }
+  ]
+}

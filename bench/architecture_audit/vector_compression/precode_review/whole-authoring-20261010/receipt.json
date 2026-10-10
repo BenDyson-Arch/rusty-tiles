@@ -1,0 +1,41 @@
+{
+  "status": "AUTHORING_GATE_RESOLVED_FOR_SMALLEST_CONSTRAINED_SLICE",
+  "recorded_at_utc": "2026-10-10T13:55:57.612898+00:00",
+  "reviewer_task": "/root/vector_proof_checkpoint_review",
+  "acceptedP0": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "actualPlanReviewSha256": "f901d18d359884be858ed21ceed542f070f624bde3d0416509d5cd9845e2646b",
+  "actualPlanIntegritySha256": "65328ff1cb59efb4dbcec4efc0304bcd145d9156201994e50a6a156640449a81",
+  "afterBindingSha256": "ea5fe7429ce44417a3889cd2ea52e10f66435acce1d0baf385e7e5210b46c3bd",
+  "readHashVerification": {
+    "argv": [
+      "nice",
+      "-n",
+      "10",
+      "python3",
+      "-B",
+      "/tmp/rusty-tiles-vector-whole-precode-review/verify_inputs.py"
+    ],
+    "exitCode": 0,
+    "recordedCommands": 55,
+    "probeCommands": 52,
+    "changedRecordControls": 18,
+    "productionFilesUnchanged": 97
+  },
+  "blockingFindings": [],
+  "requiredAdditionalPrecodeProbe": [],
+  "authoringAllowed": true,
+  "productionAccepted": false,
+  "empiricalDefaultsAccepted": false,
+  "fullP2P5Accepted": false,
+  "compilerCargoNativeProducerDecoderAuthorCheckerOrGitInvocations": 0,
+  "productionOrPriorEpochEdits": 0,
+  "files_sha256": {
+    "adjudication.md": "d57aa7e27a26c0d699b8b08f5fdf972ec4bdf76440267eaac547c2aab853697f",
+    "evidence-scope.md": "09c5e613efd4f4ade28ee7a3b047c12a6637b5a8b0d8786d36957edc1b3bb4e1",
+    "ownership.md": "c0c521fc47f51a21a6cecb2c8277ede9a04c739cb6bf38716e1c8276d7b19c67",
+    "decisions.json": "f8523220f419782c6a1269ef508a36673343163ac86f5cace3ae1db65135bb46",
+    "verify_inputs.py": "f3d176a434c130fce952d78a6e369cf720a735ae81ea01ccc7ba6a58d11bb8aa",
+    "input-pin.json": "726587ea4d9cf64ab807b9610710abe92f88d9bbcea5dc15d69b167c715e2760",
+    "verification.json": "e7d380391103d6e90da1bbed284df2e821781ca214e5ef71489af52d08e0e330"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "consumer_command": [
+    "node",
+    "/tmp/rusty-tiles-vector-p3-generated-preparation/consumer.mjs",
+    "EXTRACTED_ROOT",
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/meshoptimizer/meshopt_decoder.cjs",
+    "fabafaaa29cbb1cfa367f20e896d7f6e95b86e575e2ea86ddb6f8cca1a87152d"
+  ],
+  "existing_package_lock": {
+    "entry": {
+      "integrity": "sha512-2oZqMAcEEiCtXWUjIGtZ71oPx1B0ZxYGTqIKsXB1wzWFhleNsCFxQuUJzgCV706bRcwPWtMGf1odmQvAcqKkIw==",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/meshoptimizer/-/meshoptimizer-1.3.0.tgz",
+      "version": "1.3.0"
+    },
+    "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/package-lock.json",
+    "sha256": "acfe22045e0b01a8038e9fcbd7187e0b3f5c0e5f8b947832211fbbc635d8867f"
+  },
+  "golden_test_source": {
+    "claim_limit": "Exact test byte equality plus NPM package integrity does not bind whole CommonJS decoder to a Git revision; exact runtime filehash is separate artifact identity",
+    "exact_cached_test_matches_primary": true,
+    "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/meshoptimizer/meshopt_decoder.test.js",
+    "primary_receipt": "/tmp/rusty-tiles-vector-codec-foundation/bench/architecture_audit/vector_compression/codec/primary/primary-receipt.json",
+    "primary_receipt_sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8",
+    "primary_revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+    "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+  },
+  "module_package_json": {
+    "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/meshoptimizer/package.json",
+    "sha256": "7c0b926331466962d22ab250359fcdea20c225ab243d78474b955fb6af23f74c",
+    "version": "1.3.0"
+  },
+  "prior_exact_reference_decoder": {
+    "module_type": "ESM pure JS reference",
+    "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/meshoptimizer/meshopt_decoder_reference.js",
+    "receipt_path": "/tmp/rusty-tiles-vector-codec-foundation/bench/architecture_audit/implicit_rewrite/a2_real_sources/source-artifacts.json",
+    "receipt_sha256": "9e751f7fdc5c3c0556d860eb5bb01f30b2e90f53af6e8502ae6f006d302e7685",
+    "sha256": "207f64595be3d5d0c0d728a981673c3fee8b4d9e671341831d556485d96de8dc"
+  },
+  "status": "STATIC_EXISTING_ARTIFACT_LOCATION_NO_TARGET_OR_CONSUMER_EXECUTION",
+  "usable_commonjs": {
+    "bytes": 29360,
+    "new_observed_exact_file_pin": true,
+    "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/meshoptimizer/meshopt_decoder.cjs",
+    "sha256": "fabafaaa29cbb1cfa367f20e896d7f6e95b86e575e2ea86ddb6f8cca1a87152d",
+    "whole_decoder_git_revision_proved": false
+  }
+}

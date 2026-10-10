@@ -1,0 +1,620 @@
+{
+  "setup": {
+    "nice": 10,
+    "affinity": [
+      0,
+      1
+    ]
+  },
+  "package": {
+    "path": "/tmp/rusty-tiles-vector-final-local-source-package-20261011/package.json",
+    "sha256": "224d3d96f644b7da21f8753d005da285c756d2ed17fc13ace02565b190c98460",
+    "bytes": 11705
+  },
+  "stagedTree": "e47d63e78ede054b6853ddde5af48f9f67e8471c",
+  "head": "a60c216caef35cca68a5c36969457c83c08d41e9",
+  "packageFiles": [
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/Cargo.lock",
+      "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "bytes": 70262
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/Cargo.toml",
+      "sha256": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467",
+      "bytes": 3540
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/bindings/python/Cargo.toml",
+      "sha256": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77",
+      "bytes": 460
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/bindings/python/src/lib.rs",
+      "sha256": "1677dd95342ed8972b7a705d7e26235aeb2e82566e86d56ec4d383079606ca2f",
+      "bytes": 39210
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/build.rs",
+      "sha256": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+      "bytes": 3213
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/archive3tz.rs",
+      "sha256": "02cf420d342057ac106e7f1bac9f4b891e361fa969b54ce788ad9584b74d84ef",
+      "bytes": 27278
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/archive3tz/read.rs",
+      "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06",
+      "bytes": 58673
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/bbox.rs",
+      "sha256": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+      "bytes": 18705
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity.rs",
+      "sha256": "faedaa701efb91671ba7cb1aaaee9c015d0f329561b1c30ddc7b56b85eaaf2f2",
+      "bytes": 1187
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/json.rs",
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+      "bytes": 19184
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/meshopt.rs",
+      "sha256": "ccaf4ce61fa60fd23b4d0ec48ca6514911394cc4ae91286f0d964d571b7a8c7e",
+      "bytes": 3105
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/numbers.rs",
+      "sha256": "d9df98565ac36231b537e6e3d7116e21485ec5a36b3cad64f4770b1ccb905dc7",
+      "bytes": 3837
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload.rs",
+      "sha256": "316f5010db03b93b3b9a49430159977c859d58c80ef20bba2ffd31a544b2bce7",
+      "bytes": 64682
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/controls.rs",
+      "sha256": "8b81a3f19e14348e849fc56a12a9ea35bb108600ebab26141a8b1efbb81e06b4",
+      "bytes": 12961
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/numbers.rs",
+      "sha256": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42",
+      "bytes": 884
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/content_integrity/payload/records.rs",
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9",
+      "bytes": 8392
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/convert_implicit.rs",
+      "sha256": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+      "bytes": 19547
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/crs.rs",
+      "sha256": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+      "bytes": 135270
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/doctor.rs",
+      "sha256": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+      "bytes": 15928
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/error.rs",
+      "sha256": "49c2c8768f8ce3b5cc6bdf12e2eea874b23cf2d2c58f3bfe755219905b625175",
+      "bytes": 2838
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/fixtures.rs",
+      "sha256": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+      "bytes": 2362
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/georef.rs",
+      "sha256": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+      "bytes": 26943
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/geospatial.rs",
+      "sha256": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+      "bytes": 33840
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/geospatial/native.rs",
+      "sha256": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+      "bytes": 13115
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/glb.rs",
+      "sha256": "43557368427781a78611aa788546006900edfc0df6e57809263c5d682070a0a0",
+      "bytes": 17439
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/glb_write.rs",
+      "sha256": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+      "bytes": 14114
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/gpu_texture.rs",
+      "sha256": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+      "bytes": 3464
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/grid.rs",
+      "sha256": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+      "bytes": 15438
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/hlod.rs",
+      "sha256": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+      "bytes": 21867
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/implicit.rs",
+      "sha256": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+      "bytes": 13370
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/implicit/tileset.rs",
+      "sha256": "a2e07f0f920787035329859e086b164b68fc71f27b33bf5824a4838f2da9270c",
+      "bytes": 50914
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/jpeg.rs",
+      "sha256": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+      "bytes": 7888
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/lib.rs",
+      "sha256": "684e4fcc0da5b6764bec1ebf707a35c524a711d8ec1ee59ed5b36407aabc790c",
+      "bytes": 2940
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/lossless.rs",
+      "sha256": "8682a0060f1f35a097c8875a253924deceeff79e581bacdf0d938502b47ecf58",
+      "bytes": 8238
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/main.rs",
+      "sha256": "6bb03728d5d52724ace4911d2ad887c764d009997d8816dfdbab4a673e863a6d",
+      "bytes": 62990
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh.rs",
+      "sha256": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+      "bytes": 18951
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive.rs",
+      "sha256": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+      "bytes": 36944
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/approximation.rs",
+      "sha256": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+      "bytes": 14194
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/approximation/certificate.rs",
+      "sha256": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+      "bytes": 25165
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/binding.rs",
+      "sha256": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+      "bytes": 37954
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode.rs",
+      "sha256": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+      "bytes": 20154
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode/identity.rs",
+      "sha256": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+      "bytes": 13145
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/encode/proxy_identity.rs",
+      "sha256": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+      "bytes": 9173
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/model.rs",
+      "sha256": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+      "bytes": 22687
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/partition.rs",
+      "sha256": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+      "bytes": 8377
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/placement.rs",
+      "sha256": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+      "bytes": 13322
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source.rs",
+      "sha256": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+      "bytes": 59421
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/json.rs",
+      "sha256": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+      "bytes": 3594
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/material.rs",
+      "sha256": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+      "bytes": 12899
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/original_bounds.rs",
+      "sha256": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+      "bytes": 10961
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_archive/source/texture.rs",
+      "sha256": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+      "bytes": 13879
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/mesh_crs.rs",
+      "sha256": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+      "bytes": 20137
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/metadata.rs",
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+      "bytes": 17642
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/output.rs",
+      "sha256": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+      "bytes": 15382
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/output_path.rs",
+      "sha256": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+      "bytes": 1199
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/pack.rs",
+      "sha256": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+      "bytes": 971
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/package.rs",
+      "sha256": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+      "bytes": 19619
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud.rs",
+      "sha256": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+      "bytes": 34946
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud/source.rs",
+      "sha256": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+      "bytes": 26907
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/point_cloud/tiles.rs",
+      "sha256": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+      "bytes": 17484
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/point_sampling.rs",
+      "sha256": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+      "bytes": 1067
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/preview.rs",
+      "sha256": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+      "bytes": 8190
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/raster.rs",
+      "sha256": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+      "bytes": 3670
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/raster/native.rs",
+      "sha256": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+      "bytes": 24600
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/raster_directory.rs",
+      "sha256": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+      "bytes": 20954
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/raster_directory/native.rs",
+      "sha256": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+      "bytes": 11134
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/report.rs",
+      "sha256": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+      "bytes": 6618
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/runtime.rs",
+      "sha256": "53f396d335b4f41f55bc06c3fc7102810a830e0cb85ac6d40fe6d915c08b0046",
+      "bytes": 22224
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/directory.rs",
+      "sha256": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+      "bytes": 49206
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/directory_platform.rs",
+      "sha256": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+      "bytes": 17255
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/runtime/tests.rs",
+      "sha256": "7ee8ca66485116dbcea9534cd77353c6a543687aab54dc2ebd272110c8ba8a9e",
+      "bytes": 20038
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/terrain.rs",
+      "sha256": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+      "bytes": 33779
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/terrain/glb.rs",
+      "sha256": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+      "bytes": 3305
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/terrain/raster.rs",
+      "sha256": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+      "bytes": 25663
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/texture.rs",
+      "sha256": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+      "bytes": 73246
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/tile.rs",
+      "sha256": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+      "bytes": 49308
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/tileset.rs",
+      "sha256": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+      "bytes": 7047
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/tileset/resources.rs",
+      "sha256": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+      "bytes": 4021
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/tileset_node.rs",
+      "sha256": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+      "bytes": 4212
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/validate.rs",
+      "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563",
+      "bytes": 50701
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/validate/types.rs",
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+      "bytes": 3219
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vec3.rs",
+      "sha256": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+      "bytes": 1915
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector.rs",
+      "sha256": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+      "bytes": 27327
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/model.rs",
+      "sha256": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+      "bytes": 9709
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline.rs",
+      "sha256": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+      "bytes": 3556
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/acceptance.rs",
+      "sha256": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+      "bytes": 2218
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/aggregation.rs",
+      "sha256": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+      "bytes": 4613
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/encoding.rs",
+      "sha256": "49aea4cb62a1c31c537d5e155cf255f0f7bdd96feb06c6499eb582b3691a53fa",
+      "bytes": 77525
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry.rs",
+      "sha256": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+      "bytes": 35536
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/countries_tests.rs",
+      "sha256": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+      "bytes": 8244
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/native.rs",
+      "sha256": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+      "bytes": 8339
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/geometry/portable.rs",
+      "sha256": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+      "bytes": 31103
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/reuse.rs",
+      "sha256": "9036bfb0bec848925bea9390c2ac920be0090519a35307f132047cfea8943c9b",
+      "bytes": 22423
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/source.rs",
+      "sha256": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+      "bytes": 7157
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/source_native.rs",
+      "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+      "bytes": 36697
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/pipeline/store.rs",
+      "sha256": "0e7e47536a81ee40b3533d6b2b23d1468a1db70ca9c84d33f7f92d51e74fb1a7",
+      "bytes": 62834
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/portable.rs",
+      "sha256": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+      "bytes": 102675
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector/source_fields.rs",
+      "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+      "bytes": 8870
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_compression.rs",
+      "sha256": "1a69d62a0541516133fb12a055f6f63f273b14030f09b44a7023f33d1f854a22",
+      "bytes": 11558
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_compression/source.rs",
+      "sha256": "928bc4095c6e788c58fafb0c88f184ef90d8eea420afc4798ab7fa9c65fbc896",
+      "bytes": 13788
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_compression/tests.rs",
+      "sha256": "deef1ab2ec6cfd52f33f52ec677dee56f25a2cf40c74fdb7032e8c5baf119805",
+      "bytes": 21940
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding.rs",
+      "sha256": "3e34b5493328b62288935a217021cfe8c96e2ad0a8018ee874d271aa2ea43f85",
+      "bytes": 4111
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/framing.rs",
+      "sha256": "3120ba9ee2d7a7dd2c710d4e2122563f85e52b24cc0e721944615b961bc1d9c6",
+      "bytes": 5193
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/limits.rs",
+      "sha256": "93f44bce2f36506542ae259dc073845fe04f2e5c951609b5b8d6bf450fd1d9e0",
+      "bytes": 2348
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/plan.rs",
+      "sha256": "3f75e14cc0c1069596e29d0cb5c2c6b1f0ecf27b28f8ce719a842167f48628f3",
+      "bytes": 38084
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/raw.rs",
+      "sha256": "26090db3cb85f895f0a3a3d2995c80d3c2a91185fd41ee5972df7cf1fe5a2034",
+      "bytes": 6597
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/rewrite.rs",
+      "sha256": "8b6739e4047c2ad9fd04c8b0f6ffac241938d013a4417b1d009e740d3f28d42d",
+      "bytes": 13840
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/src/vector_encoding/tests.rs",
+      "sha256": "e28b4ded190570080e56d75b739fb0e2d8a371b597566f77d2a270d88a683127",
+      "bytes": 22934
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/docs/architecture/vector-compression-foundation.md",
+      "sha256": "443d78f12991975e7ded2a47268dc1bea9b0fe912cb2880eea2ac157a36963b0",
+      "bytes": 21271
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/docs/architecture/public-surface-inventory.md",
+      "sha256": "81c4f236ae86c665eb2e3c2de6c015716e945df9144614756b4be09ef16a225c",
+      "bytes": 30188
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-codec-foundation/bench/architecture_audit/vector_compression/candidate_evidence/local-implementation-20261011/index.json",
+      "sha256": "b1086f6d56def7e3d1e61f292bb719448df4816ee50e7587a4e8ace6bc0ed3fd",
+      "bytes": 2398849
+    }
+  ],
+  "stagedCounts": {
+    "all": 1993,
+    "production": 27,
+    "docs": 2,
+    "evidence": 1964
+  },
+  "stagedPathsSha256": "b86d99017f44fd27395f2c41ac8b710ee31eaa96b1f9d5191d62e877457d7fba",
+  "index": {
+    "path": "/tmp/rusty-tiles-vector-codec-foundation/bench/architecture_audit/vector_compression/candidate_evidence/local-implementation-20261011/index.json",
+    "sha256": "b1086f6d56def7e3d1e61f292bb719448df4816ee50e7587a4e8ace6bc0ed3fd",
+    "bytes": 2398849
+  },
+  "retention": {
+    "fullOriginalByteRecords": 5062,
+    "uniqueGzipBlobs": 1743,
+    "gzipBytes": 13613074,
+    "externalCompiledMetadata": 341,
+    "allOriginalIdentityAndGzipChecksPass": true
+  },
+  "retentionScript": {
+    "path": "/tmp/rusty-tiles-vector-retain-local-implementation-20261011.py",
+    "sha256": "5c0c922d74e7ad5a9a98b9e451b9ca1e3b541607778c7d68bbb88024d23b62ac",
+    "bytes": 4161
+  },
+  "priorIndependentReviews": [
+    {
+      "path": "/tmp/rusty-tiles-vector-integrated-source-review/correction6/integrity.json",
+      "sha256": "b4df089b7bc727eefd26d85f9a6c6e8f4c6010b3bd8cf5177357c943c6a16a13",
+      "bytes": 657
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-integrated-source-review/actual-regression1/integrity.json",
+      "sha256": "50f991482bb924b89d0d25d90c26e806aa9b8e4f6df14f4e5de9e86fd3aa96f2",
+      "bytes": 663
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-integrated-source-review/actual-operation-limits1/integrity.json",
+      "sha256": "be3ea12a95a1acddc9c77be68598816f896ebad74739baec98defb1271bced35",
+      "bytes": 676
+    },
+    {
+      "path": "/tmp/rusty-tiles-vector-integrated-source-review/actual-native-producer1/integrity.json",
+      "sha256": "12c7a28d811d1168cfe8fe1dd54a4e1650db8e21e76b015a3d00ad18868e404b",
+      "bytes": 1292
+    }
+  ],
+  "hashPaths": 7478
+}

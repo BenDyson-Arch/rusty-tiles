@@ -1,0 +1,29 @@
+{
+  "status": "FROZEN_INDEPENDENT_BOUNDED_ALLOCATION_SCHEDULE_AND_PROTOTYPE_PREPARATION_REVIEW",
+  "files": {
+    "review.md": {
+      "sha256": "1189778677d4ce35d901a9796bf45f694019dc4553bdb4559dfa60804b54a48c",
+      "bytes": 8065
+    },
+    "prototype-plan.md": {
+      "sha256": "7669807a4152291aa24e70d79071b0d2a5920b0e7bd625e1caafe2fddfac1188",
+      "bytes": 9837
+    },
+    "decisions.json": {
+      "sha256": "94b1d9a64a0fa5c3d44b93454fdb2857c558aa6860ad2c4eef0ebdcd5b70058b",
+      "bytes": 2592
+    },
+    "verification.json": {
+      "sha256": "ca96fbd7526b3049f80ef720fc7a5e4dee33b8f9540959cc0a05df576923a65f",
+      "bytes": 618
+    },
+    "input-pin.json": {
+      "sha256": "251d5e0f9d100d5ab406bfeb076fe6048befd23dcdb63f6561a20228b4a7234e",
+      "bytes": 10189
+    },
+    "verify_retained.py": {
+      "sha256": "ffc7475e749ed8009d6fb5e0c27ea9f406a299e155edd87d4e6dc7a8fc2b30bf",
+      "bytes": 4670
+    }
+  }
+}

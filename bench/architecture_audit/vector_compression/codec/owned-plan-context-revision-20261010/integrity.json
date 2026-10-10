@@ -1,0 +1,29 @@
+{
+  "status": "FROZEN_STATIC_ONLY additive contextual pin revision",
+  "files": {
+    "README.md": {
+      "sha256": "948805949b50ef4f8cf26c105a7ad9c18a2d5e4d6dead3540926dcfd15a78e7b",
+      "bytes": 1033
+    },
+    "input-pin.json": {
+      "sha256": "ac67d429afde70aa90d30b0922e2a19065e2aeb903bb6f2478379d5cb99ee0ee",
+      "bytes": 32683
+    },
+    "revision.json": {
+      "sha256": "63bd7974766c2c87989214518bc3e71b72a1ce556c34aabe62fb05a623814eb4",
+      "bytes": 1392
+    },
+    "root_runner.py": {
+      "sha256": "79fbf068782cb68a45dba1cd00e224fafc6d738028ec02fa6f3b23e31314295a",
+      "bytes": 3327
+    },
+    "runner.diff": {
+      "sha256": "c6d604fc0be82c61df0005b87934571100bc9fcc83824ed32ab4766f3e8801a3",
+      "bytes": 1003
+    },
+    "vector-compression-foundation.md": {
+      "sha256": "73db500b0c6c013e5ff5656006503b29981a1b5241d94d82e7f5a60c99c2528f",
+      "bytes": 10768
+    }
+  }
+}

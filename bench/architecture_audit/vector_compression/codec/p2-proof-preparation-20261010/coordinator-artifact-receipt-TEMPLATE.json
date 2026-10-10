@@ -1,0 +1,39 @@
+{
+  "status": "TEMPLATE_ONLY_NOT_ACCEPTED_NO_ARTIFACT_EXECUTION",
+  "acceptedMergeCommit": "REQUIRED_EXACT_ACCEPTED_C1_MERGE",
+  "cargoLockSha256": "REQUIRED_HASH_OF_FROZEN_LOCK",
+  "rustc": "ABSOLUTE_ROOT_OWNED_RUSTC",
+  "rustcSha256": "REQUIRED_HASH",
+  "rustcVV": "EXACT_rustc_-vV_WITH_NEWLINES",
+  "stdSourceMatchedToCompiler": false,
+  "dependencyClosureComplete": false,
+  "serdeJsonFeatures": [
+    "raw_value",
+    "float_roundtrip",
+    "unbounded_depth"
+  ],
+  "dependencySearchDir": "ROOT_PINNED_DEPENDENCY_DIR",
+  "crates": {
+    "meshopt": {
+      "version": "0.6.2",
+      "registryChecksum": "e01e77ead21976b3a9f01ec1724f766923da74f0726364e2b0f425658935d71a",
+      "path": "ABSOLUTE_MATCHED_RLIB"
+    },
+    "serde": {
+      "version": "1.0.229",
+      "registryChecksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+      "path": "ABSOLUTE_MATCHED_RLIB"
+    },
+    "serde_json": {
+      "version": "1.0.151",
+      "registryChecksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
+      "path": "ABSOLUTE_MATCHED_RLIB"
+    }
+  },
+  "artifacts": {
+    "every_consumed_rlib_proc_macro_std_compiler_dependency": {
+      "path": "ABSOLUTE_PATH",
+      "sha256": "REQUIRED_HASH"
+    }
+  }
+}

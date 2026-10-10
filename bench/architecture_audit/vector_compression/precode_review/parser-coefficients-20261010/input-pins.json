@@ -1,0 +1,115 @@
+{
+  "scope": "read-only source coefficients; no new target execution",
+  "pins": [
+    {
+      "path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/src/content_integrity/json.rs",
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+      "bytes": 19184
+    },
+    {
+      "path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/de.rs",
+      "sha256": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+      "bytes": 86840
+    },
+    {
+      "path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/read.rs",
+      "sha256": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3",
+      "bytes": 33041
+    },
+    {
+      "path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/raw.rs",
+      "sha256": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+      "bytes": 23498
+    },
+    {
+      "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/error.rs",
+      "sha256": "a13add05a63adf53d89e37effa03221d897a60486cfe360a5a958c0dd2a7e90d",
+      "bytes": 17221
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs",
+      "sha256": "a262b9e494236a00270be0dd0c57be5259d62bc1e538c56506f7f0ce8debccc0",
+      "bytes": 35551
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs",
+      "sha256": "699c02fe7844cd9490905545e503fec56552be2a34d50a79242852739483889b",
+      "bytes": 22366
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs",
+      "sha256": "09171c3c4c767a5c0716a85786f7670e5e149f75325fc1b27f5dbce14f16711f",
+      "bytes": 168574
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs",
+      "sha256": "a0816ad0f39b947889771bf06930bf8e0c4ce794846d83863349697ec7c415ec",
+      "bytes": 1433
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs",
+      "sha256": "ab25e38b449f67347a4f88083b7c61c3f17c6249a1f7a97ef37f99545c6aa0b1",
+      "bytes": 95131
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/set.rs",
+      "sha256": "16ed8c7dc84c338b71350e0c5b9b01948aad0c0a44a5d4969a3822756893c1f2",
+      "bytes": 74125
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/hash/random.rs",
+      "sha256": "7e4715f54722ae0a1c79d18acfed402ca1aef88e0e911614a1093bf1d33eff23",
+      "bytes": 5103
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/random/mod.rs",
+      "sha256": "38d7c91c3fee07226c5071a4e8edd75dd693f54cd76bc7f2a06fd8b80d0cb794",
+      "bytes": 3534
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/random/linux.rs",
+      "sha256": "1f272a57daf188918d992ffbb0ce03dfade98a8dabb34fad6c674128ceb84a1c",
+      "bytes": 7797
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/raw.rs",
+      "sha256": "0c8ad353ba95817e72b0a8fea48fa2599099ea3def374f254ab6402a9c468d22",
+      "bytes": 197141
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/map.rs",
+      "sha256": "b79497ce537ffc5ed4f8f3399434b9216c01e7927fdc434fee190e9e9ce2abb0",
+      "bytes": 216071
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/control/mod.rs",
+      "sha256": "83fede19e9c5a26fd2c7372e6cf92547d32ade4cd69fde8a0eaaeb1be6ddc2ba",
+      "bytes": 161
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/control/group/mod.rs",
+      "sha256": "32150c3ac5bd4197ce122fea5b45ec1047c1e5227a4ba940aef6ceab2c00f54b",
+      "bytes": 1776
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/control/group/sse2.rs",
+      "sha256": "53d7d09c72332232b4562aa7dfabf18e5f57c5009a672b2cfac7193ef468b349",
+      "bytes": 4875
+    },
+    {
+      "path": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/alloc.rs",
+      "sha256": "7ffdd9a84787cb1f93b31184c32733649324faf500bcc3012197ee91353c9ac7",
+      "bytes": 3401
+    },
+    {
+      "path": "/tmp/rusty-tiles-codec-p2-executions/accepted-c1-gate.json",
+      "sha256": "144b71d8184ed741dd49a64582309b9fba5850510e339c5740463c7fa9c16e7f",
+      "bytes": 679
+    },
+    {
+      "path": "/tmp/rusty-tiles-codec-p2-executions/exact-artifact-receipt.json",
+      "sha256": "a1b36545590021009cd8bfcee7527c95bbd11624139f63ee8f942398d7621bc1",
+      "bytes": 82583
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "status": "UNEXECUTED required narrow owner-level cases; production code must await whole-precode approval",
+  "source": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+  "owner": "Coordinator/producer error bridge; codec owner supplies tagged causes; no new public operation or standalone Python",
+  "actual_route": [
+    "encoding::emit -> fits_feature -> FeatureFailure::Fatal(Error) -> Spool::insert -> accept_feature rollback -> source reader fatal -> vector_to_archive JobFailure",
+    "encoding::emit -> final encoding::encode -> Error -> vector_to_archive JobFailure",
+    "JobFailure -> CLI category and existing installed producer-Python run_job mapping"
+  ],
+  "cases": [
+    {
+      "id": "resource_fitting",
+      "at": "shared codec prepare inside fits_feature",
+      "inject": "one specific ResourceLimit cause with stage marker",
+      "skip_invalid": true,
+      "expected": "same causal ResourceLimit primary; no split retry/FeatureRejected/skipped warning/install; prior output unchanged"
+    },
+    {
+      "id": "resource_final",
+      "at": "shared codec encode inside final tile encoding",
+      "inject": "one specific ResourceLimit cause",
+      "skip_invalid": true,
+      "expected": "ResourceLimit fatal before archive commit; accepted workspace cleanup; prior output unchanged"
+    },
+    {
+      "id": "encoder_failure",
+      "at": "native encoding after admitted plan",
+      "inject": "EncodingFailure(stage) with reachable seam",
+      "skip_invalid": true,
+      "expected": "InvalidState with typed codec source/stage, not InvalidInput/InvalidRequest/Io/feature rejection"
+    },
+    {
+      "id": "authored_invalid",
+      "at": "bounded producer bridge/prepare",
+      "inject": "authored bad range or malformed selected metadata framing",
+      "skip_invalid": true,
+      "expected": "InvalidState with codec InvalidInput source; no silent padding repair or uncompressed fallback"
+    },
+    {
+      "id": "authored_unsupported",
+      "at": "bounded producer bridge/prepare",
+      "inject": "well-formed out-of-profile internally authored source",
+      "skip_invalid": true,
+      "expected": "InvalidState with codec Unsupported source; explicit user/backend request refusal tested separately"
+    },
+    {
+      "id": "checkpoint_first",
+      "at": "in-flight codec resource-refusal seam; cancellation/observer abort wins Attempt before tagged ResourceLimit returns",
+      "inject": "original Attempt cancellation/observer cause wins gate",
+      "skip_invalid": true,
+      "expected": "original first cause primary; later typed ResourceLimit secondary only if both causes are actually reached before terminal return; one Attempt"
+    },
+    {
+      "id": "resource_first",
+      "at": "before observer/cancellation",
+      "inject": "typed ResourceLimit wins gate",
+      "skip_invalid": true,
+      "expected": "ResourceLimit primary; later observer/cancellation cause does not replace it"
+    },
+    {
+      "id": "rollback_failure",
+      "at": "accept_feature rollback after resource refusal",
+      "inject": "actual rollback Io failure",
+      "skip_invalid": true,
+      "expected": "original resource cause retained with rollback secondary causal diagnostic according owning accepted transaction semantics; never feature rejection"
+    },
+    {
+      "id": "limit_never_false_fit",
+      "at": "feature fitting",
+      "inject": "requested-storage refusal for otherwise geometrically fitting input",
+      "skip_invalid": true,
+      "expected": "Err(Fatal), not Ok(false), split, skipped feature or uncompressed trial"
+    },
+    {
+      "id": "cause_not_display",
+      "at": "codec -> producer bridge",
+      "inject": "display messages deliberately containing invalid/source/io/unsupported/skip words",
+      "skip_invalid": true,
+      "expected": "same variant/causal stage mapping; message changes do not change selected kind"
+    }
+  ],
+  "bridge_checks": [
+    "selected metadata j8=align8(20+J)-20, BIN origin/end absolute8; core4 only without declared metadata",
+    "exact actual fitting/final byte budget includes selected padding; glb::encode_glb4 not assumed metadata proof",
+    "bridge old Value/BIN capacities overlap counted before move/drop; I_bridge charged once in codec phase",
+    "ResourceLimit JobErrorKind plus CLI category and installed producer-Python ResourceLimitError/kind; no speculative standalone Python",
+    "new codec/raw/framing/helper dependencies included in reuse fingerprint and invalidation controls",
+    "accepted archive inventory and final max_bytes independently decoded"
+  ],
+  "sensitive_controls": [
+    "map ResourceLimit through Error::Message => InvalidRequest",
+    "flatten unmatched codec failure into generic InvalidInput",
+    "return Ok(false) on resource refusal to trigger splitting",
+    "wrap resource refusal as FeatureRejected under skip_invalid",
+    "lose EncodingFailure cause/stage by formatting to string",
+    "nest new Attempt inside producer codec",
+    "retain old encoder fingerprint while codec dependency changes"
+  ],
+  "proof_limit": "Cases are authored preparation inputs only. Existing accepted vector/mesh behavior is not retrospectively labeled defective. New typed resource/cause contract requires independent owner-level probes after P2 and eventual approved implementation acceptance."
+}

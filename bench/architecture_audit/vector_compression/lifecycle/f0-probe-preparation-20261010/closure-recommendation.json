@@ -1,0 +1,897 @@
+{
+  "status": "STATIC_MATCHED_ARTIFACT_CLOSURE_RECOMMENDATION_NOT_EXECUTED",
+  "rootFingerprint": {
+    "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rusty-tiles-fe8339c670388461/lib-rusty_tiles.json",
+    "bytes": 2841,
+    "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rusty-tiles-fe8339c670388461/lib-rusty_tiles.json",
+    "sha256": "85517a0c86322408fe6b8d6eaafcdc20013364897c6ea5f44831623928936d73"
+  },
+  "rootEdges": {
+    "tempfile": [
+      "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile.json"
+    ],
+    "libc": [
+      "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc.json"
+    ],
+    "same_file": [
+      "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file.json"
+    ]
+  },
+  "compiled": [
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile.json",
+      "role": "compiled",
+      "fingerprintInteger": 14383520249602967518,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile",
+        "sha256": "18d1c7426511abf9756f8c1a67ea69e425a95586edda25e55688355941e943ae"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile.json",
+        "bytes": 651,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/tempfile-e49357780c076028/lib-tempfile.json",
+        "sha256": "90d3fac6a6ca4a5fad841593e5f0f45bbcbf8e2a697d8c6dc37c47cbddacd29e"
+      },
+      "features": [
+        "default",
+        "getrandom"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [
+        {
+          "name": "fastrand",
+          "integer": 6386353925080450671,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "once_cell",
+          "integer": 13316772679917755800,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "getrandom",
+          "integer": 8484064546418861558,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "rustix",
+          "integer": 17727894937738552379,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix.json"
+          ],
+          "resolutionUnique": true
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libtempfile-e49357780c076028.rlib",
+          "bytes": 443734,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libtempfile-e49357780c076028.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/tempfile-e49357780c076028.d",
+        "bytes": 4488,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/tempfile-e49357780c076028.d",
+        "sha256": "1e4aa1af8671d2697adebe4f21f1cbe9c5a2ce3a6d301935a91069660d3dee36"
+      },
+      "package": {
+        "name": "tempfile",
+        "version": "3.27.0",
+        "lockChecksum": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0.crate",
+          "bytes": 44780,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0.crate",
+          "sha256": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0/Cargo.toml",
+          "bytes": 2321,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0/Cargo.toml",
+          "sha256": "4ffd8ce684ce8f34075633101c8e627761387b5e66e5efe95010b0aa1414bf1b"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand.json",
+      "role": "compiled",
+      "fingerprintInteger": 6386353925080450671,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand",
+        "sha256": "d87e89384527e9dab4df4bfeb3bb68c70aa6c3bd93670e68bc6ca43188ce8530"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand.json",
+        "bytes": 436,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/fastrand-ffee68ada3e4657c/lib-fastrand.json",
+        "sha256": "b53e6170b0ffb2680ad3032af531ddf7647f79be07118c3ba70d24b1c41f5955"
+      },
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libfastrand-ffee68ada3e4657c.rlib",
+          "bytes": 208826,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libfastrand-ffee68ada3e4657c.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/fastrand-ffee68ada3e4657c.d",
+        "bytes": 1015,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/fastrand-ffee68ada3e4657c.d",
+        "sha256": "abb6afe710809c93612ac836e99dcedac0acf86c52beb7b80ed1ae326741a806"
+      },
+      "package": {
+        "name": "fastrand",
+        "version": "2.5.0",
+        "lockChecksum": "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/fastrand-2.5.0.crate",
+          "bytes": 20782,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/fastrand-2.5.0.crate",
+          "sha256": "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/fastrand-2.5.0/Cargo.toml",
+          "bytes": 1994,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/fastrand-2.5.0/Cargo.toml",
+          "sha256": "3f01725ad91d1a1705762821e9231ea15ddfa62648143516e68d64021ae31e08"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/fastrand-2.5.0",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell.json",
+      "role": "compiled",
+      "fingerprintInteger": 13316772679917755800,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell",
+        "sha256": "4b33ee00515826e88ee2d49880a5c78be18505a3715d1e89479acf1922501e8d"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell.json",
+        "bytes": 530,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/once_cell-2f94496522ad20a0/lib-once_cell.json",
+        "sha256": "47a5610afdb871fca189e0f2830b1988c0dc213f459c024d35fbf15a946ba87f"
+      },
+      "features": [
+        "alloc",
+        "default",
+        "race",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libonce_cell-2f94496522ad20a0.rlib",
+          "bytes": 245096,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libonce_cell-2f94496522ad20a0.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/once_cell-2f94496522ad20a0.d",
+        "bytes": 1395,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/once_cell-2f94496522ad20a0.d",
+        "sha256": "5ccf9329b5f45bcbe0bc8aee0640a5251ba75692a14d6d05fbed7200c1823afb"
+      },
+      "package": {
+        "name": "once_cell",
+        "version": "1.21.4",
+        "lockChecksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4.crate",
+          "bytes": 35010,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4.crate",
+          "sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4/Cargo.toml",
+          "bytes": 2542,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4/Cargo.toml",
+          "sha256": "87e5b7ee438abdef12e46386e86370f54ad70cabdcf949556b9ef012a9da9587"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom.json",
+      "role": "compiled",
+      "fingerprintInteger": 8484064546418861558,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom",
+        "sha256": "e1d2fcef6dc8ad5f50537951aca2744f6f5cb46f8a52eb7c81ef9f648f478e14"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom.json",
+        "bytes": 570,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-b58f3fc1d6a38448/lib-getrandom.json",
+        "sha256": "bd841880f03af21cce472be21ff038e5ad2833249db166c1a0450e47687c668c"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 11558646924270836803,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [
+        {
+          "name": "cfg_if",
+          "integer": 15465703181948006559,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "libc",
+          "integer": 237658083879289825,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "build_script_build",
+          "integer": 11700459785841009626,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libgetrandom-b58f3fc1d6a38448.rlib",
+          "bytes": 102964,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libgetrandom-b58f3fc1d6a38448.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/getrandom-b58f3fc1d6a38448.d",
+        "bytes": 4927,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/getrandom-b58f3fc1d6a38448.d",
+        "sha256": "089cfc2cdefda015f0ac21036dc0ebc04efba4a1ef5ea3afffc1d0c0af96acfa"
+      },
+      "package": {
+        "name": "getrandom",
+        "version": "0.4.3",
+        "lockChecksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3.crate",
+          "bytes": 52437,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3.crate",
+          "sha256": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3/Cargo.toml",
+          "bytes": 4847,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3/Cargo.toml",
+          "sha256": "4f107fe4ceacee71d0068cfbbc69554b3d8523a1fcbb99b17e9fa0d008961ff9"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if.json",
+      "role": "compiled",
+      "fingerprintInteger": 15465703181948006559,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if",
+        "sha256": "6baabd6eab889ba70817edf2b0aa726a00630b8f5480819a379356ee9dcf9c67"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if.json",
+        "bytes": 377,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/cfg-if-68d55d7753931075/lib-cfg_if.json",
+        "sha256": "2320f7c01e5362cde317aa199faeeb9f809c9638857f954d39e41c83d8368e47"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libcfg_if-68d55d7753931075.rlib",
+          "bytes": 7698,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libcfg_if-68d55d7753931075.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/cfg_if-68d55d7753931075.d",
+        "bytes": 612,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/cfg_if-68d55d7753931075.d",
+        "sha256": "cfab5c85a4dd0001bc39919bc9dd57baba50f8de2499b201f1eaf281e643447f"
+      },
+      "package": {
+        "name": "cfg-if",
+        "version": "1.0.4",
+        "lockChecksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4.crate",
+          "bytes": 9360,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4.crate",
+          "sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4/Cargo.toml",
+          "bytes": 1239,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4/Cargo.toml",
+          "sha256": "281d508beb1fe3927cf03d3f2f8c9a5117b1e4fe97ae21b9026cf318e8c35273"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc.json",
+      "role": "compiled",
+      "fingerprintInteger": 237658083879289825,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc",
+        "sha256": "75f78aac0c3516f2632dfa196fdaf22f05f0b80ab2e7760191927528c7700b53"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc.json",
+        "bytes": 568,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-6a1ca5ce17f02622/lib-libc.json",
+        "sha256": "a2e52ccb386b1dd94dff8b62804f34fd6f7a85f942e84295c6d740122b7000ce"
+      },
+      "features": [
+        "default",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 4405459846660963551,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [
+        {
+          "name": "build_script_build",
+          "integer": 10142653951952867436,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/liblibc-6a1ca5ce17f02622.rlib",
+          "bytes": 4220674,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/liblibc-6a1ca5ce17f02622.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libc-6a1ca5ce17f02622.d",
+        "bytes": 21966,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libc-6a1ca5ce17f02622.d",
+        "sha256": "2bc41d3db5159a8ce0bde1728f5dd1eb36732dba580623b8943691f23db24147"
+      },
+      "package": {
+        "name": "libc",
+        "version": "0.2.189",
+        "lockChecksum": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/libc-0.2.189.crate",
+          "bytes": 851502,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/libc-0.2.189.crate",
+          "sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.189/Cargo.toml",
+          "bytes": 6072,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.189/Cargo.toml",
+          "sha256": "95159789ef9c9aaee8230b13be5c89594833a7bf2db299e61eb23b512cb67144"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.189",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix.json",
+      "role": "compiled",
+      "fingerprintInteger": 17727894937738552379,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix",
+        "sha256": "805cee58737c53ab8081cd14fd787e0b1afb2aa9085bb410ee1b4c842ab91776"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix.json",
+        "bytes": 1055,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-a14f7305c1374395/lib-rustix.json",
+        "sha256": "e02b2c165afa58725245f2590b27b8c53f1bfaab064e9143c934c4d084c77bd3"
+      },
+      "features": [
+        "alloc",
+        "default",
+        "fs",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 13670713050734078800,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [
+        {
+          "name": "linux_raw_sys",
+          "integer": 10818991921160517561,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "bitflags",
+          "integer": 3995789383826517418,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags.json"
+          ],
+          "resolutionUnique": true
+        },
+        {
+          "name": "build_script_build",
+          "integer": 855154676855933363,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/librustix-a14f7305c1374395.rlib",
+          "bytes": 4940500,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/librustix-a14f7305c1374395.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/rustix-a14f7305c1374395.d",
+        "bytes": 24761,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/rustix-a14f7305c1374395.d",
+        "sha256": "0df052a5aa4adc6bde245e880870dd18518662c974d05e58357bd5a52020c082"
+      },
+      "package": {
+        "name": "rustix",
+        "version": "1.1.4",
+        "lockChecksum": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4.crate",
+          "bytes": 425241,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4.crate",
+          "sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml",
+          "bytes": 10350,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml",
+          "sha256": "13302af30f997a373ad50b7aa668d9612483e85be6b455e09d95bbd59fb5296f"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys.json",
+      "role": "compiled",
+      "fingerprintInteger": 10818991921160517561,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys",
+        "sha256": "2223d9a3a86cf1ef2168b1c7010e1968bb210459554ef07e68245267fe2c8d69"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys.json",
+        "bytes": 792,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/linux-raw-sys-053c793e01ca150b/lib-linux_raw_sys.json",
+        "sha256": "f3364148a6ac02e5afa0c0ae839f232ec37bd521ef332afb797dd45b78dfeb9b"
+      },
+      "features": [
+        "auxvec",
+        "elf",
+        "errno",
+        "general",
+        "ioctl",
+        "no_std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 4314370921045452772,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/liblinux_raw_sys-053c793e01ca150b.rlib",
+          "bytes": 1387336,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/liblinux_raw_sys-053c793e01ca150b.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/linux_raw_sys-053c793e01ca150b.d",
+        "bytes": 2746,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/linux_raw_sys-053c793e01ca150b.d",
+        "sha256": "4b606034dbb835f6c280b02c603e570c4b9d663153e2d94b73e2e5fa7d249685"
+      },
+      "package": {
+        "name": "linux-raw-sys",
+        "version": "0.12.1",
+        "lockChecksum": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.12.1.crate",
+          "bytes": 3006116,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.12.1.crate",
+          "sha256": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.12.1/Cargo.toml",
+          "bytes": 2294,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.12.1/Cargo.toml",
+          "sha256": "1d24fe227d87b23fc5220ddf2ca4708e5e0d794a3f77961b71cd8140bf33faa5"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.12.1",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags.json",
+      "role": "compiled",
+      "fingerprintInteger": 3995789383826517418,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags",
+        "sha256": "36980976eba9bd7964ee0f26415fdbfd60eaa418333576bc1d5b95b55a93116d"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags.json",
+        "bytes": 444,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/bitflags-e5152661cb11b012/lib-bitflags.json",
+        "sha256": "8c272fb54b670323e30c99ce6ba04c14812ca1cee960d924c8e4d3e559e9eeec"
+      },
+      "features": [
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libbitflags-e5152661cb11b012.rlib",
+          "bytes": 264106,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libbitflags-e5152661cb11b012.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/bitflags-e5152661cb11b012.d",
+        "bytes": 2900,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/bitflags-e5152661cb11b012.d",
+        "sha256": "62e1bee8225aae501beeebdd59a2033035d6493a41c6ea297b017ec78e7c941d"
+      },
+      "package": {
+        "name": "bitflags",
+        "version": "2.13.1",
+        "lockChecksum": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1.crate",
+          "bytes": 51395,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1.crate",
+          "sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/Cargo.toml",
+          "bytes": 2354,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/Cargo.toml",
+          "sha256": "b13b9b7edbbb039205f57f107acdba1840b7c8452c6fdf4e04bc58124f7b5e0c"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file.json",
+      "role": "compiled",
+      "fingerprintInteger": 1721909969307075913,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file",
+        "sha256": "795e7558d0746294ed0c4d4c0167817fd2dfec8fceb1734c390718a6a9d2aa6f"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file.json",
+        "bytes": 352,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/same-file-3ba7bddfadca5e94/lib-same_file.json",
+        "sha256": "fc59b4d1de9250b1361b22810aec4bdd9c3c8338139b9158bc31a2dbc6047d46"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 2040997289075261528,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": [],
+      "artifacts": [
+        {
+          "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libsame_file-3ba7bddfadca5e94.rlib",
+          "bytes": 48622,
+          "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/libsame_file-3ba7bddfadca5e94.rlib",
+          "sha256": null,
+          "hashStatus": "ROOT_COORDINATOR_HASH_AND_FREEZE_REQUIRED"
+        }
+      ],
+      "depInfo": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/deps/same_file-3ba7bddfadca5e94.d",
+        "bytes": 1002,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/deps/same_file-3ba7bddfadca5e94.d",
+        "sha256": "0662e798f16d31fd66af048bcbe0eeebdf6cd5d4900ade21fe0ba683e2404b3b"
+      },
+      "package": {
+        "name": "same-file",
+        "version": "1.0.6",
+        "lockChecksum": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+        "cachedArchive": {
+          "path": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6.crate",
+          "bytes": 10183,
+          "resolvedPath": "/home/bend/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6.crate",
+          "sha256": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+        },
+        "cargoToml": {
+          "path": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/Cargo.toml",
+          "bytes": 1116,
+          "resolvedPath": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/Cargo.toml",
+          "sha256": "991f8df8fa5a259801900a56908cf21a66c5cf7b238bc81ba9bdf348e233252e"
+        },
+        "depInfoSourceDirectory": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6",
+        "proofLimit": "Current registry metadata/dep-info, not historical extracted build-source immutability"
+      }
+    }
+  ],
+  "historicalBuildProvenance": [
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 10142653951952867436,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build",
+        "sha256": "41bf6c01848ca3d41f22cdba4be9b0cc2f4c7be6db8731551fe9a0d7ca2de457"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build.json",
+        "bytes": 467,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-8b7583ea03f5b82b/run-build-script-build-script-build.json",
+        "sha256": "c06bb49cdb2931265968afc1fdaa1b92fb278d654e22e5148df29c01b21ecb84"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 0,
+      "rustflags": [],
+      "config": 0,
+      "edges": [
+        {
+          "name": "build_script_build",
+          "integer": 17122152155493195281,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ]
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 17122152155493195281,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build",
+        "sha256": "231f5e4565040470d2ab879095d8274c8c8f9dcc6a1d3f4f2dd7f5e6f0b220ac"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build.json",
+        "bytes": 520,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/libc-727d7a671073f00c/build-script-build-script-build.json",
+        "sha256": "8e67ae7212634ab4c883c045859f502a5ec283501257647d032db75cb64f90de"
+      },
+      "features": [
+        "default",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 1062373418235393412,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": []
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 11700459785841009626,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build",
+        "sha256": "80f3d42519d863c083c456ffd6a15b120d3a0833b8b32fe00ac3f7fc97392a25"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build.json",
+        "bytes": 331,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-ef6b721df081be3c/run-build-script-build-script-build.json",
+        "sha256": "c5b1f2278b7483c64f63788ce29b03ad406a8d5c3d86fd88f54e4a057cfda2e0"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 0,
+      "rustflags": [],
+      "config": 0,
+      "edges": [
+        {
+          "name": "build_script_build",
+          "integer": 6582548385902998499,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ]
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 6582548385902998499,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build",
+        "sha256": "94269636d05975d76278b56765fa69cd9bf7c3f7b7435c456eae5deebe1ad999"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build.json",
+        "bytes": 404,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/getrandom-349d5bde37b22dab/build-script-build-script-build.json",
+        "sha256": "c8803b1e3f393044d57d41bf5eaea3cdf98ff3e347ec72197361f8d45617f4e8"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 6350529014318243270,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": []
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 855154676855933363,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build",
+        "sha256": "8141a12c121a72f926d9e32f053b44d8efd6b2c608037c7596f9478060b0275e"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build.json",
+        "bytes": 676,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-ac1974a5491b60f1/run-build-script-build-script-build.json",
+        "sha256": "cd950004fd44edfecfa761ea6916d8b478f9eeea588d99da99aadd174e00f604"
+      },
+      "features": [],
+      "rustcId": 2467252760697041086,
+      "profile": 0,
+      "rustflags": [],
+      "config": 0,
+      "edges": [
+        {
+          "name": "build_script_build",
+          "integer": 8999919368818626985,
+          "candidateUnits": [
+            "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build.json"
+          ],
+          "resolutionUnique": true
+        }
+      ]
+    },
+    {
+      "unit": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build.json",
+      "role": "historical_build_provenance",
+      "fingerprintInteger": 8999919368818626985,
+      "fingerprintFile": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build",
+        "bytes": 16,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build",
+        "sha256": "fb29a72b008bc2ae8da90c321c1919b6c0899c0a54264862e8eb2f21533396aa"
+      },
+      "fingerprintJson": {
+        "path": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build.json",
+        "bytes": 882,
+        "resolvedPath": "/tmp/rusty-tiles-f1d2-final-target/release/.fingerprint/rustix-0373c58ac1462e3f/build-script-build-script-build.json",
+        "sha256": "f82ed9b9ab1fc7990b44c99d78d6eba3ee42141dbf868806f553be999bb74bc9"
+      },
+      "features": [
+        "alloc",
+        "default",
+        "fs",
+        "std"
+      ],
+      "rustcId": 2467252760697041086,
+      "profile": 5199614438611472489,
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "edges": []
+    }
+  ],
+  "unresolvedEdges": [],
+  "directNeed": {
+    "tempfile": "Actual runtime and file probe dependency",
+    "libc": "Unchanged accepted inline Linux directory module compiles under cfg(test)",
+    "same_file": "Matched1.0.6 identity dependency prepared for future captured-source/handle work; current two file publication probes do not use it, so no same-file primitive execution acceptance follows"
+  },
+  "compilerBinding": "Repin selected rustc/std/driver/LLVM and actual linker/loader as in exact P2 receipt; augment with these compiled artifacts before/after. No new dependency closure complete flag from this static package. Linux compiled artifacts are not Windows artifacts.",
+  "nativeMeaning": "Native-host x86_64 Linux crate closure includes rustix/linux_raw_sys/libc filesystem interfaces; no meshopt C++ dependency in this probe.",
+  "historicalBuildLimit": "Build script/run records identify original compilation provenance. Actual root rustc consumes rlibs and their bundled code; current extracted source agreement does not prove original source immutability."
+}

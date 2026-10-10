@@ -557,3 +557,18 @@ fn real_replace_failure_preserves_competing_directory_and_cleans_candidate() {
     assert!(failure.retained_paths.is_empty());
     assert_eq!(fs::read_dir(work.path()).unwrap().count(), 1);
 }
+
+#[test]
+fn resource_refusal_retains_typed_cause_and_shared_first_abort_identity() {
+    let cause = crate::content_integrity::FormatError::ResourceLimit("requested storage".into());
+    let error = JobError::with_cause(JobErrorKind::ResourceLimit, "bounded codec refused", cause);
+    assert!(std::error::Error::source(&error)
+        .unwrap()
+        .is::<crate::content_integrity::FormatError>());
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let failure = attempt.fail(error.clone());
+    assert!(failure.error.same_cause(&error));
+    assert_eq!(failure.error.kind(), JobErrorKind::ResourceLimit);
+    assert!(!control.cancellation_handle().cancel());
+}

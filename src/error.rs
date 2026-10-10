@@ -62,6 +62,9 @@ impl Error {
     pub fn category(&self) -> (&'static str, u8) {
         match self {
             Self::Validation(failure) => failure.category(),
+            Self::Job(failure) if failure.error.kind() == crate::JobErrorKind::ResourceLimit => {
+                ("resource_limit", 1)
+            }
             Self::Environment(_) => ("environment", 4),
             Self::OutputExists(_) => ("output_conflict", 5),
             Self::Io(_) => ("io", 1),

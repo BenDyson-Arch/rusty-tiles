@@ -1,0 +1,144 @@
+{
+  "status": "ADDITIVE PREPARATION; root execution pending; P2-P5 HELD",
+  "originalPackage": "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010",
+  "originalPackageIntegritySha256": "20c6f6dff821962f6ca1845853765499f53baf2bcf5e498eb11adbffaa1da78e",
+  "originalDomainOracle": {
+    "bytes": 2264,
+    "sha256": "40d721b03630f797338e67fb10e27c61fcf9f1f8446f2d730ae249f6a39c6ce2"
+  },
+  "revisedDomainOracle": {
+    "bytes": 4322,
+    "sha256": "b8b1361fbf497122fdcd91b6c47682dc67aa48087b608ae95ecbc7dbc0430c0c"
+  },
+  "unchangedCheckerSourceSha256": "0d8edcb450091dba15c4863423e4efd087a3c89f791006d4a9ee17ec833e428d",
+  "acceptedC1MergeCommit": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "acceptedJsonOwnerSha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+  "retainedActualFailure": {
+    "receipt": "/tmp/rusty-tiles-codec-p2-executions/models/receipt.json",
+    "stderr": "/tmp/rusty-tiles-codec-p2-executions/models/domain_oracle.stderr",
+    "exitCode": 1,
+    "error": "StopIteration; no selected association key for polygon-loops-offsets"
+  },
+  "preciseDelta": [
+    "Original fixture directory referenced explicitly; no original bytes copied or rewritten.",
+    "Append featureTable to the existing selector priority: only polygon-loops-offsets selects a different/new key.",
+    "Keep check(case,dir) byte-for-byte unchanged, including exception predicates/messages.",
+    "Self-test copies only each case literal files to an ephemeral directory, checks baseline, mutates one binary at a time and requires the actual same checker to raise its binary assertion, restores that binary, then requires checker rejection of changed associations and restores/rechecks baseline.",
+    "Mutations must change bytes/object; list mutation appends an element instead of potentially symmetric reversal.",
+    "Add full expected records and root-only adapter preserving original package/accepted C1 identity gates, same nice10/two-core/two-worker controls and fresh output directory. Default runs only revised domain; optional models also runs unchanged phase/frame."
+  ],
+  "originalFixtureManifest": {
+    "bytes": 18632,
+    "sha256": "76476cb80fe3f997e9543b1a196e70d443f09d035d3dae5fdba855397cbaad49"
+  },
+  "inputExpectationChanges": 0,
+  "originalFilesChanged": 0,
+  "associationSelectionAndLiteralEdits": [
+    {
+      "case": "positions-f32",
+      "selectedKey": "componentType",
+      "originalValue": 5126,
+      "mutatedValue": 5127,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "positions-normalized-u16",
+      "selectedKey": "componentType",
+      "originalValue": 5123,
+      "mutatedValue": 5124,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "feature-ids-padded-u16",
+      "selectedKey": "propertyTable",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "feature-ids-f32",
+      "selectedKey": "propertyTable",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "line-restart",
+      "selectedKey": "mode",
+      "originalValue": 3,
+      "mutatedValue": 4,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "polygon-loops-offsets",
+      "selectedKey": "featureTable",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": true
+    },
+    {
+      "case": "fill-triangles-material",
+      "selectedKey": "propertyTable",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "metadata-boolean-bitset",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "metadata-int64-nodata",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "metadata-float64",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "metadata-utf8-array-string",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "external-uint64",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "external-structural-array-shared",
+      "selectedKey": "valuesView",
+      "originalValue": 0,
+      "mutatedValue": 1,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "external-interleaved-matrix-partial",
+      "selectedKey": "componentType",
+      "originalValue": 5121,
+      "mutatedValue": 5122,
+      "selectionPreviouslyMissing": false
+    },
+    {
+      "case": "opaque-source-json",
+      "selectedKey": "extrasRaw",
+      "originalValue": "{\"n\":9007199254740993,\"u\":18446744073709551615,\"x\":1e400,\"m\":{\"$serde_json::private::Number\":\"1e400\"}}",
+      "mutatedValue": "{\"n\":9007199254740992,\"u\":18446744073709551615,\"x\":1e400,\"m\":{\"$serde_json::private::Number\":\"1e400\"}}",
+      "selectionPreviouslyMissing": false
+    }
+  ],
+  "authorExecution": "NONE; AST/source-text equality, fixture hash/length checks and mutation arithmetic preparation only; no script/model/native/Cargo/target execution"
+}

@@ -1,6 +1,6 @@
 //! Shared GLB container plumbing: chunk framing, alignment, buffer-view
 //! appends, extension declarations and the one `EXT_meshopt_compression`
-//! view rewriter used by mesh and vector content.
+//! view rewriter used by lossless mesh tiles.
 //!
 //! Every writer keeps its glTF document and binary buffer in memory and
 //! serialises exactly once through [`encode_glb`].
@@ -154,21 +154,11 @@ pub(crate) enum MeshoptStream {
     Attributes { count: usize, stride: usize },
 }
 
-/// Where compressed views point in the uncompressed fallback buffer.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum FallbackOffsets {
-    /// Keep each view's source `byteOffset`; the fallback spans the source.
-    Source,
-    /// Repack compressed views contiguously at the layout alignment.
-    Packed,
-}
-
 /// Container layout for one family of meshopt-compressed content.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct MeshoptLayout {
-    /// Alignment of every view in the compressed (and packed fallback) buffer.
+    /// Alignment of every view in the compressed buffer.
     pub align: usize,
-    pub fallback: FallbackOffsets,
     /// Write `"filter":"NONE"` explicitly on compressed views.
     pub explicit_filter: bool,
 }
@@ -176,7 +166,8 @@ pub(crate) struct MeshoptLayout {
 /// Compress buffer views of `document` (whose binary is `source`) with
 /// `EXT_meshopt_compression`. `classify(view, byte_length)` selects the
 /// stream role of each view; `None` copies the view verbatim. Accessors,
-/// view identities and element order are unchanged. Returns the new binary.
+/// view identities and element order are unchanged. Compressed views retain
+/// source offsets in a fallback buffer spanning `source`. Returns the new binary.
 pub(crate) fn meshopt_compress(
     document: &mut Value,
     source: &[u8],
@@ -187,7 +178,6 @@ pub(crate) fn meshopt_compress(
         .as_array_mut()
         .ok_or_else(|| Error::msg("missing views"))?;
     let mut binary = Vec::with_capacity(source.len());
-    let mut packed_size = 0usize;
     let mut indices = Vec::new();
     for (index, view) in views.iter_mut().enumerate() {
         let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
@@ -241,11 +231,6 @@ pub(crate) fn meshopt_compress(
             }
         };
         view["buffer"] = json!(1);
-        if let FallbackOffsets::Packed = layout.fallback {
-            packed_size = packed_size.next_multiple_of(layout.align);
-            view["byteOffset"] = json!(packed_size);
-            packed_size += length;
-        }
         let mut extension = json!({"buffer":0,"byteOffset":start,"byteLength":binary.len() - start,
             "byteStride":stride,"count":count,"mode":mode});
         if layout.explicit_filter {
@@ -253,12 +238,8 @@ pub(crate) fn meshopt_compress(
         }
         view["extensions"] = json!({ MESHOPT: extension });
     }
-    let fallback = match layout.fallback {
-        FallbackOffsets::Source => source.len(),
-        FallbackOffsets::Packed => packed_size,
-    };
     document["buffers"] = json!([{"byteLength":binary.len()},
-        {"byteLength":fallback,"extensions":{MESHOPT:{"fallback":true}}}]);
+        {"byteLength":source.len(),"extensions":{MESHOPT:{"fallback":true}}}]);
     add_extension(document, MESHOPT, true)?;
     Ok(binary)
 }

@@ -1,0 +1,48 @@
+{
+  "status": "actualisolatedcompileexit1modulepathlookup;zeroF0testsrun",
+  "records": [
+    {
+      "sourceRelativePath": "commands.json",
+      "bytes": 1223,
+      "sha256": "8e5de831faa34a84d0f66475135d8256e7e97f0d11a0165f952ab6b393e429dd",
+      "retainedFile": "0000.gz",
+      "gzipSha256": "4af4003ca279ee85d2f3d738ac79290f8ce0c603dd5c73eaf5532bf583885a66"
+    },
+    {
+      "sourceRelativePath": "compiler-vV.stdout",
+      "bytes": 196,
+      "sha256": "3975d062e234a9f3921955bf6ae5b90f5819df94fa825d057f76b34a35ed0f4d",
+      "retainedFile": "0001.gz",
+      "gzipSha256": "ef2045890c36ffd3410e3ab523e5cc17c36337ed6d7a5fdbc9d1d33fc7dc2887"
+    },
+    {
+      "sourceRelativePath": "compiler-vV.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0002.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourceRelativePath": "compile.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0003.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourceRelativePath": "compile.stderr",
+      "bytes": 1132,
+      "sha256": "8490f77b910e858128d95b62c83e67e99146f742734ca1b0b6ce52e0ceabef15",
+      "retainedFile": "0004.gz",
+      "gzipSha256": "fd089aa8277244271959c37510d6f315a77f14381a75efead4ed0b2a67c0f88d"
+    },
+    {
+      "sourceRelativePath": "preexecution-review.json",
+      "bytes": 517,
+      "sha256": "40b716cb30d4d41d86d75fc93799d0237293fdb709789a7c9bf6193400a04591",
+      "retainedFile": "0005.gz",
+      "gzipSha256": "5da118311a9f02ae9e3c6ee87c7332701978cdcb8ddd54d0a5b9a4cda9953fff"
+    }
+  ],
+  "scope": "preparationlayoutdefect; acceptedruntimebytesunchanged"
+}

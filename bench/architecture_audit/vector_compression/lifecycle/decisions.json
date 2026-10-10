@@ -1,0 +1,229 @@
+{
+  "status": "PRECODE DRAFT; not implementation approval or executed acceptance",
+  "captured_at_utc": "2026-10-10T11:06:10.625925+00:00",
+  "source_pin_file": "source-pin.json",
+  "source_head": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "prerequisite": "Current C1 exact-source independent acceptance and applicable package/remote gates must complete before next code",
+  "required_review": "Fresh independent whole-slice precode review resolves representation/default/profile/platform proof choices before implementation",
+  "scope": "One standalone generated-family self-contained GLB in-place named-entry replacement and current producer pure-codec integration, including draft bounded validated identity output for already-generated compressed input",
+  "decisions": [
+    {
+      "id": "standalone_api",
+      "choice": "CompressionRequest::in_place(path).with_limits(CompressionLimits); compress_file(request,&RunControl)->CompressionResult/JobFailure",
+      "owner": "standalone compression orchestration",
+      "reason": "No arbitrary destination/output policy needed for intentional equality; typed defaults/causes/results replace direct mutation",
+      "disposition": "REPLACE direct mutator and REMOVE superseded export/caller"
+    },
+    {
+      "id": "source_capture",
+      "choice": "One absolute original spelling + canonical regular source/replacement path; bounded immutable bytes; held identity/metadata before any observer",
+      "owner": "standalone source owner",
+      "domain": "ordinary stable local regular file; no final symlink; canonical ancestors admitted",
+      "disposition": "REWORK mesh capture idioms; do not reuse mesh binder/source policy wholesale"
+    },
+    {
+      "id": "source_recheck",
+      "choice": "After final observer, recheck spelling/canonical path/regular identity and exact streamed bytes with 64 KiB buffer; Conflict on detected change; close handles before seal",
+      "owner": "standalone source owner",
+      "status": "DRAFT focused source/Windows feasibility proof required",
+      "proof_limit": "No atomic snapshot/compare-and-replace. Stability of source and namespace through installation remains caller precondition"
+    },
+    {
+      "id": "hardlinks",
+      "choice": "Admit and replace selected named entry only; other hardlink aliases/original open handles retain original object/bytes",
+      "owner": "source/publication contract",
+      "status": "DRAFT cross-platform identity/alias controls required"
+    },
+    {
+      "id": "permissions",
+      "choice": "Copy captured portable fs::Permissions onto complete private candidate before seal; failure aborts as Io",
+      "owner": "standalone finalization",
+      "status": "DRAFT Unix/Windows readonly/platform evidence required",
+      "excluded": "old inode/timestamps/ownership/ACL/xattrs and all-alias mutation"
+    },
+    {
+      "id": "f0_publication",
+      "choice": "One F0 Staging->seal/sync->Replace via persist; no predelete/copy fallback",
+      "owner": "runtime existing completed-file publisher",
+      "disposition": "RETAIN only accepted file/platform/stable-namespace domain",
+      "excluded": "atomic expected-identity update, same-target competing-writer no-loss, hostile ancestor mutation, crash durability"
+    },
+    {
+      "id": "lifecycle",
+      "choice": "One Attempt; all producer/callback/recheck work before event closure/seal/permission; no callbacks after seal; explicit staging.fail cleanup",
+      "owner": "standalone orchestration + existing runtime arbitration",
+      "causes": "first accepted prepermission fatal is primary; later causes secondary; postpermission publisher owns outcome; committed result survives later diagnostics"
+    },
+    {
+      "id": "resource_error",
+      "choice": "Minimal JobErrorKind::ResourceLimit extension with explicit CLI/Python exhaustive mapping",
+      "owner": "runtime domain cause classification and adapters",
+      "reason": "Requested storage/cardinality refusal cannot be mislabeled malformed/unsupported/Io"
+    },
+    {
+      "id": "codec_boundary",
+      "choice": "prepare(bytes, ValidatedCompressionLimits, ordinary generic checkpoint)->physical-view Plan/CodecError<E>; encode(Plan,same checkpoint)->Encoded/statistics; direct counted RawValue emission into final GLB",
+      "owner": "codec lane",
+      "excluded": "paths, RunControl, adapters, force, worker pool, converter identity, Value rounding of opaque numbers",
+      "checkpoint": "Before/after bounded JSON and each view/decoder/serializer stage; no runtime import; generic checkpoint error tagged separately",
+      "existing_compressed": "DRAFT bounded stream-validation + exact identity output for existing generated ATTRIBUTES/NONE; C1 helper extraction/allocation review remains blocker",
+      "eligibility": "Whole physical eligible view uses explicit parent stride or unanimous effective stride; mixed stride/partial tails raw; separate accessor-window validation"
+    },
+    {
+      "id": "producer",
+      "choice": "Existing vector Attempt supplies validated codec policy and invokes shared planner/encoder; no standalone operation or in-place content publication",
+      "owner": "vector orchestration",
+      "disposition": "RETAIN existing accepted inventory/archive lifecycle; REWORK pure codec stage",
+      "limit_behavior": "Actual candidate exceeding codec profile fails ResourceLimit; no uncompressed fallback; max_bytes remains final tile limit"
+    },
+    {
+      "id": "python_surface",
+      "choice": "Bounded standalone operation exposes intentional Rust API and migrates existing CLI worker; no standalone Python binding is added or advertised",
+      "owner": "whole-slice facade/adapters",
+      "status": "SETTLED DRAFT scope choice subject to independent whole-slice review",
+      "reason": "No current standalone Python route/caller exists; smallest real migration does not add an unrelated adapter",
+      "future_gate": "If later advertised, Python uses existing run_job and requires installed default/error/callback/cancel/identity/platform parity; producer Python remains applicable now"
+    }
+  ],
+  "draft_defaults": {
+    "max_source_bytes": 33554432,
+    "max_json_bytes": 1048576,
+    "max_json_depth": 64,
+    "max_json_nodes": 65536,
+    "max_buffer_views": 4096,
+    "max_accessors": 4096,
+    "max_processed_view_bytes": 33554432,
+    "max_output_bytes": 67108864,
+    "max_estimated_working_bytes": 134217728
+  },
+  "default_proof_status": "Numerical choices are proposed, not inherited C1 policy or measured accepted limits; valid maximum/max+1 and actual generated boundary evidence mandatory",
+  "accounting": {
+    "version": "v0 engineering estimate; coefficients pending independent pinned capacity/scratch review",
+    "B": "1 + (N/256 + (N%256!=0)) * S * (S/4+260) +32; S in 4, 8, 12; checked all arithmetic",
+    "BIN_upper": "sum(raw_view_lengths)+sum(B)+7*V",
+    "fallback": "sum aligned original compressed-view lengths; virtual address space, not actual decoded fallback allocation",
+    "GLB_upper": "28+align4(counted_output_JSON)+align4(BIN_upper)",
+    "E_json": "8*J+256*min(max_json_nodes,J)+65536; for early admission preflight; replace with admittedK afterward",
+    "E_plan": "2*J+128*K+256*(V+A)",
+    "E_standalone": "I + max(E_json, E_plan+BIN_upper+GLB_upper+separate_JSON_capacity+65536, E_plan+decoder_scratch+65536,65536)+1024+actual_path_storage; identity branch BIN_upper=0,GLB_upper=I; mutually exclusive branches",
+    "producer": "Peak=max(H+old_Value_BIN+bridge_I+serializer_scratch, H+old_Value_BIN_if_still_alive+E_codec); E_codec already includes bridge_I once. Drop consumed old document/BIN when ownership permits; count real clones and persistent worker/geometry state separately; no producer RSS bound.",
+    "source_work": "2*I plus excess-detection bytes; one source capture and one exact source comparison",
+    "codec_work": "sum actual physical view lengths <= max_processed_view_bytes; one stream call per compressed physical view",
+    "JSON_scan_metric": "(2*depth+4)*J conservative design metric, not wall-clock/adversarial HashSet proof",
+    "exclusions": "RSS/native stacks/allocator overhead/page cache; cannot claim total memory or hard allocator bound",
+    "mandatory_checks": [
+      "u64->usize checked",
+      "allocation <=isize::MAX",
+      "count*stride checked",
+      "ceil division checked without N+255",
+      "sum/align/start+bound checked",
+      "GLB u32 total/chunks checked",
+      "output JSON bound/count includes generated edit fields",
+      "parser scratch can precede descendant depth detection",
+      "all simultaneous input/BIN/GLB/source-bridge allocations charged"
+    ],
+    "general_B": "For admitted S<=256: b=min(256,16*floor(8192/(16*S))); B=1+ceil(N/b)*S*(S/4+ceil(b/64)+b)+max(32,S+S/4), all checked; source-derived draft awaiting review",
+    "JSON_upper": "J+512*V+1024 proposed conservative edit growth ceiling; exact bounded counting pass validates it before allocation; raw JSON emitted directly into final GLB",
+    "decoder_scratch": "For compressed identity branch one view D: 4*ceil(D/4)+D <=2D+3; decoded logical view sum <=max_processed_view_bytes; charge before allocating, discard per view; helper allocation review blocker"
+  },
+  "acceptance_plan": {
+    "source_identity": [
+      "cwd first/final observer subprocess",
+      "dot/ancestor symlink spelling",
+      "final symlink/nonregular refusal",
+      "hardlink selected entry and alias bytes/fileids",
+      "same-length change restoring mtime",
+      "delete/rename/replace in callback",
+      "final-check/install competitor window explicitly demonstrates nonCAS"
+    ],
+    "faults": [
+      "capture/read",
+      "plan/reservation",
+      "encoder",
+      "counting/output serialization",
+      "candidate write/flush",
+      "permissions",
+      "sync",
+      "install",
+      "precommit cleanup",
+      "postcommit name reoccupation"
+    ],
+    "control": [
+      "early/final observer failure",
+      "prepermission cancellation",
+      "stream boundary cancellation",
+      "reuse/reentry",
+      "repeated/concurrent independent targets",
+      "one Attempt trace",
+      "no callbacks after seal",
+      "first cause versus publisher cause",
+      "committed classification survives adapter"
+    ],
+    "resource": [
+      "every limit max/max+1",
+      "physical view vs accessor count",
+      "small many views padding",
+      "metadata/schema/large keys/numbers/deep JSON",
+      "N=0/1/255/256/257 bound across S=4/8/12",
+      "host arithmetic",
+      "requested capacity sensitivity omissions",
+      "actual RSS/scratch/descriptors measured separately",
+      "producer bridge overlap"
+    ],
+    "independent_output": [
+      "externalmeshopt whole-byte stream decoder",
+      "raw metadata bytes/values",
+      "opaque JSON numberlexemes",
+      "feature association/restarts/padding",
+      "actual pinned browser vector picking",
+      "archiveinventory and final max_bytes"
+    ],
+    "adapters": [
+      "Rust/CLIdefaults/typed errors/output identity",
+      "hidden worker caller migration",
+      "Python installed parity only if advertised",
+      "original primary callback exception",
+      "applicable final CI/wheel/official Blender platforms"
+    ],
+    "negative_controls": [
+      "direct source write",
+      "omit path capture",
+      "omitexact source comparison",
+      "omit source/BIN/GLB/parser/bridge account",
+      "nested Attempt",
+      "emit after  seal",
+      "splitcheck/install race",
+      "unlink reoccupied temporary name",
+      "rewrite committed success"
+    ]
+  },
+  "open_precode_proofs": [
+    "raw JSON rewrite/edit descriptor allocation layout and exact direct counted emission",
+    "pinned parser/hashkey growth estimate vs type/capacity accounting",
+    "numeric profile valid boundary generated fixture coverage",
+    "Windows handle/permission/Replace feasibility",
+    "producer bridge lifetime and preexisting state overlap",
+    "Rust/CLI-only standalone facade scope review",
+    "generic checkpoint boundaries and tagged caller causes",
+    "existing generated compressed identity output + accepted C1 decoder helper extraction/capacities",
+    "general eligible stride bound and exact JSON J+512V+1024 growth ceiling"
+  ],
+  "not_executed": [
+    "Cargo/build/test",
+    "resource measurements",
+    "new codec executions",
+    "production source edits",
+    "Git mutations",
+    "issue writes"
+  ],
+  "parent_gates_unchanged": [
+    "113",
+    "121",
+    "125",
+    "126",
+    "Full A2 unavailable-root external template conformance",
+    "release/tag/publication"
+  ],
+  "alignment_source": "Codec lane message received: same draft defaults, generic prepare/encode checkpoints, direct counted RawValue emission, physical-view eligibility and review-blocked identity branch; no executions",
+  "freeze_status": "FINAL PREPARATION FREEZE ONLY; all codec identity/allocation and storage/work formula choices remain unproved review gates; source identity remains read baseline 2ebfb749, no retrobinding to later C1 corrections"
+}

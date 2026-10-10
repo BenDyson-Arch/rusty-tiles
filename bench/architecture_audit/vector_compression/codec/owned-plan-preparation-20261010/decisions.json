@@ -1,0 +1,39 @@
+{
+  "status": "FROZEN_STATIC_ONLY: author has not compiled/run target, models or evaluator",
+  "approvalRequested": "Independent review of this exact isolated Plan/capacity/serializer source and root-only execution scope",
+  "retain": [
+    "C1 immutable borrowed CheckedDocument and RawValue numeric lexemes",
+    "fixed independent byte oracles and existing205-artifact/compiler/std closure",
+    "finite typed pure errors and one source owner"
+  ],
+  "replace": [
+    "Per-object String/RawValue vectors by one actual-K flat Cow/RawField arena",
+    "old128K/256V guesses by actual sizeof/capacity terms for this representation",
+    "count/emission declaration decoding by prepare-known enums plus retained raw refs"
+  ],
+  "rework": [
+    "Eprepare phase estimate with source-backed scratch initial minimum and temporary raw-ref backing",
+    "future producer selected metadata framing, source classifier and identity domain remain separate"
+  ],
+  "remove": [
+    "Duplicate plain-key copies and retained per-object/reference maps",
+    "dummy receipt allocations and unused accessor array",
+    "prospective coefficient/default/production approval from scaffold-only outputs"
+  ],
+  "sourceDerivedPlanEstimate": "3J+8+K*sizeof(RawField)+min(K,4096)*sizeof(PreparedView)+max(min(K,4096),1)*sizeof(RawRef)",
+  "exactRetained": "K*sizeof(RawField)+actualV*sizeof(PreparedView)+sum(actual escaped owned-key capacities)",
+  "held": [
+    "future2-buffer identity prepare branch absent from this prototype",
+    "full source classifier and core unknown extension/external URI policy",
+    "full generated G1-G9 native/association preservation owner integration",
+    "native/BIN-bound scratch, bridge, source/read/path/runtime/receipt/publication combined peak",
+    "production/default/wholeP2-P5 acceptance",
+    "serde internal allocation infallibility"
+  ],
+  "fixtureCases": 28,
+  "futureTargetCommands": 52,
+  "authorsExecutedTargets": 0,
+  "authorMutatedProductionFiles": 0,
+  "acceptedC1Merge": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "execution": "Root must first obtain independent pre-run source approval; root_runner.py --out-dir NEW_DIRECTORY"
+}

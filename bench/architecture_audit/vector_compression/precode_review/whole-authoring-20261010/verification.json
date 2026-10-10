@@ -1,0 +1,13 @@
+{
+  "status": "PASS_READ_HASH_IDENTITIES_ONLY",
+  "inputFiles": 342,
+  "rootPlanReceiptCommands": 55,
+  "rootActualProbeCommands": 52,
+  "rootChangedRecordRejections": 18,
+  "allRecordedExitCodesZero": true,
+  "productionHashesUnchanged": 97,
+  "afterBindingSha256": "ea5fe7429ce44417a3889cd2ea52e10f66435acce1d0baf385e7e5210b46c3bd",
+  "scope": "All recorded output hashes checked; separate actual reviewer owns allocation-event/source/ABI acceptance. This reviewer does not rehash the large compiler inventory or execute any target/author checker.",
+  "compilerCargoNativeProducerDecoderAuthorCheckerOrGitInvocations": 0,
+  "productionEdits": 0
+}
