@@ -1,7 +1,8 @@
 //! External facade consumer: source admission and lifecycle, without private imports.
 use rusty_tiles::{
     mesh_to_archive, JobError, JobErrorKind, MeshApproximation, MeshApproximationReport,
-    MeshPlacement, MeshRequest, Observer, OutputPolicy, RunControl, RunEvent,
+    MeshCertificateReport, MeshPlacement, MeshRequest, Observer, OutputPolicy, RunControl,
+    RunEvent,
 };
 use serde_json::{json, Value};
 use std::{fs, path::Path, sync::Arc};
@@ -703,8 +704,8 @@ fn placement_is_per_request_and_keeps_encoded_geometry_local() {
     });
     let mut geometry = Vec::new();
     for result in &results {
-        assert_eq!(result.report.schema_version, 6);
-        assert_eq!(result.report.profile, "f1d1-root-proxy-gltf-v1");
+        assert_eq!(result.report.schema_version, 7);
+        assert_eq!(result.report.profile, "f1d2-adaptive-root-proxy-gltf-v1");
         assert_eq!(result.report.source_coordinates, "local-gltf");
         let mut archive = zip::ZipArchive::new(fs::File::open(&result.output).unwrap()).unwrap();
         let manifest: Value =
@@ -861,21 +862,42 @@ fn root_proxy_public_facade_preserves_leaves_and_declares_separate_error_budget(
     )
     .unwrap();
     assert_eq!(result.report.triangles, 32);
+    let expected_report = serde_json::to_value(&result.report).unwrap();
     let MeshApproximationReport::RootProxy {
         triangles,
-        certified_error_metres,
+        certificate,
         geometric_error_metres,
-        comparison_pairs,
         ..
     } = result.report.approximation
     else {
         panic!("wrong report")
     };
     assert!(triangles > 0 && triangles <= 8 && triangles < 32);
-    assert!(certified_error_metres <= 10.0);
+    let certificate: MeshCertificateReport = certificate;
+    assert!(certificate.error_metres <= 10.0);
     assert_eq!(geometric_error_metres, 10.0);
-    assert_eq!(comparison_pairs, 2 * 32 * triangles);
+    assert_eq!(certificate.patch_face_tests, 2 * 32 * triangles);
+    assert_eq!(certificate.accepted_patches, 32 + triangles);
+    assert_eq!(certificate.max_depth, 0);
+    assert_eq!(result.report.schema_version, 7);
+    assert_eq!(result.report.profile, "f1d2-adaptive-root-proxy-gltf-v1");
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let published_report: Value =
+        serde_json::from_reader(zip.by_name("conversion.json").unwrap()).unwrap();
+    assert_eq!(published_report, expected_report);
+    assert!(published_report["approximation"]
+        .get("comparison_pairs")
+        .is_none());
+    assert!(published_report["approximation"]
+        .get("certified_error_metres")
+        .is_none());
+    let proof = published_report["approximation"]["certificate"]
+        .as_object()
+        .unwrap();
+    assert_eq!(proof.len(), 4);
+    assert_eq!(proof["patch_face_tests"], certificate.patch_face_tests);
+    assert_eq!(proof["accepted_patches"], certificate.accepted_patches);
+    assert_eq!(proof["max_depth"], certificate.max_depth);
     let manifest: Value = serde_json::from_reader(zip.by_name("tileset.json").unwrap()).unwrap();
     assert_eq!(manifest["root"]["content"]["uri"], "t/root.glb");
     assert_eq!(manifest["root"]["geometricError"], 10.0);

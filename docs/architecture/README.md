@@ -67,6 +67,7 @@ remain proposals wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
+- [F1d2 bounded adaptive surface certificate contract](f1d2-certificate-contract.md)
 - [F1d1 certified root proxy contract](mesh-approximation-contract.md)
 - [F1d1 implementation and remaining approximation gates](f1d1-implementation.md)
 - [F1d1 independent artifact and consumer evidence](../../bench/architecture_audit/mesh_approximation/README.md)

@@ -271,7 +271,9 @@ mod tests {
     }
     #[test]
     fn root_region_name_counts_once_in_the_shared_archive_budget() {
-        use crate::mesh_archive::approximation::{ProxyGeometry, ProxyRegion, ProxyTriangle};
+        use crate::mesh_archive::approximation::{
+            Certificate, ProxyGeometry, ProxyRegion, ProxyTriangle,
+        };
         let geometry = geometry(2048, Some("🦉".repeat(1024)));
         let leaves: Vec<_> = (0..2048).map(leaf).collect();
         let proxy = ProxyGeometry {
@@ -287,8 +289,12 @@ mod tests {
                 positions: [[0.; 3]; 3],
                 region: 0,
             }],
-            certified_error_metres: 0.,
-            comparison_pairs: 0,
+            certificate: Certificate {
+                error_metres: 0.,
+                patch_face_tests: 0,
+                accepted_patches: 0,
+                max_depth: 0,
+            },
         };
         super::super::validate_identity_budget(&geometry, &leaves[..2047], Some(&proxy), || Ok(()))
             .unwrap();

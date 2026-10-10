@@ -144,9 +144,10 @@ evidence; none is required for this finite tightening slice.
 ## Work and resource accounting
 
 Retain checked base admission `2*sum(original_region_faces*proxy_region_faces)`
-<=16,777,216 because the chosen exhaustive policy evaluates every root against
-every target before splitting. This is a mandatory baseline, not an upper bound
-on adaptive work. Charge one unit for each actual `(source patch,target face)`
+<=16,777,216 because every successful complete proof under the chosen exhaustive
+policy evaluates every root against every target. A partial failed proof can
+stop before all roots are visited. This is a compulsory success baseline, not
+an upper bound on adaptive work. Charge one unit for each actual `(source patch,target face)`
 evaluation, including equal-face fast paths. Check the global limit before the
 next evaluation, including across regions/directions; never overrun then report
 a smaller count. On success report consumed actual tests separately from the

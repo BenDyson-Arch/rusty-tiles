@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::{
     fs::{self, File},
     io::Write,
+    num::NonZeroUsize,
     path::{Path, PathBuf},
 };
 
@@ -38,6 +39,16 @@ pub enum MeshApproximation {
     },
 }
 
+/// Conservative local surface bound and performed adaptive proof work.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct MeshCertificateReport {
+    pub error_metres: f64,
+    pub patch_face_tests: u64,
+    pub accepted_patches: u64,
+    /// Deepest accepted proof patch across both directions and all regions.
+    pub max_depth: u8,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MeshApproximationReport {
@@ -46,9 +57,8 @@ pub enum MeshApproximationReport {
         triangle_limit: u64,
         triangles: u64,
         regions: u64,
-        certified_error_metres: f64,
+        certificate: MeshCertificateReport,
         geometric_error_metres: f64,
-        comparison_pairs: u64,
         appearance: &'static str,
     },
 }
@@ -116,6 +126,41 @@ pub struct MeshResult {
     pub report: MeshReport,
     pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
 }
+// Constructed once by core request validation. Lower stages consume these
+// limits without reinterpreting raw request policy.
+#[derive(Clone, Copy)]
+struct RootProxyLimits {
+    triangle_limit: NonZeroUsize,
+    max_error_metres: f64,
+}
+impl RootProxyLimits {
+    fn new(triangle_limit: usize, max_error_metres: f64) -> Result<Self, JobError> {
+        let triangle_limit = NonZeroUsize::new(triangle_limit).ok_or_else(|| {
+            invalid(
+                JobErrorKind::InvalidRequest,
+                "root proxy requires a positive triangle limit",
+            )
+        })?;
+        if !max_error_metres.is_finite() || max_error_metres <= 0.0 {
+            return Err(invalid(
+                JobErrorKind::InvalidRequest,
+                "root proxy requires finite positive maximum error metres",
+            ));
+        }
+        Ok(Self {
+            triangle_limit,
+            max_error_metres,
+        })
+    }
+    fn triangle_limit(self) -> usize {
+        self.triangle_limit.get()
+    }
+}
+enum ValidatedApproximation {
+    FullDetail,
+    RootProxy(RootProxyLimits),
+}
+
 struct PreparedMesh {
     output: PathBuf,
     policy: OutputPolicy,
@@ -134,8 +179,7 @@ enum PreparedRoot {
     FullDetail,
     Proxy {
         geometry: approximation::ProxyGeometry,
-        triangle_limit: usize,
-        max_error_metres: f64,
+        limits: RootProxyLimits,
     },
 }
 struct Workspace(tempfile::TempDir);
@@ -213,7 +257,7 @@ impl ProducerOperations for SystemProducer {}
 fn invalid(kind: JobErrorKind, message: impl Into<String>) -> JobError {
     JobError::new(kind, message)
 }
-fn validate(request: &MeshRequest) -> Result<(), JobError> {
+fn validate(request: &MeshRequest) -> Result<ValidatedApproximation, JobError> {
     if request.input.as_os_str().is_empty()
         || request.output.as_os_str().is_empty()
         || request.output.file_name().is_none()
@@ -236,17 +280,14 @@ fn validate(request: &MeshRequest) -> Result<(), JobError> {
             "mesh output must use .3tz or .3dtiles.zip",
         ));
     }
-    if let MeshApproximation::RootProxy {
-        triangle_limit,
-        max_error_metres,
-    } = request.approximation
-    {
-        if triangle_limit == 0 || !max_error_metres.is_finite() || max_error_metres <= 0.0 {
-            return Err(invalid(JobErrorKind::InvalidRequest,
-                "root proxy requires a positive triangle limit and finite positive maximum error metres"));
-        }
+    match request.approximation {
+        MeshApproximation::FullDetail => Ok(ValidatedApproximation::FullDetail),
+        MeshApproximation::RootProxy {
+            triangle_limit,
+            max_error_metres,
+        } => RootProxyLimits::new(triangle_limit, max_error_metres)
+            .map(ValidatedApproximation::RootProxy),
     }
-    Ok(())
 }
 
 fn prepare(
@@ -255,14 +296,14 @@ fn prepare(
     operations: &mut impl ProducerOperations,
 ) -> Result<PreparedMesh, JobError> {
     attempt.check()?;
-    validate(&request)?;
+    let approximation = validate(&request)?;
     let MeshRequest {
         input,
         output,
         leaf_triangles,
         policy,
         placement,
-        approximation,
+        approximation: _,
     } = request;
     let placement = ResolvedPlacement::resolve(&placement)?;
     crate::runtime::file_publication_supported()?;
@@ -286,21 +327,15 @@ fn prepare(
         || attempt.check(),
     )?;
     let root = match approximation {
-        MeshApproximation::FullDetail => PreparedRoot::FullDetail,
-        MeshApproximation::RootProxy {
-            triangle_limit,
-            max_error_metres,
-        } => {
+        ValidatedApproximation::FullDetail => PreparedRoot::FullDetail,
+        ValidatedApproximation::RootProxy(limits) => {
             operations.stage(ProducerStage::Approximate)?;
             attempt.emit(&RunEvent::Progress {
                 phase: "mesh_approximation",
                 done: 0,
                 total: Some(1),
             })?;
-            let proxy =
-                approximation::prepare(&geometry, triangle_limit, max_error_metres, || {
-                    attempt.check()
-                })?;
+            let proxy = approximation::prepare(&geometry, limits, || attempt.check())?;
             attempt.emit(&RunEvent::Progress {
                 phase: "mesh_approximation",
                 done: 1,
@@ -308,8 +343,7 @@ fn prepare(
             })?;
             PreparedRoot::Proxy {
                 geometry: proxy,
-                triangle_limit,
-                max_error_metres,
+                limits,
             }
         }
     };
@@ -422,11 +456,7 @@ fn produce(
             MeshApproximationReport::FullDetail,
             omission_error,
         ),
-        PreparedRoot::Proxy {
-            geometry,
-            triangle_limit,
-            max_error_metres,
-        } => {
+        PreparedRoot::Proxy { geometry, limits } => {
             operations.stage(ProducerStage::EncodeProxy)?;
             let bytes = encode::proxy(&prepared.geometry, geometry, || attempt.check())?;
             operations.stage(ProducerStage::WriteProxy)?;
@@ -439,18 +469,22 @@ fn produce(
             )?);
             (
                 encode::RootContent::Proxy {
-                    geometric_error_metres: *max_error_metres,
+                    geometric_error_metres: limits.max_error_metres,
                 },
                 MeshApproximationReport::RootProxy {
-                    triangle_limit: *triangle_limit as u64,
+                    triangle_limit: limits.triangle_limit() as u64,
                     triangles: geometry.triangles.len() as u64,
                     regions: geometry.regions.len() as u64,
-                    certified_error_metres: geometry.certified_error_metres,
-                    geometric_error_metres: *max_error_metres,
-                    comparison_pairs: geometry.comparison_pairs,
+                    certificate: MeshCertificateReport {
+                        error_metres: geometry.certificate.error_metres,
+                        patch_face_tests: geometry.certificate.patch_face_tests,
+                        accepted_patches: geometry.certificate.accepted_patches,
+                        max_depth: geometry.certificate.max_depth,
+                    },
+                    geometric_error_metres: limits.max_error_metres,
                     appearance: "opaque-untextured-factors",
                 },
-                omission_error.max(*max_error_metres),
+                omission_error.max(limits.max_error_metres),
             )
         }
     };
@@ -477,8 +511,8 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 6,
-        profile: "f1d1-root-proxy-gltf-v1",
+        schema_version: 7,
+        profile: "f1d2-adaptive-root-proxy-gltf-v1",
         source_coordinates: "local-gltf",
         coordinates: prepared.placement.coordinates(),
         placement: prepared.placement.report(),

@@ -103,7 +103,7 @@ placed = rusty_tiles.mesh_local_to_3tz(
     scene_offset=(10.0, 2.0, -5.0),
 )
 assert placed.report["coordinates"] == "wgs84-ecef"
-assert placed.report["schema_version"] == 6
+assert placed.report["schema_version"] == 7
 ```
 
 `mesh_local_to_3tz(input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None,
@@ -136,7 +136,7 @@ including elevated anchors and poles; supplied longitude defines the pole
 meridian. Placement is an f64 rigid root transform. Source GLB coordinates,
 normal/tangent frames, UVs, colors and resource associations stay local. Offset
 does not restore a projected E/N/A shift, infer source CRS, or correct a geoid.
-Schema 6/profile `f1d1-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`,
+Schema 7/profile `f1d2-adaptive-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`,
 output `coordinates`, tagged `placement` with normalized parameters, and exact
 `root_transform`, along with existing counters. The [F1c2 candidate](../../docs/architecture/f1c2-contract.md) carries two labeled feature sets: `source_primitive` exposes source node/mesh/primitive indices and optional authored name with an explicit presence flag; `source_triangle` adds the original triangle ordinal. Table row IDs are leaf-local; source keys belong to the unchanged source document, not a persistent business namespace. Imported metadata/extras remain excluded.
 
@@ -150,8 +150,12 @@ before staging with `UnsupportedError`; malformed policy raises
 `root_proxy`, reports actual bound/counts/work, and names the admitted appearance
 profile. Coarse picking exposes complete `proxy_region` membership arrays while
 unchanged leaves retain exact original triangle identities. See the
-[F1d1 contract](../../docs/architecture/mesh-approximation-contract.md) for
-certificate looseness and appearance limits, and the
+[F1d2 contract](../../docs/architecture/f1d2-certificate-contract.md) for
+complete-surface dyadic proof subdivision, finite proof limits and appearance
+limits. `report["approximation"]["certificate"]` contains `error_metres`,
+`patch_face_tests`, `accepted_patches` and `max_depth`. Depth/work refusal means
+the bound could not be certified within the profile; it does not prove the true
+surface distance exceeds the request. See also the
 [bounded evidence](../../bench/architecture_audit/mesh_approximation/README.md).
 
 It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`

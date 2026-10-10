@@ -31,7 +31,7 @@ def finite(values):
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
 
 
-PROFILE = 'f1d1-root-proxy-gltf-v1'
+PROFILE = 'f1d2-adaptive-root-proxy-gltf-v1'
 IDENTITY_TRANSFORM = tuple(float(i == j) for j in range(4) for i in range(4))
 
 
@@ -59,7 +59,7 @@ def check_placement(root, report, expectation=None):
     else:
         for i, (a, b) in enumerate(zip(actual, wanted['root_transform'])):
             require(abs(a-b) <= (1e-6 if i in (12,13,14) else 2e-15), 'independent root component ' + str(i))
-    require(report.get('schema_version') == 6 and report.get('profile') == PROFILE and
+    require(report.get('schema_version') == 7 and report.get('profile') == PROFILE and
             report.get('source_coordinates') == 'local-gltf', 'placement profile/source report')
     require(report.get('coordinates') == wanted['coordinates'], 'output coordinate interpretation')
     reported_matrix = report.get('root_transform')
@@ -422,7 +422,7 @@ def inspect(source,archive,leaf_limit,position_tolerance=None,normal_tolerance=2
             actual.extend(triangles)
         require(set(names)=={'tileset.json','conversion.json','@3dtilesIndex1@',*uris},'exact accepted resource closure')
         report=json.loads(z.read('conversion.json'))
-        expected_report={'schema_version':6,'profile':PROFILE,'approximation':{'kind':'full_detail'},'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        expected_report={'schema_version':7,'profile':PROFILE,'approximation':{'kind':'full_detail'},'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         check_placement(root, report)
         require(close_value(expected_report,report,1e-10*max(1,ge)),'typed report facts/fields')
         check_index(z,Path(archive).read_bytes())
@@ -448,7 +448,7 @@ def archive_controls():
         root=Path(temporary);source=root/'source.glb';source.write_bytes(fixture(2,transformed=False))
         box=[2.5,-0.5,0.5,2.5,0,0,0,0.5,0,0,0,0.5];ge=math.sqrt(27)
         manifest={'asset':{'version':'1.1'},'geometricError':ge,'root':{'transform':list(IDENTITY_TRANSFORM),'boundingVolume':{'box':box},'geometricError':ge,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
-        report={'schema_version':6,'profile':PROFILE,'approximation':{'kind':'full_detail'},'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        report={'schema_version':7,'profile':PROFILE,'approximation':{'kind':'full_detail'},'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         members={'tileset.json':json.dumps(manifest).encode(),'conversion.json':json.dumps(report).encode(),'t/0.glb':source.read_bytes()}
         archive=root/'control.3tz';write_control_archive(archive,members);inspect(source,archive,2)
         controls={}
