@@ -1,0 +1,34 @@
+{
+  "adjudication.md": {
+    "bytes": 19030,
+    "sha256": "d57aa7e27a26c0d699b8b08f5fdf972ec4bdf76440267eaac547c2aab853697f"
+  },
+  "evidence-scope.md": {
+    "bytes": 4206,
+    "sha256": "09c5e613efd4f4ade28ee7a3b047c12a6637b5a8b0d8786d36957edc1b3bb4e1"
+  },
+  "ownership.md": {
+    "bytes": 3070,
+    "sha256": "c0c521fc47f51a21a6cecb2c8277ede9a04c739cb6bf38716e1c8276d7b19c67"
+  },
+  "decisions.json": {
+    "bytes": 5782,
+    "sha256": "f8523220f419782c6a1269ef508a36673343163ac86f5cace3ae1db65135bb46"
+  },
+  "verify_inputs.py": {
+    "bytes": 4020,
+    "sha256": "f3d176a434c130fce952d78a6e369cf720a735ae81ea01ccc7ba6a58d11bb8aa"
+  },
+  "input-pin.json": {
+    "bytes": 64173,
+    "sha256": "726587ea4d9cf64ab807b9610710abe92f88d9bbcea5dc15d69b167c715e2760"
+  },
+  "verification.json": {
+    "bytes": 649,
+    "sha256": "e7d380391103d6e90da1bbed284df2e821781ca214e5ef71489af52d08e0e330"
+  },
+  "receipt.json": {
+    "bytes": 1828,
+    "sha256": "023fe6904ec0e5ca277e5684f31c8472b9f43c6150601980c3015e383ffb4dbc"
+  }
+}

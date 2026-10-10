@@ -265,7 +265,7 @@ fn aliases_charge_logical_views_once_and_keep_actual_resource_pool_separate() {
 fn meshopt_partial_word_copy_never_grows_past_exact_request() {
     for length in [2usize, 6, 10] {
         let words = vec![u32::from_ne_bytes([1, 2, 3, 4]); length.div_ceil(4)];
-        let out = copy_meshopt_words(&words, length).unwrap();
+        let out = crate::content_integrity::meshopt::copy_words(&words, length).unwrap();
         assert_eq!(out.len(), length);
         assert_eq!(
             out.capacity(),

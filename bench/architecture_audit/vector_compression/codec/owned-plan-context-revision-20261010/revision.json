@@ -1,0 +1,21 @@
+{
+  "status": "STATIC_ONLY context-pin correction, no target execution",
+  "originalPackageIntegritySha256": "4433a13ab08fc02f892f2287c246e90dbbf14f9c265742c54736c044f76ecee4",
+  "originalRunnerSha256": "f1832f3f83699dd56ddd6805165efb619145258e7db553ea5796014567102154",
+  "newRunnerSha256": "79fbf068782cb68a45dba1cd00e224fafc6d738028ec02fa6f3b23e31314295a",
+  "runnerDiffSha256": "c6d604fc0be82c61df0005b87934571100bc9fcc83824ed32ab4766f3e8801a3",
+  "originalInputPinSha256": "3d2344cc58db400d7edd7f37ed3350033fd1dc9509b9021c7c4c6fffdd7f583b",
+  "newInputPinSha256": "ac67d429afde70aa90d30b0922e2a19065e2aeb903bb6f2478379d5cb99ee0ee",
+  "removedMutableDocumentEntry": {
+    "path": "/tmp/rusty-tiles-vector-codec-foundation/docs/architecture/vector-compression-foundation.md",
+    "sha256": "5fba831dd384f27654da377f7b893d251369ae192cb6b86db9cc447f41f135fc",
+    "bytes": 9715
+  },
+  "addedImmutableSnapshotEntry": {
+    "path": "/tmp/rusty-tiles-codec-owned-plan-context-revision/vector-compression-foundation.md",
+    "sha256": "73db500b0c6c013e5ff5656006503b29981a1b5241d94d82e7f5a60c99c2528f",
+    "bytes": 10768
+  },
+  "unchangedExternalInputs": 139,
+  "scope": "Only document path/pin and derivative runner input-pin read location; HERE, source,fixtures,compile recipe, original integrity verification remain original package. Root controls new execution/linker-trace environment."
+}

@@ -1,0 +1,23 @@
+{
+  "status": "ACCEPT_BOUNDED_ACTUAL_PLAN_MECHANISM_AND_SETTLE_REPRESENTATION_AUTHORING_PREREQUISITE",
+  "actualCommands": 52,
+  "actualChangedRecordRejections": 18,
+  "independentStagesReplayed": 204,
+  "independentEventsReplayed": 25737,
+  "sourceFreeze": "4433a13ab08fc02f892f2287c246e90dbbf14f9c265742c54736c044f76ecee4",
+  "contextFreeze": "276480a171a392d3b8adbe7e012e8a3434d1c9f42dcc216096eb7cb5cdd5d595",
+  "laterImplementationConstraints": [
+    "two-buffer temporary refs",
+    "finite errors/token-shape prechecks",
+    "exact consumed unsigned lexeme helper",
+    "preserve known extension bodies/occurrence scan",
+    "actual source classifier/association facts",
+    "aggregate BIN/native/final candidate/source/producer/runtime owner ledger",
+    "typed causal ResourceLimit and one Attempt",
+    "captured-file/platform/writer framing"
+  ],
+  "productionAcceptance": false,
+  "defaultsAccepted": false,
+  "wholeP2P5Accepted": false,
+  "authoringPrerequisiteCircularHold": false
+}

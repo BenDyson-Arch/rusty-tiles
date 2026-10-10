@@ -274,6 +274,8 @@ struct Spool<'a> {
     db: &'a Connection,
     repair: bool,
     options: &'a VectorOptions,
+    policy: encoding::ProducerPolicy,
+    attempt: &'a Attempt,
 }
 impl Spool<'_> {
     fn insert(
@@ -288,11 +290,19 @@ impl Spool<'_> {
             db,
             repair,
             options,
+            policy,
+            attempt,
         } = self;
+        attempt.check().map_err(|cause| {
+            encoding::codec_failure(
+                crate::vector_encoding::CodecError::Checkpoint(cause),
+                attempt,
+            )
+        })?;
         if hint
             && (feature.geometry.size() > options.max_vertices
                 || feature.estimate() > options.max_bytes
-                || !encoding::fits_feature(&feature, repair, options)?)
+                || !encoding::fits_feature(&feature, repair, options, policy, attempt)?)
         {
             for (index, mut part) in split(&feature, repair, counters, reports)?
                 .into_iter()
@@ -307,15 +317,26 @@ impl Spool<'_> {
         Ok(())
     }
 }
+// This transaction owns SQL and delta reports while validating one feature;
+// codec policy and the original Attempt arrive from the conversion boundary.
+#[allow(clippy::too_many_arguments)]
 fn accept_feature(
     db: &Connection,
     mut feature: Feature,
     repair: bool,
     ambiguous: bool,
     options: &VectorOptions,
+    policy: encoding::ProducerPolicy,
+    attempt: &Attempt,
     counters: &mut Counters,
     reports: &mut Reports,
 ) -> FeatureResult<()> {
+    attempt.check().map_err(|cause| {
+        encoding::codec_failure(
+            crate::vector_encoding::CodecError::Checkpoint(cause),
+            attempt,
+        )
+    })?;
     db.execute_batch("SAVEPOINT feature;").map_err(sql)?;
     let mut delta_counters = Counters::default();
     let mut delta_reports = Vec::new();
@@ -325,6 +346,8 @@ fn accept_feature(
             db,
             repair,
             options,
+            policy,
+            attempt,
         }
         .insert(feature, "", true, &mut delta_counters, &mut delta_reports)?;
         Ok(())
@@ -414,6 +437,7 @@ struct Build<'a> {
     spool: &'a Path,
     output: &'a Path,
     options: &'a VectorOptions,
+    policy: encoding::ProducerPolicy,
     schemas: &'a BTreeMap<String, String>,
     max_features: usize,
     repair: bool,
@@ -441,6 +465,8 @@ impl Build<'_> {
             options: self.options,
             schemas: self.schemas,
             output: self.output,
+            policy: self.policy,
+            attempt: self.attempt,
         };
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
             levels
@@ -619,6 +645,8 @@ impl Build<'_> {
                     db: self.db,
                     repair: self.repair,
                     options: self.options,
+                    policy: self.policy,
+                    attempt: self.attempt,
                 }
                 .insert(part, prefix, false, &mut self.counters, &mut staged_reports)
                 .map_err(FeatureFailure::into_error)?;
@@ -728,6 +756,9 @@ pub(super) fn convert(
     options: &VectorOptions,
     attempt: &Attempt,
 ) -> Result<CompletedVector, Error> {
+    let policy = encoding::ProducerPolicy::new(options.meshopt).map_err(|error| {
+        encoding::codec_failure(crate::vector_encoding::CodecError::Format(error), attempt)
+    })?;
     let max_features = options.max_features;
     let repair = options.repair;
     let ambiguous = options.ambiguous_outlines;
@@ -774,6 +805,8 @@ pub(super) fn convert(
                 repair,
                 ambiguous,
                 options,
+                policy,
+                attempt,
                 &mut counters.borrow_mut(),
                 &mut reports.borrow_mut(),
             )
@@ -865,6 +898,7 @@ pub(super) fn convert(
         spool: &spool,
         output,
         options,
+        policy,
         schemas: reader.schemas(),
         max_features,
         repair,
@@ -994,7 +1028,7 @@ pub(super) fn convert(
         "performance":{"jobs":options.jobs,"workersUsed":build.workers.len(),"phaseSeconds":{"ingestion":ingestion_seconds,"partitioning":build.partition_seconds,"encoding":encoding_seconds,"publication":publication_started.elapsed().as_secs_f64()}},
         "budgets":{"features":max_features,"parentFeatures":options.max_parent_features,"vertices":options.max_vertices,"bytes":options.max_bytes,"tiles":options.max_tiles},
         "attributeFilter":options.where_clause,"metadata":{"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields},
-        "encoding":{"quantize":options.quantize,"meshopt":options.meshopt,"primitiveReferences":sum("primitives"),"maximumTilePrimitives":list.iter().map(|n| n["extras"]["primitives"].as_u64().unwrap_or(0)).max().unwrap_or(0),"maximumQuantizationErrorMetres":max("quantizationErrorMetres"),"uncompressedTileBytes":sum("uncompressedBytes"),"encodedTileBytes":sum("encodedBytes")},
+        "encoding":{"quantize":options.quantize,"meshopt":options.meshopt,"primitiveReferences":sum("primitives"),"maximumTilePrimitives":list.iter().map(|n| n["extras"]["primitives"].as_u64().unwrap_or(0)).max().unwrap_or(0),"maximumQuantizationErrorMetres":max("quantizationErrorMetres"),"uncompressedTileBytes":sum("uncompressedBytes"),"uncompressedTileBytesScope":"selected-framed raw bridge after requested quantization, including fill wrapper","encodedTileBytes":sum("encodedBytes")},
         "parentRepairEnabled":options.parent_repair,"skipInvalidEnabled":options.skip_invalid,"repairEnabled":repair,"lodToleranceMetres":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"reuse":reuse_report,
         "lodFallbacks":build.reports.first,"geometryReportCount":build.reports.count,"geometryReports":"geometry-reports.jsonl","geometryReportsScope":"current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
         "lockedSharedVertices":shared,"pointPolicy":if options.aggregate_points {"opt-in per-layer voxel count aggregates in point-only parents; original identities and properties in full-detail leaves"} else {"retain every semantic point feature; oversized parents route without content"},
@@ -1024,6 +1058,30 @@ pub(super) fn convert(
 mod countries_fragment_tests {
     use super::*;
 
+    fn accept_feature(
+        db: &Connection,
+        feature: Feature,
+        repair: bool,
+        ambiguous: bool,
+        options: &VectorOptions,
+        counters: &mut Counters,
+        reports: &mut Reports,
+    ) -> FeatureResult<()> {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        super::accept_feature(
+            db,
+            feature,
+            repair,
+            ambiguous,
+            options,
+            encoding::ProducerPolicy::new(options.meshopt).unwrap(),
+            &attempt,
+            counters,
+            reports,
+        )
+    }
+
     fn fixture_db() -> Connection {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch("PRAGMA journal_mode=MEMORY; CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
@@ -1048,6 +1106,122 @@ mod countries_fragment_tests {
             first: Vec::new(),
             count: 0,
         }
+    }
+    #[test]
+    fn fitting_resource_limit_rolls_back_instead_of_skip_or_split() {
+        for meshopt in [false, true] {
+            let db = fixture_db();
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let options = VectorOptions {
+                meshopt,
+                skip_invalid: true,
+                max_bytes: 1_000_000,
+                ..Default::default()
+            };
+            let limits = crate::vector_encoding::CompressionLimits {
+                source_bytes: 1,
+                ..Default::default()
+            };
+            let mut policy = encoding::ProducerPolicy::new(meshopt).unwrap();
+            policy.limits = limits.validate().unwrap();
+            let mut counters = Counters::default();
+            let mut reports = fixture_reports();
+            let error = super::accept_feature(
+                &db,
+                fixture_feature(Geometry::Point([0.; 3])),
+                false,
+                false,
+                &options,
+                policy,
+                &attempt,
+                &mut counters,
+                &mut reports,
+            )
+            .unwrap_err();
+            let FeatureFailure::Fatal(Error::Job(failure)) = error else {
+                panic!("actual bridge limit is infrastructure failure, never skippable")
+            };
+            assert_eq!(failure.error.kind(), crate::JobErrorKind::ResourceLimit);
+            assert!(failure.error.same_cause(&attempt.check().unwrap_err()));
+            assert_eq!(
+                (
+                    counters.features,
+                    counters.fragments,
+                    counters.fragmented_polygons,
+                    reports.count
+                ),
+                (0, 0, 0, 0)
+            );
+            assert_eq!(
+                db.query_row("SELECT COUNT(*) FROM features", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            assert!(reports.first.is_empty());
+            // Feature savepoint is released after rollback, so a fresh feature
+            // transaction can begin; no accepted row was retained or split.
+            db.execute_batch("SAVEPOINT feature; RELEASE feature;")
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn actual_native_fitting_refusal_rolls_back_without_split_or_skip() {
+        let db = fixture_db();
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let options = VectorOptions {
+            meshopt: true,
+            skip_invalid: true,
+            max_bytes: 1_000_000,
+            ..Default::default()
+        };
+        let mut counters = Counters::default();
+        let mut reports = fixture_reports();
+        let (result, reached) = crate::vector_encoding::with_capacity_one(|| {
+            super::accept_feature(
+                &db,
+                fixture_feature(Geometry::Point([0.; 3])),
+                false,
+                false,
+                &options,
+                encoding::ProducerPolicy::new(true).unwrap(),
+                &attempt,
+                &mut counters,
+                &mut reports,
+            )
+        });
+        assert_eq!(reached, 1);
+        let FeatureFailure::Fatal(Error::Job(failure)) = result.unwrap_err() else {
+            panic!("actual native refusal must abort admission")
+        };
+        assert_eq!(failure.error.kind(), crate::JobErrorKind::InvalidState);
+        assert!(failure.error.same_cause(&attempt.check().unwrap_err()));
+        assert!(matches!(
+            std::error::Error::source(&failure.error)
+                .unwrap()
+                .downcast_ref::<crate::vector_encoding::CodecError<crate::JobError>>()
+                .unwrap(),
+            crate::vector_encoding::CodecError::EncodingFailure("ATTRIBUTES encoder")
+        ));
+        assert_eq!(
+            (
+                counters.features,
+                counters.fragments,
+                counters.fragmented_polygons,
+                reports.count
+            ),
+            (0, 0, 0, 0)
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM features", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        db.execute_batch("SAVEPOINT feature; RELEASE feature;")
+            .unwrap();
+        assert!(run.begin().is_err());
     }
     #[test]
     fn sql_admission_faults_are_fatal_and_do_not_commit_delta() {
@@ -1291,10 +1465,14 @@ mod countries_fragment_tests {
             ]),
         );
         db.execute_batch("SAVEPOINT feature;").unwrap();
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
         let outcome = Spool {
             db: &db,
             repair: false,
             options: &options,
+            policy: encoding::ProducerPolicy::new(options.meshopt).unwrap(),
+            attempt: &attempt,
         }
         .insert(
             rejected,

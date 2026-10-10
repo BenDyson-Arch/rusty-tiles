@@ -60,6 +60,7 @@ fn job_kind(kind: JobErrorKind) -> &'static str {
         JobErrorKind::InvalidRequest => "invalid_request",
         JobErrorKind::InvalidInput => "invalid_input",
         JobErrorKind::Unsupported => "unsupported",
+        JobErrorKind::ResourceLimit => "resource_limit",
         JobErrorKind::Io => "io",
         JobErrorKind::Conflict => "output_conflict",
         JobErrorKind::Cancelled => "cancelled",
@@ -74,6 +75,7 @@ fn job_failure_to_python(py: Python<'_>, failure: JobFailure) -> PyErr {
         JobErrorKind::InvalidRequest => InvalidRequestError::new_err(message),
         JobErrorKind::InvalidInput => DataError::new_err(message),
         JobErrorKind::Unsupported => UnsupportedError::new_err(message),
+        JobErrorKind::ResourceLimit => ResourceLimitError::new_err(message),
         JobErrorKind::Io => TilesIOError::new_err(message),
         JobErrorKind::Conflict => OutputExistsError::new_err(message),
         JobErrorKind::Cancelled => CancelledError::new_err(message),
@@ -1038,6 +1040,30 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod recovery_tests {
     use super::*;
+    #[test]
+    fn producer_resource_refusal_uses_existing_exception_and_explicit_kind() {
+        Python::initialize();
+        Python::attach(|py| {
+            let failure = JobFailure {
+                error: tiles_core::JobError::new(JobErrorKind::ResourceLimit, "codec work refused"),
+                secondary: Vec::new(),
+                retained_paths: Vec::new(),
+                recovery: None,
+            };
+            let error = job_failure_to_python(py, failure);
+            assert!(error.is_instance_of::<ResourceLimitError>(py));
+            assert_eq!(
+                error
+                    .value(py)
+                    .getattr("kind")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "resource_limit"
+            );
+        });
+    }
+
     #[test]
     fn failed_restore_maps_primary_secondary_and_distinct_recovery_paths() {
         Python::initialize();

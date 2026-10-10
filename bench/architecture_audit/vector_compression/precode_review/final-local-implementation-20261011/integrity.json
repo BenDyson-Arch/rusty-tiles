@@ -1,0 +1,22 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "decision.json": {
+      "bytes": 1269,
+      "sha256": "71dabe7c67928f0caefacf739d39d344c66325a0b1e09ad5c0340049c5662abd"
+    },
+    "review.md": {
+      "bytes": 9882,
+      "sha256": "d9289f015a6219c3b9f22e48d53f7b54437b1f1763ba0cdb898663964f7b1d6b"
+    },
+    "verification.json": {
+      "bytes": 24519,
+      "sha256": "ad79567a1d5a2f53c49ca43148c3a003340d67b41bb75f12a31665ec1af8223d"
+    },
+    "verify.py": {
+      "bytes": 5658,
+      "sha256": "db4ebdaee710c4d281bee45f8261c5b858fca052e64654710aaf5ca612606c6f"
+    }
+  },
+  "scope": "Independent final local source/evidence review, exact staged tree and package; integrity excludes itself"
+}

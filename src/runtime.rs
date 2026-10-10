@@ -16,6 +16,7 @@ pub enum JobErrorKind {
     InvalidRequest,
     InvalidInput,
     Unsupported,
+    ResourceLimit,
     Io,
     Conflict,
     Cancelled,
@@ -42,6 +43,20 @@ impl JobError {
             message: message.into(),
             path: None,
             source: None,
+        }))
+    }
+
+    /// Retain a typed non-I/O cause in the existing causal error owner.
+    pub(crate) fn with_cause(
+        kind: JobErrorKind,
+        message: impl Into<String>,
+        cause: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(ErrorDetail {
+            kind,
+            message: message.into(),
+            path: None,
+            source: Some(Arc::new(cause)),
         }))
     }
 
@@ -507,6 +522,10 @@ impl<'a> Staging<'a> {
             .tempfile_in(parent)
             .map_err(|error| attempt.fail(JobError::io("create staging file", parent, error)))?;
         Ok(Self { file, attempt })
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        self.file.path()
     }
 
     pub(crate) fn writer(&mut self) -> &mut File {

@@ -1,0 +1,322 @@
+{
+  "status": "INDEPENDENT_BOUNDED_ACTUAL_RECORD_REPLAY_PASS",
+  "evidenceClass": "read/hash/arithmetic only; no reviewer target/compiler execution",
+  "commands": 52,
+  "commandReceiptRecords": 55,
+  "outputHashesVerified": 112,
+  "linkTraceHashesVerified": 3,
+  "types": {
+    "RawField": 40,
+    "PreparedView": 96,
+    "ViewEdit": 32,
+    "RawRef": 16,
+    "Span": 16,
+    "Declarations": 352,
+    "Facts": 64,
+    "RepackPlan": 544,
+    "Plan": 544,
+    "Encoded": 88
+  },
+  "stagesReplayed": 204,
+  "allocationEventsReplayed": 25737,
+  "wholeOracleAssertionsObserved": 22,
+  "oneBelowPlanGatesNoAllocation": 4,
+  "authorActualChangedRecordRejections": 18,
+  "sensitivitySelectorsObservedInActualTrace": true,
+  "artifactPinsRootBeforeAfterVerified": 205,
+  "largeArtifactRehashByReviewer": false,
+  "prepareFacts": [
+    {
+      "label": "opaque-token-and-marker",
+      "J": 905,
+      "K": 54,
+      "V": 1,
+      "peak": 2293,
+      "retained": 2269,
+      "estimate": 10931,
+      "events": 22
+    },
+    {
+      "label": "escaped-keys",
+      "J": 480,
+      "K": 30,
+      "V": 1,
+      "peak": 1327,
+      "retained": 1303,
+      "estimate": 6008,
+      "events": 19
+    },
+    {
+      "label": "high-J-low-K",
+      "J": 98598,
+      "K": 21,
+      "V": 1,
+      "peak": 967,
+      "retained": 943,
+      "estimate": 298994,
+      "events": 11
+    },
+    {
+      "label": "long-root-key-late-escape",
+      "J": 65830,
+      "K": 21,
+      "V": 1,
+      "peak": 197449,
+      "retained": 66480,
+      "estimate": 200690,
+      "events": 22
+    },
+    {
+      "label": "low-J-high-K",
+      "J": 24867,
+      "K": 12309,
+      "V": 1,
+      "peak": 492487,
+      "retained": 492463,
+      "estimate": 1025721,
+      "events": 19
+    },
+    {
+      "label": "escaped-key-cardinality",
+      "J": 9507,
+      "K": 789,
+      "V": 1,
+      "peak": 31687,
+      "retained": 31663,
+      "estimate": 148457,
+      "events": 19
+    },
+    {
+      "label": "deep-chain-wide-sibling",
+      "J": 7477,
+      "K": 2312,
+      "V": 32,
+      "peak": 96377,
+      "retained": 95776,
+      "estimate": 373863,
+      "events": 228
+    },
+    {
+      "label": "high-view-cardinality",
+      "J": 405699,
+      "K": 28686,
+      "V": 4096,
+      "peak": 1634872,
+      "retained": 1569328,
+      "estimate": 2823297,
+      "events": 12304
+    },
+    {
+      "label": "declarations-already-present",
+      "J": 345,
+      "K": 23,
+      "V": 1,
+      "peak": 1047,
+      "retained": 1023,
+      "estimate": 4539,
+      "events": 19
+    },
+    {
+      "label": "declarations-missing",
+      "J": 227,
+      "K": 18,
+      "V": 1,
+      "peak": 847,
+      "retained": 823,
+      "estimate": 3425,
+      "events": 19
+    },
+    {
+      "label": "declarations-other-required",
+      "J": 317,
+      "K": 22,
+      "V": 1,
+      "peak": 1007,
+      "retained": 983,
+      "estimate": 4303,
+      "events": 19
+    },
+    {
+      "label": "metadata-j0-u0",
+      "J": 294,
+      "K": 21,
+      "V": 1,
+      "peak": 967,
+      "retained": 943,
+      "estimate": 4082,
+      "events": 19
+    },
+    {
+      "label": "metadata-j7-u7",
+      "J": 301,
+      "K": 21,
+      "V": 1,
+      "peak": 967,
+      "retained": 943,
+      "estimate": 4103,
+      "events": 19
+    },
+    {
+      "label": "long-buffer-key-late-escape",
+      "J": 65679,
+      "K": 13,
+      "V": 1,
+      "peak": 197129,
+      "retained": 66153,
+      "estimate": 199021,
+      "events": 12
+    },
+    {
+      "label": "long-view-key-late-escape",
+      "J": 65679,
+      "K": 13,
+      "V": 1,
+      "peak": 197241,
+      "retained": 66153,
+      "estimate": 199021,
+      "events": 12
+    },
+    {
+      "label": "tiny-no-views-huge-configured-limit",
+      "J": 89,
+      "K": 8,
+      "V": 0,
+      "peak": 336,
+      "retained": 320,
+      "estimate": 1491,
+      "events": 5
+    },
+    {
+      "label": "shared-descriptor-four-references",
+      "J": 387,
+      "K": 32,
+      "V": 1,
+      "peak": 1392,
+      "retained": 1376,
+      "estimate": 6033,
+      "events": 8
+    },
+    {
+      "label": "distinct-overlapping-physical-views",
+      "J": 176,
+      "K": 16,
+      "V": 2,
+      "peak": 864,
+      "retained": 832,
+      "estimate": 2968,
+      "events": 8
+    },
+    {
+      "label": "long-root-key-late-escape-exact-work",
+      "J": 65830,
+      "K": 21,
+      "V": 1,
+      "peak": 197449,
+      "retained": 66480,
+      "estimate": 200690,
+      "events": 22
+    },
+    {
+      "label": "tiny-no-views-huge-configured-limit-exact-work",
+      "J": 89,
+      "K": 8,
+      "V": 0,
+      "peak": 336,
+      "retained": 320,
+      "estimate": 1491,
+      "events": 5
+    },
+    {
+      "label": "high-view-cardinality-exact-work",
+      "J": 405699,
+      "K": 28686,
+      "V": 4096,
+      "peak": 1634872,
+      "retained": 1569328,
+      "estimate": 2823297,
+      "events": 12304
+    },
+    {
+      "label": "deep-chain-wide-sibling-exact-work",
+      "J": 7477,
+      "K": 2312,
+      "V": 32,
+      "peak": 96377,
+      "retained": 95776,
+      "estimate": 373863,
+      "events": 228
+    },
+    {
+      "label": "forced-edits",
+      "J": 65830,
+      "K": 21,
+      "V": 1,
+      "peak": 197449,
+      "retained": 66480,
+      "estimate": 200690,
+      "events": 22
+    },
+    {
+      "label": "forced-candidate",
+      "J": 65830,
+      "K": 21,
+      "V": 1,
+      "peak": 197449,
+      "retained": 66480,
+      "estimate": 200690,
+      "events": 22
+    },
+    {
+      "label": "fixture-selected-raw",
+      "J": 905,
+      "K": 54,
+      "V": 1,
+      "peak": 2293,
+      "retained": 2269,
+      "estimate": 10931,
+      "events": 22
+    },
+    {
+      "label": "fixture-selected-identity",
+      "J": 905,
+      "K": 54,
+      "V": 1,
+      "peak": 2293,
+      "retained": 2269,
+      "estimate": 10931,
+      "events": 22
+    }
+  ],
+  "typedPrepareFailureFacts": [
+    [
+      "unknown-declaration-short",
+      "Unsupported",
+      568
+    ],
+    [
+      "unknown-declaration-long-late-escape",
+      "Unsupported",
+      197168
+    ],
+    [
+      "forced-arena",
+      "ResourceLimit",
+      0
+    ],
+    [
+      "forced-views",
+      "ResourceLimit",
+      197449
+    ],
+    [
+      "forced-refs",
+      "ResourceLimit",
+      197449
+    ],
+    [
+      "forced-owned_key",
+      "ResourceLimit",
+      197448
+    ]
+  ]
+}

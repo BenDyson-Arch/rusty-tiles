@@ -1,0 +1,69 @@
+{
+  "decision": "AUTHORING_GATE_RESOLVED_FOR_SMALLEST_CONSTRAINED_SLICE",
+  "authoringAllowed": true,
+  "productionAccepted": false,
+  "fullP2P5Accepted": false,
+  "empiricalDefaultsAccepted": false,
+  "additionalPrecodeProbesRequired": [],
+  "concretePrecodeBlockers": [],
+  "acceptedPrerequisite": "C1 PR153 develop f5401dd120441b4f9aac5ad229dbfffe03fe4428, unchanged97production pins",
+  "actualPlanReviewSha256": "f901d18d359884be858ed21ceed542f070f624bde3d0416509d5cd9845e2646b",
+  "actualPlanIntegritySha256": "65328ff1cb59efb4dbcec4efc0304bcd145d9156201994e50a6a156640449a81",
+  "scope": "One private lossless physical-view codec, real vector producer under its existing Attempt, and one Rust captured-file in-place request/result through existing F0 Replace; migrate hidden CLI worker; no new standalone Python feature",
+  "retain": [
+    "Complete current generated semantic roles and finite declared external preservation profile",
+    "Accepted borrowed json::admit and narrow matched-source requested-storage reasoning",
+    "Actual flat actual-K Cow/RawField arena, physical-view descriptor, exact temporary refs/edit vector and drop schedule",
+    "RawValue/CountWriter/direct final GLB mechanics and conservative locked native bounds/aligned scratch mechanism",
+    "One existing producer Attempt, causal failure arbitration and F0 completed named-entry Replace"
+  ],
+  "rework": [
+    "Selected vector metadata8 writer and producer bridge, including fitting/final/raw/fill sources, without globally reframing other accepted writer consumers",
+    "Canonical two-buffer identity refs max(V_upper,2) and two fixed buffer spans",
+    "Real consumed graph/range/role/window/classifier facts instead of fixture-selected actions",
+    "Finite consumed-shape errors/token checks and known extension body preserving overlays/core-position scans",
+    "Actual native BIN/output/source/bridge/path/receipt/runtime combined phase ledger",
+    "Typed ResourceLimit/codec/checkpoint source adaptation, installed producer-Python causal parity and reuse invalidation",
+    "Captured file identity/path/permissions/exact-byte rechecks and reached platform/publication faults"
+  ],
+  "replace": [
+    "Last accessor wins and accessor-count-as-physical-count assumptions",
+    "Raw external Value roundtrip, destructive extension replacement and unchecked native/output bounds",
+    "Obsolete2J/128K/256Plan coefficients with actual source-specific size/capacity terms",
+    "Destructive standalone read/write with complete staged captured-source Replace"
+  ],
+  "remove": [
+    "Superseded legacy codec/public mutator/hidden adapter route once both actual callers migrate",
+    "Per-object duplicate key/reference maps, unused retained accessor inventory and dummy receipt owners",
+    "Nested job/pool/public IR/full-inspector framework and size-triggered fallback"
+  ],
+  "chosenFiniteAuthoringDefaults": {
+    "sourceBytes": 33554432,
+    "jsonBytes": 1048576,
+    "jsonDepthRootZero": 64,
+    "jsonValueNodesKeysExcluded": 65536,
+    "physicalViews": 4096,
+    "accessors": 4096,
+    "aggregateLogicalViewBytes": 33554432,
+    "outputGlbBytes": 67108864,
+    "estimatedOperationOwnedRequestedBytes": 134217728
+  },
+  "defaultPolicy": "Finite operation-owned policy, no RAM/RSS guarantee; joint estimate can refuse below individual maxima and conservative bound can refuse eventual-fitting output. Actual default/boundary/corpus empirical acceptance follows implementation.",
+  "producerChoiceOwner": "Resolve existing meshopt once at producer encoding boundary. Both fitting/final share finite selected-framing bridge/default/error policy. false returns raw bridge with no codec Plan/meshopt streams; true invokes shared pure prepare/encode. No generic flag/publicIR/fallback.",
+  "representationConstraint": "Prototype40Field/96View/32Edit/16RawRef sizes are matched-target mechanics only. Added extension span/role/error/path/receipt/header owner or different target requires additive actual source-ledger reconciliation and focused tests; conditional3J successful-shape/J-retained is not universal malformed-serde accounting.",
+  "errorConstraint": "Use admitted raw object/array/string shape checks and finite typed reason/stage before typed serde; exact unsigned consumed dimensions; no interpolating source-sized strings/key names. Preserve original causal checkpoints/codec stages, no string classification/inventedIo/FeatureRejected/skip/retry.",
+  "publicationConstraint": "Stable selected regular source and namespace; Windows readonly Unsupported before observers/staging; explicit Unix candidate permissions; final identity/permissions/exact-byte recheck, close handles/events, seal/install F0 named-entry Replace. NonCAS, aliases/readers retain old object, no crash-durability promise.",
+  "laterRequired": [
+    "Fresh separate nonauthor actual production source/ledger/artifact/receipt review",
+    "Complete generated and supported external source/domain/identity/raw/framing/native controls",
+    "Nine isolated limits/joint refusal/raised caps/default corpus/overflow/reserve failure checks",
+    "Real fitting/final oneAttempt/cause/reuse/inventory/max_bytes integration",
+    "Actual captured-source/permission/handle/path/byte/publication faults on supported Linux/macOS/Windows",
+    "Applicable exact-head CI, installed producer wheel/Python, pinned vector consumer/picking and official Blender checks"
+  ],
+  "fullA2Prerequisite": false,
+  "fullA2Accepted": false,
+  "mainTagPublishReleaseIssueClosureAuthorizedByThisDecision": false,
+  "priorEpochsChanged": false,
+  "reviewerExecution": "Read/hash/JSON/integer checks only; no compiler/Cargo/native/producer/decoder/author-checker or Git invocation; all writes in new external whole-review directory"
+}

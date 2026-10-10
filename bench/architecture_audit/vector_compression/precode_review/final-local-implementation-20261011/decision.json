@@ -1,0 +1,20 @@
+{
+  "status": "FINAL_LOCAL_CHOSEN_FOUNDATION_CONTRACT_ACCEPTED",
+  "head": "a60c216caef35cca68a5c36969457c83c08d41e9",
+  "stagedTree": "e47d63e78ede054b6853ddde5af48f9f67e8471c",
+  "packageSha256": "224d3d96f644b7da21f8753d005da285c756d2ed17fc13ace02565b190c98460",
+  "productionPinSha256": "a6789f6fe8fdefb01049b6cb10b031970852595d48fc56c75599f776f06819c9",
+  "foundationDocumentSha256": "443d78f12991975e7ded2a47268dc1bea9b0fe912cb2880eea2ac157a36963b0",
+  "publicInventorySha256": "81c4f236ae86c665eb2e3c2de6c015716e945df9144614756b4be09ef16a225c",
+  "retentionIndexSha256": "b1086f6d56def7e3d1e61f292bb719448df4816ee50e7587a4e8ace6bc0ed3fd",
+  "reviewSha256": "d9289f015a6219c3b9f22e48d53f7b54437b1f1763ba0cdb898663964f7b1d6b",
+  "verificationSha256": "ad79567a1d5a2f53c49ca43148c3a003340d67b41bb75f12a31665ec1af8223d",
+  "retainedRecords": 5062,
+  "gzipBlobs": 1743,
+  "externalCompiledHashMetadata": 341,
+  "commitPushPrMayProceed": true,
+  "exactRemoteHeadAccepted": false,
+  "platformWheelBlenderAccepted": false,
+  "mergeReleaseAccepted": false,
+  "remaining": "Applicable exact remote-head source/evidence reconciliation, CI/platform, installed-wheel and official-Blender checks before evidence-backed develop merge; no main/tag/publication authorization."
+}

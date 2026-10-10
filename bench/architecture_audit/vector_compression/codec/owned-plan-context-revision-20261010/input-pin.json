@@ -1,0 +1,566 @@
+{
+  "status": "ADDITIVE contextual snapshot only:139 original external input pins unchanged; executable/source/fixture pins remain original",
+  "acceptedMerge": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "files": {
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/expected.glb": {
+      "sha256": "e57c0222bdb7280ec97e95da8b4a39e4c3bb465b047e50f01ad5951499212286",
+      "bytes": 676
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/expected.json": {
+      "sha256": "5660f6f82d131e73a90d4a59bc28638b53f713b4d0a584bd21bfb1dba0a0754d",
+      "bytes": 640
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/distinct-overlapping-physical-views/input.json": {
+      "sha256": "d7cca3b60fabce0e537d9770bd83f37ab98261f5e28dcba675f5f2ac5ca34881",
+      "bytes": 176
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/expected.glb": {
+      "sha256": "cb047deb9c0c909d03e057cd88bd1bfe17e884eeedfe552a73333671b58171fc",
+      "bytes": 66028
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/expected.json": {
+      "sha256": "356973bde6eca1ec347f860d2c6bd0805b5915b02f900ad4f2c2c4f02defc789",
+      "bytes": 65991
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-buffer-key-late-escape/input.json": {
+      "sha256": "478ae32a49b4b97886c373f41f677c051458bb95f9796e9db9a42d93cca11c56",
+      "bytes": 65679
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/expected.glb": {
+      "sha256": "3db449540c0a827e5d358681c85e19d2321517549ce2988fafc5fdecb4d45f7b",
+      "bytes": 66028
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/expected.json": {
+      "sha256": "6c329ceebd9deedee4d4a74c002d39f401430d32759d107097edebd8602c3471",
+      "bytes": 65991
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/long-view-key-late-escape/input.json": {
+      "sha256": "9d1111c256195133505cb3841a48c8608b7cac6610ea081ffc2725882461da46",
+      "bytes": 65679
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m1/input.json": {
+      "sha256": "fab7405a47c0231c425bb10810e191acd59fad1abe8374bf802ec44035dc64ed",
+      "bytes": 8
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m14/input.json": {
+      "sha256": "01f5782ec6031f4193e19834f63d4b0372a9ac0ad280b6cb4a189155694c27ea",
+      "bytes": 103
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m15/input.json": {
+      "sha256": "59429d78929a37183c9fd3bb6de37b0bc0b3fc3f31f782a1ee70fcc69dde7c79",
+      "bytes": 111
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m3/input.json": {
+      "sha256": "b1ecb53b6e0d9e36254c7cfb43810ee34ba5b9cea215b4d9751d13d4c5a83e6e",
+      "bytes": 22
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m4/input.json": {
+      "sha256": "fa220b00279295ddbe669dd80e810b7f1756a736d8593f7696bb1ddc17646d18",
+      "bytes": 29
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m7/input.json": {
+      "sha256": "3516315f686dbdd60178e830bf3039331eee476a18d3fd0afadbd74d79150125",
+      "bytes": 50
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/parser-table-m8/input.json": {
+      "sha256": "c58b05445745455d4c63ebe6ea5ffe4d6b7e20dc625e1355fed8ff6522f6b08a",
+      "bytes": 57
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/expected.glb": {
+      "sha256": "3e833cf94cc8363caee4b101bc4cd6900ad8ebb71ca1fe34ff5b8aa43f5f851d",
+      "bytes": 740
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/expected.json": {
+      "sha256": "7751197e5f5ad6043b94fc4effea6ba1bafa023dd4e05480837c417f7afbd777",
+      "bytes": 704
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/input.json": {
+      "sha256": "d4567f1235238c937a525359aa33a0b6efe1a3ebd58cf28748c1b1af1db0b6b2",
+      "bytes": 387
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/shared-descriptor-four-references/shared_refs.json": {
+      "sha256": "6b5b2b61bab53901041fbc9b6c8486b15b23b7424cc70c70552b94e291f3e26d",
+      "bytes": 23
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/expected.glb": {
+      "sha256": "9187d30a7ba4a5431208be907adfd8df827a87063c50095002a309aed946c7bc",
+      "bytes": 296
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/expected.json": {
+      "sha256": "5050f5cae8ac14ac1382e7130c0a1bbaece75a83362abd3f95bd9e0b7c64ab44",
+      "bytes": 259
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/tiny-no-views-huge-configured-limit/input.json": {
+      "sha256": "05eee0e018c289f43ddea8b3e551a1aca2743a7ae63159b1d44641e074f28ebd",
+      "bytes": 89
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-long-late-escape/input.json": {
+      "sha256": "e3eae249aa17616085697dad55fd9e036849ead3e3fa3979bcf989a6806fb129",
+      "bytes": 65696
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/binary.bin": {
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/edits.json": {
+      "sha256": "cd1a55fa6c7f148354c8c721d7c4d96277d4e804aea35d3ca73b518092082d63",
+      "bytes": 137
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/expected.glb": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-preparation/fixtures/unknown-declaration-short/input.json": {
+      "sha256": "e098afee47fa8cf86e8dba5935a9a705b6f4b6bda3d83c7efceec88302f5ace9",
+      "bytes": 161
+    },
+    "/tmp/rusty-tiles-codec-p2-allocation-review/prototype-plan.md": {
+      "sha256": "7669807a4152291aa24e70d79071b0d2a5920b0e7bd625e1caafe2fddfac1188",
+      "bytes": 9837
+    },
+    "/tmp/rusty-tiles-codec-p2-executions/accepted-c1-gate.json": {
+      "sha256": "144b71d8184ed741dd49a64582309b9fba5850510e339c5740463c7fa9c16e7f",
+      "bytes": 679
+    },
+    "/tmp/rusty-tiles-codec-p2-executions/exact-artifact-receipt.json": {
+      "sha256": "a1b36545590021009cd8bfcee7527c95bbd11624139f63ee8f942398d7621bc1",
+      "bytes": 82583
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present/expected.glb": {
+      "sha256": "10782ef025cd56f37075067f0791a7027b684f1120b64cdbf33b32ee120d39aa",
+      "bytes": 604
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present/expected.json": {
+      "sha256": "da9e6f2ff40ed747ff551b4179d9f8c5234d2fa538c540b2c8149fe60b377ae4",
+      "bytes": 568
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-already-present/input.json": {
+      "sha256": "d59208ad5ff920b6e3468b26a00b83fe88735adb81a233744077117f8a39913b",
+      "bytes": 345
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing/expected.glb": {
+      "sha256": "4c85486a29df2466ebca423196673e93cdc069886fb74883c1932a5670a86baf",
+      "bytes": 580
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing/expected.json": {
+      "sha256": "d564cd11c03a9e5e4a8d3b973a1a7b326f721e74aa2529e78ed098edb47b1a10",
+      "bytes": 544
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-missing/input.json": {
+      "sha256": "42a1f116c0d4536c479ff97411a41857b2100652dd99d3386949df33c95f51fb",
+      "bytes": 227
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required/expected.glb": {
+      "sha256": "b172a7131ea57def1dc206b009a65f4f12bf8c7114fdc0907ba4c38fd484e92c",
+      "bytes": 628
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required/expected.json": {
+      "sha256": "9c261bed2d2c5be1879df430604c6a71f11c5300d0b353613386cb97d2b19249",
+      "bytes": 592
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/declarations-other-required/input.json": {
+      "sha256": "80c8f2ad7b9e09e8f06b6c6aa3933c1c30b3a2115ea65dbdfc758025d293a3b5",
+      "bytes": 317
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling/edits.json": {
+      "sha256": "45734b8fa3c7e885572632defb7291ecaac6d9c7de57909c1ca48bc71e287005",
+      "bytes": 110
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling/expected.glb": {
+      "sha256": "c9aa7a3824d3a461adcfbc4ac35ea7d8d2009ee365dba8eff86212bf5e9579f6",
+      "bytes": 12348
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling/expected.json": {
+      "sha256": "0aa90b429356cb824b42665aca8f4c71e55e16dbbd298b504ac6c7ebb42ea106",
+      "bytes": 12310
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/deep-chain-wide-sibling/input.json": {
+      "sha256": "78e9be73950b196ced30678b40c6b49718fd8f860cad48dda667d236487c3a42",
+      "bytes": 7477
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality/expected.glb": {
+      "sha256": "fcb74632112bb0ea90f6faba8d2b8bb6f8b67f2c2d9e47e4175572b94a0788c5",
+      "bytes": 9820
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality/expected.json": {
+      "sha256": "ed1cc93a084a790885d4dc1fda48815e900dde26fe8d99832e975bc2ce80149e",
+      "bytes": 9781
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-key-cardinality/input.json": {
+      "sha256": "75e07df6e16f1d20b9d03387f29678bb978a95626b43070e851c849548aa55d6",
+      "bytes": 9507
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys/expected.glb": {
+      "sha256": "712c7706b7bb60c0f9051ca44279fb68863442e03c672e76de825c96d28db323",
+      "bytes": 792
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys/expected.json": {
+      "sha256": "d8786f7da5b6d70e84133a0cc919066395a8472874a88300a9b7e9ff703c5185",
+      "bytes": 754
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/escaped-keys/input.json": {
+      "sha256": "902467c97645f97a96d67c7993b2c1b9357f5f1f808df070b3d54487fe8f8c28",
+      "bytes": 480
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K/expected.glb": {
+      "sha256": "b1b8fe2cfc3a2b3914ab02d3ac1f886613300c7622a17d70f5a2e2f130037918",
+      "bytes": 98908
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K/expected.json": {
+      "sha256": "7770d0d93a37659f1256f9779b1cdb875ee367ffb87490372c2a59832ee305db",
+      "bytes": 98872
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-J-low-K/input.json": {
+      "sha256": "4858ad18a5bfd5897eb762feb19f0f57db9d83ba2f7f02f12d7f3b0274f6496e",
+      "bytes": 98598
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality/edits.json": {
+      "sha256": "63bc8bb38b6871a8588d871bfc54bf007b7ae1700cbd467ab674ba700a4e9dff",
+      "bytes": 112
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality/expected.glb": {
+      "sha256": "0711d6ab289ada1495ad2572dc7a915c38d444e1f7bd555381d97007e688b0e1",
+      "bytes": 1007980
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality/expected.json": {
+      "sha256": "2a20ae3f35cc7a2fb39e484d6b7e62a3191c6024cd8068a3d49d4105cd7b5a8f",
+      "bytes": 1007942
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/high-view-cardinality/input.json": {
+      "sha256": "6a383f63ad78c8087b076dccab8156c1b8c778c8fe78a0c8225a1929cdc35669",
+      "bytes": 405699
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/expected.glb": {
+      "sha256": "665ded961bf80b4a74eb952f2f8f20b7863ad84a9027e5a050683c36167875bd",
+      "bytes": 66136
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/expected.json": {
+      "sha256": "c9ab2a7aa9937e06d605fa48ba2fb88e019cea71417dce542f081fb4ee59ca6b",
+      "bytes": 66099
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/input.json": {
+      "sha256": "38c42690d78cbf80e5a7debd0cb05bbf9be22b3fd36d0a3cf6a35873418685e0",
+      "bytes": 65830
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K/expected.glb": {
+      "sha256": "8494e47d72e095c684c8b17134f2161d439bc94ae23a1f2fa8aa409eceb2ce2f",
+      "bytes": 25180
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K/expected.json": {
+      "sha256": "6f31d23b1fb05946be39970104b6a4c04550868925c48fc1a09be98ae14e2eab",
+      "bytes": 25141
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/low-J-high-K/input.json": {
+      "sha256": "51180a12fcb341d0e629f1efca414aec9a03ff77050dc9cfaa940ffe8ca5bd6c",
+      "bytes": 24867
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0/binary.bin": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0/edits.json": {
+      "sha256": "4eaa2cf2379380cf453d645f38cdb9eb3e5c4e1cef31d99d1357dc297ef4c3ea",
+      "bytes": 107
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0/expected.glb": {
+      "sha256": "2c428398637e147a3d36b52dd50ea4134c95afc85858b0aa0d07c0f89457fd42",
+      "bytes": 600
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0/expected.json": {
+      "sha256": "eb0a8091e548bc06bc67c32e1847023cb45baeb75063c11ead154aa2a06bca4b",
+      "bytes": 568
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j0-u0/input.json": {
+      "sha256": "9769c1a7d0ecb0d8fb2e9a8978c1f93185b29608de1f85ee22e6bcde7b4305d5",
+      "bytes": 294
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7/binary.bin": {
+      "sha256": "57355ac3303c148f11aef7cb179456b9232cde33a818dfda2c2fcb9325749a6b",
+      "bytes": 7
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7/edits.json": {
+      "sha256": "24443716830ca125e4d93f90e5bca5940ce90d84fe2d8aad62cd2c7a55e12f37",
+      "bytes": 107
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7/expected.glb": {
+      "sha256": "7afa12f64a8089f71d3bac320aae7bfeff9fb639c55d861ad8a2856d4b41ee76",
+      "bytes": 616
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7/expected.json": {
+      "sha256": "27cc1e0312a0c5a59a9cc94bd6a7563aab9d3eebc3c49ec15e2778a1368fec19",
+      "bytes": 575
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/metadata-j7-u7/input.json": {
+      "sha256": "5b21a67c9b1e4db234022919a6a8ade7981c0350522d61dd6de5fb60e419074e",
+      "bytes": 301
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker/binary.bin": {
+      "sha256": "2882cd5578bcb44ff3e78d17261fce7b1d9a4babb8821184bc44e89d5211c530",
+      "bytes": 5
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker/edits.json": {
+      "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b",
+      "bytes": 108
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker/expected.glb": {
+      "sha256": "ed25b070c599cb4dd42a5d28d71028d9aeb1e25267c3bf463f160ee16fefea17",
+      "bytes": 1212
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker/expected.json": {
+      "sha256": "3274fb34ff918f0d714c2daa4facba5eb7c865d962af00d53391db07b3908d73",
+      "bytes": 1174
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/opaque-token-and-marker/input.json": {
+      "sha256": "e51a1a93c1635aec737adbd724d2d632bb35800d1c62da7b8c9d2e6afccf46f0",
+      "bytes": 905
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/de.rs": {
+      "sha256": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+      "bytes": 86840
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/raw.rs": {
+      "sha256": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+      "bytes": 23498
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/read.rs": {
+      "sha256": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3",
+      "bytes": 33041
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/src/content_integrity/json.rs": {
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+      "bytes": 19184
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/toolchain/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs": {
+      "sha256": "a262b9e494236a00270be0dd0c57be5259d62bc1e538c56506f7f0ce8debccc0",
+      "bytes": 35551
+    },
+    "/tmp/rusty-tiles-vector-codec-foundation/AGENTS.md": {
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+      "bytes": 3752
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/coordinator_runner.py": {
+      "sha256": "ee7bc73abbd813dc32090c19139520b853e4cbe2a765f8e9781bb6c907d11bcf",
+      "bytes": 6610
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/Cargo.lock": {
+      "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "bytes": 70262
+    },
+    "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/integrity.json": {
+      "sha256": "20c6f6dff821962f6ca1845853765499f53baf2bcf5e498eb11adbffaa1da78e",
+      "bytes": 152822
+    },
+    "/tmp/rusty-tiles-codec-owned-plan-context-revision/vector-compression-foundation.md": {
+      "sha256": "73db500b0c6c013e5ff5656006503b29981a1b5241d94d82e7f5a60c99c2528f",
+      "bytes": 10768
+    }
+  }
+}

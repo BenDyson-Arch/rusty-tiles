@@ -1,152 +1,136 @@
-//! Lossless buffer-view compression for generated vector content. Metadata and
-//! polygon/feature accessor identities remain unchanged; no vertex reordering.
-use crate::{
-    error::Error,
-    glb::{self, FallbackOffsets, MeshoptLayout, MeshoptStream},
-};
-use serde_json::{json, Value};
-use std::{collections::BTreeMap, path::Path};
-
-/// Vector content keeps eight-byte views (64-bit property tables) in both the
-/// compressed and the repacked fallback buffer.
-const VECTOR_MESHOPT: MeshoptLayout = MeshoptLayout {
-    align: 8,
-    fallback: FallbackOffsets::Packed,
-    explicit_filter: false,
-};
-
-pub fn compress_file(path: &Path) -> Result<Value, Error> {
-    let input = std::fs::read(path)?;
-    let output = compress_bytes(&input)?;
-    std::fs::write(path, &output)?;
-    Ok(json!({"beforeBytes":input.len(),"afterBytes":output.len()}))
+//! Immutable physical-view compression. Format policy knows no paths or jobs.
+use crate::content_integrity::FormatError;
+use std::{fmt, mem::size_of};
+mod framing;
+mod limits;
+mod plan;
+mod raw;
+mod rewrite;
+pub(crate) use framing::write_generated_glb;
+pub use limits::CompressionLimits;
+pub(crate) use limits::ValidatedCompressionLimits;
+pub(crate) use plan::prepare;
+pub(crate) use rewrite::encode;
+#[derive(Debug)]
+pub(crate) enum CodecError<E> {
+    Format(FormatError),
+    EncodingFailure(&'static str),
+    Checkpoint(E),
 }
-
-pub(crate) fn compress_bytes(input: &[u8]) -> Result<Vec<u8>, Error> {
-    let glb = gltf::binary::Glb::from_slice(input)?;
-    let mut doc: Value = serde_json::from_slice(&glb.json)?;
-    let source = glb
-        .bin
-        .ok_or_else(|| Error::msg("vector GLB has no binary chunk"))?;
-    let binary = compress_document(&mut doc, &source)?;
-    glb::encode_glb(&doc, &binary)
-}
-
-/// Compress every accessor-backed view of a vector document in place as an
-/// attribute stream (positions, feature IDs, polygon offsets and restart
-/// loop indices alike); other views (metadata) stay raw. Returns the binary.
-pub(crate) fn compress_document(doc: &mut Value, source: &[u8]) -> Result<Vec<u8>, Error> {
-    let mut layouts = BTreeMap::new();
-    for accessor in doc["accessors"]
-        .as_array()
-        .ok_or_else(|| Error::msg("missing accessors"))?
-    {
-        let view = accessor["bufferView"]
-            .as_u64()
-            .ok_or_else(|| Error::msg("missing accessor view"))? as usize;
-        let count = accessor["count"]
-            .as_u64()
-            .ok_or_else(|| Error::msg("missing accessor count"))? as usize;
-        let components = match accessor["type"].as_str() {
-            Some("VEC3") => 3,
-            Some("SCALAR") => 1,
-            _ => return Err(Error::msg("unsupported vector accessor")),
-        };
-        let width = match accessor["componentType"].as_u64() {
-            Some(5123) => 2,
-            Some(5125 | 5126) => 4,
-            _ => return Err(Error::msg("unsupported vector component")),
-        };
-        let stride = doc["bufferViews"][view]["byteStride"]
-            .as_u64()
-            .map(|v| v as usize)
-            .unwrap_or(components * width);
-        layouts.insert(view, (count, stride));
+impl<E> From<FormatError> for CodecError<E> {
+    fn from(e: FormatError) -> Self {
+        Self::Format(e)
     }
-    glb::meshopt_compress(doc, source, VECTOR_MESHOPT, |view, length| {
-        let Some(&(count, stride)) = layouts.get(&view) else {
-            return Ok(None);
-        };
-        if count.checked_mul(stride) != Some(length) {
-            return Err(Error::msg("vector view layout mismatch"));
+}
+impl<E: fmt::Display> fmt::Display for CodecError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Format(e) => write!(f, "{e}"),
+            Self::EncodingFailure(s) => write!(f, "native encoding failed at {s}"),
+            Self::Checkpoint(e) => write!(f, "{e}"),
         }
-        if !matches!(stride, 4 | 8 | 12) {
-            return Err(Error::msg("unsupported vector stride"));
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for CodecError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Format(e) => Some(e),
+            Self::Checkpoint(e) => Some(e),
+            Self::EncodingFailure(_) => None,
         }
-        Ok(Some(MeshoptStream::Attributes { count, stride }))
-    })
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CompressionReceipt {
+    pub before_bytes: usize,
+    pub after_bytes: usize,
+    pub views: usize,
+    pub raw_views: usize,
+    pub compressed_views: usize,
+    pub existing_views: usize,
+    pub accessors: usize,
+    pub logical_bytes: usize,
+    pub estimated_peak_bytes: usize,
+}
+pub(crate) struct Encoded {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) receipt: CompressionReceipt,
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GeneratedCounts {
+    pub(crate) views: usize,
+    pub(crate) accessors: usize,
+    pub(crate) logical_bytes: usize,
+}
+type Result<T> = std::result::Result<T, FormatError>;
+fn invalid(s: &'static str) -> FormatError {
+    FormatError::InvalidInput(s.into())
+}
+fn unsupported(s: &'static str) -> FormatError {
+    FormatError::Unsupported(s.into())
+}
+fn limit(s: &'static str) -> FormatError {
+    FormatError::ResourceLimit(s.into())
+}
+fn add(a: usize, b: usize) -> Result<usize> {
+    a.checked_add(b)
+        .ok_or_else(|| limit("compression byte arithmetic overflow"))
+}
+fn mul(a: usize, b: usize) -> Result<usize> {
+    a.checked_mul(b)
+        .ok_or_else(|| limit("compression byte arithmetic overflow"))
+}
+fn align(n: usize, a: usize) -> Result<usize> {
+    Ok(add(n, a - 1)? / a * a)
+}
+fn exact<T>(n: usize) -> Result<Vec<T>> {
+    let bytes = mul(n, size_of::<T>())?;
+    if bytes > isize::MAX as usize {
+        return Err(limit("compression allocation outside host range"));
+    }
+    let mut out = Vec::new();
+    out.try_reserve_exact(n)
+        .map_err(|_| limit("compression owned reservation failed"))?;
+    if out.capacity() != n {
+        return Err(limit("compression exact capacity mismatch"));
+    }
+    #[cfg(test)]
+    tests::reserved::<T>(n);
+    Ok(out)
+}
+#[derive(Clone, Copy)]
+struct Working {
+    base: usize,
+    maximum: usize,
+    peak: usize,
+}
+fn finite_error_storage() -> usize {
+    size_of::<FormatError>() + 3 * (size_of::<String>() + 6 * size_of::<usize>()) + 4 * 128
+}
+impl Working {
+    fn new(base: usize, limits: &ValidatedCompressionLimits) -> Result<Self> {
+        let base = add(base, finite_error_storage())?;
+        if base > limits.values.working_bytes {
+            return Err(limit("retained compression working storage exceeds limit"));
+        }
+        Ok(Self {
+            base,
+            maximum: limits.values.working_bytes,
+            peak: base,
+        })
+    }
+    fn admit(&mut self, extra: usize) -> Result<()> {
+        let bytes = add(self.base, extra)?;
+        if bytes > self.maximum {
+            return Err(limit("estimated compression working storage exceeds limit"));
+        }
+        self.peak = self.peak.max(bytes);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn accessor_streams_decode_exactly_and_metadata_stays_raw() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("tile.glb");
-        let mut data = Vec::new();
-        for i in 0..1000 {
-            for v in [i as f32 * 0.1, 0.0, 0.0] {
-                data.extend(v.to_le_bytes());
-            }
-        }
-        let position_size = data.len();
-        for _ in 0..1000 {
-            data.extend(0u32.to_le_bytes());
-        }
-        let ids_size = data.len() - position_size;
-        for i in 0..1000u32 {
-            data.extend(i.to_le_bytes());
-        }
-        let raw_offset = data.len();
-        data.extend(b"metadata");
-        let original = data.clone();
-        let doc = json!({"asset":{"version":"2.0"},"buffers":[{"byteLength":data.len()}],
-            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":position_size},
-                {"buffer":0,"byteOffset":position_size,"byteLength":ids_size},
-                {"buffer":0,"byteOffset":position_size+ids_size,"byteLength":4000},
-                {"buffer":0,"byteOffset":raw_offset,"byteLength":8}],
-            "accessors":[{"bufferView":0,"componentType":5126,"count":1000,"type":"VEC3"},
-                {"bufferView":1,"componentType":5125,"count":1000,"type":"SCALAR"},
-                {"bufferView":2,"componentType":5125,"count":1000,"type":"SCALAR"}]});
-        let source = glb::encode_glb(&doc, &data).unwrap();
-        std::fs::write(&path, &source).unwrap();
-        let report = compress_file(&path).unwrap();
-        assert!(report["afterBytes"].as_u64().unwrap() < report["beforeBytes"].as_u64().unwrap());
-        let encoded = std::fs::read(path).unwrap();
-        let glb = gltf::binary::Glb::from_slice(&encoded).unwrap();
-        let result: Value = serde_json::from_slice(&glb.json).unwrap();
-        let bin = glb.bin.unwrap();
-        for (i, range) in [
-            (0, 0..position_size),
-            (1, position_size..position_size + ids_size),
-            (2, position_size + ids_size..raw_offset),
-        ] {
-            let e = &result["bufferViews"][i]["extensions"]["EXT_meshopt_compression"];
-            let start = e["byteOffset"].as_u64().unwrap() as usize;
-            let end = start + e["byteLength"].as_u64().unwrap() as usize;
-            let decoded = if i == 0 {
-                meshopt::encoding::decode_vertex_buffer::<[u8; 12]>(&bin[start..end], 1000)
-                    .unwrap()
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-            } else {
-                meshopt::encoding::decode_vertex_buffer::<[u8; 4]>(&bin[start..end], 1000)
-                    .unwrap()
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(decoded, original[range]);
-        }
-        let v = &result["bufferViews"][3];
-        let offset = v["byteOffset"].as_u64().unwrap() as usize;
-        assert_eq!(&bin[offset..offset + 8], b"metadata");
-        assert_eq!(v["buffer"], 0);
-        assert_eq!(
-            result["buffers"][1]["extensions"]["EXT_meshopt_compression"]["fallback"],
-            true
-        );
-    }
-}
+pub(crate) use rewrite::with_capacity_one;
+
+#[cfg(test)]
+mod tests;

@@ -42,6 +42,9 @@ const ENCODER_PREFIX: &str = "rusty-tiles-native-vector-v1:";
 const ENCODER_PREFIX: &str = "rusty-tiles-portable-vector-v1:";
 
 fn encoder() -> String {
+    encoder_with_framing(include_str!("../../vector_encoding/framing.rs"))
+}
+fn encoder_with_framing(framing_source: &str) -> String {
     // Intrinsic source-chart triangulation changes native explicit content too;
     // every hierarchy uses the reviewed source/dependency fingerprint.
     let mut hasher = Sha256::new();
@@ -60,6 +63,16 @@ fn encoder() -> String {
         include_str!("store.rs"),
         include_str!("reuse.rs"),
         include_str!("../../vector_encoding.rs"),
+        include_str!("../../vector_encoding/limits.rs"),
+        include_str!("../../vector_encoding/raw.rs"),
+        include_str!("../../vector_encoding/plan.rs"),
+        include_str!("../../vector_encoding/rewrite.rs"),
+        framing_source,
+        include_str!("../../content_integrity.rs"),
+        include_str!("../../content_integrity/json.rs"),
+        include_str!("../../content_integrity/numbers.rs"),
+        include_str!("../../content_integrity/meshopt.rs"),
+        include_str!("../../vector_compression.rs"),
         include_str!("../../metadata.rs"),
         include_str!("../../glb_write.rs"),
         include_str!("../../glb.rs"),
@@ -88,6 +101,7 @@ fn encoder() -> String {
     }
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
 }
+
 pub(super) fn contents(node: &Value) -> Vec<&Value> {
     if let Some(contents) = node["contents"].as_array() {
         contents.iter().collect()
@@ -454,5 +468,68 @@ impl Reuse {
             "reusedSubtrees":self.reused_subtrees,"reusedTiles":self.reused_tiles,"reusedContents":self.reused_uris.len(),"reusedContentReferences":self.reused_references,
             "publishedContents":contents.len(),"rebuiltContents":contents.difference(&self.reused_uris).count()}),
         )
+    }
+}
+
+#[cfg(test)]
+mod codec_reuse_tests {
+    use super::*;
+
+    /// Exercise the real subtree signature and restore decision: an unchanged
+    /// encoder identity restores the cached node, a changed framing dependency
+    /// rebuilds it without opening or copying old content.
+    #[test]
+    fn selected_framing_dependency_change_invalidates_cached_subtree() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("previous.3tz");
+        zip::ZipWriter::new(File::create(&archive_path).unwrap())
+            .finish()
+            .unwrap();
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE features(path TEXT,fingerprint TEXT); INSERT INTO features VALUES('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');").unwrap();
+        let source = include_str!("../../vector_encoding/framing.rs");
+        let original = encoder_with_framing(source);
+        assert_eq!(original, encoder());
+        let mut same = Reuse::new(root.path(), &VectorOptions::default()).unwrap();
+        same.configuration_hash = original.clone();
+        let signature = same.signature(&db, "").unwrap();
+        same.previous = Some(archive_path);
+        same.old.insert(
+            "".into(),
+            Record {
+                signature: signature.clone(),
+                center: [0.; 3],
+                padding: 0.,
+                fragments: 1,
+                cut: None,
+            },
+        );
+        same.nodes.insert(
+            "".into(),
+            json!({"extras":{"routing":true},"geometricError":0}),
+        );
+        let mut counters = Counters {
+            fragments: 1,
+            ..Counters::default()
+        };
+        assert_eq!(same.signature(&db, "").unwrap(), signature);
+        assert!(same
+            .restore("", &signature, &mut counters, 1, 8)
+            .unwrap()
+            .is_some());
+        assert_eq!(same.reused_subtrees, 1);
+        // An actual byte change in a codec framing dependency changes the
+        // configuration input of the real signature, not feature fingerprints.
+        let changed_source = format!("{source}\n// selected framing policy changed\n");
+        same.configuration_hash = encoder_with_framing(&changed_source);
+        let changed = same.signature(&db, "").unwrap();
+        assert_ne!(same.configuration_hash, original);
+        assert_ne!(changed, signature);
+        let before = (same.reused_subtrees, counters.tiles);
+        assert!(same
+            .restore("", &changed, &mut counters, 1, 8)
+            .unwrap()
+            .is_none());
+        assert_eq!((same.reused_subtrees, counters.tiles), before);
     }
 }

@@ -281,54 +281,12 @@ fn decode_meshopt(
         }
         _ => return Err(invalid("invalid meshopt mode")),
     }
-    let words = length
-        .checked_add(3)
-        .map(|n| n / 4)
-        .ok_or_else(|| limit("meshopt aligned output overflow"))?;
-    let backing_bytes = words
-        .checked_mul(4)
-        .ok_or_else(|| limit("meshopt aligned allocation overflow"))?;
-    // Exactly bounded requested storage while both aligned backing and byte copy live.
-    let peak = backing_bytes
-        .checked_add(length)
-        .ok_or_else(|| limit("meshopt temporary storage overflow"))?;
-    let peak_bound = length
-        .checked_mul(2)
-        .and_then(|n| n.checked_add(3))
-        .ok_or_else(|| limit("meshopt peak bound overflow"))?;
-    if peak > peak_bound {
-        return Err(limit("meshopt temporary storage bound exceeded"));
-    }
-    let mut decoded = allocation(words, 0u32)?;
-    let code = unsafe {
-        match mode.as_str() {
-            "ATTRIBUTES" => meshopt::ffi::meshopt_decodeVertexBuffer(
-                decoded.as_mut_ptr().cast(),
-                count,
-                stride,
-                compressed.as_ptr(),
-                compressed.len(),
-            ),
-            "TRIANGLES" => meshopt::ffi::meshopt_decodeIndexBuffer(
-                decoded.as_mut_ptr().cast(),
-                count,
-                stride,
-                compressed.as_ptr(),
-                compressed.len(),
-            ),
-            _ => meshopt::ffi::meshopt_decodeIndexSequence(
-                decoded.as_mut_ptr().cast(),
-                count,
-                stride,
-                compressed.as_ptr(),
-                compressed.len(),
-            ),
-        }
+    let mode = match mode.as_str() {
+        "ATTRIBUTES" => super::meshopt::Mode::Attributes,
+        "TRIANGLES" => super::meshopt::Mode::Triangles,
+        _ => super::meshopt::Mode::Indices,
     };
-    if code != 0 {
-        return Err(invalid("invalid meshopt compressed stream"));
-    }
-    let out = copy_meshopt_words(&decoded, length)?;
+    let out = super::meshopt::decode(compressed, count, stride, mode)?;
     Ok((out, stride))
 }
 fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<&[u8]> {
@@ -1171,23 +1129,6 @@ fn uninspected_record<'a, T: serde::Deserialize<'a> + Default>(raw: Raw<'a>) -> 
     }
 }
 
-fn copy_meshopt_words(words: &[u32], length: usize) -> FormatResult<Vec<u8>> {
-    let backing = words
-        .len()
-        .checked_mul(4)
-        .ok_or_else(|| limit("meshopt copy backing overflow"))?;
-    if backing < length || backing - length > 3 {
-        return Err(invalid("meshopt copy backing length mismatch"));
-    }
-    let mut out = Vec::new();
-    out.try_reserve_exact(length)
-        .map_err(|_| limit("meshopt output allocation failed"))?;
-    for word in words {
-        let take = (length - out.len()).min(4);
-        out.extend_from_slice(&word.to_ne_bytes()[..take]);
-    }
-    Ok(out)
-}
 #[cfg(test)]
 mod tests {
     use super::*;

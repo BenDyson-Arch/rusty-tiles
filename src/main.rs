@@ -712,6 +712,7 @@ fn job_category(kind: JobErrorKind) -> (&'static str, u8) {
         JobErrorKind::InvalidRequest => ("invalid_request", 2),
         JobErrorKind::InvalidInput => ("invalid_input", 3),
         JobErrorKind::Unsupported => ("unsupported", 2),
+        JobErrorKind::ResourceLimit => ("resource_limit", 1),
         JobErrorKind::Io => ("io", 1),
         JobErrorKind::Conflict => ("output_conflict", 5),
         JobErrorKind::Cancelled => ("cancelled", 1),
@@ -1064,7 +1065,11 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             Outcome::Done
         }
         Command::EncodeVectorContent { input } => {
-            println!("{}", rusty_tiles::vector_encoding::compress_file(&input)?);
+            let result = rusty_tiles::compress_vector_file(
+                rusty_tiles::VectorCompressionRequest::new(input),
+                &RunControl::default(),
+            )?;
+            println!("{}", result.report_json());
             Outcome::Done
         }
         Command::CreateTilesetJson(a) => {
@@ -1361,6 +1366,24 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_refusal_is_operational_status_one_with_explicit_kind() {
+        assert_eq!(
+            job_category(JobErrorKind::ResourceLimit),
+            ("resource_limit", 1)
+        );
+        let failure = rusty_tiles::JobFailure {
+            error: JobError::new(JobErrorKind::ResourceLimit, "codec work refused"),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        };
+        let error = Error::Job(failure);
+        assert_eq!(error.category(), ("resource_limit", 1));
+        let value = error_summary(&error, "resource_limit", 1);
+        assert_eq!(value["error"]["kind"], "resource_limit");
+    }
 
     #[test]
     fn recovery_json_distinguishes_previous_output_from_scratch() {
