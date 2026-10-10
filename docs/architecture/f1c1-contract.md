@@ -81,8 +81,12 @@ most 1e-6 metre coordinate evaluation error against independent high-precision
 forward arithmetic on the decoded local coordinates. The finite numerical
 profile admits
 `a + abs(h) + sum(abs(d_i)) + sqrt(3)*1e6 <= 2^26 metres`.
-Above that limit is Unsupported before source I/O; nonfinite parameters remain
-InvalidRequest. This bound controls intermediate magnitudes and leaves a
+Admission compares the exact sum of the four nonnegative f64 request components
+against `58998676.19243112 m`, the greatest f64 no larger than
+`2^26 - a - sqrt(3)*1e6`. A bounded error-free sum preserves rounding residuals;
+rounding a total down to the cap cannot admit a request above it. This deliberately
+conservative representable boundary is the operative limit. Above it is
+Unsupported before source I/O; nonfinite parameters remain InvalidRequest. This bound controls intermediate magnitudes and leaves a
 conservative floating-operation allowance (`64u * 2^26 < 1e-6 m`, `u=2^-53`).
 It is an engineering profile choice, not a universal geodetic accuracy proof.
 Trig/reference and boundary probes plus final consumer evidence must test it.

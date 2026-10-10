@@ -551,7 +551,7 @@ enum Outcome {
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
     /// Published local mesh with its finalized report.
-    Mesh(MeshResult),
+    Mesh(Box<MeshResult>),
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
     Terrain(Box<terrain::TerrainResult>),
@@ -1097,7 +1097,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
                 .with_policy(policy)
                 .with_placement(placement);
-            Outcome::Mesh(mesh_to_archive(request, &run)?)
+            Outcome::Mesh(Box::new(mesh_to_archive(request, &run)?))
         }
         Command::MeshTo3tz(a) => {
             let opts = mesh_opts(&a)?;

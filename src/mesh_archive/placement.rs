@@ -5,8 +5,9 @@ use serde::Serialize;
 
 const WGS84_A: f64 = 6_378_137.0;
 const WGS84_F: f64 = 1.0 / 298.257_223_563;
-const LOCAL_COMPONENT_LIMIT: f64 = 1_000_000.0;
-const PLACEMENT_MAGNITUDE_LIMIT: f64 = 67_108_864.0;
+// Greatest f64 <= 2^26 - WGS84_A - sqrt(3)*LOCAL_COMPONENT_LIMIT.
+// Independent Decimal80 boundary reference lives in tests/f1c1_oracle.py.
+const AVAILABLE_PLACEMENT_MAGNITUDE: f64 = 58_998_676.192_431_12;
 const QUATERNION_NORM_TOLERANCE: f64 = 1e-12;
 const IDENTITY: [f64; 16] = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
@@ -79,6 +80,51 @@ pub(super) fn to_tile([x, y, z]: [f64; 3]) -> [f64; 3] {
     [x, -z, y]
 }
 
+/// Exact sign of the four-component sum minus the conservative budget.
+/// General TwoSum retains each residual in a bounded, nonoverlapping expansion.
+/// The individual guard ensures finite intermediates; five terms need five slots.
+fn within_magnitude_budget(height: f64, offset: [f64; 3]) -> bool {
+    let components = [
+        height.abs(),
+        offset[0].abs(),
+        offset[1].abs(),
+        offset[2].abs(),
+    ];
+    if components
+        .iter()
+        .any(|value| *value > AVAILABLE_PLACEMENT_MAGNITUDE)
+    {
+        return false;
+    }
+    let mut expansion = [0.; 5];
+    let mut count = 0;
+    for value in components
+        .into_iter()
+        .chain([-AVAILABLE_PLACEMENT_MAGNITUDE])
+    {
+        let mut next = [0.; 5];
+        let mut next_count = 0;
+        let mut sum = value;
+        for component in &expansion[..count] {
+            let combined = sum + component;
+            let virtual_component = combined - sum;
+            let residual = (sum - (combined - virtual_component)) + (component - virtual_component);
+            if residual != 0. {
+                next[next_count] = residual;
+                next_count += 1;
+            }
+            sum = combined;
+        }
+        if sum != 0. {
+            next[next_count] = sum;
+            next_count += 1;
+        }
+        expansion = next;
+        count = next_count;
+    }
+    count == 0 || expansion[count - 1] < 0.
+}
+
 impl ResolvedPlacement {
     pub(super) fn resolve(placement: &MeshPlacement) -> Result<Self, JobError> {
         let MeshPlacement::Wgs84 {
@@ -114,14 +160,7 @@ impl ResolvedPlacement {
                 "mesh ENU orientation quaternion must have unit norm within 1e-12",
             ));
         }
-        let magnitude = WGS84_A
-            + height.abs()
-            + scene_offset_metres
-                .iter()
-                .map(|value| value.abs())
-                .sum::<f64>()
-            + 3.0_f64.sqrt() * LOCAL_COMPONENT_LIMIT;
-        if magnitude > PLACEMENT_MAGNITUDE_LIMIT {
+        if !within_magnitude_budget(height, *scene_offset_metres) {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
@@ -228,6 +267,26 @@ mod tests {
     }
 
     #[test]
+    fn magnitude_boundary_cannot_hide_a_positive_rounding_residual() {
+        let boundary = 58_998_676.192_431_12;
+        assert!(within_magnitude_budget(boundary, [0.; 3]));
+        assert!(within_magnitude_budget(0., [boundary, 0., 0.]));
+        assert!(!within_magnitude_budget(boundary.next_up(), [0.; 3]));
+        assert!(!within_magnitude_budget(
+            boundary,
+            [f64::from_bits(1), 0., 0.]
+        ));
+        assert!(within_magnitude_budget(
+            boundary.next_down(),
+            [1e-10, -1e-10, 1e-10]
+        ));
+        assert!(!within_magnitude_budget(
+            boundary.next_down(),
+            [1e-8, 0., 0.]
+        ));
+    }
+
+    #[test]
     fn omitted_anchor_cannot_hide_orientation_or_offset() {
         assert_eq!(
             MeshPlacement::from_parameters(None, None, None).unwrap(),
@@ -290,8 +349,7 @@ mod tests {
                 scene_offset_metres: [0.; 3],
             }
         );
-        let height_limit =
-            PLACEMENT_MAGNITUDE_LIMIT - WGS84_A - 3.0_f64.sqrt() * LOCAL_COMPONENT_LIMIT;
+        let height_limit = AVAILABLE_PLACEMENT_MAGNITUDE;
         for sign in [-1., 1.] {
             assert!(ResolvedPlacement::resolve(&request(
                 [0., 0., sign * (height_limit - 1.)],
