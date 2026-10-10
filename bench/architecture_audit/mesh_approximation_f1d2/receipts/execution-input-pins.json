@@ -1,0 +1,61 @@
+{
+  "source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "files": {
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1a_oracle.py": {
+      "bytes": 34852,
+      "sha256": "d3ef051ccfc217cda3c28fc0cd8a96a9b173ebea31b89c7beb78adc5fe32d211"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1b_oracle.py": {
+      "bytes": 56023,
+      "sha256": "075da4f36ca1537a662a3d417ea4913aa50991f245bb2373eb811142106de5fc"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1b2_oracle.py": {
+      "bytes": 35737,
+      "sha256": "8b5f758fed8f2f4f4e3a1c84cbb794d4c181f0b775115aaae7f157cb456cd89c"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1b3_oracle.py": {
+      "bytes": 40613,
+      "sha256": "2e4eb2051f50f2044b99d3a95c5149a6586a2e56ef3f6bc962b5e8bcb08ad56e"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1c1_oracle.py": {
+      "bytes": 33998,
+      "sha256": "f87c6e843a48fa74481cc0d47047f954b226f99f21db60d32ce400d1290606d2"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1c2_oracle.py": {
+      "bytes": 37393,
+      "sha256": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1d1_oracle.py": {
+      "bytes": 43518,
+      "sha256": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1d1_viewer.py": {
+      "bytes": 6512,
+      "sha256": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1d2_oracle.py": {
+      "bytes": 10625,
+      "sha256": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/f1d2_certificate.py": {
+      "bytes": 7383,
+      "sha256": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/tests/fixtures/f1d1_viewer.cjs": {
+      "bytes": 4629,
+      "sha256": "8a95206dc6858ea0c18edef72a2611ad74bca8ca9a6739a846492acf685d2890"
+    },
+    "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": {
+      "bytes": 10975,
+      "sha256": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204"
+    },
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533": {
+      "bytes": 251600984,
+      "sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b"
+    },
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533": {
+      "bytes": 232850280,
+      "sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3"
+    }
+  }
+}

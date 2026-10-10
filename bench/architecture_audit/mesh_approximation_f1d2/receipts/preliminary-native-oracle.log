@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/tests/f1d2_oracle.py", line 152, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/tests/f1d2_oracle.py", line 143, in main
+    result['execution']=run(args.binary,args.artifact_dir)
+                        ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/tests/f1d2_oracle.py", line 129, in run
+    artifact.require('depth' in json.loads(depth_refusal['stdout'])['error']['message'],'exercise bounded depth refusal')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/tests/f1c2_oracle.py", line 39, in require
+    raise OracleError(message)
+f1c2_oracle.OracleError: exercise bounded depth refusal

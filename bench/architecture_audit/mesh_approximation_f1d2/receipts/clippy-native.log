@@ -1,0 +1,4 @@
+   Compiling libsqlite3-sys v0.38.2
+   Compiling rusty-tiles v0.4.0 (/home/bend/.cache/rusty-tiles-f1d2-slice)
+    Checking rusqlite v0.40.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.59s

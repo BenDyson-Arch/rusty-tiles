@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/bench/architecture_audit/mesh_approximation/placed_proxy_browser.py", line 178, in <module>
+    main()
+    ~~~~^^
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/bench/architecture_audit/mesh_approximation/placed_proxy_browser.py", line 127, in main
+    viewer.main()
+    ~~~~~~~~~~~^^
+  File "/home/bend/.cache/rusty-tiles-f1d2-slice/tests/f1d1_viewer.py", line 76, in main
+    with subprocess.Popen(['node',str(Path(__file__).parent/'fixtures/f1d1_viewer.cjs',Path(__file__).with_name('f1d2_certificate.py')),f'http://127.0.0.1:{server.server_port}/'],
+                                  ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: str() argument 'encoding' must be str, not pathlib.PosixPath

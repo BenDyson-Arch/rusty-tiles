@@ -1,0 +1,240 @@
+{
+  "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+  "binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+  "source_sha256": {
+    "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+    "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+    "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+    "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+    "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+    "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+    "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+    "docs/architecture/f1d2-certificate-contract.md": "342f064c991ab3f2fcbb753b8629dc237f9a40aebb54e1c256485d3a576d340d"
+  },
+  "driver_sha256": {
+    "bench/architecture_audit/mesh_approximation_f1d2/resource_probe.py": "bae4ea54eb874b9a6d607befb05363c54dbbeacd81034b38f3af72a7ccb9cbea",
+    "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+    "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+  },
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "cpu_count": 20,
+  "invocation": [
+    "/usr/bin/python3",
+    "bench/architecture_audit/mesh_approximation_f1d2/resource_probe.py",
+    "--binary",
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+    "--expected-binary-sha256",
+    "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+    "--production-source",
+    "4553533e64c1494e706888a2c8e3a38a6867ce56",
+    "--artifact-dir",
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases",
+    "--json-output",
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-release.json"
+  ],
+  "cases": [
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/output/result.3tz",
+        "--leaf-triangles",
+        "2048",
+        "--root-proxy-triangles",
+        "1024",
+        "--max-proxy-error-metres",
+        "100.0"
+      ],
+      "source_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/source.glb",
+      "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+      "source_bytes": 149784,
+      "archive_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/output/result.3tz",
+      "triangle_limit": 1024,
+      "requested_error_metres": 100.0,
+      "exit_code": 0,
+      "elapsed_seconds": 17.439025473000584,
+      "peak_rss_kib_wait4": 26388,
+      "user_cpu_seconds": 17.31679,
+      "system_cpu_seconds": 0.012933,
+      "poll_interval_ms": 10,
+      "samples": 1701,
+      "sampled_peaks": {
+        "rss_kib": 14088,
+        "threads": 1,
+        "file_descriptors": 3,
+        "scratch_files": 3,
+        "scratch_bytes": 475920
+      },
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/output/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":4,\"triangles\":8192},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certificate\":{\"accepted_patches\":9215,\"error_metres\":7.000000000000003,\"max_depth\":0,\"patch_face_tests\":16760832},\"geometric_error_metres\":100.0,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":1024,\"triangles\":1023},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":4,\"leaf_triangles\":2048,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d2-adaptive-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":100.0,\"schema_version\":7,\"source_bytes\":149784,\"source_coordinates\":\"local-gltf\",\"triangles\":8192},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/accepted-near-base-cap/output/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":2048,\"routing_geometric_error_metres\":100.0,\"schema_version\":7,\"source_bytes\":149784},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "timeout_seconds": 180,
+      "timed_out": false,
+      "timeout_sent_sigkill_to_process_group": false,
+      "child_reaped": true,
+      "label": "accepted-near-base-cap",
+      "artifact": {
+        "source_triangles": 8192,
+        "proxy_triangles": 1023,
+        "leaves": 4,
+        "base_patch_face_tests": 16760832,
+        "certificate": {
+          "error_metres": 7.000000000000003,
+          "patch_face_tests": 16760832,
+          "accepted_patches": 9215,
+          "max_depth": 0
+        },
+        "base_ceiling_fraction": 0.9990234375,
+        "actual_ceiling_fraction": 0.9990234375,
+        "archive_sha256": "540123c38953f607781c4dd742ae291edc393ba841d27f80c22cc5b9b7aa085c",
+        "archive_bytes": 819964,
+        "member_sha256": {
+          "tileset.json": "3d4506e05dc313a176548df90bd32eb92f2f37972c2aaadb0724d102861baef8",
+          "conversion.json": "691e48250d6199c0cc98baafdb09d463b82841f8ade21149b68addb590e33773",
+          "t/0.glb": "48d31516144ad2020adcbe24ce979e7833c2704ef2db44a06d05f2e5aa0c4b1d",
+          "t/1.glb": "5218f7b2420e953eaa33c8e27ca8a8836bf0cdc660a988d810e9d1d014b6eece",
+          "t/2.glb": "6f7d45226ede8c94c149939e801f40410a3b08fecc68f930439d93464d5f3254",
+          "t/3.glb": "d193578e8688e998db9473fc127520e189b3e17c37ab636e0eafcff20f13590b",
+          "t/root.glb": "7cd3960756be56a4e5c396a30f74b5e158176708e25eedb25b10af22b217ff97"
+        },
+        "output_parent_entries_after_completion": [
+          "result.3tz"
+        ],
+        "independent_geometry_reference": {
+          "kind": "exact_common_box_diameter",
+          "squared_diameter_metres2": 8192,
+          "requested_budget_squared_metres2": "10000",
+          "requested_budget_proved": true,
+          "published_smaller_certificate_independently_proved": false,
+          "scope": "Both decoded nonempty supports lie in the same closed box. Their whole-support Hausdorff distance is <=sqrt(8192)<100m. The reported smaller scalar and precise operational counts are not independently replayed at this size."
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/refused-above-base-cap/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/refused-above-base-cap/output/result.3tz",
+        "--leaf-triangles",
+        "2048",
+        "--root-proxy-triangles",
+        "4096",
+        "--max-proxy-error-metres",
+        "100.0"
+      ],
+      "source_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/refused-above-base-cap/source.glb",
+      "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+      "source_bytes": 149784,
+      "archive_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/refused-above-base-cap/output/result.3tz",
+      "triangle_limit": 4096,
+      "requested_error_metres": 100.0,
+      "exit_code": 2,
+      "elapsed_seconds": 0.010520593999899575,
+      "peak_rss_kib_wait4": 27828,
+      "user_cpu_seconds": 0.005435,
+      "system_cpu_seconds": 0.001807,
+      "poll_interval_ms": 10,
+      "samples": 2,
+      "sampled_peaks": {
+        "rss_kib": 24,
+        "threads": 1,
+        "file_descriptors": 3,
+        "scratch_files": 0,
+        "scratch_bytes": 0
+      },
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"root proxy certificate exceeds the admitted base face-pair work limit of 16777216\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "",
+      "timeout_seconds": 180,
+      "timed_out": false,
+      "timeout_sent_sigkill_to_process_group": false,
+      "child_reaped": true,
+      "label": "refused-above-base-cap",
+      "refusal": {
+        "output_parent_absent": true,
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "root proxy certificate exceeds the admitted base face-pair work limit of 16777216",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/dynamic-cap-control/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/dynamic-cap-control/output/result.3tz",
+        "--leaf-triangles",
+        "2048",
+        "--root-proxy-triangles",
+        "1024",
+        "--max-proxy-error-metres",
+        "6.0"
+      ],
+      "source_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/dynamic-cap-control/source.glb",
+      "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+      "source_bytes": 149784,
+      "archive_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases/dynamic-cap-control/output/result.3tz",
+      "triangle_limit": 1024,
+      "requested_error_metres": 6.0,
+      "exit_code": 2,
+      "elapsed_seconds": 17.772849335999126,
+      "peak_rss_kib_wait4": 28416,
+      "user_cpu_seconds": 17.655931,
+      "system_cpu_seconds": 0.001992,
+      "poll_interval_ms": 10,
+      "samples": 1731,
+      "sampled_peaks": {
+        "rss_kib": 13832,
+        "threads": 1,
+        "file_descriptors": 3,
+        "scratch_files": 0,
+        "scratch_bytes": 0
+      },
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"root proxy could not certify the requested maximum within the patch-face work limit\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "",
+      "timeout_seconds": 180,
+      "timed_out": false,
+      "timeout_sent_sigkill_to_process_group": false,
+      "child_reaped": true,
+      "label": "dynamic-cap-control",
+      "refusal": {
+        "output_parent_absent": true,
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "root proxy could not certify the requested maximum within the patch-face work limit",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        }
+      },
+      "scope": "Actual typed dynamic work refusal after in-memory proof, no workspace. Failed attempt has no published certificate/counters; exact consumed count is established separately by unit/source controls."
+    }
+  ],
+  "status": "pass",
+  "limits": [
+    "Three fixed serial process observations on this Linux host; no total-RSS, allocation, cancellation-latency or performance guarantee.",
+    "wait4 ru_maxrss may include inherited Python launcher residency before exec; it is not pure converter steady-state residency.",
+    "Thread/descriptor/procfs RSS/scratch peaks are sampled and may miss short peaks. ru_maxrss is the child process high-water observation.",
+    "All converter children launch before large artifact decoding to reduce parent-decoder inheritance bias, without claiming its removal.",
+    "The large success independently proves the requested100m budget by common-box diameter. Its smaller published certificate is explicitly not re-certified here.",
+    "Timeout uses process-group SIGKILL and synchronous wait4 reap; sampling is cooperative and the timeout is not a hard latency guarantee."
+  ]
+}

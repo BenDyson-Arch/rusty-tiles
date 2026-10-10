@@ -1,11 +1,14 @@
 # F1d2 fresh optimized resource observations
 
-Prepared resource method for the new schema7/profile
+Fresh resource method and executed observations for schema7/profile
 `f1d2-adaptive-root-proxy-gltf-v1`. This document and
 [resource_probe.py](resource_probe.py) are a fresh method, not a replay of the
-F1d1 resource receipt. No converter execution is claimed here until a frozen
-optimized F1d2 CLI and its receipt are recorded. The coordinator owns builds,
-final source identity and acceptance.
+F1d1 resource receipt. The frozen optimized F1d2 execution passed all three
+serial workloads in `receipts/resource-release.json`; its exact raw identity is
+in [storage-index.json](storage-index.json). The coordinator owns builds and
+final source identity. Production source is
+`4553533e64c1494e706888a2c8e3a38a6867ce56`; optimized binary SHA256 is
+`d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9`.
 
 ## Fixed workloads and acceptance meaning
 
@@ -30,7 +33,7 @@ They execute serially with separate fresh case directories and no force/retry.
    subdivisions to exhaust the tiny remaining work allowance. Require actual
    typed Unsupported with the patch-face work-limit reason and an absent output
    parent. A depth/proposal/base refusal cannot stand in for dynamic admission.
-   This is a feasibility assumption awaiting the frozen F1d2 run. If it fails,
+   This workload reached the dynamic gate on the frozen F1d2 run. If a replay fails,
    retain the failed receipt and revise the bounded authored workload explicitly;
    do not relabel a different outcome or add a production fallback.
 
@@ -100,7 +103,26 @@ python3 bench/architecture_audit/mesh_approximation_f1d2/resource_probe.py \
   --json-output /absolute/f1d2-resource-release.json
 ```
 
-The driver's Python syntax was checked without importing or running a converter.
-Fresh process measurements, any adjusted dynamic workload, final receipt review
-and separate nonauthor review remain pending. Failed/supervised execution receipts
-must remain distinct from accepted observations and from artifact math acceptance.
+## Executed frozen-source results
+
+| Workload | Outcome | Elapsed s | wait4 peak RSS KiB | Sampled RSS KiB | Threads / descriptors | Sampled scratch files / bytes |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| accepted-near-base-cap | Success, 8192→1023 faces | 17.439 | 26388 | 14088 | 1 / 3 | 3 / 475920 |
+| refused-above-base-cap | Typed base face-pair Unsupported; output parent absent | 0.0105 | 27828 | 24 | 1 / 3 | 0 / 0 |
+| dynamic-cap-control | Typed patch-face work Unsupported; output parent absent | 17.773 | 28416 | 13832 | 1 / 3 | 0 / 0 |
+
+The accepted artifact reports 16,760,832 actual tests, 99.90234375% of the
+16,777,216 cap, 9,215 accepted patches and depth0; its published scalar is
+7.000000000000003m. Counts receive independently decoded base arithmetic and
+depth0 consistency checks. The common-box reference proves the requested100m
+budget; the smaller published scalar remains explicitly unproved at this size.
+The dynamic failure has no published certificate or operational counters, so
+exact exhausted work is supported by separate source/unit controls rather than
+an invented report. All three children were reaped; none timed out.
+
+The 24KiB RSS sample on the very short base refusal is a sparse process snapshot,
+not a steady-state memory bound. The wait4 launch-residency limitation and all
+sampling/supervision limits above apply to every row. These measurements do not
+establish a universal RSS or latency guarantee. Final nonauthor review is linked
+from the [evidence README](README.md); failed exploratory execution remains
+separate from accepted observations and artifact math acceptance.

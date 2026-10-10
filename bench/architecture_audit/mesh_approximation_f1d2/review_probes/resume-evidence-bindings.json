@@ -1,0 +1,419 @@
+{
+  "scope": "Nonauthor final-receipt binding checks; no producer build or geometry claim.",
+  "nonauthor": true,
+  "driver_sha256": "b5e159917b294bfaf0b57b5bc7508932739fe00494a73c82bce37dfca8916533",
+  "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "receipts": {
+    "/tmp/rusty-tiles-f1d2-final-evidence/portable-oracle.json": "fc2b6ab49aafa1e550fe0b15b5e343347352b64145bb4759befcff509f2c1a86",
+    "/tmp/rusty-tiles-f1d2-final-evidence/native-oracle.json": "cc0812d9598ac3dca39c131038e5beec344aae6177305b9f21af6e1b2ca1d266",
+    "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser.json": "21207b9155b938bf74897c0ec80e085b9c03fe42f7bf24e15138b1ddafccf5fb",
+    "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-release.json": "4fbde697a46ef49bc190ec59cc352d95476b2fdd6adc5a9146ee4f532378b5ab",
+    "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.json": "e24278c7869a897aff1f2c1dd5f4827df2a1154a5e4d4d2b2bd2a85e9a255581",
+    "/tmp/rusty-tiles-f1d2-final-evidence/source-artifacts.json": "2503b6048c019873d01c78af26453407beb05b9dd66e19056b9026ede9672dba",
+    "/tmp/rusty-tiles-f1d2-final-evidence/package-checks.json": "c25683a948acb6b501add697078edc1c697ab7c5bed7056d953e933acd3fafd9",
+    "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/coordinator-checks.json": "9868abf9ba3e00f011d44dac6bcd33a9530d9b957f359b6ccfbefbd31c47a9b0"
+  },
+  "artifacts": {
+    "portable-oracle.json": [
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/grid/source.glb",
+        "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/grid/result.3tz",
+        "archive_sha256": "0922c5e74ba6d6d87f9f69b90a2e47d72ad03a415f9e9ee91fe0f60fd62560ce",
+        "verified_members": 5,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 960,
+          "accepted_patches": 47,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/materialless/source.glb",
+        "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/materialless/result.3tz",
+        "archive_sha256": "b63291b33c7d95a94f5deda0188a59ba8d69e7244a6bd4669099146736abe9d4",
+        "verified_members": 5,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 960,
+          "accepted_patches": 47,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/instances/source.glb",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/instances/result.3tz",
+        "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+        "verified_members": 19,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 2816,
+          "accepted_patches": 236,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/viewer/source.glb",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/viewer/result.3tz",
+        "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+        "verified_members": 19,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 2816,
+          "accepted_patches": 236,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/coincident-keys/source.glb",
+        "source_sha256": "4529c304584207e388e14c6bd3cf30f6a1f72b73cc0d4e2c196f56b056ef2b9b",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/baseline/coincident-keys/result.3tz",
+        "archive_sha256": "2a57fee0f5e67bbcbffb3d6bf7c79f71c493688ac1c4af34f2cb1fc91a674981",
+        "verified_members": 7,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 1792,
+          "accepted_patches": 78,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/tight-grid/source.glb",
+        "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/tight-grid/result.3tz",
+        "archive_sha256": "ec89c660bce5ec3b2085d6101c4ffe54e3d3ad29c84e8c87b95a222091754eeb",
+        "verified_members": 5,
+        "rejected_controls": 24,
+        "certificate": {
+          "error_metres": 0.4850712500726813,
+          "patch_face_tests": 9912,
+          "accepted_patches": 260,
+          "max_depth": 3
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/nonzero-bump/source.glb",
+        "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/portable-artifacts/nonzero-bump/result.3tz",
+        "archive_sha256": "2f8ec1bd11844df9aa8ce26118f7f83fdc0714d98dadeb39f8ed0ddf36131624",
+        "verified_members": 5,
+        "rejected_controls": 25,
+        "certificate": {
+          "error_metres": 0.25000000000000017,
+          "patch_face_tests": 1408,
+          "accepted_patches": 64,
+          "max_depth": 2
+        }
+      }
+    ],
+    "native-oracle.json": [
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/grid/source.glb",
+        "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/grid/result.3tz",
+        "archive_sha256": "0922c5e74ba6d6d87f9f69b90a2e47d72ad03a415f9e9ee91fe0f60fd62560ce",
+        "verified_members": 5,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 960,
+          "accepted_patches": 47,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/materialless/source.glb",
+        "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/materialless/result.3tz",
+        "archive_sha256": "b63291b33c7d95a94f5deda0188a59ba8d69e7244a6bd4669099146736abe9d4",
+        "verified_members": 5,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 960,
+          "accepted_patches": 47,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/instances/source.glb",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/instances/result.3tz",
+        "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+        "verified_members": 19,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 2816,
+          "accepted_patches": 236,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/viewer/source.glb",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/viewer/result.3tz",
+        "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+        "verified_members": 19,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 2816,
+          "accepted_patches": 236,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/coincident-keys/source.glb",
+        "source_sha256": "4529c304584207e388e14c6bd3cf30f6a1f72b73cc0d4e2c196f56b056ef2b9b",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/baseline/coincident-keys/result.3tz",
+        "archive_sha256": "2a57fee0f5e67bbcbffb3d6bf7c79f71c493688ac1c4af34f2cb1fc91a674981",
+        "verified_members": 7,
+        "rejected_controls": 23,
+        "certificate": {
+          "error_metres": 2.0000000000000013,
+          "patch_face_tests": 1792,
+          "accepted_patches": 78,
+          "max_depth": 0
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/tight-grid/source.glb",
+        "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/tight-grid/result.3tz",
+        "archive_sha256": "ec89c660bce5ec3b2085d6101c4ffe54e3d3ad29c84e8c87b95a222091754eeb",
+        "verified_members": 5,
+        "rejected_controls": 24,
+        "certificate": {
+          "error_metres": 0.4850712500726813,
+          "patch_face_tests": 9912,
+          "accepted_patches": 260,
+          "max_depth": 3
+        }
+      },
+      {
+        "source": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/nonzero-bump/source.glb",
+        "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+        "archive": "/tmp/rusty-tiles-f1d2-final-evidence/native-artifacts/nonzero-bump/result.3tz",
+        "archive_sha256": "2f8ec1bd11844df9aa8ce26118f7f83fdc0714d98dadeb39f8ed0ddf36131624",
+        "verified_members": 5,
+        "rejected_controls": 25,
+        "certificate": {
+          "error_metres": 0.25000000000000017,
+          "patch_face_tests": 1408,
+          "accepted_patches": 64,
+          "max_depth": 2
+        }
+      }
+    ]
+  },
+  "refusals": {
+    "portable-oracle.json": [
+      {
+        "case": "companions",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "alpha",
+        "kind": "unsupported",
+        "message": "partitioning does not preserve blended draw order"
+      },
+      {
+        "case": "uv",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "color",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "tangents",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "textures",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "impossible-count",
+        "kind": "unsupported",
+        "message": "root proxy limit cannot represent every authored component"
+      },
+      {
+        "case": "no-reduction",
+        "kind": "unsupported",
+        "message": "root proxy limit cannot represent every authored component"
+      },
+      {
+        "case": "work-ceiling",
+        "kind": "unsupported",
+        "message": "root proxy certificate exceeds the admitted base face-pair work limit of 16777216"
+      },
+      {
+        "case": "zero-limit",
+        "kind": "invalid_request",
+        "message": "root proxy requires a positive triangle limit"
+      },
+      {
+        "case": "zero-error",
+        "kind": "invalid_request",
+        "message": "root proxy requires finite positive maximum error metres"
+      },
+      {
+        "case": "nonzero-budget-proposal",
+        "kind": "unsupported",
+        "message": "root proxy proposal did not achieve the requested actual reduction"
+      }
+    ],
+    "native-oracle.json": [
+      {
+        "case": "companions",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "alpha",
+        "kind": "unsupported",
+        "message": "partitioning does not preserve blended draw order"
+      },
+      {
+        "case": "uv",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "color",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "tangents",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "textures",
+        "kind": "unsupported",
+        "message": "root proxy requires selected positions-only geometry"
+      },
+      {
+        "case": "impossible-count",
+        "kind": "unsupported",
+        "message": "root proxy limit cannot represent every authored component"
+      },
+      {
+        "case": "no-reduction",
+        "kind": "unsupported",
+        "message": "root proxy limit cannot represent every authored component"
+      },
+      {
+        "case": "work-ceiling",
+        "kind": "unsupported",
+        "message": "root proxy certificate exceeds the admitted base face-pair work limit of 16777216"
+      },
+      {
+        "case": "zero-limit",
+        "kind": "invalid_request",
+        "message": "root proxy requires a positive triangle limit"
+      },
+      {
+        "case": "zero-error",
+        "kind": "invalid_request",
+        "message": "root proxy requires finite positive maximum error metres"
+      },
+      {
+        "case": "nonzero-budget-proposal",
+        "kind": "unsupported",
+        "message": "root proxy proposal did not achieve the requested actual reduction"
+      }
+    ]
+  },
+  "wheel": {
+    "path": "/tmp/rusty-tiles-f1d2-final-evidence/wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl",
+    "sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7",
+    "api": {
+      "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+      "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "package_version": "0.4.0",
+      "package_file": "/tmp/rusty-tiles-wheel-xo8acefr/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+      "wheel_sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7",
+      "empty_path": true,
+      "tests_run": 44,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "ok": true
+    }
+  },
+  "verified_production_files": 93,
+  "final_driver_sha256": {
+    "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+    "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+    "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+    "tests/f1d1_viewer.py": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943",
+    "tests/f1d1_khronos.py": "a6109e38a1c1c742beec0dd81ee975eb5c9e2c6469ab6ae340a9be4921ad8f92",
+    "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204",
+    "bindings/python/tests/test_api.py": "9f192ed37ac701692c48124f8a6a2e966d8a4da1f9c54d8476726663f7e0a4ed",
+    "tests/test_c1_validation.py": "e7d957830a0fbf0e071c6e319d7503a40beae5f31b6c165300dcf74f41a0273c",
+    "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+    "scripts/wheel_acceptance.py": "2a7170529cf44ad8081c64ef569057c7bdddc5eca18395c32902c340ba86dda1",
+    ".github/workflows/ci.yml": "1260d6b29d7f3d74eb812500c97ff6c556d0b1242a0b4fa3f56b4e7660155bfa"
+  },
+  "package": {
+    "path": "/tmp/rusty-tiles-f1d2-final-target/package/rusty-tiles-0.4.0.crate",
+    "sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+    "verified_root_production_files": 89,
+    "removed_workspace_only_lock_packages": [
+      [
+        "portable-atomic",
+        "1.15.0"
+      ],
+      [
+        "pyo3",
+        "0.29.3"
+      ],
+      [
+        "pyo3-build-config",
+        "0.29.3"
+      ],
+      [
+        "pyo3-ffi",
+        "0.29.3"
+      ],
+      [
+        "pyo3-macros",
+        "0.29.3"
+      ],
+      [
+        "pyo3-macros-backend",
+        "0.29.3"
+      ],
+      [
+        "rusty-tiles-python",
+        "0.4.0"
+      ],
+      [
+        "target-lexicon",
+        "0.13.5"
+      ]
+    ],
+    "scope": "Exact root production bytes plus normalized Cargo metadata and included current docs/oracles. No build verification of the packaged archive, publication, tag or release. Evidence-only final review/coordinator receipts can be added after this package."
+  },
+  "coordinator_logs_verified": 11,
+  "passed": true
+}

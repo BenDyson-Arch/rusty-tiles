@@ -1,0 +1,168 @@
+{
+  "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "package_path": "/tmp/rusty-tiles-f1d2-final-target/package/rusty-tiles-0.4.0.crate",
+  "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+  "package_bytes": 3473125,
+  "command": [
+    "cargo",
+    "package",
+    "--locked",
+    "--offline",
+    "--no-verify",
+    "--allow-dirty"
+  ],
+  "exit_code": 0,
+  "verified_production_sha256": {
+    "build.rs": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+    "src/archive3tz.rs": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+    "src/bbox.rs": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+    "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+    "src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+    "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+    "src/error.rs": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc",
+    "src/fixtures.rs": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+    "src/georef.rs": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+    "src/geospatial.rs": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+    "src/geospatial/native.rs": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+    "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+    "src/glb_write.rs": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+    "src/gpu_texture.rs": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+    "src/grid.rs": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+    "src/hlod.rs": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+    "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+    "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+    "src/jpeg.rs": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+    "src/lib.rs": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc",
+    "src/lossless.rs": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+    "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+    "src/mesh.rs": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+    "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+    "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+    "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+    "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+    "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+    "src/mesh_archive/encode/identity.rs": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+    "src/mesh_archive/encode/proxy_identity.rs": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+    "src/mesh_archive/model.rs": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+    "src/mesh_archive/partition.rs": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+    "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+    "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+    "src/mesh_archive/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+    "src/mesh_archive/source/material.rs": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+    "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+    "src/mesh_archive/source/texture.rs": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+    "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+    "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+    "src/output.rs": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+    "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+    "src/pack.rs": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+    "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+    "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+    "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+    "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+    "src/point_sampling.rs": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+    "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+    "src/raster.rs": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+    "src/raster/native.rs": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+    "src/raster_directory.rs": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+    "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+    "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+    "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+    "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+    "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+    "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+    "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+    "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+    "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+    "src/texture.rs": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+    "src/tile.rs": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+    "src/tileset.rs": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+    "src/tileset/resources.rs": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+    "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+    "src/validate.rs": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+    "src/validate/admission.rs": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+    "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+    "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+    "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+    "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+    "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+    "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+    "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+    "src/vector/pipeline/aggregation.rs": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+    "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+    "src/vector/pipeline/geometry.rs": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+    "src/vector/pipeline/geometry/countries_tests.rs": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+    "src/vector/pipeline/geometry/native.rs": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+    "src/vector/pipeline/geometry/portable.rs": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+    "src/vector/pipeline/reuse.rs": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+    "src/vector/pipeline/source.rs": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+    "src/vector/pipeline/source_native.rs": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+    "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+    "src/vector/portable.rs": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+    "src/vector/source_fields.rs": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+    "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+  },
+  "normalized_metadata": {
+    "Cargo.lock": {
+      "original_sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "packaged_sha256": "a0f3da4afb1161dfc6b735f4167e63f39b63dc4faf5a1a5ed95fbacbf4189c74",
+      "removed_package_keys": [
+        [
+          "portable-atomic",
+          "1.15.0"
+        ],
+        [
+          "pyo3",
+          "0.29.3"
+        ],
+        [
+          "pyo3-build-config",
+          "0.29.3"
+        ],
+        [
+          "pyo3-ffi",
+          "0.29.3"
+        ],
+        [
+          "pyo3-macros",
+          "0.29.3"
+        ],
+        [
+          "pyo3-macros-backend",
+          "0.29.3"
+        ],
+        [
+          "rusty-tiles-python",
+          "0.4.0"
+        ],
+        [
+          "target-lexicon",
+          "0.13.5"
+        ]
+      ],
+      "added_package_keys": [],
+      "changed_package_keys": [],
+      "meaning": "Workspace Python binding package plus seven Python-only dependency entries removed; no remaining package changed or new package added."
+    },
+    "Cargo.toml": {
+      "original_manifest_sha256": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+      "packaged_manifest_sha256": "f9112c8e138c088cf1349527a276f8c533441cdf2b7baf35842910f6aa851646",
+      "original_manifest_member": "Cargo.toml.orig",
+      "meaning": "Cargo normalizes registry manifest; original manifest byte-identical. Root crate production source unchanged."
+    }
+  },
+  "omitted_workspace_binding_files": {
+    "bindings/python/Cargo.toml": "Workspace binding crate intentionally excluded from root crate package; separately built/tested installed wheel.",
+    "bindings/python/src/lib.rs": "Workspace binding crate intentionally excluded from root crate package; separately built/tested installed wheel."
+  },
+  "required_docs_and_oracles_sha256": {
+    "docs/architecture/f1d2-certificate-contract.md": "342f064c991ab3f2fcbb753b8629dc237f9a40aebb54e1c256485d3a576d340d",
+    "docs/architecture/f1d2-implementation.md": "f55068a77da26aabc1953ff54a4890cd834166a32d20ddf6b907b412ae887eca",
+    "bench/architecture_audit/mesh_approximation_f1d2/README.md": "cff244d61fce84a0d6fce1f6845b3be0b56ea3c7a3db5d23764a3b8b906df8c4",
+    "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+  },
+  "archive_member_count": 1264,
+  "package_verification_scope": "Exact root production bytes plus normalized Cargo metadata and included current docs/oracles. No build verification of the packaged archive, publication, tag or release. Evidence-only final review/coordinator receipts can be added after this package."
+}

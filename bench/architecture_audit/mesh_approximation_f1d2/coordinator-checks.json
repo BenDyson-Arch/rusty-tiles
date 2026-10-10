@@ -1,0 +1,329 @@
+{
+  "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "recovery_checkpoint": "ceb94a5fbb6f92c74fecfbd74ce32a2a707f366b",
+  "build_environment": {
+    "CARGO_TARGET_DIR": "/tmp/rusty-tiles-f1d2-final-target",
+    "wheel_RUSTY_TILES_DISABLE_NATIVE_JPEG": "1",
+    "native_LIBSQLITE3_SYS_USE_PKG_CONFIG": "1"
+  },
+  "checks": {
+    "rust_portable": {
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/test-portable.log",
+      "sha256": "9a12d70993f1734f265046f4ff2cbd21011ce5331df09cf24b750060475dd854",
+      "bytes": 53692,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "    Finished `release` profile [optimized] target(s) in 26.43s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 289 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 289 filtered out; finished in 0.00s",
+        "test result: ok. 290 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.63s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.55s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s",
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+        "test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.11s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ],
+      "scope": "290 core units, 9 CLI units and integration suites. Two separately printed subprocess results are part of isolation tests; do not sum them as new core tests."
+    },
+    "rust_native": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--features",
+        "native-geospatial,native-jpeg"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/test-native.log",
+      "sha256": "0552f58cb9fc0c4e93ef2fe5bbf471cbe37b9126779ab04df3be6195bb299a71",
+      "bytes": 60739,
+      "provenance": "handoff reports successful final-source execution; retained log checked during resume",
+      "summary": [
+        "    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.53s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 333 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 333 filtered out; finished in 0.00s",
+        "test result: ok. 334 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 47.39s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.56s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.18s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.29s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s",
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s",
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.32s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.79s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+        "test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.49s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.01s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.03s",
+        "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ],
+      "scope": "334 core units, CLI and native/portable integration suites; native environment LIBSQLITE3_SYS_USE_PKG_CONFIG=1. Two subprocess results belong to isolation tests."
+    },
+    "clippy_portable": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--release",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/clippy-portable.log",
+      "sha256": "46cf2a4b1570f7a1c69a7004556064544e20941a22c73247b44a2d402bc6a175",
+      "bytes": 468,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "    Finished `release` profile [optimized] target(s) in 7.37s"
+      ]
+    },
+    "clippy_native": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--features",
+        "native-geospatial,native-jpeg",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/clippy-native.log",
+      "sha256": "8f0777382227413ec51dca873097152f2050fbe27c58733ca7707026b98ee1c7",
+      "bytes": 213,
+      "provenance": "handoff reports successful final-source execution; retained log checked during resume",
+      "summary": [
+        "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.59s"
+      ]
+    },
+    "python_bindings": {
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "rusty-tiles-python"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/test-python-binding.log",
+      "sha256": "585984cda92191502c32d6692d292d3e79529b66be58a0a9f1c0eba558ab66b7",
+      "bytes": 707,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "    Finished `release` profile [optimized] target(s) in 20.07s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+      ]
+    },
+    "clippy_python": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "rusty-tiles-python",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/clippy-python-binding.log",
+      "sha256": "dc56fa72c465100b0abe0cbd630167d3a3c63bf4511fe5700731e3fc75c51249",
+      "bytes": 6667,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "    Finished `release` profile [optimized] target(s) in 8.92s"
+      ]
+    },
+    "format": {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "provenance": "coordinator executed during resume",
+      "summary": []
+    },
+    "installed_wheel": {
+      "command": [
+        "python3",
+        "-B",
+        "scripts/test_python_wheel.py",
+        "/tmp/rusty-tiles-f1d2-final-evidence/wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl",
+        "--report-json",
+        "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.json"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.log",
+      "sha256": "1055a3a50c2ff0de9eb1a19dd539f79b06a6b71b24e9c1e963637dd422a6dc4f",
+      "bytes": 85094,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "Ran 44 tests in 8.312s",
+        "OK"
+      ]
+    },
+    "python_native_cli": {
+      "command": null,
+      "exit_code": 0,
+      "invocation_log_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/python-cli.log",
+      "sha256": "1c194520c8263cc7c79d0d54632b7050c338904f261f687480e699d9dffb1c54",
+      "bytes": 16951,
+      "provenance": "handoff reports successful final-source execution; retained log checked during resume",
+      "summary": [
+        "Ran 127 tests in 43.370s",
+        "OK (skipped=2)"
+      ],
+      "scope": "127 tests,2 skips,43.370 seconds per retained output; handoff invocation environment uses native frozen binary and isolated requirements.",
+      "command_provenance": "Full historical invocation not retained; native CLI/isolated Python environment and result reported in recovery handoff. Retained log independently pins observed suite results."
+    },
+    "build_wheel": {
+      "command": [
+        "maturin",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--out",
+        "/tmp/rusty-tiles-f1d2-final-evidence/wheels"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/build-wheel.log",
+      "sha256": "ad54f882b214dd9b4c96601d856d36c60b3700a668976569c0130d28603f0b74",
+      "bytes": 719,
+      "provenance": "coordinator executed during resume",
+      "summary": [
+        "    Finished `release` profile [optimized] target(s) in 16.65s"
+      ],
+      "scope": "Local linux_x86_64 stable ABI wheel, CPython3.14.7 installed acceptance only; no publication or multi-platform acceptance."
+    },
+    "package": {
+      "command": [
+        "cargo",
+        "package",
+        "--locked",
+        "--offline",
+        "--no-verify",
+        "--allow-dirty"
+      ],
+      "exit_code": 0,
+      "invocation_log_path": "/tmp/rusty-tiles-f1d2-final-evidence/package.log",
+      "sha256": "c9e1a5e70de0a146bebd4e79674d82942653c75a3a505f167fd4128e6852f2b9",
+      "bytes": 116,
+      "summary": [
+        "   Packaging rusty-tiles v0.4.0 (/tmp/rusty-tiles-f1d2-resume)",
+        "    Packaged 1264 files, 12.2MiB (3.3MiB compressed)"
+      ],
+      "package_checks_receipt": "/tmp/rusty-tiles-f1d2-final-evidence/package-checks.json",
+      "package_checks_sha256": "c25683a948acb6b501add697078edc1c697ab7c5bed7056d953e933acd3fafd9",
+      "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+      "scope": "Exact root production bytes plus normalized Cargo metadata and included current docs/oracles. No build verification of the packaged archive, publication, tag or release. Evidence-only final review/coordinator receipts can be added after this package."
+    }
+  },
+  "production_hash_verification": "All 93 production files are byte-identical to Git4553533 and external pins, verified before and after resumed builds/package. Three frozen binaries match external pins; final artifact agent verifies 14 binary/driver inputs stayed unchanged.",
+  "earlier_nonacceptance_attempts": [
+    "Initial portable/native broad artifact drivers reached positives but failed an incorrect bump .125 depth expectation. Corrected final driver observes proposal reduction refusal with same Unsupported/message and Replace preservation; both complete reruns passed.",
+    "Initial local/placed browser launches failed prebrowser due to driver str invocation typo. Corrected local receipt passed before interruption; corrected placed complete rerun passed during resume.",
+    "Exploratory nonuniform tiny-budget proposals include timeout/refusal/success cases; no actual CLI depth gate is claimed. Depth cap and mid-proof cancellation remain separately executed Rust controls.",
+    "Historical portable full test log was not retained; resumed final-source portable optimized full suite and clippy logs replace that evidence gap."
+  ],
+  "limits": [
+    "No total-memory or single meshopt-call cancellation-latency guarantee.",
+    "Independent metric inequalities are necessary consistency checks and do not authenticate arbitrary inflated operational counters.",
+    "Finite lattice/profile refusals do not prove true distance exceeds a requested budget.",
+    "No recursive hierarchy, textured proxy, exact world-placement error or release acceptance."
+  ],
+  "completion": "All coordinator-owned build/test/lint/format/package checks complete. Separate final nonauthor source/evidence acceptance is recorded in review.md and its own pinned review probes."
+}

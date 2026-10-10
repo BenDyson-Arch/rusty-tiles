@@ -1,11 +1,11 @@
 # F1d2 separate nonauthor review
 
-Status: frozen production source and portable CLI inspected; independent
-arithmetic/checker controls and one separate reviewer-authored producer replay
-completed. Broader final artifact, adapter and resource evidence remains pending.
-No final production acceptance conclusion follows from this draft. The
-reviewer owns this record and `review_probes/` only; no production edit, Cargo
-build or Git operation was performed.
+Status: fresh resume **NONAUTHOR** source and final artifact/evidence review
+complete; bounded F1d2 acceptance with the explicit proof limits below.
+No production or evidence blocker remains in this reviewed slice. This reviewer owns this
+record and new `review_probes/` files only, authored no production or acceptance
+driver change, and performed no Cargo/build or Git operation. The prior draft
+was read as evidence to challenge, not adopted as acceptance truth.
 
 The review applies `AGENTS.md`, the architecture gate, the settled
 [F1d2 contract](../../../docs/architecture/f1d2-certificate-contract.md) and the
@@ -139,14 +139,9 @@ This is actual frozen-CLI execution, distinct from the arithmetic reproduction
 and authored checker controls above. It does not authenticate exact counters
 merely because independent and producer metrics coincide in this case.
 
-## Pending final evidence
+## Earlier findings and corrected expectations
 
-The review still requires the complete final artifact manifest and broad pinned
-executions: unchanged authored-key/full-detail/placement/PBR evidence, actual
-base/dynamic/depth refusal and mid-proof abort preservation, installed
-adapter/report agreement, and fresh bounded resource observations. Current
-arithmetic, authored-support and single-artifact probes do not discharge the
-remaining execution obligations. A base-refusal message/checker mismatch was
+A base-refusal message/checker mismatch was
 reported to the coordinator: the oracle requires the numerical cap in the error
 message while the initial admission message omitted it. The frozen source now
 includes the cap. Two checker sensitivity gaps were also reported before execution:
@@ -156,8 +151,161 @@ on an unrelated nonzero error without requiring the intended Unsupported proof
 gate. The current corrected drivers enforce canonical exact positive CLI report
 equality and the same Unsupported error message on Replace refusal; stdout
 corruptions were added. These are resolved checker/message gaps, not executed
-production defects. Final corrected-driver pins and broad receipts remain to be
-verified.
+production defects. Final corrected-driver pins and broad receipts were verified in the fresh
+review below. Incomplete provisional broad runs and the pre-browser invocation
+typo are distinct from final acceptance receipts and production defects.
+
+## Fresh source and probe review
+
+The fresh reviewer read `AGENTS.md`, the architecture gate, settled contract,
+implementation and all three preimplementation audits, then independently
+inspected the production owner and exact reader. The previous draft was not
+used as source truth. The new [resume identity receipt](review_probes/resume-identities.json)
+re-hashes all 93 production files against the external handoff manifest, plus
+the portable, native and optimized binaries. All match production4553533.
+Source-to-build provenance remains coordinator-owned; bytes were independently
+checked rather than inferred from a commit label alone.
+
+The integer-cover argument, both-support outward reconstruction, exact singleton
+and corner-support shortcuts after finite admission, exhaustive target scans,
+single global accounting, fixed DFS bound and pre-workspace certification
+described above were checked afresh. The budget is consumed by meshopt's
+absolute-error proposal tolerance; changing it can alter reduction before
+certification. No budget-independent candidate premise is accepted.
+
+After reading their implementations, the fresh reviewer successfully repeated
+the [interval enclosure probe](review_probes/resume-interval-enclosure.json),
+[authored complete-cover and counter controls](review_probes/resume-checker-controls.json)
+and [separate literal-fixture frozen CLI replay](review_probes/resume-producer-replay.json).
+These retain their current driver, checker and executable identities. The first
+is arithmetic reproduction, the second authored exact geometry/checker evidence,
+and the third actual producer output independently decoded and recertified.
+The inflated-counter control still passes the necessary metric inequalities:
+they do not authenticate exact producer operational counters.
+
+## Corrected final evidence inspected
+
+Each final corrected portable/native run contains five baseline artifacts with
+115 rejected corruption controls, eleven admission refusals, a tight grid and
+a nonzero bumped grid. The reviewer independently verified all fourteen
+successful source/archive/member bindings, canonical JSON equality of actual
+CLI and published reports, and all twenty-four typed refusal responses and
+absent output parents. Both 0.125 m bumped requests exercise the same Unsupported
+proposal gate under Replace and preserve sentinel bytes and directory. The
+tight and bumped artifacts reject respectively 24 and 25 corruption controls
+per executable. The self-tests remain synthetic evidence: six positive cases
+and 39 rejected controls per broad run.
+
+| Actual artifact, portable and native | Decoded faces | Published local bound | Independent squared cover bound | Needed tests / leaves / depth |
+| --- | ---: | ---: | ---: | --- |
+| Tight 0.5 m grid | 32 → 15 | 0.4850712500726813 m | 4/17 | 9912 / 260 / 3 |
+| Nonzero 0.5 m bump | 32 → 2 | 0.25000000000000017 m | 1/16 | 1408 / 64 / 2 |
+
+The tight grid materially improves on its independently computed historical
+2 m whole-face pairing bound. That historical bound is a tightening comparison,
+never a lower bound on the subdivided certificate. Matching metrics in these
+receipts do not supply exact operational authentication.
+
+[resume_evidence_bindings.py](review_probes/resume_evidence_bindings.py) and
+its [receipt](review_probes/resume-evidence-bindings.json) verify final driver
+bytes and actual source/archive/member/report bindings rather than trusting
+receipt status alone. The receipt pins final portable/native broad executions,
+placed consumer, optimized resource observations, wheel and final source map.
+The broad driver digest is
+`e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf`;
+the exact checker digest is
+`8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7`;
+the artifact reader digest is
+`ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead`.
+The complete map includes independent leaf reader, browser drivers and installed
+API/validation drivers.
+
+The fresh placed public consumer receipt uses native binary
+`c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3`,
+Cesium 1.146.0 and Chromium 153.0.8010.12. Natural SSE 16 displays 44 root
+faces from afar and 192 unchanged leaf faces nearby; six complete coarse
+membership arrays and six fine original-triangle tuples match public queries.
+Wrong labels produce zero matches. There are no page errors, failed requests or
+external requests. Decimal80 independently defines the Brisbane WGS84 frame,
+cameras and targets. Basis/origin errors are below 2e-15 / 1e-8 m; missing
+placement, wrong height and swapped axes are rejected sensitive controls.
+Historical F1d1 `frozen_requested_*_match=false` fields compare old constants;
+the current command explicitly requires native4553533's actual hash and all
+current identities were checked. This is one placed consumer and local decoded
+surface proof, not an exact world Hausdorff result.
+
+The optimized near-cap resource run uses binary
+`d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9`.
+It emits 1023 proxy faces from 8192, reports 16,760,832 tests (99.9023% of
+the fixed cap), 9215 accepted patches at depth zero and a 7.000000000000003 m
+scalar. Its exact common-box reference establishes the requested 100 m budget;
+the smaller 7 m scalar is explicitly **not independently recertified at this
+size**. Base-limit and dynamic patch-limit cases return their intended typed
+Unsupported reasons before output-parent creation. Three serial children were
+reaped without timeout. The successful process's 17.439 s, wait4 26,388 KiB and
+sampled 14,088 KiB RSS are host observations; sampled peaks and Python launcher
+residency limit interpretation. These establish no total RSS or latency bound.
+
+The installed local abi3 linux_x86_64 wheel SHA-256 is
+`028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7`.
+The reviewer checked its file and every pinned ZIP member against the final
+source-artifacts manifest, read the adaptive grid/bump API test and runner, and
+inspected the log/receipt: 44 API tests, zero failures/errors/skips, with empty
+PATH on CPython 3.14.7, plus the validation fixture suite. Installed artifacts
+use the same independent exact reader and reports agree with the published
+report. This establishes no manylinux, other-Python/platform or publishability
+claim.
+
+Coordinator-owned native and final portable Rust logs establish meaningful
+canonical address/depth, exact-cap exhaustive scan, dynamic accounting,
+mixed-subnormal and cancellation controls. Cancellation interrupts at 64
+evaluations in the long-scan control, preserves its first cause through the
+Attempt, and cannot be overridden by final successful math. Concrete proxy
+stage and partial-write tests preserve Replace bytes and clean owned candidates.
+These are executed Rust controls plus inspected ownership, distinct from a CLI
+mid-proof cancellation experiment. No CLI depth-cap fixture was established:
+the bumped tight request changes proposal admission, and tiny nonuniform
+feasibility attempts supply no depth-gate acceptance. Depth semantics rely on
+direct meaningful boundary controls and source proof, with actual base/dynamic
+gates established separately. Full-detail replays and core glTF consumer checks
+remain bounded retained evidence listed in the final index; core validation
+does not prove metadata extensions.
+
+## Final conclusion boundary
+
+The root crate package SHA-256 is
+`0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd`.
+The reviewer independently opened its tar archive: all 89 included root
+production files equal reviewed source bytes, `Cargo.toml.orig` equals the
+original manifest, and included contract, implementation and exact oracles match
+their recorded snapshot. Cargo's normalized lock removes the binding crate and
+seven Python-only dependencies; no retained package entry changes and none is
+added. The root package intentionally omits workspace Python binding files;
+their separately pinned wheel was built and tested above. This package used
+`--no-verify`; no packaged-crate rebuild or release acceptance is inferred.
+Final evidence-only coordinator/review records may follow the package snapshot
+without changing this production identity.
+
+All eleven final coordinator check logs have matching byte counts/SHA-256 and
+successful recorded exit statuses, including retained final portable tests,
+native tests, portable/native/binding lints, binding tests, formatting, wheel
+build/installed tests and package. The reviewer independently checked lossless
+recovery of the indexed receipt snapshot; all 49 entries matched their stored
+and original identities and still-available raw paths. The storage verifier
+also passed deterministic recompression. The
+[package/storage receipt](review_probes/resume-package-storage.json) pins that
+snapshot; final indexing may add these reviewer records without changing any
+executed production/driver/artifact identity.
+
+No inspected production or evidence blocker remains for the bounded F1d2
+complete-local-surface proof slice, bound to production4553533, the three
+frozen binaries, corrected driver hashes, final artifact/member receipts,
+installed wheel and package above. This is the fresh nonauthor acceptance
+conclusion. It does not claim that every preimplementation CLI fixture
+aspiration was executed: the absent actual CLI depth-cap fixture, separate
+Rust cancellation evidence, exact-counter authentication limit, unproved large
+7 m resource scalar and local/world distinction remain explicit. These limits
+prevent promotion to broader approximation or release acceptance.
 
 No topology, multiplicity, normal/texture/appearance budget, exact world Hausdorff
 error, general CRS, recursive LOD, global legacy removal, universal convergence,
