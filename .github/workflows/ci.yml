@@ -42,7 +42,7 @@ jobs:
       - name: Test native build
         shell: bash
         run: |
-          cargo test --locked --features native-jpeg -- --nocapture 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --features native-jpeg -- --nocapture --test-threads=1 2>&1 | tee "${{ runner.temp }}/c1-library.log"
           python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
       - name: Independently check validation controls and finite work
         run: |
