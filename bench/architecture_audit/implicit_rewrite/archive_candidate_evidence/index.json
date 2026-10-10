@@ -28,9 +28,9 @@
     },
     {
       "retained_path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/library-test-artifact.json.gz",
-      "sha256": "c896d695caeb881bc4c0510d42e66b7c2a1d660cb74c3d970be4c97a9fa12a45",
-      "uncompressed_sha256": "ac46446ac01069c01d44bf85aedd05e0cdfebd49eeb0781ccb0a56fce214135a",
-      "uncompressed_bytes": 917,
+      "sha256": "08a66c557cd325b91bde122a86db760bb73b4dfbdc38d640e6df959ed0a2c773",
+      "uncompressed_sha256": "803f7fb856ccfd11d5878b8e4192d61a333615634c50bbdeb087851ee4e8d231",
+      "uncompressed_bytes": 1421,
       "original_path": "/tmp/rusty-tiles-archive-read-final-evidence/library-test-artifact.json"
     },
     {
