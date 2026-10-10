@@ -4,7 +4,51 @@ Implementation candidate for [#142](https://github.com/BenDyson-Arch/rusty-tiles
 
 Three Sol 6.1 agents audited [spatial meaning](audits/spatial.md), [ownership](audits/ownership.md) and [acceptance](audits/acceptance.md) before implementation. The separate nonauthor [review](review_probes/review.json) inspects the final candidate and its evidence. Repository AGENTS.md and the architecture gate require this sequence for future foundation slices; green historical tests alone are insufficient.
 
-Production is pinned to `3bd86c352c0a430731528040379ce1765fc11e67`. [build-manifest.json](build-manifest.json) binds all 90 compiled inputs to that Git tree and worktree, unique frozen portable/native binaries, and the installed wheel/extension. Each binary was copied after its build/test exited successfully, while no shared Cargo operation ran. Later commits contain acceptance, documentation and evidence only. Shared target binaries are never acceptance inputs.
+The original placement acceptance is pinned to `3bd86c352c0a430731528040379ce1765fc11e67`. [build-manifest.json](build-manifest.json) binds all 90 compiled inputs to that Git tree, unique frozen portable/native binaries, and the installed wheel/extension. Each binary was copied after its build/test exited successfully, while no shared Cargo operation ran. Shared target binaries are never acceptance inputs. The subsequent preview transport repair has its own source/artifact pin and receipts; the original receipts remain evidence for their original artifacts.
+
+## Python CI transport repair
+
+Python CI on head `f0f4bd0` timed out during terrain preview initialization after
+requesting `tileset.json`; the wheel, native, portable and official Blender jobs
+passed. A separate reviewer then reproduced a six-connection keep-alive deadlock
+on the frozen native binary, without Cesium: four requests complete, two remain
+pending, and closing one served connection releases a pending request. Four
+connections form the sensitive positive control. The CI socket mapping remains
+an inference; the transport defect itself is executed evidence.
+
+The [transport contract](../../../docs/architecture/preview-transport.md) records
+the ownership decision before implementation. Replace tiny_http's defective
+reader admission with Hyper HTTP/1 connection tasks on Tokio. Keep concrete
+selection/routing policy; each accepted connection owns its socket and each
+streamed body owns its file. Idle clients yield, and file reads follow socket
+backpressure. Browser deadlines, retries and rendering assertions are unchanged.
+
+The old [probe receipt](review_probes/preview-stall-results.json) and
+[review](review_probes/preview-stall-review.json) distinguish static observations,
+executed failure and CI inference. The probe source is an original local snapshot,
+with historical source/artifact assertions, rather than a portable CI driver.
+New persistent connection, pipelined GET/HEAD/GET, idle/partial client and slow
+receiver controls run through `tests/native_preview.rs`; Linux additionally
+forces a stopped single-CPU six-connection accept burst.
+
+Repair production is pinned to `5e4dbc30ef1de1f9231e5caf323ac72c52fffdd5`.
+[Manifest](preview-fix-build-manifest.json) verifies all 90 inputs; only
+`Cargo.toml`, `Cargo.lock` and `src/preview.rs` differ from the original pin.
+[Verification](preview-fix-verification.json) records full portable/native Rust,
+the final eight preview tests in both feature sets, workspace lint, unchanged
+terrain and placement browser acceptance, and each binary's 206/106 independent
+placement replay. The newly built wheel passes 39 API tests with empty PATH and
+134/100 CLI parity/refusal cases. [Packaging](preview-fix-source-package.json)
+includes its verification build and root source comparison. Hashed full receipts
+are in the existing [index](receipts/index.json).
+
+The [separate final transport review](review_probes/preview-fixed-review.json)
+and [executed replay](review_probes/preview-fixed-results.json) require all six
+held-open connections to complete and be reusable; the old sensitive control
+fails that exact requirement. Sixteen active clients also progress while idle,
+partial and four unread 64MiB receivers stay open. These finite cases do not
+establish universal resource/liveness bounds. Hosted CI must pass again on the
+updated head; earlier platform greens do not accept changed dependencies.
 
 ## Disposition and clean ownership
 

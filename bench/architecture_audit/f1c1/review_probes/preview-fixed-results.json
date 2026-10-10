@@ -1,0 +1,62 @@
+{
+  "source_commit": "5e4dbc30ef1de1f9231e5caf323ac72c52fffdd5",
+  "compiled_inputs_verified": 90,
+  "binary_sha256": "a053b3ac570b13edd4cc56e937d10b1605325788382f78bce4a51346cc42a0ea",
+  "old_control_binary_sha256": "bef6518c234783caaa41a1d4c416e22dab2001d8067de379f537864cf61d503e",
+  "probe_sha256": "7ca18cbbd41b913f110a98ba4a08546e192deae283fb896d85a7903bb5c444df",
+  "cache": "/home/bend/.cache/rusty-tiles-preview-fixed-review-xp3fihno",
+  "executions": [
+    {
+      "name": "old-sensitive-control",
+      "complete_while_all_six_keepalives_held": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "matches_exact_complete_requirement": false,
+      "phase_seconds": 0.5,
+      "pending_before_release": [
+        4,
+        5
+      ],
+      "response_released_by_closing_one_served_connection": true
+    },
+    {
+      "name": "fixed-held-open-burst",
+      "complete_while_all_six_keepalives_held": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "matches_exact_complete_requirement": true,
+      "phase_seconds": 0.5,
+      "all_six_connections_reused_without_close": true
+    },
+    {
+      "name": "fixed-idle-partial-backpressure",
+      "idle_clients": 8,
+      "partial_clients": 8,
+      "unread_64MiB_receivers": 4,
+      "receiver_buffers_bytes": [
+        8192,
+        8192,
+        8192,
+        8192
+      ],
+      "complete_clients": 16,
+      "reused_clients": 16,
+      "pipelined_streamed_GET_HEAD_GET": "passed",
+      "all_other_clients_held_open": true
+    }
+  ],
+  "status": "passed",
+  "limits": [
+    "Linux frozen portable artifact; no browser/native/hosted-platform execution in this probe.",
+    "Finite client/stream workload establishes progress here, not universal resource or liveness bounds.",
+    "Pinned old control is native and fixed artifact is portable, but preview is feature-independent and both previews use the same literal fixtures/HTTP sequence."
+  ]
+}

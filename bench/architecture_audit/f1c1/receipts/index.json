@@ -145,5 +145,117 @@
     "uncompressed_bytes": 400,
     "uncompressed_sha256": "7d192dd3136a0695a402644716670cf5d929a5850a45f01c37c7544074c84bf9",
     "compressed_sha256": "b1eeb356b67cc8946de50545c0f022f40114cef0e33ca48b67d1c5a9dd88052a"
+  },
+  {
+    "source_name": "preview-fix-portable-rust.log",
+    "path": "receipts/preview-fix-portable-rust.log.gz",
+    "uncompressed_bytes": 49756,
+    "uncompressed_sha256": "af60dce8bcf7e1d081ccf3489069472ecb25e045e94db8d394ed01da4ae883b6",
+    "compressed_sha256": "2b8f1ab67e978cca8a369abb67c0535ea40cb1af5755e77b519829098adba5b5"
+  },
+  {
+    "source_name": "preview-fix-native-rust.log",
+    "path": "receipts/preview-fix-native-rust.log.gz",
+    "uncompressed_bytes": 56607,
+    "uncompressed_sha256": "c10ea6d5d4e811fbecc5d3f41e765d45bd92a297043755cf8313014f42678a5c",
+    "compressed_sha256": "a52c6eba2c489696711010e75a86dff9af8e24d1378942e600b4def9c2eb2a67"
+  },
+  {
+    "source_name": "preview-fix-final-preview-rust.log",
+    "path": "receipts/preview-fix-final-preview-rust.log.gz",
+    "uncompressed_bytes": 929,
+    "uncompressed_sha256": "66a09a1e1ff32fbf0a578bd9b7228eec0af18d4d6b97d878d8c0a0adf26a6742",
+    "compressed_sha256": "19a36dc288dd17c0e2af005e78540b9ccb095da44d5073b73919c477b4b694fd"
+  },
+  {
+    "source_name": "preview-fix-final-native-preview-rust.log",
+    "path": "receipts/preview-fix-final-native-preview-rust.log.gz",
+    "uncompressed_bytes": 929,
+    "uncompressed_sha256": "2e3f9bdfb2bd7c2242c0532773f97f986b48bd7bc752ca3e2ecbe49c81355d77",
+    "compressed_sha256": "36e88925526f8263ba285b4bfb9037fc3159e21e40df8db9b70b70c7427fdea2"
+  },
+  {
+    "source_name": "preview-fix-clippy.log",
+    "path": "receipts/preview-fix-clippy.log.gz",
+    "uncompressed_bytes": 1276,
+    "uncompressed_sha256": "088d11a81e82c085adbfcf5bb7f7278eb0e7bc3835c570fb801fe390c98fc1dc",
+    "compressed_sha256": "eb000429acc915a5d451bf44f8901d2d4166eb0dc5def413bafc2de8e8d4ab32"
+  },
+  {
+    "source_name": "preview-fix-native-clippy.log",
+    "path": "receipts/preview-fix-native-clippy.log.gz",
+    "uncompressed_bytes": 241,
+    "uncompressed_sha256": "b9901879f5ab8126cac6e657d7720438bdce1743646a9bec5370cbacd2c37c6a",
+    "compressed_sha256": "c0ff6002c0ee34b1c1e069acaca5935ba4837fd0f977d91b026bb54a510283ad"
+  },
+  {
+    "source_name": "preview-fix-python-rust.log",
+    "path": "receipts/preview-fix-python-rust.log.gz",
+    "uncompressed_bytes": 567,
+    "uncompressed_sha256": "b41d1c374667309acb7eed20c5184c472d8ee1621b00e80b0cbd9d5bebb3d64a",
+    "compressed_sha256": "74e6bf00ceb00d465587513aba84e87b8d5a7456944cada77103a78f68b9e615"
+  },
+  {
+    "source_name": "preview-fix-portable-placement.json",
+    "path": "receipts/preview-fix-portable-placement.json.gz",
+    "uncompressed_bytes": 953215,
+    "uncompressed_sha256": "fe9a345abf8101a556f218293b84f40302bc10158f3f4158a7a20d0dd9f9ff06",
+    "compressed_sha256": "aef0ad5bb8ac9401019b42247ef100e1d50ccbbb340cb6fc3ae7a69ee01808d8"
+  },
+  {
+    "source_name": "preview-fix-native-placement.json",
+    "path": "receipts/preview-fix-native-placement.json.gz",
+    "uncompressed_bytes": 953213,
+    "uncompressed_sha256": "0439c6c2e78782c18853bbe268fd449e141429c80b529e4f74e421e28ae56464",
+    "compressed_sha256": "59f1b8d096885397e905a20ea983c2229e4505a144da09a581a530f8773993a6"
+  },
+  {
+    "source_name": "preview-fix-placement-browser.json",
+    "path": "receipts/preview-fix-placement-browser.json.gz",
+    "uncompressed_bytes": 76779,
+    "uncompressed_sha256": "fd15ca772c3f54f3fd652a0a8c571f581cb942a6f6a78379f47ca5492ac58243",
+    "compressed_sha256": "e1e4345e867ae0ee10d702bf777928d9c3ca47e28d5f0249d88a1a6be845ded3"
+  },
+  {
+    "source_name": "preview-fix-terrain-browser.json",
+    "path": "receipts/preview-fix-terrain-browser.json.gz",
+    "uncompressed_bytes": 77089,
+    "uncompressed_sha256": "7ce259108b2050db08ec148f1434127f070092880eb0d76fe8710e74c2e6b8ff",
+    "compressed_sha256": "e213e6fd9b45184cfd8f99ca58c5d0b4541cbebb1da4e71bf0bea6ccc58c9a2d"
+  },
+  {
+    "source_name": "preview-fix-wheel-api.json",
+    "path": "receipts/preview-fix-wheel-api.json.gz",
+    "uncompressed_bytes": 491,
+    "uncompressed_sha256": "3a4a3ea9bb1c1ae73f162f79db6ca5ceb6caf31a287a2dafebbdc95c8c8bd0b7",
+    "compressed_sha256": "369d00130b9e05f16b3c3b19c72ea689e40bde239be18497f46cae79c4d54c7d"
+  },
+  {
+    "source_name": "preview-fix-wheel-placement.json",
+    "path": "receipts/preview-fix-wheel-placement.json.gz",
+    "uncompressed_bytes": 53106,
+    "uncompressed_sha256": "1d2c47b5d8090d747830cd280533382dbdd586b91118646ff3674bcbbc3f576a",
+    "compressed_sha256": "27055272822b1997178ed2bc44738a4338e49b762fe15386c82373526e3e4a38"
+  },
+  {
+    "source_name": "preview-fix-source-package.log",
+    "path": "receipts/preview-fix-source-package.log.gz",
+    "uncompressed_bytes": 401,
+    "uncompressed_sha256": "3731ed564aa374118119081bed4dad80fc00d33d63b3c7a8734d7b114285a5a8",
+    "compressed_sha256": "e58f37779f759c6c62c8ad69a874abea61c4a8b7ae0dd815df7fb596a6f46524"
+  },
+  {
+    "source_name": "preview-fix-wheel-build.log",
+    "path": "receipts/preview-fix-wheel-build.log.gz",
+    "uncompressed_bytes": 817,
+    "uncompressed_sha256": "7b6eff10fdcec0b31d3607936f24ccdf4b066bae763c04d3af6e10475a64a3ac",
+    "compressed_sha256": "65b15cedefd49a272fd07276366d8758923b4705f954a90731d7014ba5a1255d"
+  },
+  {
+    "source_name": "ci-python-failure-f0f4bd0.log",
+    "path": "receipts/ci-python-failure-f0f4bd0.log.gz",
+    "uncompressed_bytes": 11383,
+    "uncompressed_sha256": "57649b90f3d5cdf86293eb85ed7d5e56c57919ec66a54d3d0a8fdd01d1b8617a",
+    "compressed_sha256": "b19cc9de84625cde49eb3211bf2b992c77c36a4fdd6f0c999f302dac879bf8ee"
   }
 ]

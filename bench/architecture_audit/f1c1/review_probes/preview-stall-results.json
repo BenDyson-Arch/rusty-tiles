@@ -1,0 +1,64 @@
+{
+  "artifact_sha256": "bef6518c234783caaa41a1d4c416e22dab2001d8067de379f537864cf61d503e",
+  "preview_source_sha256": "97b0c196e09d653e9113bb04a04ea529194387b73066ce9aa0fd8207ac07214e",
+  "probe_sha256": "16602b376919212813766200804b2cf9a7035734cb333910d4c609f900d2adb6",
+  "cache": "/home/bend/.cache/rusty-tiles-preview-owner-review-c9brehvh",
+  "cases": [
+    {
+      "connection_count": 4,
+      "cpu_affinity": [
+        0
+      ],
+      "completed_while_keepalive_held": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "pending_while_keepalive_held": [],
+      "thread_wait_channels": {
+        "3243933": "futex_wait",
+        "3243935": "inet_csk_wait_for_connect",
+        "3243936": "futex_wait",
+        "3243937": "wait_woken",
+        "3243938": "wait_woken",
+        "3243939": "wait_woken",
+        "3243940": "wait_woken",
+        "3243941": "futex_wait",
+        "3243942": "futex_wait",
+        "3243943": "futex_wait"
+      }
+    },
+    {
+      "connection_count": 6,
+      "cpu_affinity": [
+        0
+      ],
+      "completed_while_keepalive_held": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "pending_while_keepalive_held": [
+        4,
+        5
+      ],
+      "thread_wait_channels": {
+        "3243955": "futex_wait",
+        "3243956": "inet_csk_wait_for_connect",
+        "3243957": "futex_wait",
+        "3243958": "wait_woken",
+        "3243959": "wait_woken",
+        "3243960": "wait_woken",
+        "3243961": "wait_woken",
+        "3243962": "futex_wait",
+        "3243963": "futex_wait",
+        "3243964": "futex_wait"
+      },
+      "completed_after_one_active_connection_closed": [
+        4
+      ]
+    }
+  ]
+}

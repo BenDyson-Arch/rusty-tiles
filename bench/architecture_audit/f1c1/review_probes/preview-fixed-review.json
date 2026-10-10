@@ -1,0 +1,130 @@
+{
+  "status": "review_complete_no_blockers_in_supported_scope",
+  "reviewer_role": {
+    "production": "separate nonauthor; no production/dependency/browser edits, no Cargo or commits",
+    "authored_acceptance": "tests/native_preview.rs persistent framing helpers, portable idle/partial/backpressure/reuse regression and Linux stopped single-CPU regression; disclosed test authorship",
+    "own_execution": "preview_stall_review.py and preview_fixed_review.py against uniquely frozen artifacts"
+  },
+  "source_commit": "5e4dbc30ef1de1f9231e5caf323ac72c52fffdd5",
+  "fixed_portable_binary": {
+    "path": "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-5e4dbc3",
+    "sha256": "a053b3ac570b13edd4cc56e937d10b1605325788382f78bce4a51346cc42a0ea"
+  },
+  "identity": {
+    "compiled_inputs_verified_against_git_and_worktree": 90,
+    "compiled_inputs_changed_from_original_placement_pin": [
+      "Cargo.lock",
+      "Cargo.toml",
+      "src/preview.rs"
+    ],
+    "build_manifest_sha256": "481a09837f6a5f01d1b503cd8b38f4c696cd73964d326f2ac8f94d36f2237a0d",
+    "binary_checked_before_and_after_own_execution": true,
+    "source_sha256": {
+      "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+      "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+      "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "docs/architecture/preview-transport.md": "697b5b4197ea6eda5baf7a87b82d9879d26bb43963985b48fec563e4542856f4",
+      "tests/native_preview.rs": "6dc63b3d09cb1d4ce9ed28b36d6e3a9610ab46af4dcbe6c656654e308a298522"
+    }
+  },
+  "static_findings": [
+    {
+      "disposition": "replace justified",
+      "finding": "The independently reproduced old tiny_http idle-reader admission race belongs to transport connection ownership. Hyper HTTP/1 and Tokio independently scheduled connection tasks remove that shared reader pool without browser retries or longer acceptance deadlines.",
+      "paths": [
+        "src/preview.rs:134",
+        "Cargo.toml:73",
+        "docs/architecture/preview-transport.md"
+      ]
+    },
+    {
+      "disposition": "retain within local preview domain",
+      "finding": "Selected-root validation, canonical path fence, method policy, MIME mapping and no-cache policy remain concrete and unchanged in meaning. URL announcement follows selection validation and successful bind."
+    },
+    {
+      "disposition": "ownership reviewed",
+      "finding": "Listener admits each socket into its own task. That task owns the socket/service. ReaderStream body owns its Tokio file; poll-driven body/socket I/O yields under backpressure. Malformed/disconnected socket failure ends that connection; listener/runtime errors return process failure."
+    },
+    {
+      "disposition": "framing reviewed and probed",
+      "finding": "Explicit Content-Length frames full and streamed responses. Hyper suppresses HEAD body; independent pipelined GET/HEAD/GET exact-byte framing passed. No whole-file asset collection is introduced."
+    },
+    {
+      "disposition": "dependency surface reviewed",
+      "finding": "Only required HTTP/1 server and Tokio runtime/net/fs/io features are selected. tiny_http is removed. Local pinned Hyper/Tokio/ReaderStream source ownership agrees with production use; no router/framework or bespoke codec added."
+    }
+  ],
+  "own_executed_evidence": {
+    "receipt": "preview-fixed-results.json",
+    "receipt_sha256": "4970f36a985f53ec410b608e1f28ba53b44a93072d381ad2172fe7fb26ab6db6",
+    "probe": "preview_fixed_review.py",
+    "probe_sha256": "7ca18cbbd41b913f110a98ba4a08546e192deae283fb896d85a7903bb5c444df",
+    "old_control": "old artifact serves four of six held-open sockets, two pending; closing one served socket releases a pending response",
+    "fixed_sensitive_replay": "same stopped single-CPU six-client sequence serves and reuses all six while every connection stays open",
+    "independent_backpressure": "sixteen clients complete and reuse while eight idle, eight partial-header and four unread 64 MiB receivers remain open; observed receiver buffers 8192 bytes",
+    "file_semantics": "independently known 196608-byte payload, exact pipelined streamed GET/HEAD/GET bodies, lengths and MIME",
+    "artifact_comparison": "old frozen native versus fixed frozen portable; feature-independent preview uses identical literal fixture and HTTP schedule"
+  },
+  "historical_defect": {
+    "review": "preview-stall-review.json",
+    "sha256": "ca49dfeed5fe87cb91a57c88caef05280a5898a31f9371aff308089d86adce32",
+    "receipt": "preview-stall-results.json",
+    "sha256_receipt": "47e9fc1561f4394be0114b61de089252563c192864dcd68e45dbda865ccc8e17",
+    "status": "retained historical executed old defect; repaired in independently replayed fixed artifact",
+    "CI_mapping": "consistent with Cesium pending manifest, but exact original CI socket mapping remains inference"
+  },
+  "coordinator_receipts_inspected_only": {
+    "preview-fix-final-preview-rust.log": {
+      "sha256": "66a09a1e1ff32fbf0a578bd9b7228eec0af18d4d6b97d878d8c0a0adf26a6742",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-terrain-browser.json": {
+      "sha256": "7ce259108b2050db08ec148f1434127f070092880eb0d76fe8710e74c2e6b8ff",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-placement-browser.json": {
+      "sha256": "fd15ca772c3f54f3fd652a0a8c571f581cb942a6f6a78379f47ca5492ac58243",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-native-clippy.log": {
+      "sha256": "b9901879f5ab8126cac6e657d7720438bdce1743646a9bec5370cbacd2c37c6a",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-clippy.log": {
+      "sha256": "088d11a81e82c085adbfcf5bb7f7278eb0e7bc3835c570fb801fe390c98fc1dc",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-wheel-api.json": {
+      "sha256": "3a4a3ea9bb1c1ae73f162f79db6ca5ceb6caf31a287a2dafebbdc95c8c8bd0b7",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    },
+    "preview-fix-source-package.json": {
+      "sha256": "d114b05069f25b82f72bc9a3f73a7f763db113fc3bddbbb5bd356b5b7df94c49",
+      "ownership": "coordinator execution, inspected read-only; not independently run by reviewer"
+    }
+  },
+  "coordinator_receipt_observations": {
+    "preview_regressions": "final portable log reports all eight pass, including authored Linux sensitivity test and portable persistent/backpressure test",
+    "terrain_browser": "receipt reports ok true, four terrain leaves, first/refreshed height/clamp checks and imagery proof; no browser errors",
+    "wheel_api": "receipt reports ok true; execution belongs to coordinator"
+  },
+  "earlier_placement_review": {
+    "review": "review.json",
+    "sha256": "13adfd7e9d5e8660140a9c196bbbe1a85bbc6e48662befd74923c354f248e65d",
+    "source_commit": "3bd86c352c0a430731528040379ce1765fc11e67",
+    "status": "left frozen; all placement compiled inputs unchanged in fixed production pin; this transport review does not claim newly executed placement math/API proof"
+  },
+  "primary_dependency_references": [
+    "https://hyper.rs/guides/1/server/hello-world/",
+    "https://docs.rs/tokio-util/latest/tokio_util/io/struct.ReaderStream.html",
+    "https://docs.rs/hyper/latest/hyper/server/conn/http1/struct.Builder.html"
+  ],
+  "limits": [
+    "Own fixed execution is Linux portable HTTP only; browser, native suite, wheel, package and hosted-platform runs belong to coordinator or CI.",
+    "Held-open phase observations are finite (0.5 seconds); old source ownership explains structural starvation. Fixed probes establish progress for specified workloads, not universal liveness/resource limits.",
+    "Retained synchronous canonicalization/stat has no universal filesystem latency guarantee; canonical path check versus subsequent open preserves existing local-preview mutable-filesystem scope rather than asserting atomic adversarial containment.",
+    "Malformed/disconnect isolation is statically reviewed, not a new independently executed malformed-client test.",
+    "Hosted platform CI remains a gate; this is bounded foundation review, not release authorization."
+  ],
+  "blocking_findings": []
+}
