@@ -1,0 +1,373 @@
+{
+  "record": "Bounded next vector compression codec/source-domain PREPARATION audit",
+  "created_at_utc": "2026-10-10T10:49:24.891774+00:00",
+  "checkout": "/tmp/rusty-tiles-c1-payload-foundation",
+  "coordinator_provided_source": "2ebfb749 (provided by coordinator; no Git commands used to independently resolve full commit)",
+  "scope": "Codec/source-domain role only. File/source identity, replacement semantics, adapters, numeric ceilings and lifecycle acceptance are a separate coordinator/lifecycle lane.",
+  "status": "Preparation only; no implementation authority or acceptance. Current C1 exact-source independent acceptance and merge remain current gate. Full A2 remains HELD.",
+  "method": {
+    "performed": [
+      "Bounded local source/doc reads",
+      "Exact source and retained primary SHA256 reads",
+      "Three pinned primary text downloads plus read-only branch-path discovery",
+      "Wrote preparation JSON/Markdown and retained primary copies only under assigned temporary codec directory"
+    ],
+    "not_performed": [
+      "Production source edits",
+      "Git commands",
+      "Cargo/build/install",
+      "Production converter/codec execution",
+      "Failure/corruption probes",
+      "Resource measurements",
+      "Issue writes",
+      "Subagents",
+      "Merges/releases"
+    ]
+  },
+  "consumers": [
+    {
+      "location": "src/vector_encoding.rs:18-32",
+      "owner": "Standalone GLB file mutation; source/path/publication currently mixed with codec",
+      "observation": "GLB parsed into Value, then in-place direct write. No immutable raw-transform claim follows."
+    },
+    {
+      "location": "src/vector/pipeline/encoding.rs:268-272",
+      "owner": "Existing vector producer Attempt",
+      "observation": "Calls shared compress_document on authored Value+BIN; must consume private codec plan/encode inside existing Attempt, not standalone operation."
+    },
+    {
+      "location": "tests/fixtures/vector_oracle/vector_parallel.py:80-96",
+      "owner": "Historical Python oracle worker",
+      "observation": "Calls hidden helper on generated uncompressed GLB, then wraps fill GLB as modern BATCH_LENGTH-zero b3dm. Codec input remains GLB; wrapper meaning remains outside this slice."
+    },
+    {
+      "location": "src/vector/pipeline/reuse.rs:42-79",
+      "owner": "Vector producer intrinsic configuration/source fingerprint",
+      "observation": "Fingerprints vector_encoding/glb/metadata/encoding. Actual changed codec dependency inputs must remain in fingerprint if ownership moves. Fingerprint invalidation is not decoded-equivalence acceptance."
+    }
+  ],
+  "source_derived_domain": [
+    {
+      "kind": "Unquantized positions",
+      "location": "src/vector/pipeline/encoding.rs:172-186; tests/fixtures/vector_oracle/vector.py:72-81",
+      "representation": "FLOAT VEC3, count N, 12-byte records, exact authored f32 bits. No vertex reorder or requantization."
+    },
+    {
+      "kind": "Quantized positions",
+      "location": "src/vector/pipeline/encoding.rs:227-266; tests/fixtures/vector_oracle/vector.py:85-112",
+      "representation": "normalized UNSIGNED_SHORT VEC3, parent byteStride 8, three components plus two padding bytes; KHR_mesh_quantization required; authored node translation/scale preserved."
+    },
+    {
+      "kind": "Feature IDs",
+      "location": "src/vector/pipeline/encoding.rs:188-203",
+      "representation": "UNSIGNED_SHORT SCALAR in four-byte padded records when items <=65536; FLOAT SCALAR four-byte records otherwise, with upstream exact-ID ceiling 16777217. Preserve EXT_mesh_features attribute-set/propertyTable association, not merely accessor bytes."
+    },
+    {
+      "kind": "Topology",
+      "location": "src/vector/pipeline/encoding.rs:84-169,202",
+      "representation": "POINTS/LINE_STRIP/TRIANGLES modes 0/3/4; U32 scalar index streams; line restart u32::MAX under required pinned KHR_mesh_primitive_restart draft; polygon indicesOffsets, loopIndices, loopIndicesOffsets and loop restart values under EXT_mesh_polygon draft. ATTRIBUTES/NONE is byte-wise lossless; do not reinterpret these as triangle-codec inputs."
+    },
+    {
+      "kind": "Fill outputs",
+      "location": "src/vector/pipeline/encoding.rs:205-214; tests/fixtures/vector_oracle/vector_parallel.py:88-96",
+      "representation": "Ordinary TRIANGLES GLB with exact KHR_materials_unlit/doubleSided/PBR factors, EXT_mesh_features and structural metadata. Do not exclude fill-only content; wrapping happens after codec."
+    },
+    {
+      "kind": "Scalar/raw metadata",
+      "location": "src/metadata.rs:276-346",
+      "representation": "BOOLEAN bitsets; signed INT64 and FLOAT64 little-endian columns; UTF8 STRING values and UINT32 stringOffsets; missing noData sentinels/class definitions; source IDs/layers and aggregation table/class names. All metadata-only views raw and aligned to eight bytes. Raw UINT64 preservation required by format fixtures even though reviewed property-table writer only emits INT64 for integral properties."
+    },
+    {
+      "kind": "Generated array/list meaning",
+      "location": "src/vector/source_fields.rs:48-89; src/vector/pipeline/source_native.rs:371-376,678-732; tests/fixtures/vector_oracle/vector_source.py:183,231",
+      "representation": "Explicit list_fields=json turns arrays (including heterogeneous arrays, exact integers, order and null) into JSON-encoded STRING values. Preserve exact UTF8 content/stringOffsets and ordinary noData semantics. Do not silently classify this currently generated array use as unsupported."
+    },
+    {
+      "kind": "Structural array metadata",
+      "location": "src/metadata.rs:151-165",
+      "representation": "Public PropertyTableProperty can refer to arrayOffsets and stringOffsets; current encode_property_table does not author native structural arrays. Raw view and raw JSON preservation can cover independently authored variable/fixed array tables, but must not be claimed as accepted array authoring or semantic validation without independent controls."
+    },
+    {
+      "kind": "Source bytes/layout",
+      "location": "src/glb.rs:328-355,361-395; tests/fixtures/vector_oracle/vector.py:58-81",
+      "representation": "Reviewed builders create one embedded buffer, append eight-byte-aligned distinct views and distinct accessor-backed stream views; generated view objects have no pre-existing meshopt extension. Sparse accessors, interleaved/shared views, extra buffers/external resources and unknown GLB chunks are not produced by these builders."
+    }
+  ],
+  "primary_invariants": [
+    {
+      "reference": "glTF-core.adoc:521-529,650",
+      "invariant": "Integer schema values may use decimal/exponent notation but must have exact zero fraction; references must point to actual elements. Ordinary as_u64 after floating conversion is not authoritative source interpretation."
+    },
+    {
+      "reference": "glTF-core.adoc:886-898,1124-1141",
+      "invariant": "A view ranges over its selected buffer; accessor offset/effective stride/count/window fit that view. Shared vertex attributes require parent byteStride. Shared references are not intrinsically invalid. Index and vertex attribute data cannot share the same view."
+    },
+    {
+      "reference": "EXT_meshopt_compression.md:73-87,120-147",
+      "invariant": "Codec is defined at whole-view level. Extension byteLength/byteStride/count/ranges and parent stride must agree; ATTRIBUTES stride divisible by four <=256; NONE preserves decoded bytes. Placeholder fallback buffer is large enough, index >=1 in GLB, has only compressed-view parent references, and extension is required when fallback has no source."
+    },
+    {
+      "reference": "KHR_mesh_quantization.md:49-115",
+      "invariant": "Normalized U16 POSITION, original min/max and node dequantization transform keep their meaning; required extension declaration remains. Compression is not a new quantizer or error estimate."
+    },
+    {
+      "reference": "EXT_mesh_features.md:60-74,162-182",
+      "invariant": "Feature accessor is SCALAR/non-normalized; set index names _FEATURE_ID_n; table association and count preserved. FLOAT exact-ID implementation guidance explains source-generated f32 IDs; raw codec preservation does not certify upstream source attribution."
+    },
+    {
+      "reference": "EXT_mesh_polygon.md:29-111; KHR_mesh_primitive_restart-draft.md:27-87",
+      "invariant": "Polygon offsets/loop bindings and restart topology remain authored and ordered. These references are explicitly pinned drafts, not broad ratified glTF claims."
+    },
+    {
+      "reference": "EXT_structural_metadata.md:229-279; 3d-metadata.adoc:561-610",
+      "invariant": "Table count/class/property associations and little-endian scalar/string/array bytes remain; bufferView component-size alignment holds, including eight-byte 64-bit columns. Inference: retaining every referenced raw view byte and referenced view ID preserves admitted table storage without reauthoring metadata."
+    }
+  ],
+  "proposed_minimal_representation": {
+    "owner": "One private immutable JSON/BIN codec owner, caller-selected limits, no paths/RunControl/Attempt/discovery/report defaults.",
+    "plan": "A consumed plan assigning each actual physical view exactly once: checked source range/selector; either raw copy or whole-view ATTRIBUTES/NONE stream with chosen stride and count; checked output/fallback layout and encoded bound. Keep accessor windows/roles distinct from meshopt physical-record count. No generic IR/format registry or returned unused geometry facts.",
+    "critical_count_rule": "Do not copy current accessor.count * chosen_stride == view.byteLength as a universal rule. Meshopt count belongs to whole-view stream. Repeated compatible references need no repeated compression; conflicting last-accessor overwrite is replaced by explicit once-per-view planning.",
+    "raw_transform": "Use admitted RawValue and targeted output serialization preserving untouched numeric lexemes/subtrees. Only buffers, bufferView source/layout and relevant EXT_meshopt bookkeeping/extensionsUsed/Required change. Do not parse arbitrary opaque metadata/extras/node values into Value and assume float_roundtrip preserves them.",
+    "producer_integration": "An already-authored producer Value may be serialized once to the same admitted raw planner, then emitted with changed layout. This is a representation option needing cost settlement; do not build two independent interpretations or assume a general raw mutation engine is needed. No extra run and no source-path public validator invocation.",
+    "C1_dependency": "Pending C1 json::admit exposes CheckedDocument/raw structural admission; json::parse deliberately uses a finite owned representation. Exact numeric helper is currently payload-private, not a reusable public API. After C1 acceptance, expose/move only the actual consumed private exact unsigned interpretation, if source review justifies reuse. This audit does not authorize changes to current C1 or claim helper retention acceptance."
+  },
+  "profile_dispositions": [
+    {
+      "case": "Currently generated streams/metadata/fills/lists",
+      "decision": "Mandatory retain full supported generated domain, conditional on independent acceptance; no convenience cap or shape exclusion may silently remove it."
+    },
+    {
+      "case": "Repeated same-view references",
+      "decision": "Plan once and preserve every reference; validate role/offset windows independently. No per-accessor last writer ownership."
+    },
+    {
+      "case": "Interleaved or partial-window views",
+      "decision": "Precode decision still required. Whole-view physical stride/count can support byte-preserving layouts; current generated profile has no interleaving. Valid cases outside a declared finite whole-view stream profile must be Unsupported, not declared malformed solely for differing accessor counts. Do not broaden to stride<=256 merely because primary permits it without resource/consumer evidence."
+    },
+    {
+      "case": "Metadata and accessor roles sharing a view",
+      "decision": "Inventory actual roles before transformation. Never compress metadata-only views by inferring an accessor role accidentally; incompatible index/vertex role sharing is independently malformed under core, while unsupported other sharing gets an explicit profile disposition. Do not rewrite table associations."
+    },
+    {
+      "case": "Source buffer selector/external resource",
+      "decision": "All retained generated views select embedded buffer zero. Check selector and actual source ranges before any rewrite. Additional/external/data-URI buffers are not discovered or silently treated as BIN; declare Unsupported for valid excluded shape or InvalidInput for nonexistent/out-of-range reference."
+    },
+    {
+      "case": "Already meshopt-compressed input",
+      "decision": "Current helper must not read virtual fallback parent bytes as source. Reviewed standalone caller feeds uncompressed GLB and producer supplies precompression bytes. Recommend explicit valid-but-Unsupported initial operation disposition unless a separately proved idempotent/decoded plan is selected; this choice must be documented before implementation, not silently attributed to old behavior."
+    },
+    {
+      "case": "Extensions and extras",
+      "decision": "Known generated root/primitive extension objects and metadata/extras stay raw; extension declarations remain. A compressed view must merge meshopt bookkeeping rather than overwrite unrelated fields. Unknown buffer/view-affecting extensions and unknown required semantics need explicit Unsupported before rewrite; do not silently strip them. Known KHR_materials_unlit and generated metadata/topology/quantization/restart uses are mandatory."
+    },
+    {
+      "case": "Unknown GLB chunks",
+      "decision": "Core permits unknown chunks to be ignored by readers, not a lossless rewrite to silently delete potentially referenced chunks. Generated sources have none. Preserving them or refusing a valid excluded representation is an explicit precode disposition, not generic malformed-input acceptance."
+    }
+  ],
+  "retain": [
+    "Accepted F0 primitives are dependencies, not new codec acceptance.",
+    "Lossless ATTRIBUTES/NONE concept and eight-byte metadata placement after controls.",
+    "Current generated vector scalar/topology/metadata/list meaning and intrinsic reuse dependency invalidation.",
+    "Existing meaningful raw-byte roundtrip regression only as supplemental evidence; encoder/decoder share meshopt lineage."
+  ],
+  "rework": [
+    "Per-view ownership, checked exact source integer interpretation and source-buffer selector/ranges.",
+    "Shared/partial/interleaved role dispositions and source view/window checks.",
+    "Bounded output/fallback plan and targeted raw serialization.",
+    "Known extension/raw metadata preservation and producer/private codec integration."
+  ],
+  "replace": [
+    "Last-accessor-wins BTreeMap interpretation with one physical-view plan.",
+    "Standalone Value numeric roundtrip with preservation of untouched raw values.",
+    "Unchecked encoder bound and allocation arithmetic with admitted checked requested-storage plan."
+  ],
+  "remove_after_migration": [
+    "Old codec classification/transform implementation once both real callers migrate; no duplicated ownership.",
+    "Public compress_file direct-write path/module export and hidden adapter protocol are coordinator/lifecycle removal gates, not changes performed by this lane."
+  ],
+  "storage_facts": {
+    "status": "Static source-derived requested-storage/encoded-byte bounds, not executable resource evidence or RSS limits; numeric ceilings unresolved and belong to owning request/producer.",
+    "actual_codec_pin": "Cargo.lock meshopt 0.6.2 checksum e01e77ead21976b3a9f01ec1724f766923da74f0726364e2b0f425658935d71a; actual vendored source hash in source pins.",
+    "current_stream_bound": "For N records and S in {4,8,12}, B(N,S)=1+ceil(N/256)*S*(S/4+260)+32, derived from vertexcodec.cpp:1784-1803. Compute ceil by quotient/remainder, not unchecked N+255. All operations, accumulated output and isize/u32 host/container conversions must be checked.",
+    "output_bin_bound": "Conservative U <= sum(raw_view_lengths)+sum(B_i)+7*view_count; include final align4 padding explicitly. This bound reserves full worst-case capacity per encoded stream and does not assume compression shrinks data.",
+    "virtual_fallback": "Sum eight-byte-aligned decoded compressed view lengths with checked arithmetic; placeholder size is virtual address-space metadata, not permission to allocate it or decode it redundantly.",
+    "glb_bound": "T=28+align4(output_json_bytes)+align4(output_bin_bytes), u32 GLB header/chunk limits checked before materialization.",
+    "simultaneous_layers": [
+      "Captured input bytes and raw JSON borrowing",
+      "Bounded structural-admission scratch, role/reference containers and consumed plan",
+      "Codec output BIN including worst-case reservation for current stream",
+      "Targeted output JSON bookkeeping/raw serialization",
+      "Final GLB copying BIN under current encode_glb; producer original Value+optional raw serialization can coexist"
+    ],
+    "unresolved": "Output JSON delta representation/ceiling and actual requested capacities, per-payload/profile limits versus producer aggregate work, and whether direct serialization to owned staging avoids a BIN copy must be settled before code. Do not expose a memory-limit promise based on sum of logical lengths or C1 constants."
+  },
+  "error_policy": [
+    "Malformed framing, invalid selected-buffer/accessor/view references/windows or nonintegral source integer => InvalidInput.",
+    "Valid excluded format/extension/layout/owned representation => Unsupported with explicit profile cause.",
+    "Consumed checked work/bytes/count/host/container/allocation ceiling => ResourceLimit distinct from excluded semantics.",
+    "Codec encode failure => typed codec/format cause; required resolver/publication I/O belongs to caller, no string matching.",
+    "Existing runtime mapping lacks ResourceLimit; coordinator must settle causal presentation if resource request exposed, not collapse resource cause into Unsupported."
+  ],
+  "sensitive_independent_oracle_plan": [
+    {
+      "id": "G1",
+      "case": "Authored unquantized, normalized/padded U16 and padded U16/f32 feature streams",
+      "oracle": "Hand-authored raw BIN record bytes, independently decode output via pinned external decoder, compare full bytes including padding; compare accessor/raw nodes/extension associations. Nonzero padding makes missing padding detectable."
+    },
+    {
+      "id": "G2",
+      "case": "POINTS, multiline restart, polygon with exterior+hole/multiple polygons and fill-only GLB",
+      "oracle": "Explicit expected U32 arrays incl u32::MAX, independent raw topology walk, polygon and feature/table associations. Corrupt offset/restart/feature-table link without changing harmless byte counts must fail the oracle."
+    },
+    {
+      "id": "G3",
+      "case": "64-bit numeric/bitset/UTF8/null/list/string metadata",
+      "oracle": "Signed INT64 extrema and >2^53+1, raw UINT64 max fixture, FLOAT64 authored bits, BOOLEAN byte crossing, Unicode/empty UTF8 strings, noData collision-sensitive values, array-as-STRING with heterogeneous integers/null/order. Independently read table refs/count/class and binary offsets; alter raw byte, stringOffset or schema noData/table link as controls."
+    },
+    {
+      "id": "G4",
+      "case": "Structural variable/fixed arrays and shared metadata references",
+      "oracle": "Independently authored values/arrayOffsets/stringOffsets with exact expected rows and raw bytes. Establish preservation coverage separately from actual writer source profile. Controls swap view IDs or array/string offsets."
+    },
+    {
+      "id": "G5",
+      "case": "Per-view interpretation sensitivity",
+      "oracle": "Compatible repeated references, differing accessor offsets/counts, valid interleaving/partial window, contradictory stride/layout, mixed index/vertex role, missing/out-of-range view and nonzero actual source-buffer selector. Assert chosen declared supported/unsupported/malformed result, not old implementation parity."
+    },
+    {
+      "id": "G6",
+      "case": "Already compressed/fallback/extension/chunk decisions",
+      "oracle": "No actual parent fallback buffer for compressed view; virtual buffer with offsets unlike actual compressed BIN; altered extensions and unknown chunks. Prove no re-reading virtual ranges or silent loss. Test compressed extension declarations and fallback reference graph independently."
+    },
+    {
+      "id": "G7",
+      "case": "Raw numeric/JSON interpretation",
+      "oracle": "Decimal oracle over exact source tokens: integer 4/4.0/4e0, invalid fractional near-boundary token that rounds integral, host/count overflow, huge zero exponent, duplicate decoded key, Unicode surrogate, and untouched extras/schema 9007199254740993.0 or exponent beyond finite Value. Compare preserved untouched raw numeric tokens, never Value equality as oracle."
+    },
+    {
+      "id": "G8",
+      "case": "Output/accounting boundaries",
+      "oracle": "Small explicitly selected caps exact/one-over, alignment boundaries, many shared refs but one encoded view, codec-bound vs actual output, incompressible input increasing size. Separately verify checked B/formula against actual pinned API/encoded cases and output/fallback reference dimensions; model arithmetic sensitivity controls before big probes."
+    },
+    {
+      "id": "G9",
+      "case": "Both real integrations",
+      "oracle": "Portable/native real vector generation with meshopt toggled, quantized/unquantized/list/fill/profile combinations and standalone hidden-worker migration. Decode against independently authored semantic expectations, not Python/native agreement or common decoder helpers. Check reuse invalidation when actual codec source changes."
+    }
+  ],
+  "oracle_limits": [
+    "A pinned meshopt JS/WASM decoder is a separately executed reference but may share upstream implementation lineage with Rust meshopt; retain canonical compressed/expected vectors and raw independently authored bytes, document the limitation.",
+    "C1 production payload inspector may establish admitted integrity after independent acceptance; it does not verify table/feature meanings, world bounds, geometry approximation or source fidelity.",
+    "Historical Python vector writer has design lineage with native writer and invokes this same compressor; parity is supplemental.",
+    "No controls or production codec probes were executed by this preparation audit."
+  ],
+  "precode_stop_gates": [
+    "Current C1 exact-source independent acceptance/merge before borrowing owners.",
+    "Settle finite full generated source profile plus shared/interleaved/existing-compressed/extensions/chunk dispositions; no silent source-use loss.",
+    "Select one small actual raw plan/output representation and numeric helper boundary; account producer serialization.",
+    "Settle consuming resource ceilings, exact requested capacities/output bounds and typed ResourceLimit mapping with lifecycle owner.",
+    "Author sensitive independent raw/semantic/control fixtures and specify final independent acceptance."
+  ],
+  "authority_limits": [
+    "No current source mutation or acceptance recommendation for a merge.",
+    "Full A2 literal unavailable-root external-template conformance remains held; this independent codec operation is not an implicit fallback.",
+    "Keep #113/#121 open; no main/tag/publication/release."
+  ],
+  "source_sha256": {
+    "AGENTS.md": {
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0"
+    },
+    "Cargo.toml": {
+      "bytes": 3540,
+      "sha256": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467"
+    },
+    "Cargo.lock": {
+      "bytes": 70262,
+      "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673"
+    },
+    "src/vector_encoding.rs": {
+      "bytes": 6397,
+      "sha256": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+    },
+    "src/glb.rs": {
+      "bytes": 18129,
+      "sha256": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880"
+    },
+    "src/metadata.rs": {
+      "bytes": 17642,
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b"
+    },
+    "src/vector/pipeline/encoding.rs": {
+      "bytes": 28074,
+      "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6"
+    },
+    "src/vector/pipeline/reuse.rs": {
+      "bytes": 19055,
+      "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21"
+    },
+    "src/vector/source_fields.rs": {
+      "bytes": 8870,
+      "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac"
+    },
+    "src/vector/pipeline/source_native.rs": {
+      "bytes": 36697,
+      "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e"
+    },
+    "src/main.rs": {
+      "bytes": 62090,
+      "sha256": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8"
+    },
+    "src/content_integrity.rs": {
+      "bytes": 1139,
+      "sha256": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4"
+    },
+    "src/content_integrity/json.rs": {
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    "src/content_integrity/payload.rs": {
+      "bytes": 67059,
+      "sha256": "80fb98f59c826c08b1bec268da9d8202261483ff2e530982f5db2a16f2899d8c"
+    },
+    "src/content_integrity/payload/numbers.rs": {
+      "bytes": 4191,
+      "sha256": "dba564337acc64201b187d569b9a1191baed7fbb3088ba63e52b4aef42b9c509"
+    },
+    "src/content_integrity/payload/records.rs": {
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    "tests/fixtures/vector_oracle/vector.py": {
+      "bytes": 32043,
+      "sha256": "76cc716e7a9ef89b5c5094c1cc27a2d25bd73a06ddad7a2b4a4f9dca3252368a"
+    },
+    "tests/fixtures/vector_oracle/vector_parallel.py": {
+      "bytes": 6523,
+      "sha256": "4e9484be28301f3ee7e1908ca6483726ade4719140ee6162e79697da78cf58aa"
+    },
+    "tests/fixtures/vector_oracle/vector_source.py": {
+      "bytes": 16724,
+      "sha256": "bcee55fda09334dccc4d78231cd5f35dfaa5491d9f05b879a640b546607d6deb"
+    },
+    "docs/architecture/public-surface-inventory.md": {
+      "bytes": 29592,
+      "sha256": "7c3cc54125e13cff0e4f7ad9e7a0d644a110cf632cf0b469cd1e80d566640dde"
+    },
+    "docs/architecture/implicit-rewrite-contract.md": {
+      "bytes": 20379,
+      "sha256": "e9aff36c1321ab9d18be3eaa001b01a16d42015431b09925f396141c12c47ca8"
+    },
+    "docs/architecture/c1-payload-integrity-contract.md": {
+      "bytes": 35453,
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/vendor/src/vertexcodec.cpp": {
+      "bytes": 58757,
+      "sha256": "75ae7ceb46191804037bef52f3d20b8781fdcabbc26f0ff5273580b59153059f",
+      "role": "Actual Cargo-locked vendored bound formula; inspected static source, not independently executed acceptance"
+    }
+  },
+  "primary_receipt": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/primary-receipt.json"
+}

@@ -1,0 +1,326 @@
+{
+  "status": "Independent toy requested-storage/lifetime witnesses; integers deliberately not measured production capacities",
+  "cases": [
+    {
+      "name": "admission-key-slot-scratch-growth",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "source",
+          "category": "source",
+          "bytes": 100
+        },
+        {
+          "op": "alloc",
+          "id": "grammar",
+          "category": "parser",
+          "bytes": 11
+        },
+        {
+          "op": "alloc",
+          "id": "keys",
+          "category": "keys",
+          "bytes": 13
+        },
+        {
+          "op": "alloc",
+          "id": "hash",
+          "category": "hash",
+          "bytes": 17
+        },
+        {
+          "op": "alloc",
+          "id": "pending",
+          "category": "slots",
+          "bytes": 19
+        },
+        {
+          "op": "alloc",
+          "id": "children",
+          "category": "slots",
+          "bytes": 23
+        },
+        {
+          "op": "realloc",
+          "id": "pending",
+          "bytes": 29
+        },
+        {
+          "op": "free",
+          "id": "grammar"
+        },
+        {
+          "op": "free",
+          "id": "keys"
+        },
+        {
+          "op": "free",
+          "id": "hash"
+        },
+        {
+          "op": "free",
+          "id": "pending"
+        },
+        {
+          "op": "free",
+          "id": "children"
+        }
+      ],
+      "expectedPeak": 212,
+      "exactCap": 212,
+      "oneBelowCap": 211,
+      "mustDetectOmissions": [
+        "source",
+        "parser",
+        "keys",
+        "hash",
+        "slots"
+      ],
+      "reallocControl": true,
+      "transferControl": false
+    },
+    {
+      "name": "repack-bound-tail-final-copy",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "source",
+          "category": "source",
+          "bytes": 100
+        },
+        {
+          "op": "alloc",
+          "id": "plan",
+          "category": "plan",
+          "bytes": 31
+        },
+        {
+          "op": "alloc",
+          "id": "raw",
+          "category": "raw_bin",
+          "bytes": 7
+        },
+        {
+          "op": "alloc",
+          "id": "bound_tail",
+          "category": "bin_bound_tail",
+          "bytes": 37
+        },
+        {
+          "op": "alloc",
+          "id": "final",
+          "category": "final_glb",
+          "bytes": 53
+        }
+      ],
+      "expectedPeak": 228,
+      "exactCap": 228,
+      "oneBelowCap": 227,
+      "mustDetectOmissions": [
+        "source",
+        "plan",
+        "raw_bin",
+        "bin_bound_tail",
+        "final_glb"
+      ],
+      "reallocControl": false,
+      "transferControl": false
+    },
+    {
+      "name": "identity-copy-after-decoder-drop",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "source",
+          "category": "source",
+          "bytes": 100
+        },
+        {
+          "op": "alloc",
+          "id": "plan",
+          "category": "plan",
+          "bytes": 31
+        },
+        {
+          "op": "alloc",
+          "id": "decode",
+          "category": "decoder",
+          "bytes": 47
+        },
+        {
+          "op": "free",
+          "id": "decode"
+        },
+        {
+          "op": "alloc",
+          "id": "candidate",
+          "category": "identity_copy",
+          "bytes": 100
+        }
+      ],
+      "expectedPeak": 231,
+      "exactCap": 231,
+      "oneBelowCap": 230,
+      "mustDetectOmissions": [
+        "source",
+        "plan",
+        "identity_copy"
+      ],
+      "reallocControl": false,
+      "transferControl": false
+    },
+    {
+      "name": "decoder-dominant-before-copy",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "source",
+          "category": "source",
+          "bytes": 100
+        },
+        {
+          "op": "alloc",
+          "id": "plan",
+          "category": "plan",
+          "bytes": 31
+        },
+        {
+          "op": "alloc",
+          "id": "decode",
+          "category": "decoder",
+          "bytes": 151
+        },
+        {
+          "op": "free",
+          "id": "decode"
+        },
+        {
+          "op": "alloc",
+          "id": "candidate",
+          "category": "identity_copy",
+          "bytes": 100
+        }
+      ],
+      "expectedPeak": 282,
+      "exactCap": 282,
+      "oneBelowCap": 281,
+      "mustDetectOmissions": [
+        "decoder"
+      ],
+      "reallocControl": false,
+      "transferControl": false
+    },
+    {
+      "name": "producer-bridge-owner-transfer",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "geometry",
+          "category": "persistent_geometry",
+          "bytes": 71
+        },
+        {
+          "op": "alloc",
+          "id": "oldValue",
+          "category": "producer_value",
+          "bytes": 31
+        },
+        {
+          "op": "alloc",
+          "id": "oldBin",
+          "category": "producer_bin",
+          "bytes": 37
+        },
+        {
+          "op": "alloc",
+          "id": "bridge",
+          "category": "bridge",
+          "bytes": 101
+        },
+        {
+          "op": "free",
+          "id": "oldValue"
+        },
+        {
+          "op": "free",
+          "id": "oldBin"
+        },
+        {
+          "op": "transfer",
+          "id": "bridge",
+          "fromOwner": "bridge",
+          "toOwner": "codec_input"
+        },
+        {
+          "op": "alloc",
+          "id": "plan",
+          "category": "plan",
+          "bytes": 11
+        },
+        {
+          "op": "alloc",
+          "id": "bin",
+          "category": "bin_bound_tail",
+          "bytes": 17
+        },
+        {
+          "op": "alloc",
+          "id": "final",
+          "category": "final_glb",
+          "bytes": 23
+        }
+      ],
+      "expectedPeak": 240,
+      "exactCap": 240,
+      "oneBelowCap": 239,
+      "mustDetectOmissions": [
+        "persistent_geometry",
+        "producer_value",
+        "producer_bin",
+        "bridge"
+      ],
+      "reallocControl": false,
+      "transferControl": true
+    },
+    {
+      "name": "path-receipt-comparison-buffer",
+      "events": [
+        {
+          "op": "alloc",
+          "id": "source",
+          "category": "source",
+          "bytes": 100
+        },
+        {
+          "op": "alloc",
+          "id": "path",
+          "category": "path",
+          "bytes": 19
+        },
+        {
+          "op": "alloc",
+          "id": "receipt",
+          "category": "receipt_state",
+          "bytes": 23
+        },
+        {
+          "op": "alloc",
+          "id": "compare",
+          "category": "chunk_buffer",
+          "bytes": 11
+        }
+      ],
+      "expectedPeak": 153,
+      "exactCap": 153,
+      "oneBelowCap": 152,
+      "mustDetectOmissions": [
+        "source",
+        "path",
+        "receipt_state",
+        "chunk_buffer"
+      ],
+      "reallocControl": false,
+      "transferControl": false
+    }
+  ]
+}

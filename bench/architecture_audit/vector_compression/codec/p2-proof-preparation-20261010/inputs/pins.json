@@ -1,0 +1,485 @@
+{
+  "status": "Frozen preparation inputs only; final prerequisite accepted exact C1 develop merge and repin before implementation/actual probes",
+  "coordinatorSourceLabel": "e4ec (coordinator-supplied current C1 label, no Git queried)",
+  "installedChannel": {
+    "date": "2026-08-20",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "rust_std": "1.98.0 (88d9e12ae 2026-08-18)"
+  },
+  "files": [
+    {
+      "file": "codec/contract-draft.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/contract-draft.md",
+      "bytes": 18401,
+      "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e",
+      "classification": "Historical frozen codec DRAFT, not implementation acceptance"
+    },
+    {
+      "file": "codec/decisions.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/decisions.json",
+      "bytes": 20032,
+      "sha256": "a7a93c86b20bb713dbd15b0556c8d5fc37086886d71a711ca120b1710dc2fe90",
+      "classification": "Historical frozen codec DRAFT, not implementation acceptance"
+    },
+    {
+      "file": "codec/draft-integrity.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/draft-integrity.json",
+      "bytes": 1316,
+      "sha256": "830da62ba894df135a9e89728fbd6f87e744a091a7298534decb1f9edbbdd3dd",
+      "classification": "Historical frozen codec DRAFT, not implementation acceptance"
+    },
+    {
+      "file": "codec/audit.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/audit.json",
+      "bytes": 27513,
+      "sha256": "261edcad319e8b98de00325dd11ee4cc51f8f396f0367256a67270fc4ef9d017",
+      "classification": "Historical frozen codec DRAFT, not implementation acceptance"
+    },
+    {
+      "file": "codec/primary/primary-receipt.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/primary-receipt.json",
+      "bytes": 6116,
+      "sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8",
+      "classification": "Historical frozen codec DRAFT, not implementation acceptance"
+    },
+    {
+      "file": "held-review/review.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/review.md",
+      "bytes": 15443,
+      "sha256": "17ae5e13a9df36adefd08d65166b6b493ce39b38251b2f766bf3a492b4b2171e",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "held-review/decisions.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/decisions.json",
+      "bytes": 3880,
+      "sha256": "a746904a74d524b0c14536728cbe88087a4244fcebbc845a23ec161826e03cfa",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "held-review/source-pin.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/source-pin.json",
+      "bytes": 12711,
+      "sha256": "9b06639bad91f80cae638901543f52664a24aac8fa925cf641f4a554eb6d846b",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "held-review/input-pin.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/input-pin.json",
+      "bytes": 2050,
+      "sha256": "214e29fe94d59c25ef2068f2226de7ee93f0e440cd87e4d630b052afb1c148d8",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "held-review/arithmetic.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/arithmetic.json",
+      "bytes": 4849,
+      "sha256": "988827ba5b8ac4a498f8c087f374dd9a0bfa7129ca6dc49bde952bcb98ac3f81",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "held-review/integrity.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/integrity.json",
+      "bytes": 841,
+      "sha256": "855f52a91fed5faf64484dd6e997d298a97a1ff461a3045145d504f09c6acbd0",
+      "classification": "Independent HELD precode review and model-only arithmetic"
+    },
+    {
+      "file": "lifecycle-revision/contract-draft.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/lifecycle/revision-20261010/contract-draft.md",
+      "bytes": 24408,
+      "sha256": "637bac2fb0c85c11abc43eb370880aea7daa9aadf54953cbcded87a201a93789",
+      "classification": "Additive HELD lifecycle revision"
+    },
+    {
+      "file": "lifecycle-revision/decisions.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/lifecycle/revision-20261010/decisions.json",
+      "bytes": 9899,
+      "sha256": "ee25201087f277b56051ae0a36806893856f36c7822a6c7b8a306909f4939173",
+      "classification": "Additive HELD lifecycle revision"
+    },
+    {
+      "file": "lifecycle-revision/integrity.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/lifecycle/revision-20261010/integrity.json",
+      "bytes": 3064,
+      "sha256": "b5a78824f207db04a124c7af0c6d5415c52153c19be89dc9f0c4c3cfe5af1ceb",
+      "classification": "Additive HELD lifecycle revision"
+    },
+    {
+      "file": "primary/3d-metadata.adoc",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/3d-metadata.adoc",
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/primary-receipt.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/primary-receipt.json",
+      "bytes": 6116,
+      "sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/EXT_mesh_features.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_mesh_features.md",
+      "bytes": 11434,
+      "sha256": "31e89e90f5c1edd953bf4919e22efcd8217b38e87c24229ca0a74bbaf493f3cf",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/EXT_structural_metadata.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_structural_metadata.md",
+      "bytes": 30885,
+      "sha256": "2f5579b8d6698a0bbc17b61d87a72352ce5446f17f194c8f23b6fe08f24db566",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/glTF-core.adoc",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/glTF-core.adoc",
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/EXT_mesh_polygon.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_mesh_polygon.md",
+      "bytes": 7129,
+      "sha256": "777c13228de2de5838a8f0eed5c4f653674a5278c30306124bb8ccbe2fe1016d",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/meshopt_decoder.test.js",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/meshopt_decoder.test.js",
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/KHR_mesh_primitive_restart-draft.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/KHR_mesh_primitive_restart-draft.md",
+      "bytes": 4364,
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/KHR_mesh_quantization.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/KHR_mesh_quantization.md",
+      "bytes": 12593,
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "primary/EXT_meshopt_compression.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_meshopt_compression.md",
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "classification": "Retained exact pinned primary text, no future target execution"
+    },
+    {
+      "file": "source/AGENTS.md",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/AGENTS.md",
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/Cargo.toml",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/Cargo.toml",
+      "bytes": 3540,
+      "sha256": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/Cargo.lock",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/Cargo.lock",
+      "bytes": 70262,
+      "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/vector_encoding.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/vector_encoding.rs",
+      "bytes": 6397,
+      "sha256": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/glb.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/glb.rs",
+      "bytes": 18129,
+      "sha256": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/metadata.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/metadata.rs",
+      "bytes": 17642,
+      "sha256": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/vector/pipeline/encoding.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/encoding.rs",
+      "bytes": 28074,
+      "sha256": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/vector/pipeline/reuse.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/reuse.rs",
+      "bytes": 19055,
+      "sha256": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/vector/source_fields.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/vector/source_fields.rs",
+      "bytes": 8870,
+      "sha256": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/vector/pipeline/source_native.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/vector/pipeline/source_native.rs",
+      "bytes": 36697,
+      "sha256": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/main.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/main.rs",
+      "bytes": 62090,
+      "sha256": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/content_integrity.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity.rs",
+      "bytes": 1139,
+      "sha256": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/content_integrity/json.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/json.rs",
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/content_integrity/payload.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload.rs",
+      "bytes": 66755,
+      "sha256": "9eb4d4eba8e8adf435500cecba2fe10869333b3d65cddbff2d488c1a13fd310c",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/content_integrity/payload/numbers.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload/numbers.rs",
+      "bytes": 4191,
+      "sha256": "dba564337acc64201b187d569b9a1191baed7fbb3088ba63e52b4aef42b9c509",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/src/content_integrity/payload/records.rs",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/src/content_integrity/payload/records.rs",
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/tests/fixtures/vector_oracle/vector.py",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/tests/fixtures/vector_oracle/vector.py",
+      "bytes": 32043,
+      "sha256": "76cc716e7a9ef89b5c5094c1cc27a2d25bd73a06ddad7a2b4a4f9dca3252368a",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/tests/fixtures/vector_oracle/vector_parallel.py",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/tests/fixtures/vector_oracle/vector_parallel.py",
+      "bytes": 6523,
+      "sha256": "4e9484be28301f3ee7e1908ca6483726ade4719140ee6162e79697da78cf58aa",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/tests/fixtures/vector_oracle/vector_source.py",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/tests/fixtures/vector_oracle/vector_source.py",
+      "bytes": 16724,
+      "sha256": "bcee55fda09334dccc4d78231cd5f35dfaa5491d9f05b879a640b546607d6deb",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/docs/architecture/public-surface-inventory.md",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/docs/architecture/public-surface-inventory.md",
+      "bytes": 29592,
+      "sha256": "7c3cc54125e13cff0e4f7ad9e7a0d644a110cf632cf0b469cd1e80d566640dde",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/docs/architecture/implicit-rewrite-contract.md",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/docs/architecture/implicit-rewrite-contract.md",
+      "bytes": 20379,
+      "sha256": "e9aff36c1321ab9d18be3eaa001b01a16d42015431b09925f396141c12c47ca8",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source/docs/architecture/c1-payload-integrity-contract.md",
+      "original": "/tmp/rusty-tiles-c1-payload-foundation/docs/architecture/c1-payload-integrity-contract.md",
+      "bytes": 35453,
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "source//home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/vendor/src/vertexcodec.cpp",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/vendor/src/vertexcodec.cpp",
+      "bytes": 58757,
+      "sha256": "75ae7ceb46191804037bef52f3d20b8781fdcabbc26f0ff5273580b59153059f",
+      "classification": "Observed source bytes during coordinator C1 e4ec gate, commit identity supplied externally; not accepted merged baseline"
+    },
+    {
+      "file": "dependencies/serde_json-1.0.151/src/raw.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/raw.rs",
+      "bytes": 23498,
+      "sha256": "0e6ae2ade492a3c5c090dfaf31f03ff4e54123a5a47b59def5f1b3dcc035a2e3",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/serde_json-1.0.151/src/de.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs",
+      "bytes": 86840,
+      "sha256": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/serde_json-1.0.151/src/read.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/read.rs",
+      "bytes": 33041,
+      "sha256": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/serde_json-1.0.151/src/ser.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/ser.rs",
+      "bytes": 63877,
+      "sha256": "f2b8cc0b97e30c49dbc58698fa22c14a7d56ea616cdb57b067835a59af49a75f",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/serde_json-1.0.151/Cargo.toml",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/Cargo.toml",
+      "bytes": 3118,
+      "sha256": "00b920255c320a278bf25b962b491263a19d8c90e12e4a91c1d823db71eabb2f",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/meshopt-0.6.2/src/encoding.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/src/encoding.rs",
+      "bytes": 5507,
+      "sha256": "29196f91ddf3dec14ad8bf3c5d6a6b7f2539ff6f7016a495433385fce7b4f9f8",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/meshopt-0.6.2/src/ffi.rs",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/src/ffi.rs",
+      "bytes": 169,
+      "sha256": "2aa8f9f1a73b88b962b42b61c3dc79f563303695c17f34a374ffb8318a3a0e4e",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/meshopt-0.6.2/vendor/src/vertexcodec.cpp",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/vendor/src/vertexcodec.cpp",
+      "bytes": 58757,
+      "sha256": "75ae7ceb46191804037bef52f3d20b8781fdcabbc26f0ff5273580b59153059f",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/meshopt-0.6.2/vendor/src/meshoptimizer.h",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/vendor/src/meshoptimizer.h",
+      "bytes": 88578,
+      "sha256": "83bb9111b94473f60d5b655cb1afb3f37d55516bda9bd755dc5bdb76893322b2",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "dependencies/meshopt-0.6.2/Cargo.toml",
+      "original": "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/meshopt-0.6.2/Cargo.toml",
+      "bytes": 2424,
+      "sha256": "73d947048b973a5f94f98020f39bcbf73b1a0a2a859a799ebb39fa58ab41191d",
+      "classification": "Locked direct dependency source; Cargo.lock checksum retained separately"
+    },
+    {
+      "file": "toolchain/lib/rustlib/multirust-channel-manifest.toml",
+      "original": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/multirust-channel-manifest.toml",
+      "bytes": 1034029,
+      "sha256": "b17aaaeded2ac77b968b406613ec319b001f105793900a6f852a72a03e241ba9",
+      "classification": "Installed toolchain/std source observation; root must bind actual compiler -vV/rlibs and matched source before execution acceptance"
+    },
+    {
+      "file": "toolchain/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs",
+      "original": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs",
+      "bytes": 95131,
+      "sha256": "ab25e38b449f67347a4f88083b7c61c3f17c6249a1f7a97ef37f99545c6aa0b1",
+      "classification": "Installed toolchain/std source observation; root must bind actual compiler -vV/rlibs and matched source before execution acceptance"
+    },
+    {
+      "file": "toolchain/lib/rustlib/src/rust/library/std/src/collections/hash/set.rs",
+      "original": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/set.rs",
+      "bytes": 74125,
+      "sha256": "16ed8c7dc84c338b71350e0c5b9b01948aad0c0a44a5d4969a3822756893c1f2",
+      "classification": "Installed toolchain/std source observation; root must bind actual compiler -vV/rlibs and matched source before execution acceptance"
+    },
+    {
+      "file": "toolchain/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs",
+      "original": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs",
+      "bytes": 35551,
+      "sha256": "a262b9e494236a00270be0dd0c57be5259d62bc1e538c56506f7f0ce8debccc0",
+      "classification": "Installed toolchain/std source observation; root must bind actual compiler -vV/rlibs and matched source before execution acceptance"
+    },
+    {
+      "file": "toolchain/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/raw.rs",
+      "original": "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/src/raw.rs",
+      "bytes": 197141,
+      "sha256": "0c8ad353ba95817e72b0a8fea48fa2599099ea3def374f254ab6402a9c468d22",
+      "classification": "Installed toolchain/std source observation; root must bind actual compiler -vV/rlibs and matched source before execution acceptance"
+    },
+    {
+      "file": "held-review-revision/checklist.md",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/checklist.md",
+      "bytes": 15804,
+      "sha256": "285a9bbb1d70d1586e8c295e0d2639d390656ee8d0c5f628ad36a0e8133c36a1",
+      "classification": "Additive independent review: P1 corrected, P2-P5 HELD"
+    },
+    {
+      "file": "held-review-revision/decisions.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/decisions.json",
+      "bytes": 3698,
+      "sha256": "377ec8f2fd4c46db944db03d7d8753f6999a40d029722ac31be85dd316f8a82c",
+      "classification": "Additive independent review: P1 corrected, P2-P5 HELD"
+    },
+    {
+      "file": "held-review-revision/input-pin.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/input-pin.json",
+      "bytes": 2977,
+      "sha256": "8f4e673610f9737d9c17432c0e2f3224242f4196d5f2b0d873df7f595b9717cb",
+      "classification": "Additive independent review: P1 corrected, P2-P5 HELD"
+    },
+    {
+      "file": "held-review-revision/integrity.json",
+      "original": "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/integrity.json",
+      "bytes": 673,
+      "sha256": "243c90e0e727c450a2ea9037db27a169686040d76e3c7c69e051ce8225b8f875",
+      "classification": "Additive independent review: P1 corrected, P2-P5 HELD"
+    }
+  ],
+  "unresolvedPins": [
+    "Exact accepted merged C1 commit/root source-pin",
+    "Compiler -vV/rustc path and hashes",
+    "Actual serde/serde_json/meshopt rlib or isolated lock/build receipt with all transitive versions/features",
+    "Actual std/hashbrown backing matching compiled toolchain",
+    "Actual owned plan/edit/path/receipt types do not exist, so coefficients remain held"
+  ],
+  "coordinatorSourceCandidate": {
+    "head": "5fdf6fb0bb15ccb404217b7e18f1414efc075a39",
+    "status": "Root-supplied PR153 candidate, docs/evidence-only atop e4ec97/237; P0 merge not yet accepted",
+    "provenance": "Coordinator message, no Git operation by preparation author"
+  }
+}

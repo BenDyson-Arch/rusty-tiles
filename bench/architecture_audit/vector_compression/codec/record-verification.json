@@ -1,0 +1,19 @@
+{
+  "scope": "Preparation record parse/hash and source stability verification only; no product execution",
+  "source_changes_after_pin": [],
+  "bad_primary_hashes": [],
+  "artifacts": {
+    "audit.json": {
+      "bytes": 27513,
+      "sha256": "261edcad319e8b98de00325dd11ee4cc51f8f396f0367256a67270fc4ef9d017"
+    },
+    "audit.md": {
+      "bytes": 20113,
+      "sha256": "fa82b064622358f985ff16e8ee452716c122f52a51416e20a5a7e31bb0a1c3e7"
+    },
+    "primary-receipt.json": {
+      "bytes": 6116,
+      "sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8"
+    }
+  }
+}

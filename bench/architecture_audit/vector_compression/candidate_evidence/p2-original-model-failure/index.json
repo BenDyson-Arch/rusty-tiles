@@ -1,0 +1,61 @@
+{
+  "status": "Originalpostmergepreparationfailure; phase/framingmodelsPASS, domainassociationselectorStopIteration; noP2acceptance",
+  "records": [
+    {
+      "path": "accepted-c1-gate.json.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/accepted-c1-gate.json",
+      "sha256": "144b71d8184ed741dd49a64582309b9fba5850510e339c5740463c7fa9c16e7f",
+      "storedSha256": "1c3d6aad87dcdc404d0b40531f437166e18ab0475957ec0debbac5bfc8ab34e4",
+      "bytes": 679
+    },
+    {
+      "path": "models/domain_oracle.stderr.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/domain_oracle.stderr",
+      "sha256": "20c52d801f616432d4f54bc395af99d4c4d651d36613c47e65acbe4b98bd8f7c",
+      "storedSha256": "fafe801a32c022ae46dcdc501db04207fb67628344e04dad407b4977efd6d23d",
+      "bytes": 538
+    },
+    {
+      "path": "models/domain_oracle.stdout.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/domain_oracle.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storedSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "bytes": 0
+    },
+    {
+      "path": "models/frame_oracle.stderr.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/frame_oracle.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storedSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "bytes": 0
+    },
+    {
+      "path": "models/frame_oracle.stdout.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/frame_oracle.stdout",
+      "sha256": "b199a3c204296a7f2701a27672caacd5fff465f93aeeb2db51de42a50caedf2c",
+      "storedSha256": "b005ab67c33e66b6b5cf000d2a3b132f24e4d479f8f4f9c687077174c356f548",
+      "bytes": 34554
+    },
+    {
+      "path": "models/phase_model.stderr.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/phase_model.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storedSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "bytes": 0
+    },
+    {
+      "path": "models/phase_model.stdout.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/phase_model.stdout",
+      "sha256": "51da1c5f15805e408da9132107360c1e7dee8140f64a5ee1cfbcb06ab8d9ac79",
+      "storedSha256": "8a159d244513f52d25766fc82aa442d77cdbd021650944692a17bf28a8ac8c70",
+      "bytes": 4224
+    },
+    {
+      "path": "models/receipt.json.gz",
+      "sourceRecord": "/tmp/rusty-tiles-codec-p2-executions/models/receipt.json",
+      "sha256": "57dfbc2a59a45ce4f384889eaff73035b83cc44294de8a0b594fba73cae305c2",
+      "storedSha256": "bd78430c9d26cd47e81410393e369caf8f89241d55487ac0014dab8fd4cd6978",
+      "bytes": 2841
+    }
+  ]
+}

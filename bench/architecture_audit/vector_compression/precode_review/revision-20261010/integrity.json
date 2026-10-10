@@ -1,0 +1,19 @@
+{
+  "status": "Additive independent read-only preparation freeze, HELD_PRECODE",
+  "captured_at_utc": "2026-10-10T11:47:41.016181+00:00",
+  "files": {
+    "checklist.md": {
+      "bytes": 15804,
+      "sha256": "285a9bbb1d70d1586e8c295e0d2639d390656ee8d0c5f628ad36a0e8133c36a1"
+    },
+    "decisions.json": {
+      "bytes": 3698,
+      "sha256": "377ec8f2fd4c46db944db03d7d8753f6999a40d029722ac31be85dd316f8a82c"
+    },
+    "input-pin.json": {
+      "bytes": 2977,
+      "sha256": "8f4e673610f9737d9c17432c0e2f3224242f4196d5f2b0d873df7f595b9717cb"
+    }
+  },
+  "only_writes": "precode_review/revision-20261010/{checklist.md,decisions.json,input-pin.json,integrity.json}"
+}

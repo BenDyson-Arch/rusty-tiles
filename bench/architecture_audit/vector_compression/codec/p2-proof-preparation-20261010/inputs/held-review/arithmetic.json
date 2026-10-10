@@ -1,0 +1,272 @@
+{
+  "status": "Executed bounded Python integer/model checks only; no Rust/codec/platform execution; not full bound or resource acceptance",
+  "codec_checks": 1088,
+  "codec_match": "literal pinned source formula versus proposal on 64 strides and 17 counts per stride",
+  "codec_rows": [
+    {
+      "stride": 4,
+      "count": 1,
+      "block": 256,
+      "bound": 1077
+    },
+    {
+      "stride": 4,
+      "count": 255,
+      "block": 256,
+      "bound": 1077
+    },
+    {
+      "stride": 4,
+      "count": 256,
+      "block": 256,
+      "bound": 1077
+    },
+    {
+      "stride": 4,
+      "count": 257,
+      "block": 256,
+      "bound": 2121
+    },
+    {
+      "stride": 4,
+      "count": 255,
+      "block": 256,
+      "bound": 1077
+    },
+    {
+      "stride": 4,
+      "count": 256,
+      "block": 256,
+      "bound": 1077
+    },
+    {
+      "stride": 4,
+      "count": 257,
+      "block": 256,
+      "bound": 2121
+    },
+    {
+      "stride": 8,
+      "count": 1,
+      "block": 256,
+      "bound": 2129
+    },
+    {
+      "stride": 8,
+      "count": 255,
+      "block": 256,
+      "bound": 2129
+    },
+    {
+      "stride": 8,
+      "count": 256,
+      "block": 256,
+      "bound": 2129
+    },
+    {
+      "stride": 8,
+      "count": 257,
+      "block": 256,
+      "bound": 4225
+    },
+    {
+      "stride": 8,
+      "count": 255,
+      "block": 256,
+      "bound": 2129
+    },
+    {
+      "stride": 8,
+      "count": 256,
+      "block": 256,
+      "bound": 2129
+    },
+    {
+      "stride": 8,
+      "count": 257,
+      "block": 256,
+      "bound": 4225
+    },
+    {
+      "stride": 12,
+      "count": 1,
+      "block": 256,
+      "bound": 3189
+    },
+    {
+      "stride": 12,
+      "count": 255,
+      "block": 256,
+      "bound": 3189
+    },
+    {
+      "stride": 12,
+      "count": 256,
+      "block": 256,
+      "bound": 3189
+    },
+    {
+      "stride": 12,
+      "count": 257,
+      "block": 256,
+      "bound": 6345
+    },
+    {
+      "stride": 12,
+      "count": 255,
+      "block": 256,
+      "bound": 3189
+    },
+    {
+      "stride": 12,
+      "count": 256,
+      "block": 256,
+      "bound": 3189
+    },
+    {
+      "stride": 12,
+      "count": 257,
+      "block": 256,
+      "bound": 6345
+    },
+    {
+      "stride": 252,
+      "count": 1,
+      "block": 32,
+      "bound": 24508
+    },
+    {
+      "stride": 252,
+      "count": 255,
+      "block": 32,
+      "bound": 193852
+    },
+    {
+      "stride": 252,
+      "count": 256,
+      "block": 32,
+      "bound": 193852
+    },
+    {
+      "stride": 252,
+      "count": 257,
+      "block": 32,
+      "bound": 218044
+    },
+    {
+      "stride": 256,
+      "count": 1,
+      "block": 32,
+      "bound": 25153
+    },
+    {
+      "stride": 256,
+      "count": 255,
+      "block": 32,
+      "bound": 198977
+    },
+    {
+      "stride": 256,
+      "count": 256,
+      "block": 32,
+      "bound": 198977
+    },
+    {
+      "stride": 256,
+      "count": 257,
+      "block": 32,
+      "bound": 223809
+    }
+  ],
+  "metadata_framing_checks": 1024,
+  "metadata_rows": [
+    {
+      "json": 4,
+      "bin": 4,
+      "json_chunk": 4,
+      "bin_chunk": 8,
+      "bin_origin": 32,
+      "total": 40,
+      "core_total": 36
+    },
+    {
+      "json": 4,
+      "bin": 8,
+      "json_chunk": 4,
+      "bin_chunk": 8,
+      "bin_origin": 32,
+      "total": 40,
+      "core_total": 40
+    },
+    {
+      "json": 4,
+      "bin": 12,
+      "json_chunk": 4,
+      "bin_chunk": 16,
+      "bin_origin": 32,
+      "total": 48,
+      "core_total": 44
+    },
+    {
+      "json": 8,
+      "bin": 4,
+      "json_chunk": 12,
+      "bin_chunk": 8,
+      "bin_origin": 40,
+      "total": 48,
+      "core_total": 40
+    },
+    {
+      "json": 8,
+      "bin": 8,
+      "json_chunk": 12,
+      "bin_chunk": 8,
+      "bin_origin": 40,
+      "total": 48,
+      "core_total": 44
+    },
+    {
+      "json": 8,
+      "bin": 12,
+      "json_chunk": 12,
+      "bin_chunk": 16,
+      "bin_origin": 40,
+      "total": 56,
+      "core_total": 48
+    },
+    {
+      "json": 12,
+      "bin": 4,
+      "json_chunk": 12,
+      "bin_chunk": 8,
+      "bin_origin": 40,
+      "total": 48,
+      "core_total": 44
+    },
+    {
+      "json": 12,
+      "bin": 8,
+      "json_chunk": 12,
+      "bin_chunk": 8,
+      "bin_origin": 40,
+      "total": 48,
+      "core_total": 48
+    },
+    {
+      "json": 12,
+      "bin": 12,
+      "json_chunk": 12,
+      "bin_chunk": 16,
+      "bin_origin": 40,
+      "total": 56,
+      "core_total": 52
+    }
+  ],
+  "fixed_meshopt_field_bytes_at_u64_decimal_max": 241,
+  "proof_limits": [
+    "No actual FFI bound/encoded bytes executed",
+    "No serializer key-escaping/output-delta proof",
+    "No parser/type/capacity coefficient proof",
+    "Metadata formula adopts absolute chunk-end boundary interpretation of retained primary; needs independently framed and actual consumer controls"
+  ]
+}

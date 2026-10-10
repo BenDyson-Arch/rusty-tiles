@@ -1,0 +1,110 @@
+{
+  "scope": "Static primary-text preparation only, not codec execution/conformance acceptance",
+  "references": [
+    {
+      "bytes": 35576,
+      "file": "EXT_meshopt_compression.md",
+      "httpStatus": 200,
+      "repository": "KhronosGroup/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:43.533364+00:00",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_meshopt_compression.md",
+      "source": "retained exact-pinned primary bundle; hash reverified in this audit"
+    },
+    {
+      "bytes": 12593,
+      "file": "KHR_mesh_quantization.md",
+      "httpStatus": 200,
+      "repository": "KhronosGroup/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:43.247689+00:00",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/extensions/2.0/Khronos/KHR_mesh_quantization/README.md",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/KHR_mesh_quantization.md",
+      "source": "retained exact-pinned primary bundle; hash reverified in this audit"
+    },
+    {
+      "bytes": 4364,
+      "file": "KHR_mesh_primitive_restart-draft.md",
+      "httpStatus": 200,
+      "repository": "CesiumGS/glTF",
+      "retrievedAtUtc": "2026-10-10T08:53:44.224076+00:00",
+      "revision": "9811e8407d4533500cfc6b10e3bc408345035a6f",
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707",
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/KHR_mesh_primitive_restart-draft.md",
+      "source": "retained exact-pinned primary bundle; hash reverified in this audit"
+    },
+    {
+      "bytes": 16220,
+      "file": "meshopt_decoder.test.js",
+      "httpStatus": 200,
+      "repository": "zeux/meshoptimizer",
+      "retrievedAtUtc": "2026-10-10T08:53:44.507280+00:00",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/meshopt_decoder.test.js",
+      "source": "retained exact-pinned primary bundle; hash reverified in this audit"
+    },
+    {
+      "revision": "c1a035499b70aeb5d8281470101423e5e285dfe3",
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/c1a035499b70aeb5d8281470101423e5e285dfe3/extensions/2.0/Vendor/EXT_mesh_polygon/README.md",
+      "bytes": 7129,
+      "sha256": "777c13228de2de5838a8f0eed5c4f653674a5278c30306124bb8ccbe2fe1016d",
+      "httpStatus": 200,
+      "scope": "Exact pinned primary retrieval/static adjudication only; no new target execution.",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_mesh_polygon.md",
+      "source": "retained exact-pinned draft; hash reverified"
+    },
+    {
+      "file": "glTF-core.adoc",
+      "repository": "KhronosGroup/glTF",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/specification/2.0/Specification.adoc",
+      "httpStatus": 200,
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/glTF-core.adoc",
+      "source": "fresh pinned primary retrieval",
+      "retrievedAtUtc": "2026-10-10T10:44:17.231689+00:00"
+    },
+    {
+      "file": "EXT_structural_metadata.md",
+      "repository": "CesiumGS/glTF",
+      "revision": "7182f40bd2bb5c090188efc4f66f2404cba266f0",
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/7182f40bd2bb5c090188efc4f66f2404cba266f0/extensions/2.0/Vendor/EXT_structural_metadata/README.md",
+      "httpStatus": 200,
+      "bytes": 30885,
+      "sha256": "2f5579b8d6698a0bbc17b61d87a72352ce5446f17f194c8f23b6fe08f24db566",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_structural_metadata.md",
+      "source": "fresh pinned primary retrieval",
+      "retrievedAtUtc": "2026-10-10T10:44:17.516174+00:00"
+    },
+    {
+      "file": "EXT_mesh_features.md",
+      "repository": "CesiumGS/glTF",
+      "revision": "7182f40bd2bb5c090188efc4f66f2404cba266f0",
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/7182f40bd2bb5c090188efc4f66f2404cba266f0/extensions/2.0/Vendor/EXT_mesh_features/README.md",
+      "httpStatus": 200,
+      "bytes": 11434,
+      "sha256": "31e89e90f5c1edd953bf4919e22efcd8217b38e87c24229ca0a74bbaf493f3cf",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/EXT_mesh_features.md",
+      "source": "fresh pinned primary retrieval",
+      "retrievedAtUtc": "2026-10-10T10:44:17.794465+00:00"
+    },
+    {
+      "path": "references/metadata.adoc",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/README.adoc",
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+      "httpStatus": 200,
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "file": "3d-metadata.adoc",
+      "local_path": "/tmp/rusty-tiles-next-vector-compression-audit/codec/primary/3d-metadata.adoc",
+      "source": "retained pinned primary text; hash reverified"
+    }
+  ]
+}

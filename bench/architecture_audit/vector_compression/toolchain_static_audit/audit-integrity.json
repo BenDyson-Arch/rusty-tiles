@@ -1,0 +1,28 @@
+{
+  "scope": "static file-audit verification only",
+  "checks": {
+    "all_fingerprint_edges_unique": true,
+    "all_38_byte_comparisons_match": true,
+    "all_frozen_dependency_files_match_registry_archive": true,
+    "all_native_archive_members_match_rlib": true,
+    "acceptance_fields_held": true
+  },
+  "files": {
+    "recommendation.txt": {
+      "bytes": 6122,
+      "sha256": "f29c09fbbef50bf1bccf2d7221a1d4ff9741b4fd75faa365856c06772c51e696"
+    },
+    "root-hash-candidates.txt": {
+      "bytes": 12473,
+      "sha256": "63e04f3de22ec144ad04ee634cc150c122e3aea9d8ebb75b54aeb1b456b13148"
+    },
+    "closure-candidates.json": {
+      "bytes": 340658,
+      "sha256": "0c6904322b2e69d1dde1b88f72ca2cd34e3aff8b260fb1263e0332b3bb39ddce"
+    },
+    "audit.py": {
+      "bytes": 15263,
+      "sha256": "47e78977bd61d40bcef51e3aa65525e606879e78f79c57c3049f6c5e7f4c4d99"
+    }
+  }
+}

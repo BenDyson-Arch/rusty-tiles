@@ -1,0 +1,7 @@
+{
+  "bytes": 8,
+  "depth": 64,
+  "nodes": 65536,
+  "category": "resource_limit",
+  "expectedNodes": null
+}

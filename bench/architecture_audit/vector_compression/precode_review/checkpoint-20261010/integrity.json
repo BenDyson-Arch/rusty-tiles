@@ -1,0 +1,18 @@
+{
+  "scope": "Frozen independent retention-checkpoint review; no whole-precode approval",
+  "captured_at_utc": "2026-10-10T12:36:35.105009+00:00",
+  "files": {
+    "review.md": {
+      "bytes": 4502,
+      "sha256": "964f2d75f495e406b4b207406831af7607814e1e0a4b8fd82d1ab451c8f7ce67"
+    },
+    "verification.json": {
+      "bytes": 293806,
+      "sha256": "925a75fded9a72e6d2754b4dd98fb788dc7b829dde084a37b170aac65fae393e"
+    },
+    "decisions.json": {
+      "bytes": 1219,
+      "sha256": "45f7bc027f01ca41c8b05c63302b21903e24e676399520b500c9379af6126a0a"
+    }
+  }
+}

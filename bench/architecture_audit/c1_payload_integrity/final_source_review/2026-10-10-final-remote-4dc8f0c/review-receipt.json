@@ -1,0 +1,30 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "role": "separate nonauthor final-source review",
+  "createdUtc": "2026-10-10T12:28:30.186465+00:00",
+  "head": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+  "tree": "57095507d251e4f2fcb826cee367fa72bd306158",
+  "mainRun": 38050915453,
+  "wheelRun": 38050915448,
+  "boundedC1FoundationRemoteMergeGatesMet": true,
+  "mergeExecuted": false,
+  "mergeAcceptedAsAlreadyCompleted": false,
+  "A2ReleaseMainTagPublishingAcceptance": false,
+  "files": {
+    "verify_remote.py": {
+      "bytes": 13437,
+      "sha256": "40e7c41b258ed2256dd0174de3322ade7ebe0cf2c24e14115bd6bb491dd8f984"
+    },
+    "verification.json": {
+      "bytes": 126450,
+      "sha256": "a38eaaebb9c561e36d5303aa0796e07be83a7f6d864ebf9ce7f8515949edc12e"
+    },
+    "review.md": {
+      "bytes": 7909,
+      "sha256": "5dfa5c96ec5cec99b16a12aeab82ffc6acfde4332c4f488619aabb263d2529d4"
+    }
+  },
+  "earlierEpochsRebound": false,
+  "repositoryChanged": false,
+  "cargoOrTargetExecuted": false
+}

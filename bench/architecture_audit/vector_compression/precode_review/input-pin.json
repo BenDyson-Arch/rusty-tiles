@@ -1,0 +1,56 @@
+{
+  "status": "Final independent precode proposal input pin; all author integrity manifests reverified",
+  "captured_at_utc": "2026-10-10T11:22:15.747847+00:00",
+  "source": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "corrected_C1": "Separate dependency acceptance; not transferred",
+  "files": {
+    "lifecycle/audit.md": {
+      "bytes": 28592,
+      "sha256": "8162d1f7c796d942443e0a7f9762d46ca7dd33e678e4402193f4551ed2e92543"
+    },
+    "lifecycle/source-pin.json": {
+      "bytes": 3281,
+      "sha256": "af20cfc2187dbea221968ff3f39a893ac38900ceba7c33119173f8b555eee36d"
+    },
+    "lifecycle/contract-draft.md": {
+      "bytes": 26205,
+      "sha256": "568f0ef8324aeb98890db427ea06bf3d75edc1b2172686b1741f0375f64c05b0"
+    },
+    "lifecycle/decisions.json": {
+      "bytes": 13103,
+      "sha256": "237fc0232a8faf9b29b20311602284bec3265b18783bc3fc6d167eadae559ece"
+    },
+    "lifecycle/draft-integrity.json": {
+      "bytes": 1304,
+      "sha256": "e7147c7e8b848a606a3e3033db6f3cc69bf905dd26b9508309e3d47375273afb"
+    },
+    "codec/audit.md": {
+      "bytes": 20113,
+      "sha256": "fa82b064622358f985ff16e8ee452716c122f52a51416e20a5a7e31bb0a1c3e7"
+    },
+    "codec/audit.json": {
+      "bytes": 27513,
+      "sha256": "261edcad319e8b98de00325dd11ee4cc51f8f396f0367256a67270fc4ef9d017"
+    },
+    "codec/contract-draft.md": {
+      "bytes": 18401,
+      "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e"
+    },
+    "codec/decisions.json": {
+      "bytes": 20032,
+      "sha256": "a7a93c86b20bb713dbd15b0556c8d5fc37086886d71a711ca120b1710dc2fe90"
+    },
+    "codec/record-verification.json": {
+      "bytes": 594,
+      "sha256": "d52801e3238086cc13f7c7b48cc0f0a7c1951c469cae0bbdab2d9d63a9a8cc0a"
+    },
+    "codec/primary/primary-receipt.json": {
+      "bytes": 6116,
+      "sha256": "ec1e75800169a99781a56abc76ec904aeade31b95264d5810c159868c2a780b8"
+    },
+    "codec/draft-integrity.json": {
+      "bytes": 1316,
+      "sha256": "830da62ba894df135a9e89728fbd6f87e744a091a7298534decb1f9edbbdd3dd"
+    }
+  }
+}

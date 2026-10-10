@@ -1,0 +1,43 @@
+{
+  "audit_kind": "read-only static preparation; no executed correctness, resource or platform acceptance",
+  "captured_at_utc": "2026-10-10T10:44:50.227043+00:00",
+  "source_root": "/tmp/rusty-tiles-c1-payload-foundation",
+  "git_head": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "source_sha256": {
+    "AGENTS.md": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+    "Cargo.toml": "d8e1cbf99a0d46ee5c015eeae2e7b70d2fa571a2d4f21d8457f1fbeeaa423467",
+    "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+    "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a",
+    "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+    "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+    "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+    "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+    "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+    "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+    "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+    "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+    "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+    "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+    "src/content_integrity.rs": "f0ba84385e8f9e02617f56c21c2337640f198795c06b66c3a7ceea0c21b2a9b4",
+    "src/content_integrity/json.rs": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+    "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+    "src/lib.rs": "bc3d404792330824ca70bd206d49f68db5b54f8a15bb12b2643573d599c39059",
+    "bindings/python/src/lib.rs": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9",
+    "tests/test_vector_compression.py": "3e54c82148744b03a63705b8716935a178d5960db3e34f737ac4f4d9a756e952",
+    "tests/fixtures/vector_oracle/vector_parallel.py": "4e9484be28301f3ee7e1908ca6483726ade4719140ee6162e79697da78cf58aa",
+    "docs/architecture/README.md": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80",
+    "docs/architecture/foundation-contracts.md": "e415f1e26460e8078ce8242636d4cad128889446b7fb77a29f9f11c021351612",
+    "docs/architecture/f0-implementation.md": "93bcdf244c87943a9dfaf09d21a7fd8b7e6d173e5b1b2fbd382486da3b7554b6",
+    "docs/architecture/f0-evidence.md": "1a30e3e9a49a48d02339ddd88841137dab65d12bc1db359ead968214c0826840",
+    "docs/architecture/platform-evidence.md": "b3cdd9df11a7721f379380c547099a7add88a93119fb33e3842dda31cc4fc8db",
+    "docs/architecture/public-surface-inventory.md": "7c3cc54125e13cff0e4f7ad9e7a0d644a110cf632cf0b469cd1e80d566640dde"
+  },
+  "commands_not_run": [
+    "Cargo/builds/tests",
+    "resource measurements",
+    "production probes",
+    "source edits",
+    "issue writes"
+  ],
+  "other_lane": "Codec formula and actual stream-domain observations supplied by /root/next_dependency_selection; not executed here"
+}
