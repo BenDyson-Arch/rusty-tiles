@@ -1,0 +1,223 @@
+{
+  "scope": "Nonauthor review of two active CI resource inspector schema/profile/mode guards and retained replay provenance. Positive gate controls deliberately stop at absent archive; they are not full artifact replays. Full workload outcomes are reviewed coordinator receipts, not reviewer re-execution. No Git, Cargo or converter execution.",
+  "production_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "verified_production_source_hashes": 92,
+  "binary_sha256": "81fca6a80c1e64cfe6cec953838eba8cce6b39cadcd45a193e4a1096c8e44965",
+  "inspectors": {
+    "f1b3": "540f974ada5c47f38199734ebb3670c74dfa0689ac45ffe771ae4c9564d91532",
+    "f1c1": "0bf92f3fbabe414e2d24e1736981a58182bcb63fb78f402fc4789d8f7455bfc1"
+  },
+  "old_f1b3_reconstruction_sha256": "7ec7d9bbfd1dea5e0c72da37f6fad39b5811ef721200cdfde929b25da56a5469",
+  "reconstruction": "Reverse only schema6/profilef1d1 to schema5/profilef1c2 and remove exact full_detail assertion; reconstructed bytes match before receipt probe SHA.",
+  "verified_storage": {
+    "f1b3-ci-before.json": {
+      "path": "f1b3-ci-before.json.gz",
+      "original_bytes": 4562,
+      "original_sha256": "656e520b807dec6c3c7e5b4d9a748af4a03b89264b7bc46c18b5dfdca1518b91",
+      "stored_bytes": 1629,
+      "stored_sha256": "4ba075c3ac64369e8fcf48180aacaf18d91e61023eaa01cd0e3d06bfd92849cd"
+    },
+    "f1b3-ci-after.json": {
+      "path": "f1b3-ci-after.json.gz",
+      "original_bytes": 16197,
+      "original_sha256": "b6460bda623965bf87237836e2bcc99e448c284ff628de5ebd16457f18105eb3",
+      "stored_bytes": 2246,
+      "stored_sha256": "89a49e0acde01a492b9424b22743921afb0478ad0174fd8ba9055d5b023a1103"
+    },
+    "f1c1-ci-after.json": {
+      "path": "f1c1-ci-after.json.gz",
+      "original_bytes": 61169,
+      "original_sha256": "a78ea00ede49933a050a97e7349f9831f77d482751cd4619ea64b091273bb2e7",
+      "stored_bytes": 10207,
+      "stored_sha256": "2d766c4fa496e38648ac1ad563dc5d491a3b2fe4a3faf1e98d644e52c5f65858"
+    }
+  },
+  "failure_excerpt_sha256": "c4411a8dc23a23f273ddf257df0da395013bee53f36f03ce69c040c0fbfcbb8f",
+  "retained_replay_outcomes": {
+    "f1b3": {
+      "cases": 4,
+      "successful_artifact_inspections": 3,
+      "typed_refusals": 1
+    },
+    "f1c1": {
+      "cases": 10,
+      "successful_artifact_inspections": 6,
+      "typed_refusals": 4,
+      "identical_local_placed_content_pairs": 3
+    }
+  },
+  "sensitivity": {
+    "unmodified_report_gate_controls": 9,
+    "mutated_reports_rejected_before_archive_access": 54,
+    "mutations": {
+      "schema5": [
+        "schema_version",
+        5
+      ],
+      "schema7": [
+        "schema_version",
+        7
+      ],
+      "old-profile": [
+        "profile",
+        "f1c2-source-identity-gltf-v1"
+      ],
+      "root-proxy-mode": [
+        "approximation",
+        {
+          "kind": "root_proxy"
+        }
+      ],
+      "missing-approximation": [
+        "approximation",
+        null
+      ],
+      "extra-mode-property": [
+        "approximation",
+        {
+          "kind": "full_detail",
+          "extra": true
+        }
+      ]
+    },
+    "controls": [
+      {
+        "inspector": "f1b3",
+        "case": "core-pbr-single-leaf",
+        "placed": null,
+        "payload_sha256": "ab4d8d62c428c6b16d0891f47121998fed5b977385d475128c11820855058aea",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1b3",
+        "case": "core-pbr-many-leaves",
+        "placed": null,
+        "payload_sha256": "704b84a6158a69d5438191ac473e0cb1470b5850284cc283ab8c4e87af5beef1",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1b3",
+        "case": "shared-six-attrs-4096-primitives",
+        "placed": null,
+        "payload_sha256": "1bd2b12a2fd7be4edad2b341ef92dc90e3b07ac3263ac8b4fd7cfbe56bd19be2",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "core-pbr-single-leaf",
+        "placed": false,
+        "payload_sha256": "a57aa446057ea662e30b10fd0d041bc762da2fb1d0a2fb42b5a32499a3a70c49",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "core-pbr-single-leaf",
+        "placed": true,
+        "payload_sha256": "fc7202cb8ff0ea8b20912e20b5acad1e40b465f5e0af17a840cf822d4706363d",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "core-pbr-many-leaves",
+        "placed": false,
+        "payload_sha256": "cbb08d7a3c5556f0ccc70369d42d60c8c66b6c5c45e40234a0cb64f62bcf7dad",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "core-pbr-many-leaves",
+        "placed": true,
+        "payload_sha256": "f491c279cb22aea586a819f6b096a484ddea410931693043f87b89ecda8c45a8",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "shared-six-attrs-4096-primitives",
+        "placed": false,
+        "payload_sha256": "11692daae3131359048e74c119b08a2bb41bfd89f929201f6c45836f72434216",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      },
+      {
+        "inspector": "f1c1",
+        "case": "shared-six-attrs-4096-primitives",
+        "placed": true,
+        "payload_sha256": "d000c090cf6a5c85a3ccfec6a26856084f09a97528f40d9f756d9cde71cd981c",
+        "positive_gate_control": "FileNotFoundError at deliberately absent archive",
+        "negative_gate_controls": {
+          "schema5": "AssertionError",
+          "schema7": "AssertionError",
+          "old-profile": "AssertionError",
+          "root-proxy-mode": "AssertionError",
+          "missing-approximation": "KeyError",
+          "extra-mode-property": "AssertionError"
+        }
+      }
+    ]
+  },
+  "reproduction": "Load successful result/payload from each compressed after receipt; import corresponding resource_probe.py without calling main. Call inspect with recorded expected/expected_source, leaf_triangles and placed arguments, plus an absent archive path. Unchanged report must raise FileNotFoundError; independently apply each listed mutation to meshReport and require AssertionError or KeyError before filesystem access.",
+  "conclusion": "No blocker found in narrow inspector correction. Hosted CI rerun remains pending; concurrent replay timing and sampled memory are not fresh performance baselines. Production bytes unchanged."
+}

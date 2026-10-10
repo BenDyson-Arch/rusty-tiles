@@ -123,6 +123,15 @@ Khronos checks and the placed-browser receipt. `coordinator-checks.json` records
 local test/lint log identities and unsuccessful environment setup attempts.
 No converter binaries, wheel files or generated archives are checked in.
 
+The first PR CI run exposed two stale schema-5 expectations in the active F1b3
+and F1c1 resource inspectors. Rust tests passed; the PBR inspector rejected three
+successful conversions, and CI had not yet reached the placement inspector.
+`ci-followup.json` binds the failure, frozen native binary, before/after execution
+and compressed receipts. Both inspectors now require schema 6 and exact
+full-detail mode. All four PBR cases and ten placement cases passed on replay,
+without changing production. These complete resource drivers were missed by the
+earlier local verification. Historical audit scripts retain their original pins.
+
 For either storage index, verify each stored SHA256 and byte length, decompress
 the gzip, then verify the original SHA256 and byte length. Decompression recovers
 the executed JSON bytes; it does not create new acceptance evidence. The primary

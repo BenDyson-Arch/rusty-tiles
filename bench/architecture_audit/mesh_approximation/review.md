@@ -216,6 +216,42 @@ budget, exact omissions and remaining approximation gates consistently with
 the inspected source. No supplemental blocker or unresolved production finding
 was identified.
 
+## #149 active CI checker follow-up
+
+Rust CI run `38027622273`, job `114141722779`, at head
+`711e663b6bc388e59e7803043169c802cc5e42c6` reached the active F1b3 resource
+driver after Rust tests passed. Its stale schema 5 / F1c2 profile guard rejected
+three successful conversions. The corresponding F1c1 guard had the same stale
+expectation, although that driver was not reached in the failed job. Earlier
+local verification did not replay these two complete active CI resource drivers.
+The retained before receipt reproduces the PBR checker failure with a successful
+conversion from the frozen native binary; this is a checker defect, not a
+production conversion failure.
+
+Both inspectors now require schema 6, `f1d1-root-proxy-gltf-v1`, and exactly
+`{"kind":"full_detail"}`. These resource workloads request the default
+full-detail mode. Existing artifact, count, placement and resource checks remain
+in place. Reversing only the PBR profile/schema change and removing its new mode
+assertion reconstructs the prior probe bytes exactly, matching the before
+receipt digest `7ec7d9bbfd1dea5e0c72da37f6fad39b5811ef721200cdfde929b25da56a5469`.
+The final retained coordinator replays pass all four PBR cases and all ten
+placement cases: nine successful artifact inspections, five typed refusals,
+and three local/placed content byte-equality comparisons. Their driver,
+generator, native binary, compressed/raw receipt and failure excerpt identities
+match retained bytes; all 92 frozen production source hashes remain unchanged.
+
+Independent guard controls use all nine successful retained report payloads.
+Schema 5, schema 7, the old profile, root-proxy mode, missing approximation and
+an extra approximation property each fail before archive access: 54 rejected
+mutations. Each unchanged payload reaches the deliberately absent archive and
+raises `FileNotFoundError`. These controls test report-gate sensitivity only;
+they do not claim another complete artifact replay. The compact
+[review receipt](ci-checker-review.json) records pins, mutations and reproduction
+instructions. No blocker was found in this narrow correction. A new hosted CI
+run remains required; the two concurrent coordinator replays do not establish
+fresh timing or sampled-memory baselines. This addendum does not broaden the
+production, approximation or release conclusions above.
+
 ## Reproduction and remaining limits
 
 Run `review_probes/interval_controls.py` and
