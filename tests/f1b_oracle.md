@@ -1,6 +1,8 @@
 # F1b1 independent texture and resource acceptance
 
-Current replay advances to `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md). The historical blanket material/UV1/tangent refusals are explicitly replaced with remaining texture-extension/UV2/COLOR1 and missing-authored-tangent boundaries. New admitted positives and extended-corner proof are in [f1b3_oracle.md](f1b3_oracle.md); the historical receipts below retain their original scope and profile.
+Current replay uses schema4/profile `f1c1-placed-gltf-v1` with an explicit identity root transform and typed Local placement report under the [F1c1 contract](../docs/architecture/f1c1-contract.md). This remains local geometry/resource regression evidence. The separate [F1c1 oracle](f1c1_oracle.md) proves Earth placement and the full world transform chain; historical receipts below retain their original scope.
+
+The earlier F1b3 replay advanced to `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md). The historical blanket material/UV1/tangent refusals are explicitly replaced with remaining texture-extension/UV2/COLOR1 and missing-authored-tangent boundaries. New admitted positives and extended-corner proof are in [f1b3_oracle.md](f1b3_oracle.md); the historical receipts below retain their original scope and profile.
 
 The independent oracle exercises the first bounded [#121 slice](../docs/architecture/f1b-contract.md): full-detail local GLB triangles with supported embedded base-color PNG/JPEG, UVs, materials and samplers, delivered through shared archive images. It imports no production loader, writer, validator, atlas, sampling kernel or coordinate helper. It reuses only the independently authored F1a Python matrix, GLB reader, bounds and 3TZ-index helpers.
 

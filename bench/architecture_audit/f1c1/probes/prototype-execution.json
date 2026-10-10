@@ -1,0 +1,41 @@
+{
+  "status": "prototype-self-test-passed",
+  "not_executed": "No production converter, Cargo, acceptance archive reader, renderer or installed API was run.",
+  "provenance": "Independent author; stdlib Decimal80 Taylor trig; NGA WGS84 constants; literal cardinals and rational Hamilton rotation; spec sources pinned separately.",
+  "rational_orientation_rows": [
+    [
+      "2/15",
+      "-2/3",
+      "11/15"
+    ],
+    [
+      "14/15",
+      "1/3",
+      "2/15"
+    ],
+    [
+      "-1/3",
+      "2/3",
+      "2/3"
+    ]
+  ],
+  "max_f64_origin_difference_metres": 7.450580596923828e-09,
+  "max_f64_axis_difference": 1.9147505681844805e-16,
+  "sensitive_wrong_formula_controls_metres": {
+    "omit-yup-conversion": 45.694638635261356,
+    "double-yup-conversion": 45.694638634672415,
+    "rotation-before-yup-conversion": 51.894936597536905,
+    "source-offset-before-node": 24.062418831066466,
+    "quaternion-wxyz-misread": 11.892854997761292,
+    "wrong-anchor-height": 129.99999999951115,
+    "degrees-as-radians": 8065751.319633596,
+    "geocentric-latitude": 17214.987223315256
+  },
+  "precision_representation_probe": {
+    "direct_ecef_f32_error_metres": 0.11284911634369034,
+    "local_f32_error_metres": 8.363255971750552e-10
+  },
+  "script_sha256": "0596fff52eb7893864a72613181e5bf3bea0643b0c77bd9d40157c139c5ee0df",
+  "fixture_sha256": "3381ea43441cc341951b0a3bab1ebe0bdb5b03449824b528cf7867b7db094227",
+  "anchor_case_count": 21
+}

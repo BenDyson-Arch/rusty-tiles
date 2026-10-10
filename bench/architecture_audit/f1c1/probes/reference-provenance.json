@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/fc2d0a6c23ab236e268b285f4fe683b28380c8aa/specification/README.adoc",
+    "local": "tiles-specification.adoc",
+    "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87",
+    "length": 63585
+  },
+  {
+    "url": "https://earth-info.nga.mil/index.php?action=wgs84&dir=wgs84",
+    "local": "nga-wgs84.html",
+    "sha256": "a057b27276450e25c18f2fce6f60e396442410411f9c3662cc61e94fb6b6c09c",
+    "length": 48657
+  }
+]

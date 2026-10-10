@@ -1,0 +1,168 @@
+{
+  "binary_sha256": "b0f2031f3f951018f6e19e682d62e86e1699dd15e382ca2d275300d30c7f99e5",
+  "resource_probe_sha256": "1ea2dd38792c9a751559d3e3bf57b4a25127c9f0e4f03d2cd7fb2d816d6ecbe0",
+  "parent_retained_bytes": 188743680,
+  "scope": "Three frozen cap-refusal invocations using fresh resource-probe workers after180MiB parent growth. Validates launch-floor separation only, not complete resource workload acceptance.",
+  "results": [
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/tmp/f1c1-worker-verification-23ohflwc/0/missing.glb",
+        "-o",
+        "/tmp/f1c1-worker-verification-23ohflwc/0/absent-parent/result.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1000000000"
+      ],
+      "exit_code": 2,
+      "elapsed_seconds": 0.005063268996309489,
+      "peak_rss_kib_wait4": 20528,
+      "launcher_memory_kib_at_spawn": {
+        "VmRSS": 20756,
+        "VmHWM": 20756
+      },
+      "rss_accounting": "wait4 includes inherited fresh-worker launcher floor; sampled vm_hwm_kib is observed converter /proc VmHWM, with transient peaks possibly missed",
+      "sampled_observations": {
+        "samples": 3,
+        "peak": {
+          "rss_kib": 13572,
+          "vm_hwm_kib": 13572,
+          "threads": 1,
+          "file_descriptors": 3,
+          "child_processes": 0
+        },
+        "permission_denials": 0,
+        "vanished_races": 0,
+        "peak_scratch_files": 0,
+        "peak_scratch_bytes": 0
+      },
+      "termination": null,
+      "stderr_excerpt": "",
+      "payload": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/tmp/f1c1-worker-verification-23ohflwc/1/missing.glb",
+        "-o",
+        "/tmp/f1c1-worker-verification-23ohflwc/1/absent-parent/result.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1000000000"
+      ],
+      "exit_code": 2,
+      "elapsed_seconds": 0.0032347500091418624,
+      "peak_rss_kib_wait4": 20472,
+      "launcher_memory_kib_at_spawn": {
+        "VmRSS": 20656,
+        "VmHWM": 20656
+      },
+      "rss_accounting": "wait4 includes inherited fresh-worker launcher floor; sampled vm_hwm_kib is observed converter /proc VmHWM, with transient peaks possibly missed",
+      "sampled_observations": {
+        "samples": 2,
+        "peak": {
+          "rss_kib": 604,
+          "vm_hwm_kib": 604,
+          "threads": 1,
+          "file_descriptors": 3,
+          "child_processes": 0
+        },
+        "permission_denials": 0,
+        "vanished_races": 0,
+        "peak_scratch_files": 0,
+        "peak_scratch_bytes": 0
+      },
+      "termination": null,
+      "stderr_excerpt": "",
+      "payload": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    },
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1c1-evidence/rusty-tiles-portable-3bd86c3",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/tmp/f1c1-worker-verification-23ohflwc/2/missing.glb",
+        "-o",
+        "/tmp/f1c1-worker-verification-23ohflwc/2/absent-parent/result.3tz",
+        "--leaf-triangles",
+        "1",
+        "--anchor",
+        "0",
+        "0",
+        "1000000000"
+      ],
+      "exit_code": 2,
+      "elapsed_seconds": 0.0027405759901739657,
+      "peak_rss_kib_wait4": 20868,
+      "launcher_memory_kib_at_spawn": {
+        "VmRSS": 20804,
+        "VmHWM": 20804
+      },
+      "rss_accounting": "wait4 includes inherited fresh-worker launcher floor; sampled vm_hwm_kib is observed converter /proc VmHWM, with transient peaks possibly missed",
+      "sampled_observations": {
+        "samples": 2,
+        "peak": {
+          "rss_kib": 16,
+          "vm_hwm_kib": 16,
+          "threads": 1,
+          "file_descriptors": 3,
+          "child_processes": 0
+        },
+        "permission_denials": 0,
+        "vanished_races": 0,
+        "peak_scratch_files": 0,
+        "peak_scratch_bytes": 0
+      },
+      "termination": null,
+      "stderr_excerpt": "",
+      "payload": {
+        "error": {
+          "code": "unsupported",
+          "kind": "unsupported",
+          "message": "mesh placement exceeds the 2^26 metre forward-magnitude precision budget",
+          "recovery": null,
+          "retainedPaths": [],
+          "secondaryDiagnostics": []
+        },
+        "exitCode": 2,
+        "ok": false
+      }
+    }
+  ],
+  "passed": true
+}

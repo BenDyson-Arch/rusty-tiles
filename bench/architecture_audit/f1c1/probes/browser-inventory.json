@@ -1,0 +1,63 @@
+{
+  "package_pins": [
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/package.json",
+      "name": "cesium",
+      "version": "1.146.0",
+      "sha256": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/playwright/package.json",
+      "name": "playwright",
+      "version": "1.63.0",
+      "sha256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/engine/package.json",
+      "name": "@cesium/engine",
+      "version": "26.4.0",
+      "sha256": "79740486bf756085f666bf92b49a425ffc3dd45d7593ff9a8daa956d1d86da8d"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/core/package.json",
+      "name": "@cesium/core",
+      "version": "0.1.0",
+      "sha256": "04204071eab73501125de8385ac43867557e023356a82c5551d6738a99b7e0a0"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1b3-three/node_modules/three/package.json",
+      "name": "three",
+      "version": "0.180.0",
+      "sha256": "aa42494664dba4cf76d89c6975ee38321a402f09a048672e190bad6f13beec93"
+    }
+  ],
+  "assets": [
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium/Cesium.js",
+      "length": 6080574,
+      "sha256": "a5ab7e638f51d3bc5a6c710a79c9aecea42d9252b5cd2dad34980ea771c2c9af"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1b3-three/node_modules/three/build/three.module.js",
+      "length": 603113,
+      "sha256": "c8211c69345d2e9949dc7a8ac969380497aa0600a5a8ac6a459c8cd02dd9cb8a"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-f1b3-three/node_modules/three/examples/jsm/loaders/GLTFLoader.js",
+      "length": 114739,
+      "sha256": "67ac5551fdafa6e349bd80c8f8e5e39c136d6b2fb1ad647db9abb21dc86f9e4a"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/@cesium/core/Source/FixedFrameTransforms.js",
+      "length": 28462,
+      "sha256": "ff7489c317a55aa25bb79b6f4ff1857bb3ca73ee9519cec1ce6802ddb249742d"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+      "length": 293285184,
+      "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+    }
+  ],
+  "browser_version_only": "Google Chrome for Testing 153.0.8010.12",
+  "scope": "Inventory and browser executable version only; no renderer acceptance run."
+}

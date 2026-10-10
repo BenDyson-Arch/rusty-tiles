@@ -22,7 +22,7 @@ import f1a_oracle as geometry
 
 OracleError = geometry.OracleError
 require = geometry.require
-PROFILE = 'f1b-core-pbr-gltf-v1'
+PROFILE = 'f1c1-placed-gltf-v1'
 PIXELS = ((255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 0),
           (255, 255, 0, 64), (255, 0, 255, 255), (0, 255, 255, 192))
 # A prebuilt JPEG and its independently decoded Pillow RGB manifest are appended
@@ -513,7 +513,7 @@ def shared_uv_fixture(primitives=4096, vertices=300000):
     return encode_glb(doc, bytes(binary))
 
 def inspect(source, archive, leaf_limit, *, source_model=None, scene_reader=None,
-            triangle_matcher=None, triangle_positions=None):
+            triangle_matcher=None, triangle_positions=None, placement_expectation=None):
     reader = scene_triangles if scene_reader is None else scene_reader
     matcher = match_triangles if triangle_matcher is None else triangle_matcher
     positions_of = (lambda triangle: triangle[0]) if triangle_positions is None else triangle_positions
@@ -538,7 +538,7 @@ def inspect(source, archive, leaf_limit, *, source_model=None, scene_reader=None
         root = tileset['root']
         children = root.get('children', [])
         require(tileset['asset']['version'] == '1.1' and root['refine'] == 'REPLACE' and children, 'tileset full detail hierarchy')
-        require('content' not in root and 'contents' not in root and 'transform' not in root and 'implicitTiling' not in root, 'flat empty root')
+        require('content' not in root and 'contents' not in root and 'implicitTiling' not in root, 'flat empty root')
         box = root['boundingVolume']['box']
         error = max(1.0, 2 * math.sqrt(sum(box[i] ** 2 for i in (3, 7, 11))))
         require(abs(root['geometricError'] - error) <= 1e-10 * max(1, error), 'root routing metric')
@@ -575,14 +575,14 @@ def inspect(source, archive, leaf_limit, *, source_model=None, scene_reader=None
             child_box = child['boundingVolume']['box']
             for bits in range(8):
                 corner = tuple(child_box[i] + (-1 if bits & (1 << i) else 1) * child_box[3 + 4 * i] for i in range(3))
-                require(geometry.box_contains(box, corner, 1e-9), 'root encloses descendant box')
+                require(geometry.box_contains(box, corner, 0), 'root encloses descendant box')
             for triangle in triangles:
                 for point in positions_of(triangle):
-                    require(geometry.box_contains(box, point, 1e-9) and geometry.box_contains(child_box, point, 1e-9), 'stored vertex bounds')
+                    require(geometry.box_contains(box, point, 0) and geometry.box_contains(child_box, point, 0), 'stored vertex bounds')
             actual.extend(triangles)
         require(used_names == expected_members, 'exact selected source image closure')
         require(set(names) == {'tileset.json', 'conversion.json', '@3dtilesIndex1@', *leaf_uris, *expected_members}, 'exact archive dependency closure')
-        expected_report = {'schema_version': 3, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': len(source_data), 'external_files': external_files, 'external_bytes': external_bytes,
+        expected_report = {'schema_version': 4, 'profile': PROFILE, 'source_coordinates': 'local-gltf', **geometry.local_placement_expectation(), 'source_bytes': len(source_data), 'external_files': external_files, 'external_bytes': external_bytes,
                            'triangles': len(expected), 'leaf_tiles': len(leaf_uris), 'leaf_triangles': leaf_limit,
                            'routing_geometric_error_metres': error, 'images': len(source_used),
                            'image_bytes': sum(len(source_raw[i]) for i in source_used),
@@ -590,6 +590,8 @@ def inspect(source, archive, leaf_limit, *, source_model=None, scene_reader=None
         report = json.loads(z.read('conversion.json'))
         for field in ('schema_version', 'source_bytes', 'triangles', 'leaf_tiles', 'leaf_triangles', 'images', 'image_bytes', 'image_pixels', 'external_files', 'external_bytes'):
             require(type(report.get(field)) is int and report[field] >= 0, 'typed nonnegative integer report field ' + field)
+        resolved = geometry.check_placement(root, report, placement_expectation)
+        expected_report.update(resolved)
         require(geometry.close_value(report, expected_report, 1e-10 * max(1, error)), 'typed report facts/fields')
         geometry.check_index(z, Path(archive).read_bytes())
         matcher(expected, actual)
@@ -726,8 +728,8 @@ def synthetic_archive(root):
     high = [max(p[i] for p in positions) for i in range(3)]
     box = [(low[i] + high[i]) / 2 for i in range(3)] + [(high[0] - low[0]) / 2, 0, 0, 0, (high[1] - low[1]) / 2, 0, 0, 0, (high[2] - low[2]) / 2]
     error = max(1.0, math.dist(low, high))
-    manifest = {'asset': {'version': '1.1'}, 'geometricError': error, 'root': {'boundingVolume': {'box': box}, 'geometricError': error, 'refine': 'REPLACE', 'children': [{'boundingVolume': {'box': box}, 'geometricError': 0, 'content': {'uri': 't/0.glb'}}]}}
-    report = {'schema_version': 3, 'profile': PROFILE, 'coordinates': 'local-gltf', 'source_bytes': source.stat().st_size, 'external_files': 0, 'external_bytes': 0, 'triangles': 2, 'leaf_tiles': 1, 'leaf_triangles': 2, 'routing_geometric_error_metres': error, 'images': 1, 'image_bytes': len(raw[0]), 'image_pixels': 6}
+    manifest = {'asset': {'version': '1.1'}, 'geometricError': error, 'root': {'transform': list(geometry.IDENTITY_TRANSFORM), 'boundingVolume': {'box': box}, 'geometricError': error, 'refine': 'REPLACE', 'children': [{'boundingVolume': {'box': box}, 'geometricError': 0, 'content': {'uri': 't/0.glb'}}]}}
+    report = {'schema_version': 4, 'profile': PROFILE, 'source_coordinates': 'local-gltf', **geometry.local_placement_expectation(), 'source_bytes': source.stat().st_size, 'external_files': 0, 'external_bytes': 0, 'triangles': 2, 'leaf_tiles': 1, 'leaf_triangles': 2, 'routing_geometric_error_metres': error, 'images': 1, 'image_bytes': len(raw[0]), 'image_pixels': 6}
     members = {'tileset.json': json.dumps(manifest).encode(), 'conversion.json': json.dumps(report).encode(), 't/0.glb': leaf, 'textures/0.png': raw[0]}
     output = root / 'synthetic.3tz'
     geometry.write_control_archive(output, members)

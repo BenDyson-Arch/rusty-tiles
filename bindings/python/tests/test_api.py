@@ -69,6 +69,58 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_explicit_mesh_placement_independent_world_contract(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1c1_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        # Independently cover every placement and every admitted source frame.
+        scenarios = [("all-slots", name, limit, False)
+                     for name in oracle.PLACEMENTS for limit in (1, 1000)]
+        scenarios += [(variant, "mixed-offset", limit, variant in oracle.EXTERNAL_VARIANTS)
+                      for variant in oracle.VARIANTS for limit in (1, 1000)]
+        sources = {}
+        for index, (variant, name, limit, external) in enumerate(scenarios):
+            key = (variant, external)
+            if key not in sources:
+                sources[key] = oracle.write_fixture(self.root / (variant + str(external)),
+                                                     variant, external)
+            source = sources[key]
+            output = self.root / f"{index}-{variant}-{name}-{limit}.3tz"
+            placement = oracle.PLACEMENTS[name]
+            with self.subTest(variant=variant, placement=name, leaf_limit=limit):
+                result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit,
+                                                       **{key: tuple(value) for key, value in placement.items()})
+                self.assertEqual(result.report, oracle.inspect(source, output, limit, placement)["report"])
+                self.assertFalse(result.cleanup_diagnostics)
+        errors = {"invalid_request": rusty_tiles.InvalidRequestError,
+                  "unsupported": rusty_tiles.UnsupportedError}
+        for name, arguments, kind in oracle.refusal_cases():
+            if name.startswith("partial-"):
+                continue  # PyO3 rejects tuple arity before entering the operation.
+            parameters = {}
+            cursor = 0
+            while cursor < len(arguments):
+                flag = arguments[cursor]
+                length = 4 if flag == "--orientation-xyzw" else 3
+                parameters[flag[2:].replace("-", "_")] = tuple(
+                    float(value) for value in arguments[cursor + 1:cursor + 1 + length])
+                cursor += length + 1
+            output = self.root / "absent" / (name + ".3tz")
+            with self.subTest(refusal=name):
+                with self.assertRaises(errors[kind]) as caught:
+                    rusty_tiles.mesh_local_to_3tz(self.root / "missing.glb", output,
+                                                  leaf_triangles=1, **parameters)
+                self.assertEqual(caught.exception.kind, kind)
+                self.assertFalse(output.parent.exists())
+        for parameters in ({"anchor": (0, 0)}, {"anchor": (0, 0, 0), "orientation_xyzw": (0, 0, 1)},
+                           {"anchor": (0, 0, 0), "scene_offset": (0, 0)}):
+            with self.assertRaises((TypeError, ValueError)):
+                rusty_tiles.mesh_local_to_3tz(self.root / "missing.glb", self.root / "absent/out.3tz",
+                                              leaf_triangles=1, **parameters)
+            self.assertFalse((self.root / "absent").exists())
+
     def test_local_resource_mesh_independent_profile_oracle(self):
         sys.path.insert(0, str(ROOT / "tests"))
         try:
@@ -128,8 +180,8 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "external.3tz"
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
                                               callback=observe)
-        self.assertEqual(result.report["schema_version"], 3)
-        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 4)
+        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["external_files"], 1)
         self.assertEqual(result.report["external_bytes"], 108)
@@ -192,7 +244,7 @@ class WheelAPI(unittest.TestCase):
                         output = self.root / (name + "-" + str(limit) + ".3tz")
                         value = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
                         self.assertEqual(value.report, oracle.inspect(source, output, limit)["report"])
-                        self.assertEqual(value.report["profile"], "f1b-core-pbr-gltf-v1")
+                        self.assertEqual(value.report["profile"], "f1c1-placed-gltf-v1")
                 self.assertEqual(before, {p.relative_to(source.parent): p.read_bytes()
                                          for p in source.parent.rglob("*") if p.is_file()})
         for name, bundle, kind in oracle.refusal_bundles():
@@ -227,8 +279,8 @@ class WheelAPI(unittest.TestCase):
                 source.write_bytes(b"changed after preparation")
 
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
-        self.assertEqual(result.report["schema_version"], 3)
-        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 4)
+        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["triangles"], 8)
         self.assertEqual(result.report["leaf_tiles"], 8)
@@ -301,7 +353,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1b-core-pbr-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
@@ -392,17 +444,20 @@ class WheelAPI(unittest.TestCase):
         def observe(event):
             if not nested:
                 nested.append(rusty_tiles.mesh_local_to_3tz(
-                    source, self.root / "nested-local.3tz", leaf_triangles=3))
+                    source, self.root / "nested-local.3tz", leaf_triangles=3,
+                    anchor=(73, 90, 42), orientation_xyzw=(1, 0, 0, 0)))
 
         outer = rusty_tiles.mesh_local_to_3tz(source, self.root / "outer-local.3tz",
-                                              leaf_triangles=1, callback=observe)
+                                              leaf_triangles=1, anchor=(153, -27, 42), callback=observe)
+        self.assertNotEqual(outer.report["root_transform"], nested[0].report["root_transform"])
         self.assertEqual(outer.report["leaf_tiles"], 3)
         self.assertEqual(nested[0].report["leaf_tiles"], 1)
         with ThreadPoolExecutor(max_workers=3) as executor:
             results = list(executor.map(lambda i: rusty_tiles.mesh_local_to_3tz(
-                source, self.root / f"concurrent-local-{i}.3tz", leaf_triangles=1), range(3)))
+                source, self.root / f"concurrent-local-{i}.3tz", leaf_triangles=1,
+                anchor=(i * 37, i * 17, i * 19)), range(3)))
         self.assertEqual(len({result.output for result in results}), 3)
-        self.assertTrue(all(result.report == results[0].report for result in results))
+        self.assertEqual(len({tuple(result.report["root_transform"]) for result in results}), 3)
 
     def test_vector_geojson_options_progress_reuse_and_atomic_failure(self):
         source = self.root / "features.geojson"

@@ -219,13 +219,35 @@ and report profile rather than maintaining an F1a compatibility mode.
 
 [F1b2](f1b2-contract.md) merged through #139 with bounded local glTF/GLB
 resource binding, source stability, a pure decoder and consumer-owned capture.
-The next implementation slice is [F1b3 #140](f1b3-contract.md): five core PBR
-texture bindings and authored UV1/tangent/color companions, with exact resource
-closure and a proved bounded tangent-frame bake profile. Then settle placement
-and identity requirements, followed by an independently justified coarse
-approximation/error contract. Implicit delivery follows accepted geometry and
-resource contracts. These remain #121/#120/#125 obligations; the new local
-producer does not alone authorize deletion of all broader legacy mesh/report APIs.
+[F1b3](f1b3-contract.md) merged through #141 with five core PBR texture bindings
+and authored UV1/tangent/color companions, exact resource closure and the bounded
+tangent-frame bake profile.
+
+The current mesh implementation candidate is [F1c1 #142](f1c1-contract.md):
+explicit Local/Wgs84 placement of that local metre/Y-up source, one normalized
+ENU quaternion and post-node Y-up metre offset, and one f64 rigid root transform.
+Pure resolution precedes source I/O; PreparedMesh owns the resolved map and one
+format writer consumes it. Schema 4/profile `f1c1-placed-gltf-v1` records the
+source/output frames, normalized parameters and exact emitted matrix. Independent
+world-position/bounds/consumer, frontend and final-platform evidence plus separate
+nonauthor review remain acceptance gates; implementation alone does not pass them.
+
+F1c2 will implement source identity/metadata/picking. In the current admitted
+forest, source node index identifies an instance; mesh/primitive indices and
+original TRIANGLES ordinal identify its authored triangle association within
+the captured document. Preserve those keys through partition and regrouping;
+do not derive identity from names, output leaves or material grouping. Later
+approximation needs proved associations for geometry combining multiple source
+objects. F1c1 adds no unused metadata/provenance framework or picking claim.
+
+Independently justified coarse approximation/error follows identity, then
+implicit delivery follows accepted geometry and resource contracts. General
+source CRS/axes/E/N/A shifts and vertical/epoch/grid operations require separate
+admission evidence; manual WGS84 placement does not prove them. These remain
+#121/#120/#125 obligations. Broader legacy mesh/report routes stay advertised
+pending explicit supported-use replacement/removal decisions, with wrapping,
+implicit rewriting and in-place operations still under #126. This bounded slice
+does not close those parent gates or authorize release.
 
 After P1 acceptance, scope terrain's real directory migration under #124 using
 D1/D2, then broader mesh/resources/LOD under #121 and remaining utility operations

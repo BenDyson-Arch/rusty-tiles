@@ -1,0 +1,101 @@
+{
+  "initial": {
+    "status": {
+      "VmRSS": "18552 kB",
+      "VmHWM": "70416 kB"
+    },
+    "true": {
+      "launcher_before": {
+        "VmRSS": "18560 kB",
+        "VmHWM": "70416 kB"
+      },
+      "wait4_maxrss_kib": 70416,
+      "sampled_converter_vm_hwm_kib": 296
+    }
+  },
+  "grown": {
+    "status": {
+      "VmRSS": "203212 kB",
+      "VmHWM": "203212 kB"
+    },
+    "true": [
+      {
+        "launcher_before": {
+          "VmRSS": "203212 kB",
+          "VmHWM": "203212 kB"
+        },
+        "wait4_maxrss_kib": 202884,
+        "sampled_converter_vm_hwm_kib": 96
+      },
+      {
+        "launcher_before": {
+          "VmRSS": "203212 kB",
+          "VmHWM": "203212 kB"
+        },
+        "wait4_maxrss_kib": 202884,
+        "sampled_converter_vm_hwm_kib": 12
+      }
+    ],
+    "refusal": [
+      {
+        "launcher_before": {
+          "VmRSS": "203216 kB",
+          "VmHWM": "203216 kB"
+        },
+        "wait4_maxrss_kib": 202884,
+        "sampled_converter_vm_hwm_kib": 13568
+      },
+      {
+        "launcher_before": {
+          "VmRSS": "203224 kB",
+          "VmHWM": "203224 kB"
+        },
+        "wait4_maxrss_kib": 202884,
+        "sampled_converter_vm_hwm_kib": 13988
+      }
+    ]
+  },
+  "fresh_worker": {
+    "status": {
+      "VmRSS": "18372 kB",
+      "VmHWM": "18372 kB"
+    },
+    "true": [
+      {
+        "launcher_before": {
+          "VmRSS": "18376 kB",
+          "VmHWM": "18376 kB"
+        },
+        "wait4_maxrss_kib": 18476,
+        "sampled_converter_vm_hwm_kib": 8
+      },
+      {
+        "launcher_before": {
+          "VmRSS": "18704 kB",
+          "VmHWM": "18704 kB"
+        },
+        "wait4_maxrss_kib": 18668,
+        "sampled_converter_vm_hwm_kib": 4
+      }
+    ],
+    "refusal": [
+      {
+        "launcher_before": {
+          "VmRSS": "18708 kB",
+          "VmHWM": "18708 kB"
+        },
+        "wait4_maxrss_kib": 18668,
+        "sampled_converter_vm_hwm_kib": 18680
+      },
+      {
+        "launcher_before": {
+          "VmRSS": "18716 kB",
+          "VmHWM": "18716 kB"
+        },
+        "wait4_maxrss_kib": 18668,
+        "sampled_converter_vm_hwm_kib": 18696
+      }
+    ]
+  },
+  "scope": "Linux executable child wait4 versus sampled post-exec VmHWM; parentfixture-like180MiB allocation; frozen cap refusal and true only."
+}

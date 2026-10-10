@@ -1,0 +1,121 @@
+{
+  "scope": "Independent algorithm probe against exact Fraction arithmetic; does not execute candidate Rust or certify compiled code.",
+  "inspected_placement_source_sha256": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+  "probe_sha256": "b13a0873fb2caf970b3855ba70264d780316434d922c054390fd4dfa4554b079",
+  "reference": "Exact binary64 rational inputs via Fraction;100-digit Decimal irrational original-domain bound",
+  "counts": {
+    "cases": 90240,
+    "disagreements": 0,
+    "maximum_expansion_terms": 5,
+    "naive_rounded_sum_false_acceptances": 18784
+  },
+  "remaining_budget": {
+    "exact_remaining_budget_decimal": "58998676.19243112270647255365849412763305719474618961937194419302054806698309119996291885381324275142",
+    "bound_binary64_exact_decimal": "58998676.1924311220645904541015625",
+    "next_up_binary64_exact_decimal": "58998676.192431129515171051025390625",
+    "floor_gap_m": "6.4188209955693162763305719474618961937194419302054806698309119996291885381324275142E-10"
+  },
+  "named_controls": [
+    {
+      "case": "at_boundary",
+      "components": [
+        58998676.19243112,
+        0,
+        0,
+        0
+      ],
+      "accepted": true
+    },
+    {
+      "case": "next_up",
+      "components": [
+        58998676.19243113,
+        0,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "case": "next_down",
+      "components": [
+        58998676.192431115,
+        0,
+        0,
+        0
+      ],
+      "accepted": true
+    },
+    {
+      "case": "boundary_plus_min_subnormal",
+      "components": [
+        58998676.19243112,
+        5e-324,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "case": "boundary_plus_three_subnormals",
+      "components": [
+        58998676.19243112,
+        5e-324,
+        -5e-324,
+        5e-324
+      ],
+      "accepted": false
+    },
+    {
+      "case": "next_down_plus_three_tenths_nanometre",
+      "components": [
+        58998676.192431115,
+        1e-10,
+        -1e-10,
+        1e-10
+      ],
+      "accepted": true
+    },
+    {
+      "case": "next_down_plus_ten_nanometres",
+      "components": [
+        58998676.192431115,
+        1e-08,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "case": "large_terms_cannot_cancel",
+      "components": [
+        58998676.19243112,
+        -58998676.19243112,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "case": "finite_max",
+      "components": [
+        1.7976931348623157e+308,
+        0,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "case": "four_equal_shares",
+      "components": [
+        14749669.04810778,
+        14749669.04810778,
+        14749669.04810778,
+        14749669.04810778
+      ],
+      "accepted": true
+    }
+  ],
+  "passed": true
+}

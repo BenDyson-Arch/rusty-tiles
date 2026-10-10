@@ -31,6 +31,56 @@ def finite(values):
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
 
 
+PROFILE = 'f1c1-placed-gltf-v1'
+IDENTITY_TRANSFORM = tuple(float(i == j) for j in range(4) for i in range(4))
+
+
+def local_placement_expectation():
+    return {'coordinates': 'local-gltf', 'placement': {'kind': 'local'},
+            'root_transform': list(IDENTITY_TRANSFORM)}
+
+
+def check_placement(root, report, expectation=None):
+    """Strict report/root seam; expectations come from independent requests.
+
+    Existing callers prove Local identity by default. The local corner/resource
+    inspector still checks local truth; a caller admitting Earth placement must
+    additionally prove the complete world chain independently.
+    """
+    wanted = local_placement_expectation() if expectation is None else expectation
+    require(set(wanted) == {'coordinates', 'placement', 'root_transform'}, 'placement expectation fields')
+    require(wanted['placement']['kind'] in ('local','wgs84'), 'known placement expectation kind')
+    actual = root.get('transform')
+    require(isinstance(actual, list) and len(actual) == 16 and
+            all(type(v) in (int, float) and math.isfinite(v) for v in actual), 'explicit finite root transform')
+    require(actual[3] == actual[7] == actual[11] == 0 and actual[15] == 1, 'affine root row')
+    if wanted['placement']['kind'] == 'local':
+        require(actual == list(IDENTITY_TRANSFORM), 'exact Local root identity')
+    else:
+        for i, (a, b) in enumerate(zip(actual, wanted['root_transform'])):
+            require(abs(a-b) <= (1e-6 if i in (12,13,14) else 2e-15), 'independent root component ' + str(i))
+    require(report.get('schema_version') == 4 and report.get('profile') == PROFILE and
+            report.get('source_coordinates') == 'local-gltf', 'placement profile/source report')
+    require(report.get('coordinates') == wanted['coordinates'], 'output coordinate interpretation')
+    reported_matrix = report.get('root_transform')
+    require(isinstance(reported_matrix, list) and len(reported_matrix) == 16 and
+            all(type(v) in (int,float) and math.isfinite(v) for v in reported_matrix) and
+            reported_matrix == actual, 'report equals raw serialized transform')
+    placed = report.get('placement')
+    require(isinstance(placed, dict) and set(placed) == set(wanted['placement']), 'typed placement report fields')
+    for field, value in wanted['placement'].items():
+        if field == 'orientation_xyzw':
+            require(isinstance(placed[field], list) and len(placed[field]) == 4 and
+                    all(type(v) in (int,float) and math.isfinite(v) for v in placed[field]) and
+                    all(abs(a-b) <= 2e-15 for a,b in zip(placed[field], value)), 'independent normalized orientation report')
+        else:
+            if field in ('anchor_degrees_metres','scene_offset_metres'):
+                require(isinstance(placed[field],list) and len(placed[field]) == 3 and
+                        all(type(v) in (int,float) and math.isfinite(v) for v in placed[field]), 'typed placement report ' + field)
+            require(placed[field] == value, 'independent placement report ' + field)
+    return {**wanted, 'root_transform': actual}
+
+
 def identity():
     return [[float(i == j) for j in range(4)] for i in range(4)]
 
@@ -329,7 +379,7 @@ def inspect(source,archive,leaf_limit,position_tolerance=None,normal_tolerance=2
         box=root['boundingVolume']['box'];ge=max(1.0,2*math.sqrt(sum(box[i]**2 for i in (3,7,11))))
         require(abs(root['geometricError']-ge)<=1e-10*max(1,ge),'root selection metric')
         require(abs(doc['geometricError']-ge)<=1e-10*max(1,ge),'tileset selection metric')
-        root_m=matrix(root['transform']) if 'transform' in root else identity();actual=[];uris=[]
+        root_m=matrix(root['transform']);actual=[];uris=[]
         require(root_m==identity(),'unexpected root transform')
         for child in children:
             require(not child.get('children') and 'implicitTiling' not in child,'explicit flat leaf')
@@ -350,7 +400,8 @@ def inspect(source,archive,leaf_limit,position_tolerance=None,normal_tolerance=2
             actual.extend(triangles)
         require(set(names)=={'tileset.json','conversion.json','@3dtilesIndex1@',*uris},'exact accepted resource closure')
         report=json.loads(z.read('conversion.json'))
-        expected_report={'schema_version':3,'profile':'f1b-core-pbr-gltf-v1','coordinates':'local-gltf','source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        expected_report={'schema_version':4,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':Path(source).stat().st_size,'triangles':len(expected),'leaf_tiles':len(uris),'leaf_triangles':leaf_limit,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        check_placement(root, report)
         require(close_value(expected_report,report,1e-10*max(1,ge)),'typed report facts/fields')
         check_index(z,Path(archive).read_bytes())
         match_triangles(expected,actual,position_tolerance,normal_tolerance)
@@ -374,8 +425,8 @@ def archive_controls():
     with tempfile.TemporaryDirectory(prefix='f1a-oracle-') as temporary:
         root=Path(temporary);source=root/'source.glb';source.write_bytes(fixture(2,transformed=False))
         box=[2.5,-0.5,0.5,2.5,0,0,0,0.5,0,0,0,0.5];ge=math.sqrt(27)
-        manifest={'asset':{'version':'1.1'},'geometricError':ge,'root':{'boundingVolume':{'box':box},'geometricError':ge,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
-        report={'schema_version':3,'profile':'f1b-core-pbr-gltf-v1','coordinates':'local-gltf','source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
+        manifest={'asset':{'version':'1.1'},'geometricError':ge,'root':{'transform':list(IDENTITY_TRANSFORM),'boundingVolume':{'box':box},'geometricError':ge,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
+        report={'schema_version':4,'profile':PROFILE,'source_coordinates':'local-gltf',**local_placement_expectation(),'source_bytes':source.stat().st_size,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':ge,'external_files':0,'external_bytes':0,'images':0,'image_bytes':0,'image_pixels':0}
         members={'tileset.json':json.dumps(manifest).encode(),'conversion.json':json.dumps(report).encode(),'t/0.glb':source.read_bytes()}
         archive=root/'control.3tz';write_control_archive(archive,members);inspect(source,archive,2)
         controls={}

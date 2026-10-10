@@ -24,7 +24,7 @@ advertised route in that adapter.
 |---|---|---|---|---|
 | `runtime::{CancellationHandle,CleanupDiagnostic,DirectoryRecovery,JobError,JobErrorKind,JobFailure,Observer,OutputPolicy,RunControl,RunEvent}` (private module, root exports) / runtime.rs + runtime/directory*.rs | Shared new CLI observers / Python run_job + typed exceptions | One run, causal failure, fallible observer, cancellation; file and completed directory publication controlled by Attempt | Runtime F0/D1/D2; domain producers own drain, reports, inventory; #113/#126 | Bounded accepted foundation facade. Retain. This does not authorize legacy operations to claim F0 acceptance. |
 | `package::{package,PackageMember,PackageRequest,PackageReceipt,PackageResult}` / package.rs | `convert` / `convert_to_3tz` | Pack declared members/source tree through F0 package run; accepted inventory and receipt | Package producer + runtime, archive3tz codec; #125/#126 | Bounded accepted F0 packaging contract. Retain typed facade. Direct codec acceptance remains finite. |
-| `mesh_to_archive,MeshRequest,MeshReport,MeshResult` / mesh_archive.rs | `mesh-local-to-3tz` / `mesh_local_to_3tz` | Static local GLB/glTF, captured confined dependencies, local metre Y-up, explicit archive; F0 lifecycle | Mesh producer, #121 broader support, #120/#125 numerical/format evidence | F1a/F1b1/F1b2 accepted; F1b3 #140 adds core PBR bindings and authored UV1/COLOR/TANGENT, bounded by its contract and evidence. Retain; broader placement, identity and approximation gates still prevent replacing all legacy mesh callers. |
+| `mesh_to_archive,MeshRequest,MeshPlacement,MeshPlacementReport,MeshReport,MeshResult` / mesh_archive.rs + mesh_archive/placement.rs | `mesh-local-to-3tz` / `mesh_local_to_3tz` | Local metre/Y-up static core PBR GLB/glTF with captured confined dependencies; explicit full-detail archive under F0. F1c1 adds explicit Local/Wgs84 rigid placement | Mesh producer owns pure placement resolution before source I/O; format owner consumes one resolved map; #120/#121/#125 | F1b3 merged through #141. F1c1 #142 is an implementation candidate under its contract, pending independent review and final consumer/platform checks; schema 4/profile f1c1-placed-gltf-v1. Source identity/picking, arbitrary source CRS and approximation remain separate gates. No broad legacy deletion. |
 | `raster_to_directory,RasterDirectoryRequest,RasterDirectoryReport,RasterDirectoryResult` / raster_directory.rs | `raster-tile-to-directory` / `raster_tile_to_directory` | Single aligned RGB GeoTIFF tile, completed directory publication, native feature | Raster producer + D1/D2; #124/#120/#125 | Bounded accepted D1/D2 slice. Retain; separate from legacy raster pyramid below. |
 | `vector::{vector_to_archive,VectorRequest,VectorOptions,VectorLodOptions,VectorResult}` / vector.rs | `vector` / `vector_to_3tz` | Typed vector run, source/worker drain, finite acceptance and finalized report | Vector producer + F0, #131 V1/V2; #123 fidelity and #120/#125 | Bounded accepted V1/V2 lifecycle, not complete vector fidelity. Retain facade; each native/portable source policy remains constrained. |
 | Baseline `point_cloud::{PointCloudOptions,point_cloud_to_3tz,point_cloud_to_3tz_reported}` / point_cloud.rs | `point-cloud` / `point_cloud_to_3tz` | Baseline uses output::Job, Reporter, force and string coordinates; preparation after staging | #132 producer + F0, #120 coordinates, #125 attributes/POSITION, #122 source/LOD | Replaced in #132 candidate: both Rust entry points and producer-owned force/report paths removed after all callers migrated. No legacy acceptance inherited. |
@@ -40,6 +40,46 @@ advertised route in that adapter.
 | `doctor::{COMMANDS,DEFAULT_CESIUM,canonical,report,display}` / doctor.rs | `doctor` / — | Read-only readiness/capability report; backend/process probes | Tooling owner #126; native operation owners supply actual capabilities | Rework capability reporting parity with execution; retain read-only authority. Bound probes/cache side effects; no ownership of conversion defaults. |
 | `preview::{Preview,MANIFESTS}` / preview.rs | `preview` / — | Selected local roots and Cesium files served read-only; Preview::new/serve own server lifetime | Tooling owner #126; resource authority and network lifetime | Retain bounded operation after root/traversal/symlink/network/lifetime proof. Public constants/object methods are provisional; no converter defaults or publication authority. |
 | `error::Error` / error.rs; `report::{ConversionResult,Event,EventSink,Reporter,ndjson}` / report.rs | Remaining legacy CLI operations / legacy Python run_conversion | Legacy error and infallible observer transport; still shared by old operations/utilities | New operation errors/results use F0 JobFailure and domain results; #126 | Replace per operation, then narrow/remove legacy exports. Point removal after #132 alone cannot remove global report/output utilities still used by raster/mesh/wrapping/implicit. |
+
+## F1c1 placement candidate and legacy use dispositions
+
+The new public values describe one bounded local-source operation:
+
+```rust,ignore
+use rusty_tiles::{mesh_to_archive, MeshPlacement, MeshRequest, RunControl};
+
+let request = MeshRequest::local_gltf("local.glb", "placed.3tz", 1000)
+    .with_placement(MeshPlacement::Wgs84 {
+        anchor_degrees_metres: [153.02, -27.47, 25.0],
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0],
+        scene_offset_metres: [10.0, 2.0, -5.0],
+    });
+let result = mesh_to_archive(request, &RunControl::default())?;
+```
+
+`local_gltf` declares source metres/Y-up and defaults to `MeshPlacement::Local`.
+`from_parameters` supplies the shared adapter combination grammar; numerical
+admission belongs to private resolution before source I/O. No public arbitrary
+matrix, legacy Euler/CRS value, generic context or source IR is added. The exact
+cartographic frame, quaternion norm, forward magnitude and report fields are
+specified in the [contract](f1c1-contract.md). The candidate has not completed
+its independent final review or platform/consumer acceptance at this writing.
+
+| Existing use case | F1c1 disposition / remaining gate |
+| --- | --- |
+| Local metre/Y-up static core PBR with admitted node transforms | Retained bounded source profile; Local explicitly keeps unplaced output. |
+| Manual WGS84 anchor, orientation and local scene translation | Candidate explicit anchor/normalized XYZW/post-node Y-up metre offset; actual world-placement proof required. Explicit height zero means ellipsoidal zero. |
+| Legacy HPR/Euler options | Replaced at this boundary by one quaternion; existing legacy API remains until its caller/support migration. |
+| Alternate source axes or geographic/projected source coordinates | Deferred; callers may author admitted glTF node rotations for local axes. No CRS inference from position magnitudes. |
+| Metashape E/N/A shifts or offset files; auto+offset selecting WebMercator | Deferred source-coordinate operation, not the new scene offset; do not import offset-file I/O or offset-driven guessing into F1. |
+| General EPSG/WKT/PROJ with source_axes and source height_offset | Deferred numerical/source admission; manual anchor height is not a source height-reference conversion. |
+| Compound/geocentric/vertical CRS, geoid grids or epochs | No new admission; separate capability/data/accuracy evidence required. |
+| Source node features/picking, approximation/atlases/implicit delivery | Separate F1c2 and later #121 work; names alone are not picking support. |
+
+Legacy `tile`, `mesh`, `georef`, `mesh_crs` and old Job/report families still have
+advertised consumers. Their deletion requires replacing or explicitly removing
+those actual uses with independent evidence; F1c1's bounded success would not
+authorize a blanket export removal or close #120/#121/#126/#113.
 
 ## Public implementation building blocks
 
@@ -72,7 +112,7 @@ texture, tile, tileset, vector, raster, vector_encoding, doctor, preview, valida
 
 Root reexports are covered by their module rows: convert_implicit's two functions
 and options; Error; georef's parse_metashape_offset and five placement/source
-values; mesh archive's four values/function; pack's convert_to_3tz,
+values; mesh archive's request/result/report, placement enum/report and operation; pack's convert_to_3tz,
 pack_named_files, validate_3tz, TZ_INDEX_NAME; raster directory's function and
 three values; report's four values; the runtime facade values; tile's
 mesh_to_3tz, options and four DEFAULT constants; tileset's two functions/options.
@@ -133,6 +173,7 @@ be checked before final API narrowing.
 | `src/preview.rs` | `MANIFESTS`, `Preview`, `new`, `serve` |
 | `src/validate.rs` | `archive` |
 | `src/runtime.rs` | `JobErrorKind`, `JobError`, `new`, `io`, `kind`, `message`, `path`, `JobFailure`, `DirectoryRecovery`, `CleanupDiagnostic`, `OutputPolicy`, `RunEvent`, `Observer`, `RunControl`, `cancellation_handle`, `CancellationHandle`, `cancel` |
-| `src/mesh_archive.rs` | `MeshRequest`, `local_gltf`, `with_policy`, `MeshReport`, `MeshResult`, `mesh_to_archive` |
+| `src/mesh_archive.rs` | `MeshRequest`, `local_gltf`, `with_policy`, `with_placement`, `MeshReport`, `MeshResult`, `mesh_to_archive`; placement enums re-exported |
+| `src/mesh_archive/placement.rs` | `MeshPlacement`, `from_parameters`, `MeshPlacementReport`; resolved representation and frame math remain private |
 | `src/raster_directory.rs` | `RasterDirectoryRequest`, `web_mercator_rgb`, `with_policy`, `RasterDirectoryReport`, `RasterDirectoryResult`, `raster_to_directory` |
 | `src/glb.rs` | `MetadataGlb`, `new`, `from_parts`, `view`, `accessor`, `replace_view`, `compact_views`, `encoded_len`, `into_parts`, `finish` |
