@@ -75,3 +75,12 @@ logical owners, arbitrary native allocation and RSS are distinct scopes.
 The local source/artifact records require a separate final review and exact
 remote CI, wheel and official Blender acceptance before an evidence-backed
 develop merge. They do not close #113/#121/#125/#126 or authorize release.
+
+[Final local acceptance retention](production_evidence/20261011-final-local/index.json)
+adds the separate epoch08 actual local acceptance and fresh final formatting
+receipt. Index SHA-256: `7125e176d23a382fd46e4c7da01474d82eae0631a5019a574e978d461191f269`. Independent review integrity
+`63058547cadcc500a118d132a1b5b0cfa016056b4591fd304cbbdd2c98c57079`
+accepted the bounded local implementation with no identified material blocker.
+The final formatting check passed on the same 112-file production source pin.
+Exact remote CI, installed wheel, official Blender and final package/tree gates
+remain required before merging into develop.
