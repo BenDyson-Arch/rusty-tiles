@@ -20,12 +20,19 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    lane = root / 'bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10'
-    assert sha(lane / 'fixtures/manifest.json') == 'a3c07122e5fc902272bcf668a85e694601551a66556a7be3806132febd592aee'
-    frozen = json.loads((lane / 'integrity.json').read_text())
-    for name, record in frozen['files'].items():
-        assert sha(lane / name) == record['sha256']
-        assert (lane / name).stat().st_size == record['bytes']
+    controls = root / 'bench/architecture_audit/c1_payload_integrity/production_controls'
+    lanes = [
+        ('stride6', controls / 'stride_controls/2026-10-10',
+         'a3c07122e5fc902272bcf668a85e694601551a66556a7be3806132febd592aee', 6),
+        ('parent1', controls / 'stride_parent_control/2026-10-10',
+         '9a049a589538aef1e0d5d566460b4200966063f6eda7b7007f08f3b0fdd063f0', 1),
+    ]
+    for _, lane, manifest_hash, _ in lanes:
+        assert sha(lane / 'fixtures/manifest.json') == manifest_hash
+        frozen = json.loads((lane / 'integrity.json').read_text())
+        for name, record in frozen['files'].items():
+            assert sha(lane / name) == record['sha256']
+            assert (lane / name).stat().st_size == record['bytes']
     args.work.mkdir(parents=True, exist_ok=False)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     files = subprocess.check_output(['git', 'ls-files'], cwd=root, text=True).splitlines()
@@ -39,21 +46,27 @@ def main():
         'runner_sha256': sha(Path(__file__)),
         'scope': 'Actual selected checkout and supplied CLI; finite independent meshopt controls.',
     }, indent=2) + '\n')
-    spec = importlib.util.spec_from_file_location('independent_stride_lane', lane / 'runner.py')
-    oracle = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(oracle)
-    status = oracle.run(argparse.Namespace(binary=args.binary, binary_sha256=sha(args.binary),
-                                          source_pin=pin, source_pin_sha256=sha(pin), run_dir=args.work / 'runs'))
-    receipt = json.loads((args.work / 'runs/receipt.json').read_text())
-    for case in receipt['cases']:
-        for stream in ('stdout', 'stderr'):
-            raw = (args.work / 'runs' / (case['name'] + '.' + stream)).read_bytes()
-            assert hashlib.sha256(raw).hexdigest() == case[stream + 'Sha256']
-            case[stream + 'Base64'] = base64.b64encode(raw).decode('ascii')
-    receipt['coordinatorRunnerSha256'] = sha(Path(__file__))
-    receipt['runnerExitCode'] = status
-    args.output.write_text(json.dumps(receipt, indent=2) + '\n')
-    assert status == 0 and receipt['passes'] == 6 and receipt['failures'] == 0, args.output
+    phases = {}
+    for label, lane, _, count in lanes:
+        spec = importlib.util.spec_from_file_location('independent_' + label, lane / 'runner.py')
+        oracle = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(oracle)
+        run_dir = args.work / label
+        status = oracle.run(argparse.Namespace(binary=args.binary, binary_sha256=sha(args.binary),
+                                              source_pin=pin, source_pin_sha256=sha(pin), run_dir=run_dir))
+        receipt = json.loads((run_dir / 'receipt.json').read_text())
+        for case in receipt['cases']:
+            for stream in ('stdout', 'stderr'):
+                raw = (run_dir / (case['name'] + '.' + stream)).read_bytes()
+                assert hashlib.sha256(raw).hexdigest() == case[stream + 'Sha256']
+                case[stream + 'Base64'] = base64.b64encode(raw).decode('ascii')
+        receipt['runnerExitCode'] = status
+        phases[label] = receipt
+        evidence = {'coordinatorRunnerSha256': sha(Path(__file__)), 'phases': phases,
+                    'scope': 'Actual independently authored six stride controls plus separate parent-gate control.'}
+        args.output.write_text(json.dumps(evidence, indent=2) + '\n')
+        assert status == 0 and receipt['passes'] == count and receipt['failures'] == 0, args.output
+
 
 
 if __name__ == '__main__':

@@ -1,0 +1,12 @@
+{
+  "scope": "Equivalent modulo4 tests use standard unsigned is_multiple_of; original and formatted source remain unchanged",
+  "original": "compiled_stride_controls_formatted.rs",
+  "original_sha256": "9f71a4c34353771e95c73b7c9904643da368cea21f7e7581c247688dcfe4b188",
+  "compiled": "compiled_stride_controls_clippy.rs",
+  "compiled_sha256": "bc7ac12a5a9022e826e9bbd04af01567971185da9b8471969a0c02a161b8fa8f",
+  "changes": [
+    "json padding loop predicate only",
+    "BIN padding loop predicate only"
+  ],
+  "reason": "Two actual Clippy manual_is_multiple_of errors on d642; no production failure"
+}
