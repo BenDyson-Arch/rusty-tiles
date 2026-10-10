@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-10",
+  "classification": "separate nonauthor ownership/design revision after discarded pass-through candidate failures; no production acceptance",
+  "successor": "ONE private StoredArchive catalog; implementation-ready after recorded ownership decisions",
+  "source_phase": "candidate observations during owner settlement; original preimplementation source inventory remains separate and unchanged",
+  "files": [
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_final_review/duplicate-name-before.json",
+      "bytes": 4282,
+      "sha256": "44dbda39ee12b70088b2ccd5f542bcb8ca950dac269a5d0bb8b205b104b0f883",
+      "review_scope": "parsed independent executed control receipt; not rerun here"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_final_review/fallback-before.json",
+      "bytes": 4618,
+      "sha256": "674d85cedb4730cb4062af06483d9d1ed607f648707dfe199001d03d3a2f2266",
+      "review_scope": "exact frozen executed fallback receipt read; not rerun here"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_final_review/fallback_probe.py",
+      "bytes": 3171,
+      "sha256": "0fddb0ecb31a9b2a0f1e55ae4d4044032605759317ee4fd45958b17952ef5452",
+      "review_scope": "complete independent driver read; not rerun here"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_final_review/findings.md",
+      "bytes": 3135,
+      "sha256": "12c6a3257309a33e52e78408a40e69b832329e225099e7791d739513ab54850f",
+      "review_scope": "independent review findings read"
+    },
+    {
+      "path": "bench/architecture_audit/implicit_rewrite/archive_final_review/identity-override-before.json",
+      "bytes": 6046,
+      "sha256": "afd70d3a99bc72588f9abee65fa42fb6b3bcc70499bd0a7831a127643b2e7773",
+      "review_scope": "parsed independent executed control receipt; not rerun here"
+    },
+    {
+      "path": "docs/architecture/archive-read-foundation-contract.md",
+      "bytes": 7613,
+      "sha256": "1dcf1773421038fdc4023a8b48837227248b0924508d0139b6c009c3dddbd03c",
+      "review_scope": "previous frozen contract read as revision baseline"
+    },
+    {
+      "path": "docs/architecture/archive-read-implementation.md",
+      "bytes": 5036,
+      "sha256": "eaa12aec7a36f678492a5565d6030ee4113bd4e87fc08295def8abfcc3e70a1f",
+      "review_scope": "current owner-revision proposal read; not final production evidence"
+    },
+    {
+      "path": "src/archive3tz.rs",
+      "bytes": 31508,
+      "sha256": "24db389d2dce731a115486a890e3723a763aef0d6580aaa525de8c0337a4f4d0",
+      "review_scope": "live discarded pass-through legacy/index reader observation"
+    },
+    {
+      "path": "src/archive3tz/read.rs",
+      "bytes": 37334,
+      "sha256": "7d70ccf10da0c7a6b7ccd6e81dcbc5cc07ac2c83b18b9899385247fb957d197b",
+      "review_scope": "live discarded pass-through admission source through production implementation; tests not accepted"
+    },
+    {
+      "path": "src/validate.rs",
+      "bytes": 47521,
+      "sha256": "8bbc3e002d260f4515d96097280e46bb904c6db67fd3b013fc52519b12971750",
+      "review_scope": "live C1 adapter/hash reader observation"
+    }
+  ],
+  "new_executions": false,
+  "production_edits": false,
+  "final_source_review_required": true,
+  "full_a2": "HELD"
+}

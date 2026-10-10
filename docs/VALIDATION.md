@@ -76,17 +76,34 @@ stored geometric error establishes a source-surface or LOD error bound. The
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 
-ZIP admission reconciles local and central CRC/size fields, including ZIP64
-sizes and immediate data descriptors with or without signatures. Nonregular
-inputs are Unsupported; POSIX FIFO admission does not wait for a writer.
+ZIP admission uses one selected central-directory catalog for index validation,
+member lookup, CRC verification and exact stored-range reads. The report's
+`archiveStoredRecordLayout` check requires disjoint local-header/data/descriptor
+extents; coherent nested member records are Unsupported. Ordinary nested ZIP
+bytes within one opaque payload are permitted. Duplicate logical names and
+malformed framing are InvalidInput.
+
+The finite identity profile accepts ASCII names and flagged valid UTF-8 names.
+Legacy non-ASCII encodings, Unicode Path overrides and AES extras are Unsupported.
+All extra-field TLVs are framed, and ZIP64 values follow their sentinels exactly.
+A local ZIP64 declaration selects 64-bit descriptor sizes; central-only ZIP64
+with a descriptor is Unsupported. Signed and unsigned descriptors are reconciled
+against CRC, sizes and the next physical boundary. Other well-framed extra fields
+remain opaque. This is a bounded stored-3TZ profile; see the
+[archive reader contract](architecture/archive-read-foundation-contract.md).
+
+Nonregular inputs are Unsupported; POSIX FIFO admission does not wait for a
+writer. Underlying archive read/seek errors retain their I/O causes, while actual
+premature byte exhaustion is InvalidInput.
 
 Fixed ceilings are 8 MiB JSON with depth 64, 64 MiB per member, 1 GiB source archive and total
 stored member bytes, 16 MiB central directory, 65,536 archive entries/document
 items/hierarchy visits, 262,144 references, 4 million accessor elements per
 payload, 16 million total payload elements, 64 MiB decoded views per document,
 128 levels of hierarchy depth, and 2 GiB explicit member-hash and
-payload/document read work including repeated reads. Separately bounded ZIP
-metadata and index preflight reads are outside that member-work counter. These admission limits
+payload/document read work including repeated reads and constructor index reads.
+Separately bounded ZIP envelope/tail/header reads are outside that member-work
+counter. These admission limits
 are engineering bounds, not a total-process RSS promise. No request option
 bypasses them. The serialized `limits` describe the actual profile constants.
 

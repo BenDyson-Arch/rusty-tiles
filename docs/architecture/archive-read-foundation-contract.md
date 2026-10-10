@@ -75,21 +75,52 @@ format errors distinguish malformed, unsupported and resource limit; C1 maps
 those meanings without message matching. Existing public validation categories
 and geometry/metadata proof limits remain truthful.
 
-The private 3TZ index reader should consume the already selected `Read + Seek`
-input rather than reopen or clone a pathname. File wrappers retain public
-path-opening behavior. A missing tileset is identified only by the typed
-not-found member variant; ZIP corruption or I/O during lookup is not converted
-into missing manifest. Index cardinality, ordering and every offset/hash/name
-association remain checked. Admit exact index length as 24 times the checked
-non-index entry count before allocating its bytes. Read its admitted raw stored
-range and verify CRC explicitly, so detected CRC mismatch is a typed malformed
-condition while underlying seek/read InvalidData remains Io. C1 maps these
-private codec errors directly instead of losing origin through its legacy
-blanket archive-read mapping. Other C1 payload ZipFile read-cause classification
-is outside this slice and must remain recorded as an unresolved ownership limit. CRC verification remains part of complete C1 member
-reads; this envelope slice cannot claim every payload was read merely by
-checking fields. Do not add a generic archive resource framework or a public
-reader API.
+The revised owner is one private `StoredArchive<R>` over the admitted raw
+central-order catalog: UTF-8 name, local/data offsets, stored length and CRC.
+The scanner's selected end record and catalog are authoritative. No downstream
+ZIP-library directory constructor or earlier-end-record retry exists in C1.
+Count times the minimum central header size must fit the declared directory
+before catalog allocation. Store each name once, with a bounded sorted index
+for uniqueness/lookup; temporary physical-extent storage is released after
+admission. Names are not normalized by lookup. Missing members are a typed
+lookup outcome separate from I/O.
+
+The same catalog supplies exact index length 24 times the checked non-index
+entry count, last-central-entry identity and every offset/hash/name association.
+Verify the index's stored CRC explicitly. Member reads and hashes consume exact
+admitted ranges, stop at their declared lengths and verify CRC, including empty
+members. Underlying InvalidData/other actual read or seek failures remain Io;
+premature EOF is malformed. No ZIP parser transforms raw I/O into a metadata
+retry. C1 maps native reader errors directly; retained generic crate/ZIP error
+conversions are not used for these archive reads and gain no broader error proof.
+
+The finite identity profile accepts ASCII names without the UTF-8 flag and
+valid UTF-8 names with it. Non-ASCII legacy encodings/undeclared interpretation
+are Unsupported; invalid flagged UTF-8 is InvalidInput. Duplicate logical names
+are InvalidInput before directory/index construction. Unicode Path 0x7075 and
+AES 0x9901 extras are Unsupported after full TLV framing checks, because their
+alternate name/data interpretations are outside this finite stored profile.
+Other well-framed extras remain opaque to this native reader. Central ZIP64
+payload has exactly the sentinel-selected field length. Local ZIP64 has the
+required size fields; without sentinels a zero- or sixteen-byte local declaration
+is admitted. Unproved surplus ZIP64 fields are Unsupported. The dated
+[implementation decisions](archive-read-implementation.md) and
+[owner adjudication](../../bench/architecture_audit/implicit_rewrite/archive_prereq_review/2026-10-10-selected-directory-owner.md)
+explain these refinements and the discarded library pass-through candidate.
+
+C1's existing held regular file and stability checks remain its path boundary.
+It maps five engineering limits once and charges the already-read index bytes,
+complete member hashing and repeated member reads to its existing member-work
+counter. Envelope header/tail work is separately bounded by admitted source,
+central-directory and physical-record ranges; the member counter is not a claim
+about all raw metadata reads. Candidate/owned-byte users consume the same private
+representation. No public reader API or archive resource framework is introduced.
+
+The legacy standalone validate_3tz wrapper also uses the same interpretation,
+with natural bounds from actual input length (including count <= length/46),
+without choosing new engineering defaults. Those mathematical input bounds do
+not establish accepted resident-memory costs for that legacy facade. Writer
+behavior and the glTF semantic decoder retain their own owners.
 
 ## Independent acceptance and stop
 

@@ -9,6 +9,8 @@ use std::{
     },
 };
 pub const TZ_INDEX_NAME: &str = "@3dtilesIndex1@";
+mod read;
+pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CodecError {
@@ -408,91 +410,128 @@ pub fn validate_3tz(path: &Path) -> Result<(), CodecError> {
 }
 
 /// Validate the selected open file, without resolving its pathname again.
-pub(crate) fn validate_open_3tz(mut file: File) -> Result<(), CodecError> {
-    let mut zip = zip::ZipArchive::new(file.try_clone()?)?;
-    let n = zip.len();
-    if n < 2 {
-        return Err(CodecError::invalid(
-            "3TZ must contain tileset.json and an index",
-        ));
-    }
-    if zip.by_name("tileset.json").is_err() {
-        return Err(CodecError::MissingManifest);
-    }
-    {
-        let last = zip.by_index(n - 1)?;
-        if last.name() != TZ_INDEX_NAME {
-            return Err(CodecError::Invalid(format!(
-                "last ZIP member must be {TZ_INDEX_NAME}, got {}",
-                last.name()
-            )));
-        }
-        if last.compression() != zip::CompressionMethod::Stored {
-            return Err(CodecError::invalid(
-                "3TZ index must be stored (uncompressed)",
-            ));
-        }
-    }
-    let mut expected = std::collections::HashMap::new();
-    for i in 0..n - 1 {
-        let member = zip.by_index(i)?;
-        if member.compression() != zip::CompressionMethod::Stored {
-            return Err(CodecError::invalid("3TZ members must be stored"));
-        }
-        expected.insert(
-            member.header_start(),
-            md5::compute(member.name().as_bytes()).0,
-        );
-    }
-    let mut index = Vec::new();
-    zip.by_name(TZ_INDEX_NAME)?.read_to_end(&mut index)?;
-    drop(zip);
+pub(crate) fn validate_open_3tz(file: File) -> Result<(), CodecError> {
+    validate_reader_3tz(file)
+}
 
-    if index.len() % 24 != 0 {
-        return Err(CodecError::invalid(
-            "3TZ index length is not a multiple of 24",
+/// Legacy facade uses the same selected-directory owner with natural input
+/// bounds, not a separate ZIP interpretation or invented engineering defaults.
+pub(crate) fn validate_reader_3tz(mut reader: impl Read + Seek) -> Result<(), CodecError> {
+    let length = reader.seek(SeekFrom::End(0))?;
+    let limits = ReadLimits {
+        source_archive_bytes: length,
+        central_directory_bytes: length,
+        archive_entries: length / 46,
+        member_bytes: length,
+        archive_stored_bytes: length,
+    };
+    StoredArchive::new(reader, length, &limits)
+        .map(|_| ())
+        .map_err(|error| match error {
+            ReadError::Io(error) => CodecError::Io(error),
+            ReadError::MissingMember(name) if name == "tileset.json" => CodecError::MissingManifest,
+            ReadError::MissingMember(name) => {
+                CodecError::invalid(format!("missing archive member: {name}"))
+            }
+            ReadError::InvalidInput(message)
+            | ReadError::Unsupported(message)
+            | ReadError::ResourceLimit(message) => CodecError::invalid(message),
+        })
+}
+
+#[cfg(test)]
+mod index_read_tests {
+    use super::*;
+    use std::io::{self, Cursor};
+
+    fn package(index: &[u8], manifest: &[u8]) -> Vec<u8> {
+        read::tests::stored_zip(&[(manifest, b"{}"), (TZ_INDEX_NAME.as_bytes(), index)])
+    }
+    fn record(name: &[u8]) -> Vec<u8> {
+        let mut index = md5::compute(name).0.to_vec();
+        index.extend(0u64.to_le_bytes());
+        index
+    }
+    fn data_start() -> usize {
+        30 + b"tileset.json".len() + 2 + 30 + TZ_INDEX_NAME.len()
+    }
+
+    #[test]
+    fn generic_index_reader_accepts_hand_authored_stored_records() {
+        validate_reader_3tz(Cursor::new(package(
+            &record(b"tileset.json"),
+            b"tileset.json",
+        )))
+        .unwrap();
+    }
+
+    #[test]
+    fn index_length_is_exact_before_index_materialization() {
+        for length in [0, 23, 25, 48] {
+            assert!(
+                matches!(validate_reader_3tz(Cursor::new(package(&vec![0; length], b"tileset.json"))),
+                Err(CodecError::Invalid(message)) if message.contains("exactly once"))
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_crc_and_association_failures_are_malformed() {
+        let mut bytes = package(&record(b"tileset.json"), b"tileset.json");
+        bytes[data_start()] ^= 1;
+        assert!(matches!(validate_reader_3tz(Cursor::new(bytes)),
+            Err(CodecError::Invalid(message)) if message.contains("CRC mismatch")));
+        let bytes = package(&record(b"other.json"), b"tileset.json");
+        assert!(matches!(validate_reader_3tz(Cursor::new(bytes)),
+            Err(CodecError::Invalid(message)) if message.contains("differs from admitted directory")));
+    }
+
+    #[test]
+    fn only_typed_member_not_found_means_missing_manifest() {
+        let absent = package(&record(b"other.json"), b"other.json");
+        assert!(matches!(
+            validate_reader_3tz(Cursor::new(absent)),
+            Err(CodecError::MissingManifest)
+        ));
+        let mut broken = package(&record(b"tileset.json"), b"tileset.json");
+        broken[0] = 0;
+        assert!(matches!(
+            validate_reader_3tz(Cursor::new(broken)),
+            Err(CodecError::Invalid(_))
         ));
     }
-    if index.len() / 24 != n - 1 {
-        return Err(CodecError::invalid(
-            "3TZ index must contain every member exactly once",
-        ));
+
+    struct IndexReadFault {
+        inner: Cursor<Vec<u8>>,
+        armed: bool,
+        kind: io::ErrorKind,
     }
-    let mut previous = None;
-    let f = &mut file;
-    for rec in index.as_chunks::<24>().0 {
-        let key = (
-            u64::from_le_bytes(rec[..8].try_into().unwrap()),
-            u64::from_le_bytes(rec[8..16].try_into().unwrap()),
+    impl Read for IndexReadFault {
+        fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+            if self.armed {
+                return Err(io::Error::new(self.kind, "injected raw index cause"));
+            }
+            self.inner.read(bytes)
+        }
+    }
+    impl Seek for IndexReadFault {
+        fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
+            self.armed = matches!(from, SeekFrom::Start(n) if n == data_start() as u64);
+            self.inner.seek(from)
+        }
+    }
+    #[test]
+    fn raw_index_io_invalid_data_is_distinct_from_detected_crc_failure() {
+        let bytes = package(&record(b"tileset.json"), b"tileset.json");
+        let source = IndexReadFault {
+            inner: Cursor::new(bytes),
+            armed: false,
+            kind: io::ErrorKind::InvalidData,
+        };
+        assert!(
+            matches!(validate_reader_3tz(source), Err(CodecError::Io(e)) if e.kind() == io::ErrorKind::InvalidData)
         );
-        if previous.is_some_and(|p| p > key) {
-            return Err(CodecError::invalid("3TZ index hashes are not ordered"));
-        }
-        previous = Some(key);
-        let off = u64::from_le_bytes(rec[16..24].try_into().unwrap());
-        if expected.remove(&off).as_ref().map(|v| v.as_slice()) != Some(&rec[..16]) {
-            return Err(CodecError::invalid("3TZ index differs from ZIP directory"));
-        }
-        f.seek(SeekFrom::Start(off))?;
-        let mut hdr = [0u8; 30];
-        f.read_exact(&mut hdr)?;
-        let sig = u32::from_le_bytes(hdr[0..4].try_into().unwrap());
-        if sig != 0x0403_4b50 {
-            return Err(CodecError::Invalid(format!(
-                "3TZ index offset {off} is not a ZIP local header"
-            )));
-        }
-        let name_len = u16::from_le_bytes(hdr[26..28].try_into().unwrap()) as usize;
-        let mut name = vec![0u8; name_len];
-        f.read_exact(&mut name)?;
-        let digest = md5::compute(&name).0;
-        if digest != rec[..16] {
-            return Err(CodecError::Invalid(format!(
-                "3TZ index MD5 mismatch at offset {off}"
-            )));
-        }
     }
-    Ok(())
 }
 
 #[cfg(test)]
