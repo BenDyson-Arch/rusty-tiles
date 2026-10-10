@@ -1,0 +1,21 @@
+{
+  "artifact": "/home/bend/.cache/rusty-tiles-f1d-evidence/independent-portable-final/grid/result.3tz",
+  "sha256": "fec032e6282688e181e1d451796caae9bce675c4ed8ea6152cba9d64ac78c9a6",
+  "children": 2,
+  "root_child_containment_failures": [
+    {
+      "child": 0,
+      "axis": 1,
+      "side": "low",
+      "excess_exact": "1/4503599627370496",
+      "excess_metres": 2.220446049250313e-16
+    },
+    {
+      "child": 1,
+      "axis": 1,
+      "side": "low",
+      "excess_exact": "1/4503599627370496",
+      "excess_metres": 2.220446049250313e-16
+    }
+  ]
+}

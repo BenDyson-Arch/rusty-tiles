@@ -67,6 +67,15 @@ pub(in crate::mesh_archive) struct Material {
 }
 
 impl Material {
+    /// The root proxy profile preserves untextured opaque core factors.
+    pub(in crate::mesh_archive) fn proxy_eligible(&self) -> bool {
+        self.bindings().next().is_none()
+            && self
+                .value
+                .get("alphaMode")
+                .is_none_or(|mode| mode == "OPAQUE")
+    }
+
     pub(in crate::mesh_archive) fn bindings(&self) -> impl Iterator<Item = &TextureBinding> {
         self.bindings.iter().flatten()
     }
@@ -360,6 +369,26 @@ mod tests {
                 let material = parse(&document(value.clone())).unwrap().remove(0);
                 assert_eq!(material.remap(&BTreeMap::from([(0, 0)])).unwrap(), value);
             }
+        }
+    }
+
+    #[test]
+    fn proxy_eligibility_preserves_full_detail_material_admission() {
+        for (value, eligible) in [
+            (json!({}), true),
+            (
+                json!({"alphaMode":"OPAQUE", "doubleSided":true,
+                "pbrMetallicRoughness":{"baseColorFactor":[0.2,0.3,0.4,0.5]}}),
+                true,
+            ),
+            (json!({"alphaMode":"MASK"}), false),
+            (json!({"emissiveTexture":{"index":0}}), false),
+            (json!({"normalTexture":{"index":0}}), false),
+        ] {
+            assert_eq!(
+                parse(&document(value)).unwrap()[0].proxy_eligible(),
+                eligible
+            );
         }
     }
 }

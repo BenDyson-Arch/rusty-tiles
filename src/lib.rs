@@ -49,9 +49,10 @@ pub use georef::{
     parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
 };
 pub use mesh_archive::{
-    mesh_to_archive, model_to_archive, model_to_manifest, MeshPlacement, MeshPlacementReport,
-    MeshReport, MeshRequest, MeshResult, ModelManifestRequest, ModelManifestResult, ModelReport,
-    ModelWrapRequest, ModelWrapResult,
+    mesh_to_archive, model_to_archive, model_to_manifest, MeshApproximation,
+    MeshApproximationReport, MeshPlacement, MeshPlacementReport, MeshReport, MeshRequest,
+    MeshResult, ModelManifestRequest, ModelManifestResult, ModelReport, ModelWrapRequest,
+    ModelWrapResult,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

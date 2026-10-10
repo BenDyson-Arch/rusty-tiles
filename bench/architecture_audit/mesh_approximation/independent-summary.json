@@ -1,0 +1,114 @@
+{
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "binary_sha256": "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+  "cases": [
+    {
+      "name": "grid",
+      "source_faces": 32,
+      "proxy_faces": 15,
+      "regions": 1,
+      "archive_sha256": "88b696f00cb5d7ebef77d1c1381df20fec54881f3e5efa0ea81c8511f48d3c56",
+      "certificate_metres": 2.000000000000002,
+      "corrupted_controls_rejected": 14
+    },
+    {
+      "name": "materialless",
+      "source_faces": 32,
+      "proxy_faces": 15,
+      "regions": 1,
+      "archive_sha256": "e39857a57dd155d97f7043135fb1639adb7f375bf2ceada6a0f9e459d68c09cf",
+      "certificate_metres": 2.000000000000002,
+      "corrupted_controls_rejected": 14
+    },
+    {
+      "name": "instances",
+      "source_faces": 192,
+      "proxy_faces": 44,
+      "regions": 6,
+      "archive_sha256": "31bc76d3b99d18339fcee713ef5ae00229e944ce05a3d7336cc0aa237615304a",
+      "certificate_metres": 2.000000000000016,
+      "corrupted_controls_rejected": 14
+    },
+    {
+      "name": "viewer",
+      "source_faces": 192,
+      "proxy_faces": 44,
+      "regions": 6,
+      "archive_sha256": "31bc76d3b99d18339fcee713ef5ae00229e944ce05a3d7336cc0aa237615304a",
+      "certificate_metres": 2.000000000000016,
+      "corrupted_controls_rejected": 14
+    },
+    {
+      "name": "coincident-keys",
+      "source_faces": 64,
+      "proxy_faces": 14,
+      "regions": 1,
+      "archive_sha256": "18588c1562a62442efc72018fe94d9f9ce86f3e44831e84c1d0cd93704b4a5b5",
+      "certificate_metres": 2.000000000000002,
+      "corrupted_controls_rejected": 14
+    }
+  ],
+  "refusals": 12,
+  "browser": {
+    "version": "1.146.0",
+    "archive_sha256": "31bc76d3b99d18339fcee713ef5ae00229e944ce05a3d7336cc0aa237615304a",
+    "stages": [
+      {
+        "label": "proxy_region",
+        "stage": "coarse",
+        "visible_faces": 44,
+        "matching_queries": 6,
+        "queries": 6
+      },
+      {
+        "label": "proxy_region",
+        "stage": "fine",
+        "visible_faces": 192,
+        "matching_queries": 0,
+        "queries": 6
+      },
+      {
+        "label": "source_triangle",
+        "stage": "coarse",
+        "visible_faces": 44,
+        "matching_queries": 0,
+        "queries": 6
+      },
+      {
+        "label": "source_triangle",
+        "stage": "fine",
+        "visible_faces": 192,
+        "matching_queries": 6,
+        "queries": 6
+      }
+    ]
+  },
+  "limits": [
+    "Finite planar integer-coordinate fixtures, two source materials and reflected rigid instance; no general topology/appearance/world-distance certification.",
+    "Component face floor cannot identify component origin when disconnected supports coincide exactly.",
+    "Production-source arithmetic needs separate nonauthor review; exact-rational artifact certificate checker covers these final emitted supports."
+  ],
+  "resource_evidence": {
+    "receipt": "resource-release.json",
+    "receipt_sha256": "2590cb0412962b91b8bf403edacd30b56e364a0a81812ad003786d7565dcf3ab",
+    "driver": "resource_probe.py",
+    "binary_sha256": "930142ab6abc1fa1b8c416a8b07a6051bc62e05064a22bf545d8a3054e8e1bcf",
+    "accepted_original_faces": 8192,
+    "accepted_proxy_faces": 1023,
+    "complete_face_pairs": 16760832,
+    "comparison_ceiling_fraction": 0.9990234375,
+    "accepted_elapsed_seconds": 14.812255934999484,
+    "accepted_sampled_peaks": {
+      "rss_kib": 16080,
+      "threads": 1,
+      "file_descriptors": 4,
+      "scratch_files": 1,
+      "scratch_bytes": 819911
+    },
+    "accepted_raw_wait4_peak_rss_kib": 25408,
+    "refusal_elapsed_seconds": 0.011256267000135267,
+    "refusal_output_parent_absent": true,
+    "geometry_reference": "Common 64m square diameter proves requested100m budget; detailed near-limit certificate replay omitted.",
+    "measurement_limit": "Raw wait4 may include inherited pre-exec launcher residency; procfs/scratch/descriptor/thread peaks sampled. No total-memory or cancellation-latency guarantee."
+  }
+}

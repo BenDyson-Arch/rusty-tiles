@@ -1,0 +1,38 @@
+{
+  "controls": [
+    {
+      "oracle_sha256": "630c481e681f019a4e08b91bb66d70608e5406acfabf13e75ea6b91fab17fa20",
+      "checks": [
+        {
+          "field": "regions",
+          "value": 999,
+          "rejected": true,
+          "reason": "report region count independently decoded"
+        },
+        {
+          "field": "appearance",
+          "value": "textured-atlas",
+          "rejected": true,
+          "reason": "exact admitted appearance report"
+        },
+        {
+          "field": "kind",
+          "value": "full_detail",
+          "rejected": true,
+          "reason": "root approximation report mode"
+        },
+        {
+          "control": "omitted coincident authored component",
+          "rejected": false,
+          "source_triangles": 16,
+          "proxy_triangles": 2
+        }
+      ]
+    },
+    {
+      "control": "one face cannot retain both authored components",
+      "rejected": true,
+      "reason": "candidate has at least one face per authored-key component"
+    }
+  ]
+}

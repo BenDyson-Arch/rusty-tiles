@@ -1,7 +1,7 @@
 //! External facade consumer: source admission and lifecycle, without private imports.
 use rusty_tiles::{
-    mesh_to_archive, JobError, JobErrorKind, MeshPlacement, MeshRequest, Observer, OutputPolicy,
-    RunControl, RunEvent,
+    mesh_to_archive, JobError, JobErrorKind, MeshApproximation, MeshApproximationReport,
+    MeshPlacement, MeshRequest, Observer, OutputPolicy, RunControl, RunEvent,
 };
 use serde_json::{json, Value};
 use std::{fs, path::Path, sync::Arc};
@@ -703,8 +703,8 @@ fn placement_is_per_request_and_keeps_encoded_geometry_local() {
     });
     let mut geometry = Vec::new();
     for result in &results {
-        assert_eq!(result.report.schema_version, 5);
-        assert_eq!(result.report.profile, "f1c2-source-identity-gltf-v1");
+        assert_eq!(result.report.schema_version, 6);
+        assert_eq!(result.report.profile, "f1d1-root-proxy-gltf-v1");
         assert_eq!(result.report.source_coordinates, "local-gltf");
         let mut archive = zip::ZipArchive::new(fs::File::open(&result.output).unwrap()).unwrap();
         let manifest: Value =
@@ -815,4 +815,159 @@ fn frozen_independent_cartographic_and_rational_frames_hold_on_this_target() {
             );
         }
     }
+}
+
+// Independently authored connected indexed plane; no production source helpers.
+fn write_proxy_grid(path: &Path) {
+    let mut bin = Vec::new();
+    for y in 0..=4 {
+        for x in 0..=4 {
+            for v in [x as f32, y as f32, 0.0] {
+                bin.extend(v.to_le_bytes());
+            }
+        }
+    }
+    let position_bytes = bin.len();
+    for y in 0..4 {
+        for x in 0..4 {
+            let a = (y * 5 + x) as u32;
+            for i in [a, a + 1, a + 5, a + 1, a + 6, a + 5] {
+                bin.extend(i.to_le_bytes());
+            }
+        }
+    }
+    let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+        "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+        "buffers":[{"byteLength":bin.len()}],"bufferViews":[{"buffer":0,"byteLength":position_bytes},{"buffer":0,"byteOffset":position_bytes,"byteLength":bin.len()-position_bytes}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":25,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+            {"bufferView":1,"componentType":5125,"count":96,"type":"SCALAR"}]});
+    fs::write(path, encode(&doc, bin)).unwrap();
+}
+
+#[test]
+fn root_proxy_public_facade_preserves_leaves_and_declares_separate_error_budget() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("grid.glb");
+    let output = work.path().join("proxy.3tz");
+    write_proxy_grid(&input);
+    let result = mesh_to_archive(
+        MeshRequest::local_gltf(&input, &output, 8).with_approximation(
+            MeshApproximation::RootProxy {
+                triangle_limit: 8,
+                max_error_metres: 10.0,
+            },
+        ),
+        &RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(result.report.triangles, 32);
+    let MeshApproximationReport::RootProxy {
+        triangles,
+        certified_error_metres,
+        geometric_error_metres,
+        comparison_pairs,
+        ..
+    } = result.report.approximation
+    else {
+        panic!("wrong report")
+    };
+    assert!(triangles > 0 && triangles <= 8 && triangles < 32);
+    assert!(certified_error_metres <= 10.0);
+    assert_eq!(geometric_error_metres, 10.0);
+    assert_eq!(comparison_pairs, 2 * 32 * triangles);
+    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let manifest: Value = serde_json::from_reader(zip.by_name("tileset.json").unwrap()).unwrap();
+    assert_eq!(manifest["root"]["content"]["uri"], "t/root.glb");
+    assert_eq!(manifest["root"]["geometricError"], 10.0);
+    assert!(manifest["geometricError"].as_f64().unwrap() >= 10.0);
+    let children = manifest["root"]["children"].as_array().unwrap();
+    assert_eq!(children.len(), 4);
+    for child in children {
+        assert_eq!(child["geometricError"], 0.0);
+    }
+    assert!(result.cleanup_diagnostics.is_empty());
+}
+
+#[test]
+fn proxy_request_validation_and_unsupported_geometry_precede_output_work() {
+    let work = tempfile::tempdir().unwrap();
+    let missing = work.path().join("missing.glb");
+    let output = work.path().join("absent/out.3tz");
+    for (triangle_limit, max_error_metres) in [
+        (0, 1.0),
+        (1, 0.0),
+        (1, -1.0),
+        (1, f64::NAN),
+        (1, f64::INFINITY),
+    ] {
+        let run = RunControl::default();
+        let error = mesh_to_archive(
+            MeshRequest::local_gltf(&missing, &output, 8).with_approximation(
+                MeshApproximation::RootProxy {
+                    triangle_limit,
+                    max_error_metres,
+                },
+            ),
+            &run,
+        )
+        .unwrap_err();
+        assert_eq!(error.error.kind(), JobErrorKind::InvalidRequest);
+        assert!(!run.cancellation_handle().cancel());
+        assert!(!output.parent().unwrap().exists());
+    }
+    let input = work.path().join("disconnected.glb");
+    write_source(&input); // two separate authored triangles cannot reduce to one.
+    let error = mesh_to_archive(
+        MeshRequest::local_gltf(&input, &output, 1).with_approximation(
+            MeshApproximation::RootProxy {
+                triangle_limit: 1,
+                max_error_metres: 10.0,
+            },
+        ),
+        &RunControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.error.kind(), JobErrorKind::Unsupported);
+    assert!(!output.parent().unwrap().exists());
+}
+
+#[test]
+fn proxy_preparation_observer_abort_is_causal_and_never_stages() {
+    struct Stop;
+    impl Observer for Stop {
+        fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+            if matches!(
+                event,
+                RunEvent::Progress {
+                    phase: "mesh_approximation",
+                    ..
+                }
+            ) {
+                Err(JobError::new(
+                    JobErrorKind::InvalidState,
+                    "stop at proxy preparation",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("grid.glb");
+    write_proxy_grid(&input);
+    let output = work.path().join("absent/out.3tz");
+    let run = RunControl::new(Some(Arc::new(Stop)));
+    let failure = mesh_to_archive(
+        MeshRequest::local_gltf(&input, &output, 8).with_approximation(
+            MeshApproximation::RootProxy {
+                triangle_limit: 8,
+                max_error_metres: 10.0,
+            },
+        ),
+        &run,
+    )
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::ObserverFailure);
+    assert!(!output.parent().unwrap().exists());
+    assert!(!run.cancellation_handle().cancel());
 }

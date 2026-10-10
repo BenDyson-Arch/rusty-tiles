@@ -74,6 +74,14 @@ jobs:
           if-no-files-found: error
       - name: Independently verify source identity and metadata association
         run: python3 -B tests/f1c2_oracle.py --self-test --binary target/debug/rusty-tiles --large --json-output "${{ runner.temp }}/f1c2-identity.json"
+      - name: Independently certify root proxies and admission controls
+        run: python3 -B tests/f1d1_oracle.py --self-test --binary target/debug/rusty-tiles --artifact-dir "${{ runner.temp }}/f1d1-artifacts" --json-output "${{ runner.temp }}/f1d1-oracle.json"
+      - name: Retain root proxy evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1d1-geometry-evidence
+          path: ${{ runner.temp }}/f1d1-oracle.json
+          if-no-files-found: error
       - name: Independently verify exact model bytes and original-node bounds
         run: python3 -B tests/model_wrapping_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c2-wrapping.json"
       - name: Retain source identity evidence
@@ -303,6 +311,40 @@ jobs:
           python3 -B tests/f1c2_khronos.py --binary target/debug/rusty-tiles \
             --validator-modules target/terrain-browser/node_modules \
             --json-output "${{ runner.temp }}/f1c2-khronos.json"
+      - name: Prove native root proxy artifacts and official core format
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          python3 -B tests/f1d1_oracle.py --self-test --binary target/debug/rusty-tiles \
+            --artifact-dir "${{ runner.temp }}/f1d1-artifacts" --json-output "${{ runner.temp }}/f1d1-native.json"
+          python3 -B tests/f1d1_khronos.py --artifact-dir "${{ runner.temp }}/f1d1-artifacts" \
+            --validator-modules target/terrain-browser/node_modules --json-output "${{ runner.temp }}/f1d1-khronos.json"
+      - name: Prove natural coarse and full-detail traversal and picking
+        shell: bash -el {0}
+        run: |
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B tests/f1d1_viewer.py --source "${{ runner.temp }}/f1d1-artifacts/viewer/source.glb" \
+            --archive "${{ runner.temp }}/f1d1-artifacts/viewer/result.3tz" \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1d1-browser.json"
+      - name: Prove placed root proxy traversal with independent WGS84 cameras
+        shell: bash -el {0}
+        run: |
+          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
+          python3 -B bench/architecture_audit/mesh_approximation/placed_proxy_browser.py \
+            --binary target/debug/rusty-tiles --source-commit "$(git rev-parse HEAD)" \
+            --artifact-dir "${{ runner.temp }}/f1d1-placed-artifacts" \
+            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
+            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
+            --json-output "${{ runner.temp }}/f1d1-placed-browser.json"
+      - name: Retain root proxy consumer evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1d1-consumer-evidence
+          path: ${{ runner.temp }}/f1d1-*.json
+          if-no-files-found: error
       - name: Prove terrain rendering, queries, clamping and imagery draping
         shell: bash -el {0}
         run: |

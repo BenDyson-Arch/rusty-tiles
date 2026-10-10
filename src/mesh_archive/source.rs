@@ -45,6 +45,8 @@ impl SourceIdentity {
 #[derive(Clone, Debug)]
 pub(super) struct Triangle {
     pub source: SourceIdentity,
+    /// Authored POSITION accessor keys, in the same reflected corner order.
+    pub vertex_indices: [u32; 3],
     pub positions: [[f32; 3]; 3],
     pub normals: Option<[[f32; 3]; 3]>,
     pub tangents: Option<[[f32; 4]; 3]>,
@@ -1488,6 +1490,7 @@ pub(super) fn decode(
                         primitive_index: primitive_index as u32,
                         triangle_index: (start / 3) as u32,
                     },
+                    vertex_indices: vertices.map(|index| index as u32),
                     positions,
                     normals,
                     tangents,
@@ -1515,6 +1518,37 @@ pub(super) fn decode(
 mod metadata_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reflected_authored_keys_follow_the_decoded_corner_order() {
+        let value = json!({
+            "asset":{"version":"2.0"},
+            "buffers":[{"uri":"data.bin","byteLength":42}],
+            "bufferViews":[{"buffer":0,"byteLength":36},
+                {"buffer":0,"byteOffset":36,"byteLength":6}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,
+                "type":"VEC3","min":[0,0,0],"max":[1,1,0]},
+                {"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+            "nodes":[{"mesh":0,"scale":[-1,1,1]}],"scenes":[{"nodes":[0]}]
+        });
+        let document = Document::parse(&serde_json::to_vec(&value).unwrap(), || Ok(())).unwrap();
+        let mut buffer = Vec::new();
+        for point in [[0.0_f32, 0., 0.], [1., 0., 0.], [0., 1., 0.]] {
+            for component in point {
+                buffer.extend(component.to_le_bytes());
+            }
+        }
+        for index in [2_u16, 0, 1] {
+            buffer.extend(index.to_le_bytes());
+        }
+        let geometry = decode(&document, &[&buffer], &[], || Ok(())).unwrap();
+        assert_eq!(geometry.triangles[0].vertex_indices, [2, 1, 0]);
+        assert_eq!(
+            geometry.triangles[0].positions,
+            [[0., 1., 0.], [-1., 0., 0.], [0., 0., 0.]]
+        );
+    }
 
     // Only metadata is supplied. The dependency deliberately does not exist;
     // Document::parse must classify declarations without resolving its URI.

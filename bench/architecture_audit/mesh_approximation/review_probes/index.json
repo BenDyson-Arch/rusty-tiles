@@ -1,0 +1,71 @@
+{
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "portable_binary_sha256": "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+  "files": {
+    "artifact-controls.json": {
+      "bytes": 1591,
+      "sha256": "dd9c9260fb4d57adee532ef8a974e8756a038f6ed8d8e2e08603c705eddd1792"
+    },
+    "artifact_controls.py": {
+      "bytes": 3003,
+      "sha256": "99120dd0bb2d8f9a3bfabbf78e29d85e588b2f014c8b399f1ef87cbf014d82b9"
+    },
+    "checker-after.json": {
+      "bytes": 1015,
+      "sha256": "50e50243df64faeb7683b997b430ef11848d17b9b049588c9d9738e955318137"
+    },
+    "checker-before.json": {
+      "bytes": 877,
+      "sha256": "e92067d9fe816b25d188731498cb8617143e9c15d43ce44f25b64e0acd7dc439"
+    },
+    "child-box-after.json": {
+      "bytes": 205,
+      "sha256": "5d1a9f3ca8e71f2685b60d5601213cdf1af3d090155537f2e71279b259d7fcd3"
+    },
+    "child-box-arithmetic.json": {
+      "bytes": 381,
+      "sha256": "db8d959b9a3b74ef3074f6f4a8286e953dd1b6451e6b5dcc3b7bdf5971c8f663"
+    },
+    "child-box-before.json": {
+      "bytes": 562,
+      "sha256": "762d77cc9fc4ab7aacf8598dfe6a372f3c5a024c43a4367db6b66e21f3c773bb"
+    },
+    "child_box_arithmetic.py": {
+      "bytes": 1446,
+      "sha256": "ae6a2b4802f37b788e11e34990a00060fb0036e185f2fe4bcf10380020260c7d"
+    },
+    "child_box_containment.py": {
+      "bytes": 996,
+      "sha256": "b48a1b51b58d5462547d81a766a1af688cabe1c4737027d2b03c1b64aeaa0c8d"
+    },
+    "interval-controls.json": {
+      "bytes": 1153,
+      "sha256": "cf036dc023d6ba4c3348141f831db609f7a97f44f5927030c89bf489b3f83340"
+    },
+    "interval_controls.py": {
+      "bytes": 2299,
+      "sha256": "2017255f5b7bb1ea3bbf9ad50ebf5b677be7754906a13d0928ab1cb6b9b29355"
+    },
+    "materialless-after.json": {
+      "bytes": 792,
+      "sha256": "f56841d33f93e57f9f8987c14bf69c611083e950062a0ae5264a1a671b094109"
+    },
+    "materialless-before.json": {
+      "bytes": 752,
+      "sha256": "3be967d595670ce8f78ad12806c7625429b583a2c7d7d744375b44d20327652a"
+    },
+    "placed-algebra-check.json": {
+      "bytes": 420,
+      "sha256": "0f98311167ea54df5d67449435769bce4b38575e6c6a4ec11c33be96e1388913"
+    },
+    "placed-reviewer-replay.json": {
+      "bytes": 8837,
+      "sha256": "a84adcd9a154234363c990a84d4057726df39f075213e4f15d83ece43c16ea8d"
+    },
+    "placed_algebra_check.py": {
+      "bytes": 2059,
+      "sha256": "ced47d552767abc377c8a8eab407267c1aba48daee5b6fc4abc469e8297d2f15"
+    }
+  },
+  "scope": "Independent reviewer arithmetic replay, exact child-bound defect/correction, checker sensitivity and frozen-CLI controls. Historical before receipts deliberately retain earlier source/artifact pins; they are not final acceptance."
+}

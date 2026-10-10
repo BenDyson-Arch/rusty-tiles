@@ -1,0 +1,203 @@
+{
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "binary_path": "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-release-0eeb906",
+  "binary_sha256": "930142ab6abc1fa1b8c416a8b07a6051bc62e05064a22bf545d8a3054e8e1bcf",
+  "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+  "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+  "cpu_count": 20,
+  "invocation": [
+    "/usr/bin/python3",
+    "bench/architecture_audit/mesh_approximation/resource_probe.py",
+    "--binary",
+    "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-release-0eeb906",
+    "--artifact-dir",
+    "/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906",
+    "--production-source",
+    "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+    "--expected-binary-sha256",
+    "930142ab6abc1fa1b8c416a8b07a6051bc62e05064a22bf545d8a3054e8e1bcf",
+    "--json-output",
+    "bench/architecture_audit/mesh_approximation/resource-release.json"
+  ],
+  "driver_sha256": {
+    "bench/architecture_audit/mesh_approximation/resource_probe.py": "b1c448f4b87302b5f2461ddd44507a17bd39af990d8c27f6c67acb826a7531e2",
+    "tests/f1d1_oracle.py": "31b5a401cb25cf8c1fa39eb5e288ab8e9901ffe44a0e314c5f4245b380357798",
+    "tests/f1c2_oracle.py": "14ae2ff82eb4c719e6466a3b464b0d3cd1c6bf24bad56ae7e603a33ea262b4c7"
+  },
+  "cases": [
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-release-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/accepted-near-pair-ceiling/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/accepted-near-pair-ceiling/output/result.3tz",
+        "--leaf-triangles",
+        "2048",
+        "--root-proxy-triangles",
+        "1024",
+        "--max-proxy-error-metres",
+        "100"
+      ],
+      "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+      "source_bytes": 149784,
+      "triangle_limit": 1024,
+      "exit_code": 0,
+      "elapsed_seconds": 14.812255934999484,
+      "peak_rss_kib_wait4": 25408,
+      "user_cpu_seconds": 14.735567,
+      "system_cpu_seconds": 0.001976,
+      "poll_interval_ms": 10,
+      "samples": 1449,
+      "sampled_peaks": {
+        "rss_kib": 16080,
+        "threads": 1,
+        "file_descriptors": 4,
+        "scratch_files": 1,
+        "scratch_bytes": 819911
+      },
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/accepted-near-pair-ceiling/output/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":4,\"triangles\":8192},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certified_error_metres\":7.000000000000018,\"comparison_pairs\":16760832,\"geometric_error_metres\":100.0,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":1024,\"triangles\":1023},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":4,\"leaf_triangles\":2048,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d1-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":100.0,\"schema_version\":6,\"source_bytes\":149784,\"source_coordinates\":\"local-gltf\",\"triangles\":8192},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/accepted-near-pair-ceiling/output/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":2048,\"routing_geometric_error_metres\":100.0,\"schema_version\":6,\"source_bytes\":149784},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "timeout_seconds": 180,
+      "child_reaped": true,
+      "artifact": {
+        "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+        "source_triangles": 8192,
+        "proxy_triangles": 1023,
+        "regions": 1,
+        "authored_components": [
+          {
+            "region": [
+              0,
+              0,
+              0
+            ],
+            "count": 1
+          }
+        ],
+        "comparison_work": 16760832,
+        "ideal_certificate_squared": null,
+        "leaves": 4,
+        "emitted_name_bytes": 0,
+        "report": {
+          "schema_version": 6,
+          "profile": "f1d1-root-proxy-gltf-v1",
+          "source_coordinates": "local-gltf",
+          "coordinates": "local-gltf",
+          "placement": {
+            "kind": "local"
+          },
+          "root_transform": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "source_bytes": 149784,
+          "external_files": 0,
+          "external_bytes": 0,
+          "triangles": 8192,
+          "leaf_tiles": 4,
+          "leaf_triangles": 2048,
+          "images": 0,
+          "image_bytes": 0,
+          "image_pixels": 0,
+          "routing_geometric_error_metres": 100.0,
+          "approximation": {
+            "kind": "root_proxy",
+            "triangle_limit": 1024,
+            "triangles": 1023,
+            "regions": 1,
+            "certified_error_metres": 7.000000000000018,
+            "geometric_error_metres": 100.0,
+            "comparison_pairs": 16760832,
+            "appearance": "opaque-untextured-factors"
+          }
+        },
+        "proxy_member": "t/root.glb",
+        "member_sha256": {
+          "tileset.json": "3d4506e05dc313a176548df90bd32eb92f2f37972c2aaadb0724d102861baef8",
+          "conversion.json": "fa5548d42a4061769d39704aeb2ff0b952d6f6fcb1d3f3a105650a1a2ce236c7",
+          "t/0.glb": "48d31516144ad2020adcbe24ce979e7833c2704ef2db44a06d05f2e5aa0c4b1d",
+          "t/1.glb": "5218f7b2420e953eaa33c8e27ca8a8836bf0cdc660a988d810e9d1d014b6eece",
+          "t/2.glb": "6f7d45226ede8c94c149939e801f40410a3b08fecc68f930439d93464d5f3254",
+          "t/3.glb": "d193578e8688e998db9473fc127520e189b3e17c37ab636e0eafcff20f13590b",
+          "t/root.glb": "7cd3960756be56a4e5c396a30f74b5e158176708e25eedb25b10af22b217ff97"
+        },
+        "independent_geometry_reference": {
+          "kind": "elementary_common_box_diameter",
+          "squared_diameter_metres2": 8192,
+          "requested_budget_squared_metres2": 10000,
+          "scope": "Actual source/candidate nonempty supports and original-position membership checked. Conservative whole-support distance <=sqrt(8192)<100m; detailed reported witness certificate not replayed at this size."
+        }
+      },
+      "archive_sha256": "87c548ed839504d370c343103265a3e0dd02c210991c572c29b845cf540dc095",
+      "archive_bytes": 819911,
+      "comparison_ceiling_fraction": 0.9990234375,
+      "output_parent_entries_after_completion": [
+        "result.3tz"
+      ]
+    },
+    {
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-release-0eeb906",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/refused-over-pair-ceiling/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d-evidence/resource-final-0eeb906/refused-over-pair-ceiling/output/result.3tz",
+        "--leaf-triangles",
+        "2048",
+        "--root-proxy-triangles",
+        "4096",
+        "--max-proxy-error-metres",
+        "100"
+      ],
+      "source_sha256": "7a4d5707afe4f70dc72aaa87a33471fd47e6785330e2982710d52efcedaad5d5",
+      "source_bytes": 149784,
+      "triangle_limit": 4096,
+      "exit_code": 2,
+      "elapsed_seconds": 0.011256267000135267,
+      "peak_rss_kib_wait4": 44928,
+      "user_cpu_seconds": 0.005549999999999999,
+      "system_cpu_seconds": 0.002768,
+      "poll_interval_ms": 10,
+      "samples": 2,
+      "sampled_peaks": {
+        "rss_kib": 2588,
+        "threads": 1,
+        "file_descriptors": 3,
+        "scratch_files": 0,
+        "scratch_bytes": 0
+      },
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"root proxy certificate exceeds 16777216 complete face pairs\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "",
+      "timeout_seconds": 180,
+      "child_reaped": true,
+      "output_parent_absent": true
+    }
+  ],
+  "wait4_peak_rss_semantics": "Raw child process ru_maxrss may include inherited Python launcher residency before exec. In particular, refusal launches after independent artifact decoding and can inherit a larger parent RSS. This is not pure steady-state converter RSS; procfs values remain sampled observations.",
+  "limits": [
+    "One accepted and one refused process on this Linux host; no total-memory or cancellation-latency guarantee.",
+    "wait4 peak RSS can include pre-exec inherited launcher memory; do not use it as pure converter allocation cost or compare accepted/refused values as such.",
+    "wait4 process peak RSS is measured; descriptor/thread/scratch peaks sampled at stated interval and may miss short peaks.",
+    "Detailed exact-rational face-pair witness certificate replay is omitted at this size; independent common-box diameter proves requested 100m geometric budget only.",
+    "Measurements include source decode/candidate/certification/encoding/publication for this serial invocation; no constant-memory, streaming-total or performance guarantee."
+  ]
+}

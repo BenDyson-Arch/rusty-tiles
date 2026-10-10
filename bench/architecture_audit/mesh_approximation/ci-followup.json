@@ -1,0 +1,35 @@
+{
+  "failed_ci_run": 38027622273,
+  "failed_ci_job": 114141722779,
+  "failed_head": "711e663b6bc388e59e7803043169c802cc5e42c6",
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "binary_sha256": "81fca6a80c1e64cfe6cec953838eba8cce6b39cadcd45a193e4a1096c8e44965",
+  "cause": "Two active resource inspectors still required schema5/profilef1c2 after report migrated to schema6/profilef1d1. PBR probe rejected three successful conversions; placement probe was not reached in failed CI. No production changes.",
+  "correction": "Both inspectors require schema6/profilef1d1 and exact full_detail approximation. No old schema compatibility or weakened artifact/resource assertions.",
+  "reproduction": "Frozen native CLI shared-six-attrs-4096-primitives returned success but old inspector failed. Corrected PBR4cases and placement10cases pass, including all three unchanged local/placed content pairings.",
+  "scope": "Executions validate corrected active inspectors on finite workloads. Two full probe programs ran concurrently; timing and sampled memory observations are not fresh performance baselines or universal guarantees. Prior local checks did not replay these two complete active CI resource drivers. Historical audit review scripts retain their original schema pins. New CI still required.",
+  "failure_excerpt_sha256": "c4411a8dc23a23f273ddf257df0da395013bee53f36f03ce69c040c0fbfcbb8f",
+  "storage": {
+    "f1b3-ci-before.json": {
+      "path": "f1b3-ci-before.json.gz",
+      "original_bytes": 4562,
+      "original_sha256": "656e520b807dec6c3c7e5b4d9a748af4a03b89264b7bc46c18b5dfdca1518b91",
+      "stored_bytes": 1629,
+      "stored_sha256": "4ba075c3ac64369e8fcf48180aacaf18d91e61023eaa01cd0e3d06bfd92849cd"
+    },
+    "f1b3-ci-after.json": {
+      "path": "f1b3-ci-after.json.gz",
+      "original_bytes": 16197,
+      "original_sha256": "b6460bda623965bf87237836e2bcc99e448c284ff628de5ebd16457f18105eb3",
+      "stored_bytes": 2246,
+      "stored_sha256": "89a49e0acde01a492b9424b22743921afb0478ad0174fd8ba9055d5b023a1103"
+    },
+    "f1c1-ci-after.json": {
+      "path": "f1c1-ci-after.json.gz",
+      "original_bytes": 61169,
+      "original_sha256": "a78ea00ede49933a050a97e7349f9831f77d482751cd4619ea64b091273bb2e7",
+      "stored_bytes": 10207,
+      "stored_sha256": "2d766c4fa496e38648ac1ad563dc5d491a3b2fe4a3faf1e98d644e52c5f65858"
+    }
+  }
+}

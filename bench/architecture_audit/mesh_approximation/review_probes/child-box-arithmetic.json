@@ -1,0 +1,15 @@
+{
+  "scope": "Independent operation replay, exact Fraction child endpoint containment; no Rust execution",
+  "negative_control_old_parent": [
+    -1.9999999999999998,
+    2.0000000000000004
+  ],
+  "corrected_parent": [
+    -2.0,
+    2.0000000000000013
+  ],
+  "old_child_failures_control": 2,
+  "random_controls": 10000,
+  "old_random_failures": 1,
+  "outward_random_failures": 0
+}

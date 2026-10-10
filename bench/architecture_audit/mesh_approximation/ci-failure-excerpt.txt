@@ -1,0 +1,6 @@
+2026-10-10T05:31:14.9589997Z [36;1mpython3 -B bench/architecture_audit/f1b3/resource_probe.py --binary target/debug/rusty-tiles --output "/home/runner/work/_temp/f1b-core-pbr-bounds.json"[0m
+2026-10-10T05:31:36.2900634Z {"case": "core-pbr-single-leaf", "passed": false, "rss_kib": 111112}
+2026-10-10T05:31:38.5294843Z {"case": "core-pbr-many-leaves", "passed": false, "rss_kib": 56388}
+2026-10-10T05:31:38.8466171Z {"case": "shared-six-attrs-4096-primitives", "passed": false, "rss_kib": 34684}
+2026-10-10T05:31:39.1609363Z AssertionError: resource evidence contains failed cases
+2026-10-10T05:31:39.1742145Z ##[error]Process completed with exit code 1.

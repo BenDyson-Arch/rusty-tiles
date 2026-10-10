@@ -64,7 +64,8 @@ def fixture(case):
 
 def inspect(output, expected, limit, payload):
     report = payload['meshReport']
-    assert report['profile'] == 'f1c2-source-identity-gltf-v1' and report['schema_version'] == 5
+    assert report['profile'] == 'f1d1-root-proxy-gltf-v1' and report['schema_version'] == 6
+    assert report['approximation'] == {'kind': 'full_detail'}
     for key in ('triangles', 'source_bytes', 'image_bytes'):
         assert report[key] == expected[key], (key, report, expected)
     assert report['images'] == report['image_pixels'] == 1 and report['external_files'] == report['external_bytes'] == 0

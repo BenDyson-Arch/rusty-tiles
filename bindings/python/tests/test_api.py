@@ -69,6 +69,33 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_certified_root_proxy_installed_api(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1d1_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        payload = oracle.fixture("grid")
+        source = self.root / "proxy-grid.glb"
+        source.write_bytes(payload)
+        output = self.root / "proxy-grid.3tz"
+        result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=16,
+            root_proxy_triangles=8, max_proxy_error_metres=10.0)
+        with zipfile.ZipFile(result.output) as stream:
+            members = {name: stream.read(name) for name in stream.namelist()
+                       if name != "@3dtilesIndex1@"}
+        inspected = oracle.inspect_members(payload, members, 16, 8, 10.0)
+        self.assertEqual(result.report, json.loads(members["conversion.json"]))
+        self.assertLess(result.report["approximation"]["triangles"], result.report["triangles"])
+        self.assertTrue(inspected)
+        for kwargs in ({"root_proxy_triangles": 8}, {"max_proxy_error_metres": 10.0},
+                       {"root_proxy_triangles": 0, "max_proxy_error_metres": 10.0},
+                       {"root_proxy_triangles": 8, "max_proxy_error_metres": float("nan")}):
+            absent = self.root / "proxy-invalid" / "out.3tz"
+            with self.assertRaises(rusty_tiles.InvalidRequestError):
+                rusty_tiles.mesh_local_to_3tz(source, absent, leaf_triangles=16, **kwargs)
+            self.assertFalse(absent.parent.exists())
+
     def test_source_identity_metadata_independent_installed_api(self):
         sys.path.insert(0, str(ROOT / "tests"))
         try:
@@ -199,8 +226,8 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "external.3tz"
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
                                               callback=observe)
-        self.assertEqual(result.report["schema_version"], 5)
-        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 6)
+        self.assertEqual(result.report["profile"], "f1d1-root-proxy-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["external_files"], 1)
         self.assertEqual(result.report["external_bytes"], 108)
@@ -263,7 +290,7 @@ class WheelAPI(unittest.TestCase):
                         output = self.root / (name + "-" + str(limit) + ".3tz")
                         value = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
                         self.assertEqual(value.report, oracle.inspect(source, output, limit)["report"])
-                        self.assertEqual(value.report["profile"], "f1c2-source-identity-gltf-v1")
+                        self.assertEqual(value.report["profile"], "f1d1-root-proxy-gltf-v1")
                 self.assertEqual(before, {p.relative_to(source.parent): p.read_bytes()
                                          for p in source.parent.rglob("*") if p.is_file()})
         for name, bundle, kind in oracle.refusal_bundles():
@@ -298,8 +325,8 @@ class WheelAPI(unittest.TestCase):
                 source.write_bytes(b"changed after preparation")
 
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
-        self.assertEqual(result.report["schema_version"], 5)
-        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 6)
+        self.assertEqual(result.report["profile"], "f1d1-root-proxy-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["triangles"], 8)
         self.assertEqual(result.report["leaf_tiles"], 8)
@@ -372,7 +399,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1d1-root-proxy-gltf-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
