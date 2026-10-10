@@ -28,3 +28,29 @@ profile choices and proof limits. Bind executions to exact source/artifact
 identities; use sensitive controls and independent references. A green regression
 suite alone does not establish a new contract. Document remaining migration and
 removal gates; do not claim broader acceptance or release authorization.
+
+## Autonomous roadmap work
+
+For the authorized 0.4.0 foundation roadmap, own PRs through final-source
+independent acceptance, applicable CI, installed-wheel and official-Blender
+checks. Investigate failures at their owning boundary, revalidate exact source
+and artifact identities, and merge an accepted exact head into `develop` when
+the evidence supports it. Evidence-backed merges are authorized without another
+confirmation. Continue to the next dependency-ready bounded slice and maintain
+a durable roadmap/checkpoint record. Missing proof is unfinished work.
+
+The target is to get as close to a 0.4.0 release-ready candidate as possible.
+Do not merge into `main`, tag, publish or release under this authority. Keep
+#113/#121 open unless their closure is separately authorized. Preserve the
+foundation-first process and GPT-6.1 Sol fan-out with clear file ownership and
+a fresh separate nonauthor review; one coordinator owns shared Cargo builds.
+
+## CPU load
+
+Keep local work considerate of other applications. Default to
+`CARGO_BUILD_JOBS=2`, `RAYON_NUM_THREADS=2` and `RUST_TEST_THREADS=2`, and run
+heavy build/test/resource commands at `nice -n 10`. Serialize heavy workloads
+under the coordinator. Agents may perform lightweight reading and bounded
+small probes concurrently, but must coordinate sustained expensive work.
+Inspect host load before increasing concurrency and reduce it if needed.
+Avoid repeating broad verification once applicable meaningful checks pass.

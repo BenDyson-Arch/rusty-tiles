@@ -9,6 +9,13 @@ passed. Package production-byte identity and final separate nonauthor review
 passed; [storage-index.json](storage-index.json) records the completed slots.
 This bounded slice does not close #121/#113 or authorize release.
 
+[PR #150](https://github.com/BenDyson-Arch/rusty-tiles/pull/150) subsequently
+merged into `develop` at `34a76152d18b02553691f472207225f116307a67`, with the
+identical tree to reviewed head `43d14b1708c92d8bba9d2567da695558fd5320ac`.
+[Final CI and merge evidence](remote_acceptance/README.md) records all 21 active
+checks, separate uploaded-artifact review and 26 losslessly retained records.
+The original frozen production and bounded acceptance claims above still apply.
+
 ## Identity and receipt map
 
 | Artifact | SHA256 |

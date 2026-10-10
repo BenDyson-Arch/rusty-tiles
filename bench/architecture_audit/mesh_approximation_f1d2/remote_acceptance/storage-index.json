@@ -1,0 +1,251 @@
+{
+  "scope": "Post-PR150 final-head uploaded receipt and merge evidence. Does not change production acceptance domain or authorize release.",
+  "reviewed_head": "43d14b1708c92d8bba9d2567da695558fd5320ac",
+  "production_source": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "merge_commit": "34a76152d18b02553691f472207225f116307a67",
+  "merge_tree_equals_reviewed_head": true,
+  "ci_run": 38031595353,
+  "wheel_run": 38031595401,
+  "active_checks_successful": 21,
+  "intended_skips": [
+    "Release acceptance",
+    "Distribution Blender (Linux x86_64)"
+  ],
+  "storage": "Exact raw bytes; deterministic gzip level9,mtime0,no filename; no wheels or binaries committed",
+  "entries": [
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-coordinator-checks.json",
+      "relative_original_path": "remote-coordinator-checks.json",
+      "stored_path": "remote-coordinator-checks.json.gz",
+      "original_bytes": 14875,
+      "original_sha256": "1e189973c3ed9a11cbe56af8505e8e701a78b12bec1980574008fe87c49dd457",
+      "stored_bytes": 2483,
+      "stored_sha256": "f85c6d7e443f86f8b82f6457ac2b14cd0129b51cd5dbb26090d7009f6dff03e6"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-review.json",
+      "relative_original_path": "remote-review.json",
+      "stored_path": "remote-review.json.gz",
+      "original_bytes": 55998,
+      "original_sha256": "33946a90159bd6bbdeab1289e99475a08bcc9360d7bf2ae04dac0b2b60a36dc3",
+      "stored_bytes": 16374,
+      "stored_sha256": "ddf462316a30bbe2d7bd2f55a06cf245fc38f6534777e7c582dd1d6a0d57af3c"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/merge-result.json",
+      "relative_original_path": "merge-result.json",
+      "stored_path": "merge-result.json.gz",
+      "original_bytes": 15374,
+      "original_sha256": "29b2b42febfe4d776a1051b779ce69309c5726da6502020ed99f4c4298afb9f0",
+      "stored_bytes": 2665,
+      "stored_sha256": "7daf1d1776b431315406055758f786322a0a8048033f92d8b8560ff1fed69883"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-ci/f1d1-consumer-evidence/f1d1-browser.json",
+      "relative_original_path": "remote-ci/f1d1-consumer-evidence/f1d1-browser.json",
+      "stored_path": "remote-ci--f1d1-consumer-evidence--f1d1-browser.json.gz",
+      "original_bytes": 75973,
+      "original_sha256": "63f78789a344e25c92f7e665c75438f20ba690a431944d5c78031036b7a43c4c",
+      "stored_bytes": 5174,
+      "stored_sha256": "f4b3127409d6f9d1843571b706dad1b18dd8fd196c99033e16b3c4b8c4bdf841"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-ci/f1d1-consumer-evidence/f1d1-khronos.json",
+      "relative_original_path": "remote-ci/f1d1-consumer-evidence/f1d1-khronos.json",
+      "stored_path": "remote-ci--f1d1-consumer-evidence--f1d1-khronos.json.gz",
+      "original_bytes": 206581,
+      "original_sha256": "ffe68deddd3a323927afdd2453709149235b41cde4103ea45d17e853e61f2791",
+      "stored_bytes": 9949,
+      "stored_sha256": "5e79d92db3a67b48f828cfffea506f75b5739c3c4acff8e582eeef3ba77df58a"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-ci/f1d1-consumer-evidence/f1d1-placed-browser.json",
+      "relative_original_path": "remote-ci/f1d1-consumer-evidence/f1d1-placed-browser.json",
+      "stored_path": "remote-ci--f1d1-consumer-evidence--f1d1-placed-browser.json.gz",
+      "original_bytes": 58342,
+      "original_sha256": "7aa19c4ff6a7442261c25e619c5df7f1caada0c54a42f065a8d66041db7cf257",
+      "stored_bytes": 6606,
+      "stored_sha256": "6276c95f2bc59a3c07d483b4c521aae88f913fe0acf96fb18d23a887d0055884"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-ci/f1d1-consumer-evidence/f1d2-native.json",
+      "relative_original_path": "remote-ci/f1d1-consumer-evidence/f1d2-native.json",
+      "stored_path": "remote-ci--f1d1-consumer-evidence--f1d2-native.json.gz",
+      "original_bytes": 105266,
+      "original_sha256": "c31fbd607d6db962c92728ef3292ea2e87a1ae9d6224d18afc9c15d8b037ada1",
+      "stored_bytes": 11582,
+      "stored_sha256": "6efe00fd90b2da0e5cb85248bd073abc1c2d0c4f9edb57a69b30f62d1bf0e4d3"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-ci/f1d2-geometry-evidence/f1d2-oracle.json",
+      "relative_original_path": "remote-ci/f1d2-geometry-evidence/f1d2-oracle.json",
+      "stored_path": "remote-ci--f1d2-geometry-evidence--f1d2-oracle.json.gz",
+      "original_bytes": 105265,
+      "original_sha256": "fefb653ba4b0bb75e4f41cddfedd2b1f7a5a3ef8a66e1cf45e17aa25a9c95b9e",
+      "stored_bytes": 11587,
+      "stored_sha256": "0879e310cf593b2564cd451a11a0ff318468b69047fe7766cc1ccc7aa5f83fbb"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-linux-x64/blender-acceptance.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-linux-x64/blender-acceptance.json",
+      "stored_path": "remote-wheels--evidence-official-blender-linux-x64--blender-acceptance.json.gz",
+      "original_bytes": 1222,
+      "original_sha256": "2c4c2b1e75becf9c43bded09351669f423b6ef5495792fb716fd1163f307f6bf",
+      "stored_bytes": 641,
+      "stored_sha256": "90250d16de1109a45b13301a465883015beb85dbc5d5cf67d233877cd930d0f2"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-linux-x64/blender-distribution.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-linux-x64/blender-distribution.json",
+      "stored_path": "remote-wheels--evidence-official-blender-linux-x64--blender-distribution.json.gz",
+      "original_bytes": 571,
+      "original_sha256": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5",
+      "stored_bytes": 309,
+      "stored_sha256": "111956314bb5bc406af3c45b655fa346233a6a9a243935351b2f3b32708bb4f8"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-macos-arm64/blender-acceptance.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-macos-arm64/blender-acceptance.json",
+      "stored_path": "remote-wheels--evidence-official-blender-macos-arm64--blender-acceptance.json.gz",
+      "original_bytes": 1242,
+      "original_sha256": "524b968a44ee9ef657f38bde9e15da7736f95e9be7e33884bffe006b8e8fa08f",
+      "stored_bytes": 662,
+      "stored_sha256": "26652863c1b9c7b77f7474ebf1255bafc8e905ef156aeb0e48531e04924ed010"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-macos-arm64/blender-distribution.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-macos-arm64/blender-distribution.json",
+      "stored_path": "remote-wheels--evidence-official-blender-macos-arm64--blender-distribution.json.gz",
+      "original_bytes": 575,
+      "original_sha256": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884",
+      "stored_bytes": 325,
+      "stored_sha256": "2d5e795553fb10d8a09d3256d7d2dfc2c86728a828552685f6049072fbd73632"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-macos-x64/blender-acceptance.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-macos-x64/blender-acceptance.json",
+      "stored_path": "remote-wheels--evidence-official-blender-macos-x64--blender-acceptance.json.gz",
+      "original_bytes": 1240,
+      "original_sha256": "7c02e3ab23b2987fc9e765c76ad4a74ac234c0de41e93a237c5158954a53abab",
+      "stored_bytes": 663,
+      "stored_sha256": "2ea2dae5d52027eaf5a2b162429cb65ca7e83a5f85dfbadc167a0abc4ffb5d52"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-macos-x64/blender-distribution.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-macos-x64/blender-distribution.json",
+      "stored_path": "remote-wheels--evidence-official-blender-macos-x64--blender-distribution.json.gz",
+      "original_bytes": 571,
+      "original_sha256": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b",
+      "stored_bytes": 322,
+      "stored_sha256": "b1c8f545c1f1bf3a2e0f59e4f4fb041281b12f9924fcf68dcdc0531314f9f189"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-windows-x64/blender-acceptance.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-windows-x64/blender-acceptance.json",
+      "stored_path": "remote-wheels--evidence-official-blender-windows-x64--blender-acceptance.json.gz",
+      "original_bytes": 1259,
+      "original_sha256": "0b1a384bc68a785f17f88388006f032ffbe8dc7833f1b62d4d3c4930575a5259",
+      "stored_bytes": 661,
+      "stored_sha256": "e852ff97e02cfccbc2f7681a5ae90bb14365843eea08c5a7c0f000c0c6f3f8b1"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-official-blender-windows-x64/blender-distribution.json",
+      "relative_original_path": "remote-wheels/evidence-official-blender-windows-x64/blender-distribution.json",
+      "stored_path": "remote-wheels--evidence-official-blender-windows-x64--blender-distribution.json.gz",
+      "original_bytes": 580,
+      "original_sha256": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9",
+      "stored_bytes": 312,
+      "stored_sha256": "81c2fef2836b1ea3fd7dc24eafdd11cfa028b8446e26853b86c7e47334a5fd59"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-aarch64-apple-darwin/python-3.10.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-aarch64-apple-darwin/python-3.10.json",
+      "stored_path": "remote-wheels--evidence-wheel-aarch64-apple-darwin--python-3.10.json.gz",
+      "original_bytes": 553,
+      "original_sha256": "ba6cdfaf214202d20b791340a4b76d3c2643cef08d84ff85ea2a51c227f86ace",
+      "stored_bytes": 383,
+      "stored_sha256": "9938a1c6dabbd29e1266d9fbbad289ffc870557f6443b8b0e763e6f9c7575e94"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-aarch64-apple-darwin/python-3.14.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-aarch64-apple-darwin/python-3.14.json",
+      "stored_path": "remote-wheels--evidence-wheel-aarch64-apple-darwin--python-3.14.json.gz",
+      "original_bytes": 552,
+      "original_sha256": "ff6c9bf17d22b84060c43fdb80889d5a2903a35eea075f16b593c243eb9c4b7c",
+      "stored_bytes": 379,
+      "stored_sha256": "7191a558eb0b066fef7aab495402a9e780b5bc06d7132f6c9e843428f4f9f865"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json",
+      "stored_path": "remote-wheels--evidence-wheel-aarch64-unknown-linux-gnu--python-3.10.json.gz",
+      "original_bytes": 486,
+      "original_sha256": "8125b8ed6a2d2930ec516fec6b71173f3eb02f995b625d90709888e1b6a659b5",
+      "stored_bytes": 336,
+      "stored_sha256": "1eb9bbbdf6a33a3ce5ac9efcdd5a0117e9f6fe612d099f6382b5b139f52ebcc3"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json",
+      "stored_path": "remote-wheels--evidence-wheel-aarch64-unknown-linux-gnu--python-3.14.json.gz",
+      "original_bytes": 485,
+      "original_sha256": "bdf2d03f90e9419c3bb318488331f26f69053f9607c813916593a73f1a9ee831",
+      "stored_bytes": 336,
+      "stored_sha256": "2685ad4951aadc373116a5f6e6edb763cd03108e59169d2152c00145c98da259"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-apple-darwin/python-3.10.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-apple-darwin/python-3.10.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-apple-darwin--python-3.10.json.gz",
+      "original_bytes": 531,
+      "original_sha256": "d55a118788cc72073430a301c7d4a117caca9ac0a7aae92f2b81cda1beca71f3",
+      "stored_bytes": 370,
+      "stored_sha256": "257922bb983f2907aea9b7e1cdd1d18a4b905f2fd65ee2d647370fa092f778db"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-apple-darwin/python-3.14.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-apple-darwin/python-3.14.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-apple-darwin--python-3.14.json.gz",
+      "original_bytes": 554,
+      "original_sha256": "6a3c60cc21fe4bbaf4d7e1dbdcafb49830c9e55c3515fe27295e662a99316580",
+      "stored_bytes": 381,
+      "stored_sha256": "4dbbbd4ee0d11df769862dcf29749c704b126516f052294c93ef8dde6d288298"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-pc-windows-msvc/python-3.10.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-pc-windows-msvc--python-3.10.json.gz",
+      "original_bytes": 542,
+      "original_sha256": "78683b692ceb89ef0e9ff9a8d4c86abfaa0adaa9afd597ca96cf23b615f8da69",
+      "stored_bytes": 383,
+      "stored_sha256": "5bc5ee89816f3780b17f3e8f31662c9fe927552f57c5e337a4fc184a9f84c198"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-pc-windows-msvc/python-3.14.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-pc-windows-msvc--python-3.14.json.gz",
+      "original_bytes": 548,
+      "original_sha256": "681841d2b8a7863a1882576b8b1b829a404eb81a9203dc28849d4c752d3ae6d8",
+      "stored_bytes": 387,
+      "stored_sha256": "95494079133e6a5b7a9cc2c53c4fedd76e1d479285d99e6f95131a80fb75f4b2"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-unknown-linux-gnu--python-3.10.json.gz",
+      "original_bytes": 484,
+      "original_sha256": "26c448a99ba804ee3318b9300c17c3d7c31d5df337ad5834b0c4cb8cc069307d",
+      "stored_bytes": 336,
+      "stored_sha256": "d5022e04fbe12cbfc7a9f24c51714f6b46696f55c57ff1e57da50cb722cea783"
+    },
+    {
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/remote-wheels/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json",
+      "relative_original_path": "remote-wheels/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json",
+      "stored_path": "remote-wheels--evidence-wheel-x86_64-unknown-linux-gnu--python-3.14.json.gz",
+      "original_bytes": 483,
+      "original_sha256": "72c7cdcff03225ff4bb1bd6cd3803dc3762cb145d84ca9d0ffec9310b6696ab1",
+      "stored_bytes": 336,
+      "stored_sha256": "68fb01548de70d9dd565e11011628a5b1e0ead821c93f736f970484c5865234a"
+    }
+  ]
+}
