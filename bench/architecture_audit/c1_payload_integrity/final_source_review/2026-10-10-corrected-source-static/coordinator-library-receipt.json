@@ -1,0 +1,15 @@
+{
+  "source_commit": "6c0216c353a55afef6ebca7c929ceea1651832ba",
+  "source_pin_sha256": "d1b391b64d511556e6d7fc24ab5cc655837b6d2d1c369c03b5447fd6f51e4400",
+  "frozen_unit_artifact": "/tmp/rusty-tiles-payload-final-evidence/corrected-build/unit-6c0216c-41d262330c620539e09ce39a34e27dd11692aef180768a57a1235eb03b89c4dd",
+  "sha256": "41d262330c620539e09ce39a34e27dd11692aef180768a57a1235eb03b89c4dd",
+  "bytes": 26781312,
+  "library_result": {
+    "passed": 352,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 0
+  },
+  "log_sha256": "0690b5a8c1d35ff3d9455a141c6cbf1457c5ed22956c2db8c2965e7a1d244e14",
+  "scope": "Corrected bounded format source actual library +11 independent private controls; no full C1/A2/release acceptance."
+}

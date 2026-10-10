@@ -85,3 +85,7 @@ pub mod validate;
 #[cfg(test)]
 #[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls.rs"]
 mod payload_integrity_acceptance;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled_context_controls.rs"]
+mod payload_context_acceptance;

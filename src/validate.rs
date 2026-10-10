@@ -797,11 +797,19 @@ fn open_archive(path: &Path) -> Result<File, Error> {
 /// Inspect a bounded archive using only declared archive-local resources.
 /// Success certifies the named checks, not uninspected scene/source semantics.
 pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
+    inspect_selected(request, ValidationLimits::default())
+}
+
+// C1 selects its profile above. Explicit limits also permit bounded internal
+// controls to exercise the actual operation and every resource/parser consumer.
+pub(crate) fn inspect_selected(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<ValidationReport, Error> {
     let path = request.input();
     let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
-    let limits = ValidationLimits::default();
     let content_limits = content_limits(&limits)?;
     let archive_limits = crate::archive3tz::ReadLimits {
         source_archive_bytes: limits.source_archive_bytes,
