@@ -86,8 +86,20 @@ pub(super) fn plan(
         check()?;
         let values = leaf.bounds.box_values();
         for (axis, half) in [values[3], values[7], values[11]].into_iter().enumerate() {
-            bounds.min[axis] = bounds.min[axis].min(values[axis] - half);
-            bounds.max[axis] = bounds.max[axis].max(values[axis] + half);
+            // Enclose the exact real child box, not the rounded evaluation of
+            // its endpoints. Otherwise the root can miss a child's half axis
+            // despite enclosing every stored source position. Adding zero is
+            // exact, so a point axis needs no artificial interval expansion.
+            let (low, high) = if half == 0.0 {
+                (values[axis], values[axis])
+            } else {
+                (
+                    (values[axis] - half).next_down(),
+                    (values[axis] + half).next_up(),
+                )
+            };
+            bounds.min[axis] = bounds.min[axis].min(low);
+            bounds.max[axis] = bounds.max[axis].max(high);
         }
     }
     Ok((leaves, bounds))
@@ -149,6 +161,40 @@ fn split(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn root_union_encloses_child_box_endpoints_with_outward_arithmetic() {
+        let triangles: Vec<_> = (0..32)
+            .map(|index| {
+                let x = (index % 4) as f32;
+                let y = (index / 4) as f32;
+                Triangle {
+                    source: Default::default(),
+                    vertex_indices: [0, 1, 2],
+                    positions: [[x, y, 0.0], [x + 1.0, y, 0.0], [x, y + 1.0, 0.0]],
+                    normals: None,
+                    tangents: None,
+                    texcoords: [None; 2],
+                    colors: None,
+                    material: None,
+                }
+            })
+            .collect();
+        let (leaves, root) = plan(&triangles, 16, 4, || Ok(())).unwrap();
+        let parent = root.box_values();
+        for leaf in leaves {
+            let child = leaf.bounds.box_values();
+            for (axis, offset) in [3, 7, 11].into_iter().enumerate() {
+                if child[offset] == 0.0 {
+                    assert_eq!(parent[offset], 0.0);
+                    assert_eq!(parent[axis], child[axis]);
+                } else {
+                    assert!(root.min[axis] <= (child[axis] - child[offset]).next_down());
+                    assert!(root.max[axis] >= (child[axis] + child[offset]).next_up());
+                    assert!(parent[offset] >= (parent[axis] - child[axis]).abs() + child[offset]);
+                }
+            }
+        }
+    }
     #[test]
     fn mixed_magnitude_boxes_enclose_stored_positions_without_inward_rounding() {
         let triangle = Triangle {
