@@ -89,3 +89,7 @@ mod payload_integrity_acceptance;
 #[cfg(test)]
 #[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled_context_controls.rs"]
 mod payload_context_acceptance;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls_formatted.rs"]
+mod payload_stride_acceptance;

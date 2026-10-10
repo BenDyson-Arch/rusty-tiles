@@ -51,6 +51,7 @@ jobs:
           python3 -B tests/c1_producer_alignment.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-producer" --output "${{ runner.temp }}/c1-producer.json"
           python3 -B tests/archive_read_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/archive-read-corpus" --output "${{ runner.temp }}/c1-archive-read.json"
           python3 -B tests/payload_integrity_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-integrity-corpus" --output "${{ runner.temp }}/c1-payload-integrity.json"
+          python3 -B tests/payload_meshopt_stride_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-stride-corpus" --output "${{ runner.temp }}/c1-payload-stride.json"
       - name: Retain validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

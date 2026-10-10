@@ -1,0 +1,40 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "date": "2026-10-10",
+  "sourceCommit": "2ef8db1a329a675f578ced11fa1c19e02f8b7ba6",
+  "sourceTree": "c8633703eda9a1bd258df8c1bb748fa65a054e4d",
+  "originalLocalExecutionSource": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "decision": "bounded source archive compilation accepted",
+  "mergeDecision": "conditional pending remote, wheels and official Blender/platform lanes",
+  "all97ProductionAnd179AcceptanceHashesExact": true,
+  "docsEvidenceOnlyEquivalenceVerified": true,
+  "earlierReviewAndArtifactIdentitiesUnchanged": true,
+  "archiveSha256": "97c9d8c1635c3f5db5874fdae7624c2d6773318a9c9327e0bb3b4fa276539d69",
+  "archiveBytes": 5527107,
+  "archiveMembers": 1878,
+  "ordinaryMembersExactGitBytes": 1874,
+  "selectedRootSourceAndControlsExact": 271,
+  "manifestNormalizationSemanticDrift": false,
+  "lockTableDrift": false,
+  "retainedLockTables": 288,
+  "prunedUnreachablePythonTables": 8,
+  "coordinatorDefaultVerificationExitCode": 0,
+  "retainedCompilationIndexSha256": "2e65ea47fbe4fd031e9c4f899784d3c3d38c928185a8acf8c0d036237f2b8d8a",
+  "fourLosslessRecordsVerified": true,
+  "reviewerExecutedTarget": false,
+  "reviewerUsedCargo": false,
+  "acceptsA2OrReleaseOrIssueClosure": false,
+  "pendingMergeGates": [
+    "exact-head remote CI and uploaded receipts",
+    "five wheel builds",
+    "ten installed-wheel lanes",
+    "four official Blender/platform lanes"
+  ],
+  "phaseFilesSha256": {
+    "coordinator-package-receipt.json": "6958ce41ca384f090a8c087f8f8e1952a03d7513c12a92e76525eee7879d00a4",
+    "review.md": "c8a4d2e8d009f0414651613cde4674aea9bd3ccb6e80af27b3c9712f250c6e01",
+    "verification.json": "c7384f5e7940349aa15b887ff7ff57d7b99223145390c35dc39532887c9ba3cd",
+    "verify.py": "0bd13016d3d7650cdeb78ae3c55acdf2d34bd3b44c9cc3cefb0df2eca3d3e04a"
+  }
+}

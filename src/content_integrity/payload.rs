@@ -245,7 +245,6 @@ struct ViewPlan<'a> {
     target: Option<usize>,
     meshopt: Option<records::Meshopt<'a>>,
     meshopt_source: Option<usize>,
-    meshopt_stride: Option<usize>,
 }
 fn decode_meshopt(
     e: &records::Meshopt<'_>,
@@ -564,7 +563,6 @@ pub(crate) fn inspect<E>(
                 target,
                 meshopt,
                 meshopt_source,
-                meshopt_stride: None,
             },
             slots,
         )?;
@@ -647,7 +645,6 @@ pub(crate) fn inspect<E>(
             if plan.stride.is_some_and(|s| s != stride) {
                 return Err(invalid("meshopt and bufferView stride disagree").into());
             }
-            plan.meshopt_stride = Some(stride);
             push(&mut views, Cow::Owned(decoded), slots)?;
         } else {
             push(
@@ -730,9 +727,6 @@ pub(crate) fn inspect<E>(
                 .and_then(|n| n.checked_add(occupied))
                 .ok_or_else(|| invalid("accessor range overflow"))?;
             range(&views[v], offset, length)?;
-            if plans[v].meshopt_stride.is_some_and(|s| s != stride) {
-                return Err(invalid("accessor stride differs from meshopt decoded stride").into());
-            }
         } else if a.offset.is_some() {
             return Err(invalid("accessor without view must omit byteOffset").into());
         }

@@ -1,0 +1,30 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "date": "2026-10-10",
+  "originalSourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "originalBinarySha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+  "originalProbeReceiptSha256": "d5f926df13a691b68295b001db5a19223ca328e6c170cdaedcbd06df088ab0de",
+  "decision": "Correct inherited false InvalidInput before merge",
+  "executedProductionOutcomeDefect": true,
+  "purelyStaticGap": false,
+  "malformedFixtureExplanation": false,
+  "unsupportedProfileJustification": false,
+  "permittedChange": "Remove per-accessor codec-stride equality and unused ViewPlan field/initializer/assignment; keep parent-defined stride agreement and ordinary range/budget checks",
+  "primaryAndContractDispositionsVerified": true,
+  "fourSensitiveControlsVerified": true,
+  "eightOriginalRawStreamsVerified": true,
+  "thirteenLosslessRecordsVerified": true,
+  "retainedProbeIndexSha256": "78cb677034fa90ed4f528a15906bc08dd8be90e89bcb8347074ab01c2faf0f0c",
+  "correctedSourceAcceptance": false,
+  "earlierLocalAndPackagePhases": "Historical immutable 2eb/2ef decisions; no artifact rebinding",
+  "reviewerUsedCargo": false,
+  "reviewerExecutedTarget": false,
+  "reviewerEditedProduction": false,
+  "pending": "Independent additive controls, corrected-source artifacts/executions/source package and exact-head remote/wheel/official Blender gates",
+  "phaseFilesSha256": {
+    "coordinator-original-probe-receipt.json": "d5f926df13a691b68295b001db5a19223ca328e6c170cdaedcbd06df088ab0de",
+    "decision.md": "9f01b64f9730b131a8724432772c2197d217b68a13c0a29e510a7ee40fd3fb80",
+    "verification.json": "ef6677af7262ea72b35385fda4ff4230c33d4d6aec3b8445f7f9a1243818ad55",
+    "verify.py": "b18e506b133366909d7ad165aa064f23e3d852a4463d879fc7130c4ab05e0229"
+  }
+}

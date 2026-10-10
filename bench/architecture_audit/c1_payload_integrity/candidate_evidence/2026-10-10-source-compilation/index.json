@@ -1,0 +1,38 @@
+{
+  "scope": "Actual 2ef8db1 source archive compilation; original local code executions retain 2eb identity; frozen archive remains external, no publish",
+  "archive_sha256": "97c9d8c1635c3f5db5874fdae7624c2d6773318a9c9327e0bb3b4fa276539d69",
+  "records": [
+    {
+      "path": "package-verify.log.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/source-package/package-verify.log",
+      "raw_bytes": 7715,
+      "raw_sha256": "71da8c51baf412ee668b1d3bb844c7a52ff8c7fdfac6cde4502ba9dd91948a0a",
+      "stored_bytes": 2292,
+      "stored_sha256": "ce3eabc0ccf93a3a0f499655369dc36e9a579366b40dc55ccc4f87b496fc0224"
+    },
+    {
+      "path": "receipt.json.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/source-package/receipt.json",
+      "raw_bytes": 901,
+      "raw_sha256": "6958ce41ca384f090a8c087f8f8e1952a03d7513c12a92e76525eee7879d00a4",
+      "stored_bytes": 551,
+      "stored_sha256": "9e55e7a3e97ac1c730e56eecfc4e4a23a9db2a5bae825d7c338e8e3f2e6066f5"
+    },
+    {
+      "path": "run.py.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/source-package/run.py",
+      "raw_bytes": 1897,
+      "raw_sha256": "d063209fa67b96a4935988728af4f51256c171f15f396b1dc2a1d0d21ba73c58",
+      "stored_bytes": 852,
+      "stored_sha256": "b82dac74f3021492de5e3c84479835a93a5cccab43276dcf40341ba196759d4a"
+    },
+    {
+      "path": "archive-inventory.json.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/source-package/archive-inventory.json",
+      "raw_bytes": 392233,
+      "raw_sha256": "4a9b784a19ce7cfc1cdb94eb3ce49ae636e9ba7c8eba5aa565949eae05bbbbe4",
+      "stored_bytes": 88820,
+      "stored_sha256": "83d23dfe6325820a5faeff684c61ee38cfcfe0e39061c90dcf8e25462ae985ef"
+    }
+  ]
+}

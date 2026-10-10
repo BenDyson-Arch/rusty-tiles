@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "status": "Predictions frozen before target execution; not execution evidence",
+  "generatorSha256": "0c3a0983eaa7426b5a13d75767a9e6f1639d7269a5b2410f45f70277f69cf81e",
+  "runnerSha256": "2879dd9332871d29147ccad34f55efd5174e77a00879b03502ef8d1ec5397558",
+  "referencePins": [
+    {
+      "file": "meshopt_decoder.test.js",
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d"
+    },
+    {
+      "file": "EXT_meshopt_compression.md",
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3"
+    },
+    {
+      "file": "glTF-core.adoc",
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/specification/2.0/Specification.adoc",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf"
+    }
+  ],
+  "decodedOracle": {
+    "method": "Literal primary expected Uint8Array bytes, independently struct.unpack little-endian float32; no project encoder/decoder/helpers",
+    "compressedSha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a",
+    "expectedSha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+    "positions": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        4.203895392974451e-43,
+        0.0,
+        7.006492321624085e-43
+      ],
+      [
+        3.1591410678348977e-38,
+        0.0,
+        8.963144425019942e-38
+      ],
+      [
+        3.159225145742757e-38,
+        0.0,
+        8.963424684712807e-38
+      ]
+    ],
+    "positionMin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "positionMax": [
+      3.159225145742757e-38,
+      0.0,
+      8.963424684712807e-38
+    ],
+    "scalarValues": [
+      0.0,
+      0.0,
+      0.0,
+      4.203895392974451e-43,
+      0.0,
+      7.006492321624085e-43,
+      3.1591410678348977e-38,
+      0.0,
+      8.963144425019942e-38,
+      3.159225145742757e-38,
+      0.0,
+      8.963424684712807e-38
+    ]
+  },
+  "cases": [
+    {
+      "name": "absent-parent-baseline",
+      "path": "absent-parent-baseline/input.3tz",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "rationale": "One POSITION vertex accessor; missing parent stride gives tightly packed VEC3. Extension physical stride12/count4 supplies48 bytes.",
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "archiveStoredBytes": 1073741824,
+          "archiveEntries": 65536,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 67108864,
+          "hierarchyVisits": 65536,
+          "hierarchyDepth": 128,
+          "references": 262144,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentItems": 65536
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ]
+      },
+      "components": 12,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": null,
+      "sha256": "85455ffdad040df62ab2793b368caac51502ca11f802537ac9edfb6eb9e2d8e8",
+      "bytes": 1353,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "d9a9fe830cc1c532de7f231bfdd70002c557f87347efb4c421e65ff194acc536"
+      },
+      "literalSha256": "78cf61592ecb8d700bb6e2a42dd65d7e319ba401c5688ba1aec5e4598eff8b3a"
+    },
+    {
+      "name": "unused-packed-scalar",
+      "path": "unused-packed-scalar/input.3tz",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "rationale": "Unused SCALAR is not a second vertex attribute: core permits tightly packed scalar stride4 while extension physical stride12 produces the same48-byte view.",
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "archiveStoredBytes": 1073741824,
+          "archiveEntries": 65536,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 67108864,
+          "hierarchyVisits": 65536,
+          "hierarchyDepth": 128,
+          "references": 262144,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentItems": 65536
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ]
+      },
+      "components": 24,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": {
+        "offset": 0,
+        "effectiveStride": 4,
+        "count": 12,
+        "occupiedBytes": 4,
+        "end": 48,
+        "rawValues": [
+          0.0,
+          0.0,
+          0.0,
+          4.203895392974451e-43,
+          0.0,
+          7.006492321624085e-43,
+          3.1591410678348977e-38,
+          0.0,
+          8.963144425019942e-38,
+          3.159225145742757e-38,
+          0.0,
+          8.963424684712807e-38
+        ]
+      },
+      "sha256": "2f797738be8bcbf3e22bfd4062bc4b6171e11717ac2453ec37bfc4bf3cfd5f51",
+      "bytes": 1433,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "7350ef451cbd3a5a58b85c76f057acc4f7c5c1177f6b1fc35db76a38ad926223"
+      },
+      "literalSha256": "f50332a20ebaecdefca5ae18dba3123fdbe037570b5023345112ade97a415f4e"
+    },
+    {
+      "name": "unused-packed-scalar-offset",
+      "path": "unused-packed-scalar-offset/input.3tz",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "rationale": "Unused SCALAR offset4/count11 fits exactly48 bytes, testing a nonzero tight accessor window independently of the physical stream.",
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "archiveStoredBytes": 1073741824,
+          "archiveEntries": 65536,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 67108864,
+          "hierarchyVisits": 65536,
+          "hierarchyDepth": 128,
+          "references": 262144,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentItems": 65536
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ]
+      },
+      "components": 23,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": {
+        "offset": 4,
+        "effectiveStride": 4,
+        "count": 11,
+        "occupiedBytes": 4,
+        "end": 48,
+        "rawValues": [
+          0.0,
+          0.0,
+          4.203895392974451e-43,
+          0.0,
+          7.006492321624085e-43,
+          3.1591410678348977e-38,
+          0.0,
+          8.963144425019942e-38,
+          3.159225145742757e-38,
+          0.0,
+          8.963424684712807e-38
+        ]
+      },
+      "sha256": "95ad08c4ba4879969e68f80f424089ba3d0c84dfb9bb1a4f418bab7cfa565f69",
+      "bytes": 1433,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "40165da8535a1c906f82e7e8dd318ded508d299de3c9e4d3fc315371a31a30d3"
+      },
+      "literalSha256": "9e026c636b95d58f3de8e2d5c88cdd30b310da97801767eeac2c3461f3cab64d"
+    },
+    {
+      "name": "explicit-parent-stride",
+      "path": "explicit-parent-stride/input.3tz",
+      "expectedCategory": "admitted",
+      "expectedExitCode": 0,
+      "rationale": "Defined parentstride12 must equal extensionstride12; both accessor windows use12, scalar count4 occupies40 bytes.",
+      "expectedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "archiveStoredBytes": 1073741824,
+          "archiveEntries": 65536,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 67108864,
+          "hierarchyVisits": 65536,
+          "hierarchyDepth": 128,
+          "references": 262144,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentItems": 65536
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ]
+      },
+      "components": 16,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": {
+        "offset": 0,
+        "effectiveStride": 12,
+        "count": 4,
+        "occupiedBytes": 4,
+        "end": 40,
+        "rawValues": [
+          0.0,
+          4.203895392974451e-43,
+          3.1591410678348977e-38,
+          3.159225145742757e-38
+        ]
+      },
+      "sha256": "63cf622a628588b467f07bdb4a18a6edf8fc5aa6b81c4898adaa381e3dce452e",
+      "bytes": 1449,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "82aba43e613291cee2871e17c549a42dbe3985aef9352df377293e5497355a42"
+      },
+      "literalSha256": "7fa380662314938d25fb2cd3b8486b06012b7a21149d97b002a1100ec0dc2b15"
+    },
+    {
+      "name": "scalar-real-range",
+      "path": "scalar-real-range/input.3tz",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "rationale": "Absent parent stride: scalar count13 requires52 bytes and genuinely exceeds decoded view48.",
+      "expectedReport": null,
+      "components": 25,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": {
+        "offset": 0,
+        "effectiveStride": 4,
+        "count": 13,
+        "occupiedBytes": 4,
+        "end": 52,
+        "rawValues": null
+      },
+      "sha256": "22281b168a95a319c5cfc3c31846403b26da34d73c071cc155b8519a6086ddb3",
+      "bytes": 1433,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "e2b52457d52ba95f4d035712b80a3f1b77d79dd3fabff316f2fd3da4bca628f2"
+      },
+      "literalSha256": "d3233e3191a5f3e05dcabf18c79e6829bdeb21c09974d9ad900f0f18b5975be0"
+    },
+    {
+      "name": "wrong-parent-stride",
+      "path": "wrong-parent-stride/input.3tz",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "rationale": "Defined parentstride8 disagrees with extensionstride12; extension validity requires equality regardless of accessor use.",
+      "expectedReport": null,
+      "components": 12,
+      "decodedPhysicalBytes": 48,
+      "physicalViews": 1,
+      "scalarWindow": null,
+      "sha256": "a305ef7b3cceb975e4a1bf47f0128116ab1cb02c5d2a79cbba4ff425bbcfe72b",
+      "bytes": 1369,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0af0999a01aa831aebc2eb2b60f9e140fc06f79a780c107bc20f092bbb835014"
+      },
+      "literalSha256": "3493a525c3d99a3c51c0d74f19f8138486746ea3e505460cdd91f3f552a91a0c"
+    }
+  ],
+  "privateCaps": [
+    {
+      "case": "unused-packed-scalar",
+      "accessorComponents": 24,
+      "remainingComponents": 24,
+      "decodedBytes": 48,
+      "expected": "admitted",
+      "components": 24
+    },
+    {
+      "case": "unused-packed-scalar",
+      "accessorComponents": 23,
+      "remainingComponents": 24,
+      "decodedBytes": 48,
+      "expected": "resource_limit",
+      "resolverCalls": 0
+    },
+    {
+      "case": "unused-packed-scalar",
+      "accessorComponents": 24,
+      "remainingComponents": 23,
+      "decodedBytes": 48,
+      "expected": "resource_limit",
+      "resolverCalls": 0
+    }
+  ]
+}

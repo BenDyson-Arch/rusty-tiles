@@ -72,16 +72,36 @@ Producer framing independently passed eight portable and six native b3dm
 members; this is framing evidence, not geometry or byte equivalence. Native
 all-targets and Python-binding Clippy passed with warnings denied. Cargo's
 source-package inventory includes all 267 selected required source/acceptance
-paths; that check does not compile or certify an installed source archive.
+paths; that check is an inventory only. A separate actual `cargo package
+--locked -p rusty-tiles` at docs/evidence head `2ef8db1` compiled the extracted
+1,878-member source archive successfully. Its SHA256 is
+`97c9d8c1635c3f5db5874fdae7624c2d6773318a9c9327e0bb3b4fa276539d69`;
+[lossless compilation records](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/2026-10-10-source-compilation/index.json)
+retain the real command, log, receipt and archive inventory. Production and
+selected acceptance bytes remain identical to the `2ebfb74` execution source;
+those earlier runs keep their original source identity.
 
 The [45 lossless local records](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-2ebfb74/index.json)
 bind 97 production and 179 selected acceptance inputs, separate unit/portable/
 native executables, raw CLI streams and actual selected-limit outcomes. Linux
 resource observations measured 63,172–71,348 KiB maximum RSS for portable and
 84,308–90,556 KiB for native, with sampled descriptor maxima seven and six.
-These finite observations are not universal process-memory limits. Fresh
-independent source/artifact acceptance and exact final-head CI, installed-wheel
-and official Blender checks remain separate merge gates.
+These finite observations are not universal process-memory limits. The
+[fresh independent source/artifact review](../../bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-final-checkpoint/review.md)
+accepts this bounded local source. Exact final-head remote CI, installed-wheel
+and official Blender acceptance remain separate merge gates.
+
+A later independently adjudicated control found a false InvalidInput on the
+`2ebfb74` source inherited from the old validator: an unused tightly packed
+SCALAR accessor over a decoded meshopt view was incorrectly required to match
+the codec record stride. The
+[dated primary-backed decision](../../bench/architecture_audit/c1_payload_integrity/final_source_review/2026-10-10-meshopt-stride-adjudication/decision.md)
+settles codec grouping separately from accessor layout. The correction removes
+only that equality check and its unused tracking; defined parent stride
+agreement, decoded length, ordinary ranges/alignment/finite values and budgets
+remain. Earlier reviews and executions retain their identities. Corrected-source
+independent controls, artifacts, package and remote acceptance are required
+before merge.
 
 Admission establishes explicit finite source/node/depth/component/read/decode
 ceilings and checked requested allocations, not whole-process recoverable OOM
