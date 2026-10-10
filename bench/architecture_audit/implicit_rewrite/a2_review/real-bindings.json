@@ -1,0 +1,517 @@
+{
+  "driver_sha256": "b059bbb47fa747d3d8d4009cc6efc58e63da7b8c246f21b6db17bd68e9641502",
+  "evidence": "nonauthor final real-source byte bindings; read-only model replay",
+  "runs": {
+    "native": {
+      "b3dm_profile": [
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/01ae99ffee6f4238536d849adeae552b59290797398212354fc936298204a1e6.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/0212cca20a48d3c4c16d216262f12d1e559978b8a4c14c392fddb9c5c62c56bc.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/08a9ee122af19fb104447c45c7c5af1888dde35c86b84f55f73e5fa18afdf939.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/18aa29f875bf0d73348e0ba58cb2f6ff3cad7e1b4e0fc9bc06ba9d24d160519b.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/27d6b271cfb8a7ff2d979f2cfb3c8dddf7eb7ff1e054346dd63ca77281d36425.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/39db96fb17123789de6c335fe258d1668126d0eaed72b3fbeddb23455b28cb99.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/3a9c82e8c08da8f2279b94f2860a6092defda0b153d37342a2ebe0e61400fa42.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/56f4c0e58820d1ef5a3f2b45366b7f6315d4d652fa4b221b9f8810ebabe3b2fc.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/5dcec87d6f54a0f77681ed8daa85812e61f9f7d863f866bfd44a12f365313d72.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/5e1fbdca56461ea3076d122f10aa9325ae0ed32aa207e527c8bc66aea5571736.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/a0c1dbefe805883a5241decfa5e18c8f99dabf5f472d7ad9210437ad2c41ba68.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/c0243e646bf3e1c3a5ed1ed740a72f362adeb0c4138aec2a99c11c5dc807b6fd.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/cdf38e47a5773a8a53be07a953369c0a191e1b62d51e262729aa868d1894e6d1.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/d7d753b96bb114efdc5da86b170521d06462312427121be1a0d09fdd0a50ace5.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/3a9c82e8c08da8f2279b94f2860a6092defda0b153d37342a2ebe0e61400fa42.b3dm",
+          "source": "fragmented-array-leaf"
+        }
+      ],
+      "cases": [
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-flat-rounded",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-quantized",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-compressed",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-quantized-compressed",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 24,
+          "label": "vector-deep-tight",
+          "legacy_exit": 3,
+          "nodes": 7,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 555,
+          "label": "vector-array-b3dm",
+          "legacy_exit": 3,
+          "nodes": 27,
+          "rendered_leaf_positions": 115
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 192,
+          "label": "vector-fragmented-line",
+          "legacy_exit": 3,
+          "nodes": 11,
+          "rendered_leaf_positions": 36
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 17,
+          "label": "point-flat-rounded",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 81,
+          "label": "point-deep-tight",
+          "legacy_exit": 3,
+          "nodes": 15,
+          "rendered_leaf_positions": 16
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 29,
+          "label": "point-duplicate-midpoint",
+          "legacy_exit": 3,
+          "nodes": 7,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 12,
+          "label": "fragmented-array-leaf",
+          "legacy_exit": 0,
+          "nodes": 1,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 24,
+          "label": "shared-relative-resources",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 24,
+          "label": "opaque-extension-known-resource",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 24,
+          "label": "opaque-extension-private-resource",
+          "legacy_exit": 3,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        }
+      ],
+      "controls": 19,
+      "driver_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+      "generated_artifacts": 44,
+      "limitations": "Authored decoder replay plus separate exact ancestor containment over decoded coordinates; no independent general codec, replacement artifact, 3TZ index or viewer acceptance.",
+      "production_inputs": 93,
+      "raw_receipt_sha256": "ec92c154077c77cd178279248b1d7cb489889266929e03e11551dc246349099d",
+      "reference_codec_calls": 4
+    },
+    "portable": {
+      "b3dm_profile": [
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/05ca040493e7206cb42ba545d9e122ba0175cdfb6dec2ac13d500c7172405e32.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/07677e04a33d1987e55331b5a9cf7e700511a47f52c9de50d1eb67fa17f1675c.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/117d0ecb8aa4d2f90425a003fe7798bd76f1c3103875d00cd3101a4836155403.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/161093098f64cbb5ac72730ee781e4fde871a9550e8df4ab65e9de1d4b29718a.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/17db3c48ddc0d27576b732b4b1288ca87c2f9611ee227d1c37fe506538a72998.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/27629bc0554b6d54bc5e60799eb47ea050cbe26a65be3c1e54ff35a58d9875c8.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/4705b47d7154f54e80ceed52d13e50ff437224d9d0dbe4408445ae449cc22342.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/74aa0cb116c8c33a0f44f2aff15ae012afc24ba3e1ca26d5f5c783a8c827b67d.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/8b9e6d64e3ce103bb22cb194ff60093e382c6db5d40f5a9c8e6f0f181dfafb33.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/928b4cfb9953dc32487095fc1f79ac62bd60e8ea981b801f1da05d286ec46bbb.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/c9c28e6f9f88e480e9b546eef378a157c76adca654c2c3b92aca0fd1c691bf98.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/cbc54dc41dfa79a814fa154f1e10adc6c484c2dfd03cbdd64607bceeae767f70.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/fac78c015b856d8e3981110fbbd7a2775ece5b55979fb96d792d4e0133530a40.b3dm",
+          "source": "vector-array-b3dm"
+        },
+        {
+          "RTC_CENTER": false,
+          "batch_table": false,
+          "feature_table": {
+            "BATCH_LENGTH": 0
+          },
+          "member": "t/928b4cfb9953dc32487095fc1f79ac62bd60e8ea981b801f1da05d286ec46bbb.b3dm",
+          "source": "fragmented-array-leaf"
+        }
+      ],
+      "cases": [
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-flat-rounded",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-quantized",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-compressed",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 16,
+          "label": "vector-quantized-compressed",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 24,
+          "label": "vector-deep-tight",
+          "legacy_exit": 3,
+          "nodes": 7,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 540,
+          "label": "vector-array-b3dm",
+          "legacy_exit": 3,
+          "nodes": 25,
+          "rendered_leaf_positions": 115
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 192,
+          "label": "vector-fragmented-line",
+          "legacy_exit": 3,
+          "nodes": 11,
+          "rendered_leaf_positions": 36
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 17,
+          "label": "point-flat-rounded",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 81,
+          "label": "point-deep-tight",
+          "legacy_exit": 3,
+          "nodes": 15,
+          "rendered_leaf_positions": 16
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 29,
+          "label": "point-duplicate-midpoint",
+          "legacy_exit": 3,
+          "nodes": 7,
+          "rendered_leaf_positions": 8
+        },
+        {
+          "aliases": 2,
+          "independent_ancestor_checks": 12,
+          "label": "fragmented-array-leaf",
+          "legacy_exit": 0,
+          "nodes": 1,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 24,
+          "label": "shared-relative-resources",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 3,
+          "independent_ancestor_checks": 24,
+          "label": "opaque-extension-known-resource",
+          "legacy_exit": 0,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        },
+        {
+          "aliases": 0,
+          "independent_ancestor_checks": 24,
+          "label": "opaque-extension-private-resource",
+          "legacy_exit": 3,
+          "nodes": 3,
+          "rendered_leaf_positions": 12
+        }
+      ],
+      "controls": 19,
+      "driver_sha256": "51129b3f41f10722c01c76def351b337c043b77b310ac3c17d6a2b4f8d66869d",
+      "generated_artifacts": 44,
+      "limitations": "Authored decoder replay plus separate exact ancestor containment over decoded coordinates; no independent general codec, replacement artifact, 3TZ index or viewer acceptance.",
+      "production_inputs": 93,
+      "raw_receipt_sha256": "a44b4f35f44e375c77474ed523d4d587e241d7ec034239aa3b5c7adf1c5b616c",
+      "reference_codec_calls": 4
+    }
+  }
+}

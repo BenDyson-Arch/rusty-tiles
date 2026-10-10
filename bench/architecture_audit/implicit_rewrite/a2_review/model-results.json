@@ -1,0 +1,171 @@
+{
+  "driver_sha256": "eec49f4c9fab533b1e5bf24ae5dc901dbee266b52e4cd4aa372141fe3760b14f",
+  "evidence": "independent nonauthor bounded model replay and byte-binding review; no production execution",
+  "f1d2_preservation": {
+    "entries_verified": 26,
+    "index_sha256": "62680e443c5da72ded07478b029889470cd276951a123c953f82df33006234db",
+    "stored_and_expanded_bytes_agree": true
+  },
+  "models": {
+    "capture_receipt_sha256": "a5061be3712b4f8eb52db1492b4e4cba5e7d685f168daf8925f6bb67d0f1538b",
+    "capture_replay_cases": 41,
+    "semantic_replay": {
+      "fixtures": 4,
+      "production_executed": false,
+      "rejected_controls": 22,
+      "status": "pass"
+    },
+    "supplementary": [
+      {
+        "case": "all_payloads_in_every_ancestor",
+        "result": {
+          "containment_checks": 13,
+          "violations": []
+        },
+        "scheme": "QUADTREE"
+      },
+      {
+        "case": "missing_authoritative_bounds",
+        "cause": "'TILE_BOUNDING_BOX'",
+        "rejected": true,
+        "scheme": "QUADTREE"
+      },
+      {
+        "case": "missing_authoritative_error",
+        "cause": "'TILE_GEOMETRIC_ERROR'",
+        "rejected": true,
+        "scheme": "QUADTREE"
+      },
+      {
+        "authored_pair_oracle": "passes",
+        "case": "self_consistent_descendant_outside_ancestor",
+        "result": {
+          "containment_checks": 13,
+          "violations": [
+            {
+              "owner": "n1",
+              "payload": "p3"
+            },
+            {
+              "owner": "n1",
+              "payload": "p4"
+            }
+          ]
+        },
+        "scheme": "QUADTREE",
+        "separate_coherence_oracle": "rejects"
+      },
+      {
+        "case": "all_payloads_in_every_ancestor",
+        "result": {
+          "containment_checks": 13,
+          "violations": []
+        },
+        "scheme": "OCTREE"
+      },
+      {
+        "case": "missing_authoritative_bounds",
+        "cause": "'TILE_BOUNDING_BOX'",
+        "rejected": true,
+        "scheme": "OCTREE"
+      },
+      {
+        "case": "missing_authoritative_error",
+        "cause": "'TILE_GEOMETRIC_ERROR'",
+        "rejected": true,
+        "scheme": "OCTREE"
+      },
+      {
+        "authored_pair_oracle": "passes",
+        "case": "self_consistent_descendant_outside_ancestor",
+        "result": {
+          "containment_checks": 13,
+          "violations": [
+            {
+              "owner": "n1",
+              "payload": "p3"
+            },
+            {
+              "owner": "n1",
+              "payload": "p4"
+            }
+          ]
+        },
+        "scheme": "OCTREE",
+        "separate_coherence_oracle": "rejects"
+      }
+    ]
+  },
+  "primary_sources": [
+    {
+      "bytes": 63585,
+      "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/README.adoc"
+    },
+    {
+      "bytes": 32526,
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/ImplicitTiling/README.adoc"
+    },
+    {
+      "bytes": 15134,
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/Semantics/README.adoc"
+    },
+    {
+      "bytes": 36602,
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/README.adoc"
+    },
+    {
+      "bytes": 4388,
+      "sha256": "d53e19fde5a3fc198a57bcdbc625363eadedde9b8113c816961536480dd161eb",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/tile.schema.json"
+    },
+    {
+      "bytes": 6890,
+      "sha256": "628e5642ccf07bd3c0a9a45648d39ed1c88e268d07cca735b4428058f901605b",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/Schema/class.property.schema.json"
+    },
+    {
+      "bytes": 4556,
+      "sha256": "88bc7ec39bbc88aa8ad54dc968e6e214ed540546a1835d77d0ac34a5a9e7265a",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/Subtree/subtree.schema.json"
+    },
+    {
+      "bytes": 1638,
+      "sha256": "16da41d074dd3be58da9e0e2004cace966653b5f308228f01580b18e95a8ec2c",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/Subtree/availability.schema.json"
+    },
+    {
+      "bytes": 1544,
+      "sha256": "ea286e717ad875a1fe2c41b3d44c965f52a90793f7e906e5b43951e9d62af34e",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/schema/tile.implicitTiling.schema.json"
+    },
+    {
+      "bytes": 6168,
+      "sha256": "b2a1fbc95fee4fed6bf650e068506c4097d3cc60dbfb290ed7e50f4f654f0a31",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/glTF/README.adoc"
+    },
+    {
+      "bytes": 35078,
+      "sha256": "86109c4b82bc0ab209d82df1eb0d6e72e362c3d348fb212b1d0963388f620311",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Implicit3DTileContent.js"
+    },
+    {
+      "bytes": 6013,
+      "sha256": "9930cffc5e172e8d40abc2fca9470f9ef92c4d1aebb448e5843555c792687ae9",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/BoundingVolumeSemantics.js"
+    },
+    {
+      "bytes": 80549,
+      "sha256": "0deb9aa933cde2cc5ca64fba30ce2659e318cf63e105ab5fde396795dfc2548c",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Cesium3DTile.js"
+    },
+    {
+      "bytes": 20364,
+      "sha256": "848dc85a73d819ec2573891cc7a670828eab9ddc8a8db22db683f702ccf40b9a",
+      "url": "https://raw.githubusercontent.com/CesiumGS/cesium/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Multiple3DTileContent.js"
+    }
+  ]
+}

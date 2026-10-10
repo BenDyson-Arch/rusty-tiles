@@ -292,3 +292,31 @@ under #121. Existing retained point/vector use cases, including padded cells,
 translations and content arrays, need evidence-backed support or explicit
 disposition; an exact-cell pilot alone does not replace the advertised route.
 Parent #113/#120/#121/#125/#126 and release gates remain open.
+
+
+### Continuation after accepted F1d2 #150
+
+F1d1 and F1d2 merged through #149/#150. Accepted F1d2 merge
+`34a76152d18b02553691f472207225f116307a67` has the identical tree to reviewed
+head `43d14b1708c92d8bba9d2567da695558fd5320ac`; all 21 active final-head checks
+passed. [Post-merge uploaded-artifact review and CI identities](../../bench/architecture_audit/mesh_approximation_f1d2/remote_acceptance/README.md)
+remain losslessly retained. This proves one adaptive local certificate over
+unchanged leaves, not recursive/textured LOD or release readiness.
+
+The current operation remains #126 A2. Its fresh [semantic audit](../../bench/architecture_audit/implicit_rewrite/a2_semantics/README.md),
+[real-source audit](../../bench/architecture_audit/implicit_rewrite/a2_real_sources/README.md)
+and [capture/resource audit](../../bench/architecture_audit/implicit_rewrite/a2_capture_resources/README.md)
+precede implementation. The finite selected plan uses source-child ordinals
+and mandatory effective box/error rows, rather than treating producer padding,
+center uniqueness or nominal cells as geometric truth. Actual decoded-content
+coherence, terminal external-template interpretation/consumer acceptance,
+source metadata/resource disposition and measured production limits still need
+their own evidence. A leaf-only partial-implicit product is a different scope,
+not a fallback for an unproved full rewrite.
+
+Evidence-backed exact-head merges into `develop` and continued dependency-ready
+foundation work are authorized. The target is the closest justified 0.4.0-ready
+candidate; #113 and release PR #110 retain their final redesigned-candidate
+gates. Local heavy work follows the [two-worker, lower-priority, serial CPU
+policy](../../AGENTS.md). No main merge, tag, publication or release follows
+from this continuation authority.
