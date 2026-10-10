@@ -44,11 +44,80 @@ remain false until execution and hashes justify them.
 
 The first controlled post-merge model run passed the phase and framing oracles,
 then failed the domain oracle with `StopIteration`: its sensitivity-control key
-selector did not cover every authored association case. This is an executed
-preparation defect, not a production codec finding. The original package and
-failure records remain unchanged; an additive author correction and fresh
-execution must precede any model acceptance. No raw Rust or native FFI scaffold
-execution is accepted by this checkpoint.
+selector did not cover every authored association case. Original inputs and
+failure records remain unchanged. The additive selector revision preserves the
+checker and now passes 15 baseline/restored cases and 33 actual faulty-byte or
+association rejections.
+
+The [independent actual P2 review](../../bench/architecture_audit/vector_compression/precode_review/actual-p2-20261010/review.md)
+accepts bounded scaffold mechanics: 10 admission cases, 78 exact fixed-edit
+serializer cases and 424 native bound/canary/unaligned-input cases. The formal
+runs bind Rust 1.98.0, selected serde features, native objects and 205 supplied
+artifact hashes before and after execution. The reviewer separately rehashed
+the 18 copied compiled dependencies, source/package records and command outputs;
+did not repeat all large compiler/sysroot hashes. This is current artifact
+binding, not exhaustive OS file-access tracing or historical registry-source
+immutability. The [250 lossless records](../../bench/architecture_audit/vector_compression/candidate_evidence/p2-actual-20261010/index.json)
+retain actual outputs, commands, receipts and original tooling failures. Binary
+artifacts remain external with explicit hashes.
+
+The original allocation evaluator actually exits 2: the long escaped-key case
+requests a construction peak of 196,987 bytes, exceeding the draft planning term
+134,604. Its retained allocation is 66,676 bytes. The
+[additive owner ledger](../../bench/architecture_audit/vector_compression/codec/allocation-adjudication-20261010/proposal.md)
+reconciles scratch, owned keys and slots exactly. Its 12 boundary and 11 faulty
+ledger controls pass as a model only. The
+[separate allocation review](../../bench/architecture_audit/vector_compression/precode_review/allocation-20261010/review.md)
+accepts the bounded owner/drop schedule and isolated representation preparation.
+A conditional construction `3J` / retained `J` schedule is proposed; actual
+future Plan capacities, coefficients and defaults remain held. This incremental
+term finding does not establish a
+whole-operation threshold violation or an RSS guarantee.
+
+The [separate parser source audit](../../bench/architecture_audit/vector_compression/precode_review/parser-coefficients-20261010/review.md)
+supports a requested-storage core bound `4J + 188K_upper + 8` for the matched
+target's `json::admit`, with `K_upper = min(node_limit, J)`. It accounts for slot
+growth overlap, insert-only decoded-key tables, escaped-key ownership and serde
+scratch; finite error-message slack supports the proposed `8J + 256K_upper +
+64KiB` term. This is source reasoning, not an executed universal allocation
+guarantee. The separate Value adapter, startup OS/TLS storage, allocator overhead
+and RSS are outside this bound. Actual Plan capacities and integrated defaults
+still require their concrete representation probes.
+
+The [generated-source preparation](../../bench/architecture_audit/vector_compression/codec/p3-generated-preparation-20261010/README.md)
+and [lifecycle proof inputs](../../bench/architecture_audit/vector_compression/lifecycle/proof-inputs-20261010-4dc/README.md)
+are immutable authored inputs. Separate coordinator observations of unchanged
+accepted producer binaries may resolve source/domain retention questions after
+P0; they do not depend on approval of a future Plan estimate. Implementation
+acceptance still requires the actual representation and all applicable gates.
+The [separate actual P3 review](../../bench/architecture_audit/vector_compression/precode_review/p3-actual-20261010/review.md)
+accepts finite observations of the unchanged accepted producer: eight portable
+and native raw/meshopt pairs preserve 402 complete logical views at 38 content
+slots, exact selected metadata states and associations, and fill wrapper feature
+JSON and invariant header fields. Both revised large-ID pairs actually contain
+one 65,537-row table with f32 IDs 0 through 65,536. The upstream consumer is
+bound to its exact installed CommonJS bytes; it shares codec-kernel lineage with
+the Rust implementation. Its whole Git revision and mathematical algorithm
+independence are not established.
+
+Five literal topology positives, nine authored topology faults, seven actual
+typed mutations and seven address-comparison controls establish their finite
+sensitivity. Quantized geometry checks cardinality, association and loop area;
+original-coordinate accuracy and triangle union/coverage remain unproved.
+The original ambiguous fill selector and original large-ID expectation failure
+remain retained. The additive large-ID recipe changes only the old producer's
+partition option to 128 MiB; codec defaults are unchanged. Generated build-state
+hashes and encoded-byte reports differ with the codec request, so whole archive
+byte equality is not claimed.
+
+Every observed fill inner GLB, and ordinary typed/raw large-ID outputs, fail the
+selected absolute-eight-byte JSON-end/BIN-start profile. Total-length alignment
+does not prove those boundaries. The producer writer requires rework; existing
+bytes are evidence, not a specification to grandfather or silently repair.
+The [lossless P3 bundle](../../bench/architecture_audit/vector_compression/candidate_evidence/p3-existing-producer-20261010/index.json)
+retains all 2,603 actual indexed files as 687 full byte-identical shared blobs.
+The reviewer independently verified every hash, length and source byte. This
+accepts the existing-producer baseline, not new-codec profile admission.
 
 P2 must settle actual borrowed admission/serialization, requested capacity and
 reallocation overlap, checked arithmetic and native ABI/bounds. P3 covers complete
@@ -60,9 +129,20 @@ the supported platforms. A preliminary escaped-key allocation hypothesis and
 permission-change checks require sensitive controls, not assumptions of failure.
 
 There is no atomic conditional replace promise: callers keep the selected source
-and namespace stable between final recheck and installation. Proposed Windows
-readonly refusal, Unix portable permission preservation and exact source-byte
-comparison need their own evidence. Old aliases/readers retain their old object.
+and namespace stable between final recheck and installation. Two controlled
+Linux probes of unchanged accepted F0 code pass: a competing entry installed in
+that window is overwritten by the complete candidate, and copying Unix 0640
+permissions before sealing preserves that mode after Replace. Their original
+module-path compile failure and additive layout-only retry remain separate
+immutable phases. The [actual F0 records](../../bench/architecture_audit/vector_compression/candidate_evidence/f0-module-path-actual-20261010/index.json)
+bind the compiler, dependencies, exact source and executable. The
+[separate actual F0 review](../../bench/architecture_audit/vector_compression/precode_review/f0-actual-20261010/review.md)
+accepts only those two observations, independently verifying 254 before/after
+artifact pins, exact source copies, test causes and persistent linker inputs.
+Unix permission copying is an explicit caller action, not automatic F0 behavior.
+Windows behavior, new source capture, permission rechecks and exact source-byte
+comparison still need their own evidence. Old aliases/readers retain their old
+object.
 
 One coordinator runs heavy local work serially at nice 10 with two cores and
 two-worker limits. Audit and independent control/review authors have distinct

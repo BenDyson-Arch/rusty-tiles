@@ -1,0 +1,98 @@
+{
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/integrity.json": {
+    "bytes": 152822,
+    "sha256": "20c6f6dff821962f6ca1845853765499f53baf2bcf5e498eb11adbffaa1da78e"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/scaffolding/raw_probe.rs": {
+    "bytes": 12713,
+    "sha256": "e3ba0330dec67472c92b987b08df58d524aa9ba4fec9206aef912fbfe1d89519"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/src/content_integrity/json.rs": {
+    "bytes": 19184,
+    "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/source/Cargo.lock": {
+    "bytes": 70262,
+    "sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/evaluate_scaffold_records.py": {
+    "bytes": 1927,
+    "sha256": "102c560abd1eeaebe70979649636f1cad39b349fcde9d3e5337b07b1e4609c8e"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/input.json": {
+    "bytes": 65830,
+    "sha256": "38c42690d78cbf80e5a7debd0cb05bbf9be22b3fd36d0a3cf6a35873418685e0"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/edits.json": {
+    "bytes": 108,
+    "sha256": "d3a3a91ddb0b4f1d6629724b79fbc1de58b3ad5f842f8ef145d1224fb6cb427b"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/fixtures/serializer/long-root-key-late-escape/expected.glb": {
+    "bytes": 66136,
+    "sha256": "665ded961bf80b4a74eb952f2f8f20b7863ad84a9027e5a050683c36167875bd"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/raw/receipt.json": {
+    "bytes": 134345,
+    "sha256": "d54dc90f9f474054ca85658150aebdfc70df71772e5609302c244320a97471fb"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/raw/serializer-long-root-key-late-escape.stdout": {
+    "bytes": 1286,
+    "sha256": "4c77c8490aaaf8f20ccd01373d8534cbf15240ee1d3f96b35f60a90def3fbed8"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/raw-calibration/receipt.json": {
+    "bytes": 410,
+    "sha256": "ea19c7dffabae2cfe5880f7e2337b08d3646d6bf2bd4d9628343cb258bda79ce"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/raw-calibration/calibration.stdout": {
+    "bytes": 32997,
+    "sha256": "60f90a6a375d4b36e283544da519dac65675dd086731ef16301090d5fb4dad49"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/raw-calibration/calibration.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/exact-artifact-receipt.json": {
+    "bytes": 82583,
+    "sha256": "a1b36545590021009cd8bfcee7527c95bbd11624139f63ee8f942398d7621bc1"
+  },
+  "/tmp/rusty-tiles-codec-p2-executions/accepted-c1-gate.json": {
+    "bytes": 679,
+    "sha256": "144b71d8184ed741dd49a64582309b9fba5850510e339c5740463c7fa9c16e7f"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/contract-draft.md": {
+    "bytes": 18401,
+    "sha256": "c560f035786e2d966185f9fde9cbd6ac31bd61161fc23d25ff79a92c90561e1e"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/precode_review/revision-20261010/checklist.md": {
+    "bytes": 15804,
+    "sha256": "285a9bbb1d70d1586e8c295e0d2639d390656ee8d0c5f628ad36a0e8133c36a1"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/de.rs": {
+    "bytes": 86840,
+    "sha256": "4998d7e252eb513be85b298e287048b4fb283882e9ba7df905f572f07200f3f3"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/dependencies/serde_json-1.0.151/src/read.rs": {
+    "bytes": 33041,
+    "sha256": "17a2efe49e5a6937c8d7d4a5c0b9eac84453de0f86bf8e7ee421387e82341bb3"
+  },
+  "/tmp/rusty-tiles-next-vector-compression-audit/codec/p2-proof-preparation-20261010/inputs/toolchain/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs": {
+    "bytes": 35551,
+    "sha256": "a262b9e494236a00270be0dd0c57be5259d62bc1e538c56506f7f0ce8debccc0"
+  },
+  "/home/bend/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/src/de/impls.rs": {
+    "bytes": 97134,
+    "sha256": "2f8e2ef9d343875bb996319e69feae0dee2287e2548cedd8d3c752b64812331c"
+  },
+  "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/str.rs": {
+    "bytes": 36580,
+    "sha256": "09d3899280a0086cddf19479873931b9475e0d6b7a2e0b7f74644ea538108068"
+  },
+  "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs": {
+    "bytes": 33614,
+    "sha256": "b1f0a5f6e3d104d6176699cf05efdfe1725095cd984fdf4422ddc3093726361c"
+  },
+  "/home/bend/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs": {
+    "bytes": 2380,
+    "sha256": "f3c1a06f43734a65e102b6a107e2fd5adadd7d94d9a226d6ffe1610d1e7e1466"
+  }
+}

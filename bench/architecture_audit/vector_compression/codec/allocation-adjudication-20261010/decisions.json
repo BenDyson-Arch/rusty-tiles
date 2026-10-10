@@ -1,0 +1,45 @@
+{
+  "status": "NO-CODE PROPOSAL; review and actual future ownership proofs required; P2-P5 HELD",
+  "acceptedPrerequisiteC1": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "retain": [
+    "Original failed 2J finding/exit2 and all original corpus expectations",
+    "Exact borrowed RawValue custom serialization and direct GLB writer",
+    "128MiB whole estimated-work threshold pending actual default proof; no increase proposed",
+    "Source-backed String/Pairs representation as measured witness; no new lexer"
+  ],
+  "rework": [
+    "Separate construction3J payload from retainedJ payload only after contributing decoder/scratch drops",
+    "Actual pair/RawRef/descriptor capacities, realloc overlap, minimum allocations and distinct source-node relations",
+    "Count/emission temporary known declaration-name allocations; unsupported-source allocation charged before refusal",
+    "Explicit finite preallocation estimate admission with independent exact/onebelow typed ResourceLimit controls in eventual actual owner"
+  ],
+  "replace": [],
+  "remove": [
+    "Claim that construction2J payload covers this measured representation",
+    "Any implication this term defect proves whole default/RSS exceeded",
+    "Universal3J/128K/descriptor coefficient acceptance from this one witness"
+  ],
+  "borrowedKeyAlternative": {
+    "decision": "OPTIONAL FUTURE representation proposal, no prototype authored or approved",
+    "benefit": "Unescaped source keys avoid payload ownership; Cow and String header both24 here",
+    "doesNotFix": "Escaped late-key scratch and owned-copy peak remains",
+    "fallibility": "Custom visitor can try_reserve_exact owned escaped keys/slots; pinned serde scratch still infallible"
+  },
+  "proposal": {
+    "Ejson": "8J+256K+65536 unchanged and still held globally",
+    "Ebuild": "3J+128K+256(V+A), payload schedule conditional; other coefficients HELD",
+    "Eretain": "J+128K+256(V+A), only after decoder/scratch owners drop; other coefficients HELD",
+    "identity": "Drop plan/decoder scratch before owned identity copy; captured source plus separate copy charged",
+    "workProfileDefaultBytes": 134217728,
+    "wholeSyntheticWitnessEstimate": 664406,
+    "universalProof": false
+  },
+  "remaining": {
+    "P2": "Actual plan/slot/path/receipt/bridge owner types/capacities, phase reconciliation, finite preallocation boundary/fault sensitivity, supported allocator/toolchain binding, remaining FFI/default evidence",
+    "P3": "Actual generated complete semantic corpus, external primary decoder/consumer, compressed/raw identity and selected framing",
+    "P4": "Existing Attempt, producer bridge and fitting/final fatal ResourceLimit/checkpoint preservation",
+    "P5": "Actual platform replacement/resource/permission controls"
+  },
+  "authorProbeExecutions": 0,
+  "futureModel": "source_ledger_model.py; root owns execution; its passing truth is scaffold/model-only"
+}

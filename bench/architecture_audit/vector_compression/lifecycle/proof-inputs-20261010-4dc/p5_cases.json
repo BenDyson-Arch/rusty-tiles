@@ -1,0 +1,94 @@
+{
+  "status": "UNEXECUTED focused source/platform test inputs; each platform requires actual stage/identity evidence",
+  "owner": "Root serial platform coordinator after P0/P2; private source consumer seam, existing F0 FileOperations install seam, no publisher redesign",
+  "cases": [
+    {
+      "id": "permission_admission_open_mismatch",
+      "initial": "regular source metadata admitted then permission-only change before held open comparison",
+      "seam": "bounded private capture admission/open point",
+      "expected": "detect changed permission state before first observer/staging; source mutation remains external, no original permission rollback",
+      "control": "regular/length/mtime/identity-only comparison must be detected"
+    },
+    {
+      "id": "unix_final_chmod",
+      "initial": "mode0644 regular source",
+      "observer": "final ready chmod0640; no bytes/mtime change",
+      "expected": "Conflict; same inode/bytes; callback mode0640 survives; no install",
+      "control": "reuse mesh same_metadata without permission comparison must be detected"
+    },
+    {
+      "id": "unix_alias_chmod",
+      "initial": "source+hardlink alias mode0644",
+      "observer": "final ready chmod alias0640",
+      "expected": "selected held inode observes permission change and fails Conflict; both aliases retain bytes/identity/mode0640",
+      "control": "only checking source bytes/mtime/identity must be detected"
+    },
+    {
+      "id": "windows_initial_readonly",
+      "initial": "original source readonly=true",
+      "observer": "none may run",
+      "expected": "Unsupported before observer/staging; original readonly/content/identity unchanged",
+      "control": "clear original readonly or repair aftercommit must be detected"
+    },
+    {
+      "id": "windows_final_readonly",
+      "initial": "original source writable",
+      "observer": "final ready set original readonly=true",
+      "expected": "Conflict after callback; readonly survives failed operation; no install",
+      "control": "only using readonly admission before first observer must be detected"
+    },
+    {
+      "id": "permission_during_final_compare",
+      "initial": "stable captured regular file",
+      "seam": "after first compare chunk change mode/readonly without byte or identity change",
+      "expected": "after-read permission check notices Conflict; changed permission retained",
+      "control": "permission check only before compare must be detected"
+    },
+    {
+      "id": "permission_after_final_check",
+      "seam": "inside existing F0 install after last source check",
+      "expected": "explicit unsupported concurrency window; may replace; this is not preservation acceptance",
+      "control": "false CAS/no-loss claim detected by install seam trace"
+    },
+    {
+      "id": "same_length_restore_mtime",
+      "observer": "final ready writes different same-length bytes then restores mtime",
+      "expected": "Conflict via exact streamed compare; changed bytes preserved; no install",
+      "control": "size+mtime+inode predicate alone must fail"
+    },
+    {
+      "id": "cwd_first_final",
+      "observer": "first/final change process CWD in isolated subprocess",
+      "expected": "capture/stage/recheck/install/result use intended canonical selected path; alternate directory untouched",
+      "control": "relative path re-resolution detected"
+    },
+    {
+      "id": "hardlink_named_replace",
+      "initial": "source+hardlink alias+held original reader",
+      "expected": "selected entry candidate inode; alias/reader original bytes; Unix candidate mode preserved; no all-alias rewrite claim"
+    },
+    {
+      "id": "leaf_symlink",
+      "initial": "source request final symlink",
+      "expected": "refused before observer/staging; link/referent unchanged; ancestor-symlink case separate"
+    },
+    {
+      "id": "source_handle_lifetime",
+      "seam": "record source/identity handles close before seal/install",
+      "expected": "actual Linux/macOS/Windows success/failure domain pinned; no inferred Windows capability"
+    },
+    {
+      "id": "precommit_permission_fault",
+      "seam": "Unix candidate set_permissions fails after write",
+      "expected": "Io original source/aliases retained; explicit staging cleanup; reached fault and no install"
+    },
+    {
+      "id": "cleanup_reoccupied_name",
+      "seam": "existing postcommit temporary name becomes competitor",
+      "expected": "success plus cleanup diagnostic; no unlink of competitor; no source/output/result rewrite"
+    }
+  ],
+  "normative_boundary": "Permission/identity/window tests prove lifecycle properties only. They cannot settle selected metadata chunk framing, glTF validity, FFI integrity or full generated semantic preservation.",
+  "history_boundary": "Mesh binding permission omission is a static incompatibility with the NEW compression permission contract, not an independently established defect in accepted mesh/wrapping domain.",
+  "not_supported": "Same-target competing writers, hostile namespace mutation, atomic compare-and-replace, crash durability, broad attribute/ACL/owner preservation"
+}

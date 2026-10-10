@@ -1,0 +1,113 @@
+{
+  "status": "actualLinux2focusedtestsPASS",
+  "scope": "existingLinux named-entry non-CAS Replace and Unix0640 candidate-mode copy before seal only; Windows/source capture/new codec unaccepted",
+  "binaryArtifactsRetained": false,
+  "externalBinaryAndDependencyPins": "receipt.json / before-artifact-binding.json lossless records",
+  "records": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/before-artifact-binding.json",
+      "bytes": 41916,
+      "sha256": "b3ac07ab4da5cab6427c75b7c61f9264460d34fe3fa3e049e5764abc0924f49f",
+      "retainedFile": "0000.gz",
+      "gzipSha256": "ce2cbe74de99ef6c1beb40e51237a5253b212fdc804475e1808a7a2dd6f82ae0"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/commands.json",
+      "bytes": 1690,
+      "sha256": "acbf69caf26a7a9983ecef232a1af3e174082845641732f8fcc382cf9c35e090",
+      "retainedFile": "0001.gz",
+      "gzipSha256": "f64ae708c01657141cfdb761c09094d7f2f843ea3ae2717c8c77a61b80e27bff"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/compile.stderr",
+      "bytes": 17440,
+      "sha256": "98a5846c7281178b39fc15fdc30e0483e473a632775c1e7a96322151fb893320",
+      "retainedFile": "0002.gz",
+      "gzipSha256": "eb9a13da960b9a528aaa6a4de3ec41a1cf43d6f07e46b9166fdce8be6bc78b6f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/compile.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0003.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/compiler-vV.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0004.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/compiler-vV.stdout",
+      "bytes": 196,
+      "sha256": "3975d062e234a9f3921955bf6ae5b90f5819df94fa825d057f76b34a35ed0f4d",
+      "retainedFile": "0005.gz",
+      "gzipSha256": "ef2045890c36ffd3410e3ab523e5cc17c36337ed6d7a5fdbc9d1d33fc7dc2887"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/focused-tests.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retainedFile": "0006.gz",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/focused-tests.stdout",
+      "bytes": 299,
+      "sha256": "67dda104c121726f5bbcae963299f577a591f2b4006954fed06472c4a3a96232",
+      "retainedFile": "0007.gz",
+      "gzipSha256": "18dfde8f93f761843681c0a386496dda2b7166b62b56a40ba7d19bce61cc3563"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/link-trace/link-1533011-command.json",
+      "bytes": 11549,
+      "sha256": "b3bf02ea8e1964fbb862822ff3c349b14930ebf58f64305ba6e64524d3e69254",
+      "retainedFile": "0008.gz",
+      "gzipSha256": "7ddb829efc424b6ba3b7bbd364ba3610f1b64bac9af31c0e805f49a40d6b081f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/link-trace/link-1533011.stderr",
+      "bytes": 8753,
+      "sha256": "4b45cfa14aff5ba1ec5c914de5923a44aeb041a34927c09e49001346682cfc31",
+      "retainedFile": "0009.gz",
+      "gzipSha256": "6171a0ddbffdcc2e8a4010fa41e730046f337e0aef3c90059d7087a6dbac6a57"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/link-trace/link-1533011.stdout",
+      "bytes": 7977,
+      "sha256": "1ff7f6cb34c033c9df443184f258d101b2616d272fa97fc84991508462ce922e",
+      "retainedFile": "0010.gz",
+      "gzipSha256": "4dcbf7d63ae5779b8f1cfeb455cbd31120eb144355710baa26e3decd2f000fb9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/preexecution-review.json",
+      "bytes": 517,
+      "sha256": "40b716cb30d4d41d86d75fc93799d0237293fdb709789a7c9bf6193400a04591",
+      "retainedFile": "0011.gz",
+      "gzipSha256": "5da118311a9f02ae9e3c6ee87c7332701978cdcb8ddd54d0a5b9a4cda9953fff"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-f0-module-path-execution/receipt.json",
+      "bytes": 46226,
+      "sha256": "b52f4fa688734cd728f76250eaa532812b058e847557add3edee4c8dd3712260",
+      "retainedFile": "0012.gz",
+      "gzipSha256": "9367e35212e530aa84f5b1e83b350815aca8ce9cd8b769a059618b8a9fa0c192"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-run-f0-probes-module-path.py",
+      "bytes": 6321,
+      "sha256": "faaefceb6b201bc88826d8cb9d60cb43bfa01145b3b5033fc88332df596a5df8",
+      "retainedFile": "0013.gz",
+      "gzipSha256": "341ccd6067037ae47b5f8dd1edab3f05ccde1a1151a7ca42722eac22cc8f3ed8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+      "bytes": 277,
+      "sha256": "950b6085802eb1d684f021396111afe3a51b83ac5a75c8e0f8a404e5cd32a485",
+      "retainedFile": "0014.gz",
+      "gzipSha256": "fd68f8062163b8ef5ca95d043064ff8a17a96ec291987b9c91eab8c8e5d6c0fb"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "acceptedHead": "4dc8f0c04dd5a98420768d05c6787f3baa49bb75",
+  "acceptedMergeCommit": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "acceptedTree": "57095507d251e4f2fcb826cee367fa72bd306158",
+  "mergeTreeEqualsAcceptedHead": true,
+  "mergedAt": "2026-10-10T12:29:33Z",
+  "remoteReviewReceiptSha256": "924ef501637bbcd5d7c3a6e87cf90926fb9d0feb6784fe5af40cf31daeaf3bc3",
+  "acceptedJsonOwnerSha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+  "sourceCheckout": "/tmp/rusty-tiles-c1-payload-foundation"
+}

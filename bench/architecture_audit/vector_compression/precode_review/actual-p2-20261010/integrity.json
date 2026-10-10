@@ -1,0 +1,25 @@
+{
+  "status": "FROZEN_INDEPENDENT_BOUNDED_ACTUAL_SCAFFOLD_REVIEW_NOT_IMPLEMENTATION_APPROVAL",
+  "files": {
+    "review.md": {
+      "sha256": "b93bb334aa432bc1b40b977a4798f5d3f4befb2aea46f17593dbfc394ea87bcf",
+      "bytes": 12052
+    },
+    "decisions.json": {
+      "sha256": "da8aaa38bd8e644159f15e5bc6a993be770829ddfd2aa679b0a13e9933b4aae1",
+      "bytes": 2200
+    },
+    "verification.json": {
+      "sha256": "0600c5826883ba7688fd125c008a75ed12f5868f82c857636683acfb4e204513",
+      "bytes": 5308
+    },
+    "input-pin.json": {
+      "sha256": "0e228b33137ac93aa490a8d76b1141f35d66583785d95ac0d93ffb414c265ba0",
+      "bytes": 302830
+    },
+    "verify_records.py": {
+      "sha256": "60c701f9ee4a81dddbe9132eb7514a9a89aac36ae550b2bdad7a7f4f4f587b30",
+      "bytes": 11382
+    }
+  }
+}

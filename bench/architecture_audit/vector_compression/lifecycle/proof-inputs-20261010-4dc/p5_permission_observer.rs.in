@@ -1,0 +1,45 @@
+// UNEXECUTED concrete Observer fixture. No compression implementation.
+// Use in an isolated caller/consumer test after required P0/P2 gates, with
+// actual final-ready phase pinned by that caller. Imports are existing types.
+use crate::runtime::{JobError, Observer, RunEvent};
+use std::{fs, path::PathBuf, sync::atomic::{AtomicUsize, Ordering}};
+
+struct PermissionOnlyFinalObserver {
+    source_or_hardlink_alias: PathBuf,
+    final_phase: &'static str,
+    calls: AtomicUsize,
+}
+impl Observer for PermissionOnlyFinalObserver {
+    fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+        let selected = matches!(event,
+            RunEvent::Progress { phase, .. } if *phase == self.final_phase);
+        if !selected { return Ok(()); }
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Fixture starts mode0644;0640 changes permissions while remaining
+            // writable and without writing bytes or deliberately changing mtime.
+            fs::set_permissions(&self.source_or_hardlink_alias,
+                fs::Permissions::from_mode(0o640))
+                .map_err(|e| JobError::io("test observer chmod", &self.source_or_hardlink_alias, e))?;
+        }
+        #[cfg(windows)]
+        {
+            let mut p = fs::metadata(&self.source_or_hardlink_alias)
+                .map_err(|e| JobError::io("test observer permissions", &self.source_or_hardlink_alias, e))?
+                .permissions();
+            p.set_readonly(true);
+            fs::set_permissions(&self.source_or_hardlink_alias, p)
+                .map_err(|e| JobError::io("test observer readonly", &self.source_or_hardlink_alias, e))?;
+        }
+        Ok(())
+    }
+}
+// Required caller assertions:
+// - calls==1, original bytes/file ID/mtime unchanged by callback.
+// - callback-updated mode0640 / readonly=true remains after failed operation.
+// - typed Conflict, no installation; no ordinary staging leak.
+// - disabling captured permission comparison must make this control fail.
+// - don't restore original permission in operation cleanup. Only fixture
+//   teardown after pinned final-state capture may make readonly file deletable.

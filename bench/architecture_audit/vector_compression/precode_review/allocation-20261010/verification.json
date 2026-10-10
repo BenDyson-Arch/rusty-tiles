@@ -1,0 +1,15 @@
+{
+  "status": "INDEPENDENT_RETAINED_ALLOCATION_RECORD_HASH_AND_INTEGER_CHECKS_PASS",
+  "packageFiles": 8,
+  "externalInputs": 24,
+  "actualModelExit": 0,
+  "exactOneBelowCases": 12,
+  "faultyLedgerRejections": 11,
+  "recordedConstructionMaximum": 196987,
+  "recordedRetainedLive": 66676,
+  "sourceDerivedIntermediateEventsSeparatelyTraced": false,
+  "old2JStillRejected": true,
+  "universal3JApproved": false,
+  "productionCoefficientsApproved": false,
+  "executionScope": "Only this independent read/hash/integer verifier executed. No author model, Cargo, Git, native, Rust or producer target was run by reviewer."
+}

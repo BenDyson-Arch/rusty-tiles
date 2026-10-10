@@ -1,0 +1,12 @@
+{
+  "status": "STATIC ONLY; no probe execution",
+  "checkerSourceTextIdentical": true,
+  "originalCases": 15,
+  "predictedFaultyControls": 33,
+  "missingSelectionCases": [
+    "polygon-loops-offsets"
+  ],
+  "originalFixtureBytesAndHashesPreserved": true,
+  "everyMutationPredictedToChange": true,
+  "futureRequiredActualEvidence": "Each revised result must report actual unchanged-checker rejection; inequality alone is not a passing self-test."
+}

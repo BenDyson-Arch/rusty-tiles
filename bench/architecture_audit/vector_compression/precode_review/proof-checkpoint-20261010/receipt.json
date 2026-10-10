@@ -1,0 +1,36 @@
+{
+  "status": "ACCEPT_EXACT_DOCS_EVIDENCE_RETENTION_CHECKPOINT_ONLY",
+  "recorded_at_utc": "2026-10-10T13:41:38.022737+00:00",
+  "reviewer_task": "/root/vector_proof_checkpoint_review",
+  "candidate_pin_sha256": "80c3a25ccd65d2528520225b26b30a40ac8d8f13dcba9ebc49559f93c30f8420",
+  "verification": {
+    "argv": [
+      "nice",
+      "-n",
+      "10",
+      "python3",
+      "-B",
+      "/tmp/rusty-tiles-vector-proof-checkpoint-review/verify_checkpoint.py"
+    ],
+    "exit_code": 0,
+    "wall_time_seconds": 0.297342358,
+    "candidate_files": 402,
+    "original_copies": 125,
+    "gzip_records": 271,
+    "p3_records": 2603,
+    "p3_blobs": 687
+  },
+  "compiler_cargo_native_producer_decoder_or_author_checker_invocations": 0,
+  "git_queries": "read-only diff and show",
+  "git_mutations": 0,
+  "repository_edits": 0,
+  "reviewer_correction": "Fill framing crosscheck narrowed from every content slot to explicit b3dm wrapper slots after retained fields showed non-wrapper contents in same pair. Evidence unchanged.",
+  "files_sha256": {
+    "verify_checkpoint.py": "05057edcd50f0758c3d1b07ae3fea618092e12341938033fd25bb26b85951496",
+    "input-pin.json": "f0e8d22aca37e3935f0e2837aeb4f74237857b5a9914bd4f9f144d7fe8cea300",
+    "verification.json": "426e033726f639a43b2c961658daae219135cd08f10d1a2a0bf83636dc0f2d97",
+    "review.md": "bc7991c138e42067d550915e30e87acb0559c17219baf859fd642329b828647d",
+    "decisions.json": "46d0dcfdad647b48030345f94861aa25645581581e0aa35fb25d36be2a803784"
+  },
+  "accepted_scope": "exact candidate docs/evidence retention only; eventual commit not yet bound"
+}

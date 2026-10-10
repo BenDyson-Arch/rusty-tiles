@@ -1,0 +1,88 @@
+// UNEXECUTED test input, not production code or implementation permission.
+// Coordinator may place these tests in an isolated pinned copy of
+// runtime/tests.rs after P0/P2. Existing private Runtime helpers/seam are used.
+// No new publisher abstraction, codec, capture implementation or public API.
+// This proves F0 primitive properties only, not compression source admission.
+
+#[test]
+fn compression_preparation_replace_window_is_unconditional_named_entry() {
+    struct CompetitorAfterFinalCheck { reached: std::cell::Cell<bool> }
+    impl FileOperations for CompetitorAfterFinalCheck {
+        fn install(
+            &self,
+            candidate: TempPath,
+            output: &Path,
+            policy: OutputPolicy,
+        ) -> Result<(), PathPersistError> {
+            assert_eq!(policy, OutputPolicy::Replace);
+            self.reached.set(true);
+            // The simulated consumer already checked captured bytes before
+            // calling publish. Interference occurs exactly inside install.
+            fs::write(output, b"competitor after source recheck").unwrap();
+            assert_eq!(fs::read(output).unwrap(), b"competitor after source recheck");
+            candidate.persist(output)
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("source.glb");
+    fs::write(&output, b"captured source").unwrap();
+    let captured = fs::read(&output).unwrap();
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let staged = candidate(&output, &attempt);
+    assert_eq!(fs::read(&output).unwrap(), captured); // final source check
+    attempt.close_events().unwrap();
+    let files = CompetitorAfterFinalCheck { reached: std::cell::Cell::new(false) };
+    let published = staged.seal().unwrap().publish_with(
+        &output, OutputPolicy::Replace, &files,
+    ).unwrap();
+    assert!(files.reached.get(), "install interference seam must be reached");
+    assert_eq!(published.output, output);
+    assert_eq!(fs::read(&output).unwrap(), b"complete candidate");
+    // Expected: competitor can be overwritten. A passing test demonstrates
+    // the non-CAS limitation; it NEVER proves concurrent-writer preservation.
+}
+
+#[cfg(unix)]
+#[test]
+fn compression_preparation_unix_candidate_mode_copy_before_seal() {
+    use std::os::unix::fs::PermissionsExt;
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("source.glb");
+    fs::write(&output, b"captured source").unwrap();
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o640)).unwrap();
+    let permissions = fs::metadata(&output).unwrap().permissions();
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let mut staged = candidate(&output, &attempt);
+    assert_eq!(staged.writer().metadata().unwrap().permissions().mode() & 0o077, 0);
+    staged.writer().set_permissions(permissions).unwrap();
+    assert_eq!(staged.writer().metadata().unwrap().permissions().mode() & 0o777, 0o640);
+    attempt.close_events().unwrap();
+    staged.seal().unwrap().publish(&output, OutputPolicy::Replace).unwrap();
+    assert_eq!(fs::metadata(&output).unwrap().permissions().mode() & 0o777, 0o640);
+    // This isolates candidate mode behavior. It does not implement or prove
+    // source permission rechecks/cancellation/format correctness.
+}
+
+#[cfg(windows)]
+#[test]
+fn compression_preparation_windows_persist_clears_candidate_readonly() {
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("writable-source.glb");
+    fs::write(&output, b"captured source").unwrap();
+    assert!(!fs::metadata(&output).unwrap().permissions().readonly());
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let mut staged = candidate(&output, &attempt);
+    let mut readonly = staged.writer().metadata().unwrap().permissions();
+    readonly.set_readonly(true);
+    staged.writer().set_permissions(readonly).unwrap();
+    assert!(staged.writer().metadata().unwrap().permissions().readonly());
+    attempt.close_events().unwrap();
+    staged.seal().unwrap().publish(&output, OutputPolicy::Replace).unwrap();
+    assert!(!fs::metadata(&output).unwrap().permissions().readonly());
+    // Intentional primitive probe on a WRITABLE original target. Never clear
+    // original target readonly or apply permissions after publication.
+    // Readonly ORIGINAL source refusal is a separate consumer admission case.
+}

@@ -1,0 +1,66 @@
+{
+  "status": "ACCEPT_TWO_BOUNDED_EXISTING_F0_LINUX_PRIMITIVE_OBSERVATIONS",
+  "exact_root_receipt_sha256": "b52f4fa688734cd728f76250eaa532812b058e847557add3edee4c8dd3712260",
+  "exact_executable_sha256": "465d71090d4c3b07e5845f167d881306f28e998b695c79ee5c57be75b89d1c01",
+  "accepted": [
+    "Deterministic install seam reaches a competing write after the explicit simulated final source check; successful Replace persists complete candidate bytes over those competing bytes",
+    "On observed Linux filesystem, a private candidate initially has no group/other mode bits; explicit preseal set_permissions copies0640 and successful Replace yields0640",
+    "Original37declared preparation files and additive9declared revision files match their frozen hashes",
+    "Accepted runtime/directory/platform bodies and prepared helper/assertions are byte-identical across module-path revision; entrypoint changes runtime.rs to runtime/mod.rs only",
+    "Before/final254artifact pin dictionaries match exactly; every current pinned file and retained output hash verified; actual persistent traced linker inputs all covered",
+    "OriginalE0583compile failure remains preserved; corrected module lookup compile/test belongs to new epoch"
+  ],
+  "meaningful_causes": {
+    "replace_non_cas": {
+      "seam": "FileOperations::install invoked inside sealed publish_with after Attempt::permission",
+      "preconditions": [
+        "OutputPolicy::Replace explicitly asserted",
+        "Captured source bytes compared before closing events/seal",
+        "Inside seam competitor bytes written and read back",
+        "Reached flag verified after publication",
+        "Final output exactly complete candidate"
+      ],
+      "owner": "accepted runtime FileOperations Replace calls TempPath::persist; selected tempfile Unix overwrite uses rename",
+      "limit": "The test simulates the final source check and injects an in-process write. It does not implement captured-source admission, preserve competing writers, or test an inode-identity compare-and-swap."
+    },
+    "unix_permission_copy": {
+      "preconditions": [
+        "Original target explicitly0640",
+        "Candidate initial mode&077=0",
+        "Explicit staging.writer().set_permissions before seal",
+        "Candidate mode&0777=0640 before seal",
+        "Published target mode&0777=0640 after Replace"
+      ],
+      "owner": "consumer can set permissions through existing writer File before seal; publisher persists that candidate",
+      "limit": "This is explicit caller-driven ordinary mode-bit copy on one Linux filesystem, not automatic F0 permission copying or owner/group/ACL/xattr/special-bit preservation."
+    }
+  },
+  "closure": {
+    "artifact_pins": 254,
+    "before_after_equal": true,
+    "current_hashes_match": true,
+    "recommended_cached_rlibs": 10,
+    "link_argument_tempfile_native_rlibs": 9,
+    "same_file_executed": false,
+    "persistent_trace_unpinned_paths": [],
+    "unretained_generated_compiler_objects": 8,
+    "scope": "Conservative compiler/std/driver/environment and matched dependencies plus actual linker trace. No exhaustive operating-system read tracing or historical registry/build-source immutability."
+  },
+  "dispositions": {
+    "module_path_revision": "RETAIN bounded module lookup correction only",
+    "two_linux_tests": "RETAIN sensitive seam/precondition assertions as finite existing primitive observations",
+    "original_failed_epoch": "RETAIN immutable compiler failure; never relabel as test PASS",
+    "permission_strategy": "RETAIN demonstrated explicit Unix candidate copy mechanism for future consumer design, with source admission/rechecks separately unproved",
+    "windows_probe": "RETAIN unexecuted native-CI input only",
+    "same_file_dependency": "RETAIN matched cached artifact identity only, with no Handle primitive acceptance",
+    "ResourceLimit_capture_codec": "HELD implementation and actual consumer acceptance"
+  },
+  "remaining": [
+    "Windows readonly/persist behavior needs native execution; Linux artifacts are not Windows closure",
+    "Source permissions/read-only admission/rechecks, handle/path identity, capture, cancellation/authorization interactions and concurrent-writer guarantees remain separately unproved",
+    "JobErrorKind ResourceLimit/new causal constructor, adapters, fitting/final producer failure transport and frontend parity remain proposed",
+    "No new production codec, source classifier, P2-P5/full A2/default/release approval",
+    "Modified repository docs/final PR head remain outside this review"
+  ],
+  "reviewer_correction": "Initial missing-libmvec report came from truncated display. Exact dictionaries include/usr/lib/libmvec.so.1 before/after withcea848d7c542078f91f11aa44157eb07e0c62f3941d6b1c5f8e7d25fcf8b8eea. Complete resolved trace enumeration found no missing persistent file. No rerun was requested after correction."
+}

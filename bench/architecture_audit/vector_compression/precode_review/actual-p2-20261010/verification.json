@@ -1,0 +1,177 @@
+{
+  "status": "READ_ONLY_RETAINED_RECORD_VERIFICATION_PASSED",
+  "counts": {
+    "originalPackageFiles": 957,
+    "additiveDomainFiles": 7,
+    "frozenSourceComparisons": 38,
+    "compiledClosureArtifactsIndependentlyRehashed": 18,
+    "nativeObjectsIndependentlyMatchedInConsumedRlib": 16,
+    "commandOutputFilesIndependentlyRehashed": 194,
+    "actualAdmissionCases": 10,
+    "actualExactSerializerCases": 78,
+    "metadataResiduePairs": 64,
+    "actualFfiCases": 424,
+    "allPositiveEligibleStrides": 64,
+    "domainBaselinesAndRestored": 15,
+    "domainFaultyRejections": 33
+  },
+  "calibrationFindings": [
+    {
+      "name": "long-root-key-late-escape",
+      "scaffoldParserIncrementalPeak": 197041,
+      "draftEjson": 597552,
+      "scaffoldPairStageIncrementalPeak": 196987,
+      "draftEplanA0": 134604,
+      "parserTermGap": false,
+      "planTermGap": true,
+      "scope": "Scaffold stage comparison only; all live baselines/oracle owners/actual production types and whole branch envelope require separate reconciliation"
+    }
+  ],
+  "compiledClosure": [
+    {
+      "name": "serde_json",
+      "features": [
+        "default",
+        "float_roundtrip",
+        "raw_value",
+        "std",
+        "unbounded_depth"
+      ],
+      "copiedArtifactSha256": "26226fa4904fc54faf291d8a90a276ecf6862048d97a968f86dfb9bcd10daf6e"
+    },
+    {
+      "name": "itoa",
+      "features": [],
+      "copiedArtifactSha256": "1631a0819c9381885e2a98a8cc8937ab3c6fd819939d6b6fb94dead8539a8388"
+    },
+    {
+      "name": "serde_core",
+      "features": [
+        "result",
+        "std"
+      ],
+      "copiedArtifactSha256": "581bfaca6ac69afe4059dbcbca9d2d3a046ebc6c63863ad1063780db472668e7"
+    },
+    {
+      "name": "memchr",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ],
+      "copiedArtifactSha256": "004a72a86cc578654713b714f0697178068889074219b819116e8b76b62c2e81"
+    },
+    {
+      "name": "zmij",
+      "features": [],
+      "copiedArtifactSha256": "9281b973f77211e4febbd22829c0ef4d74ec83469c7de30595949d287858789a"
+    },
+    {
+      "name": "serde",
+      "features": [
+        "default",
+        "derive",
+        "serde_derive",
+        "std"
+      ],
+      "copiedArtifactSha256": "d940efd84101d9a673baf567a8924657fd171f10fcdd98c028c720f41551a970"
+    },
+    {
+      "name": "serde_derive",
+      "features": [
+        "default"
+      ],
+      "copiedArtifactSha256": "f8217d25650799239e231d0198809ae6cc68d2347923a642655da97206f86eb8"
+    },
+    {
+      "name": "quote",
+      "features": [
+        "default",
+        "proc-macro"
+      ],
+      "copiedArtifactSha256": "9cdd4a72e3bd77c14306cb7bb87b7db0a621e4adbc7b0eab18a565e6c1965d08"
+    },
+    {
+      "name": "proc-macro2",
+      "features": [
+        "default",
+        "proc-macro"
+      ],
+      "copiedArtifactSha256": "b41c671593ea87d91977940bebd25553b01857a689de738b34e12423dbc8e11d"
+    },
+    {
+      "name": "unicode-ident",
+      "features": [],
+      "copiedArtifactSha256": "1bf3b9200486a8fe47cb4870af71f8c217c5465aac80bb60c11570cda1279be9"
+    },
+    {
+      "name": "syn",
+      "features": [
+        "clone-impls",
+        "default",
+        "derive",
+        "extra-traits",
+        "fold",
+        "full",
+        "parsing",
+        "printing",
+        "proc-macro",
+        "visit"
+      ],
+      "copiedArtifactSha256": "1ecf2a25568339eda87c680e5f45e44808daf91d0ddec2cf8179fa444d75c4b7"
+    },
+    {
+      "name": "meshopt",
+      "features": [],
+      "copiedArtifactSha256": "a9f910f8249a6110890d8cebcf65b63855ce62405ceb4b7133fb14b464c219ca"
+    },
+    {
+      "name": "thiserror",
+      "features": [
+        "default",
+        "std"
+      ],
+      "copiedArtifactSha256": "b6da88082287b9a9f184daf5d2262baeab207d671e7c8a033c54d8e9b42a5d8c"
+    },
+    {
+      "name": "thiserror-impl",
+      "features": [],
+      "copiedArtifactSha256": "1d4368ec5a83f7deeb8fae5e30ae8c9ae345e4ab593da2bbbbbc2b38c362fb85"
+    },
+    {
+      "name": "bitflags",
+      "features": [
+        "std"
+      ],
+      "copiedArtifactSha256": "b9cef4c2be356909bd8da94f54acf84df9f05f14364f7b86494495897abc38e5"
+    },
+    {
+      "name": "float-cmp",
+      "features": [
+        "default",
+        "num-traits",
+        "ratio"
+      ],
+      "copiedArtifactSha256": "6c2a35edf5a5cb4282fb5956f94fdda6ea3852e08c22dc6e5b513e3344777427"
+    },
+    {
+      "name": "num-traits",
+      "features": [
+        "default",
+        "i128",
+        "libm",
+        "std"
+      ],
+      "copiedArtifactSha256": "0512926229fde14ed88233c3808da2ceda0a094dd2b8ef6337bd8531489f4d30"
+    },
+    {
+      "name": "libm",
+      "features": [
+        "arch",
+        "default"
+      ],
+      "copiedArtifactSha256": "76661ea4889a76557d83e414f5961622bad65a5d830b9da0484bdfeb303501f9"
+    }
+  ],
+  "scope": "Independent current small-source/package/output/18copiedcompiledartifact/probebinary/native-member hashes and integer comparisons. Did not execute any author script, model, Rust/native target, Cargo or Git. Did not independently rehash all205 large compiler/sysroot/environment artifacts; their before/after hash equality is retained coordinator evidence corroborated by inspected runner source and exact receipt identity. No historical build-source immutability/full OS trace/production/default/whole-operation/RSS claim."
+}
