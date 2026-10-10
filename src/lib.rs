@@ -5,6 +5,7 @@
 
 mod archive3tz;
 pub mod bbox;
+mod content_integrity;
 pub mod convert_implicit;
 mod crs;
 pub mod error;
