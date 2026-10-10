@@ -38,24 +38,35 @@ def main():
         path = args.work / (case['label'] + '.3tz')
         path.write_bytes(raw)
         command = [str(binary), 'validate', '--json', str(path.resolve())]
-        run = subprocess.run(command, capture_output=True, text=True, timeout=10,
-                             env=dict(os.environ, RAYON_NUM_THREADS='2'))
-        report = json.loads(run.stdout)
-        actual = 'admitted' if run.returncode == 0 and report.get('ok') is True else report.get('error', {}).get('code')
+        try:
+            run = subprocess.run(command, capture_output=True, text=True, timeout=10,
+                                 env=dict(os.environ, RAYON_NUM_THREADS='2'))
+            stdout, stderr, code = run.stdout, run.stderr, run.returncode
+            try:
+                report = json.loads(stdout)
+            except json.JSONDecodeError:
+                report = None
+            actual = ('admitted' if code == 0 and isinstance(report, dict) and report.get('ok') is True
+                      else report.get('error', {}).get('code') if isinstance(report, dict)
+                      else 'unparseable_output')
+        except subprocess.TimeoutExpired as failure:
+            decode = lambda value: value.decode(errors='replace') if isinstance(value, bytes) else value or ''
+            stdout, stderr, code, actual = decode(failure.stdout), decode(failure.stderr), None, 'timeout'
         records.append({'label': case['label'], 'archive_sha256': sha(raw),
                         'expected': case['expected'], 'actual': actual,
-                        'command': command, 'exit_code': run.returncode,
-                        'stdout': run.stdout, 'stderr': run.stderr})
-        assert path.read_bytes() == raw, case['label']
+                        'command': command, 'exit_code': code,
+                        'stdout': stdout, 'stderr': stderr,
+                        'read_only': path.is_file() and path.read_bytes() == raw})
     evidence = {'binary_sha256': sha(binary.read_bytes()),
                 'fixture_driver_sha256': sha(driver.read_bytes()),
                 'runner_sha256': sha(Path(__file__).read_bytes()),
                 'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
-                'read_only': True, 'records': records,
+                'read_only': all(r['read_only'] for r in records), 'records': records,
                 'scope': 'Independent finite stored-3TZ CLI categories; no allocation, injected I/O, A2 or release claim.'}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(evidence, indent=2) + '\n')
     assert len(records) == 45
+    assert evidence['read_only'], args.output
     assert all(r['actual'] == r['expected'] for r in records), args.output
     print(json.dumps({'ok': True, 'cases': len(records), 'evidence': str(args.output)}))
 
