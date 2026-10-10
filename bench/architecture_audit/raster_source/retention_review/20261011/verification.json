@@ -1,0 +1,40 @@
+{
+  "status": "PASS_FULL_FOLLOWUP_RETENTION_IDENTITY",
+  "index_sha256": "b6eae403f591e082e57e2ce1231e65ba0be90e43a29719d84cef8bbe38e10a87",
+  "records": 47,
+  "roots_retained": 6,
+  "lossless_records": 44,
+  "unique_blobs": 39,
+  "compressed_bytes": 148070,
+  "external_metadata_only": [
+    {
+      "path": "/tmp/rusty-tiles-r2-strace-tool-preparation-20261011/archlinux-binary.gpg",
+      "bytes": 1337669,
+      "sha256": "f7af717a90821803e5c366032f3135c236c4100962716b3c1ed352f8b9330f51"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-strace-tool-preparation-20261011/strace.pkg.tar.zst",
+      "bytes": 554150,
+      "sha256": "4e51a26cf0f69d959d96bb629b848892ab248f5c522981e391dfa302ac44312e"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-strace-tool-preparation-20261011/usr/bin/strace",
+      "bytes": 1706640,
+      "sha256": "28ed5493ecf611b83ac0d0398cc1c4f09a228afaa7fce4737d14c8599cc796e2"
+    }
+  ],
+  "all_existing_originals_equal": true,
+  "gzip_mtime_zero": true,
+  "prior_index_sha256": "68de2ab0125f8b7140c1dc769bfc9640e90e2eccd8e8030075ac85f2aeb08b6a",
+  "README": {
+    "path": "/tmp/rusty-tiles-r2-foundation/bench/architecture_audit/raster_source/README.md",
+    "bytes": 2297,
+    "sha256": "a295b31ffd1a57ac2bc9c3bedfaa5e20a51701825c8e803837d7ec85d3a970a9"
+  },
+  "nice": 10,
+  "affinity": [
+    0,
+    1
+  ],
+  "scope": "Proof checkpoint docs/evidence retention only. 74 roots scanned by helper is not 74 retained roots. Exactly six retained here;44 byte-retained files and3 external identity records. No R2 source/product/merge/release acceptance; implementation authoring already permitted by separate gate09cb."
+}
