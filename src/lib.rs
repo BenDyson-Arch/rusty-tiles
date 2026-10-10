@@ -5,6 +5,7 @@
 
 mod archive3tz;
 pub mod bbox;
+mod content_integrity;
 pub mod convert_implicit;
 mod crs;
 pub mod error;
@@ -80,3 +81,15 @@ pub mod doctor;
 pub mod preview;
 
 pub mod validate;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls_clippy.rs"]
+mod payload_integrity_acceptance;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled_context_controls.rs"]
+mod payload_context_acceptance;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls_clippy.rs"]
+mod payload_stride_acceptance;

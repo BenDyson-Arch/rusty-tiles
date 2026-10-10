@@ -1,0 +1,89 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "source_commit": "ca9b4a1ee2f55a3d4cd26e2b0ab720301d85dd37",
+  "source_tree": "0677fef538a9fd6d75eca0ce42af37bb1235c03d",
+  "phase": "New-source actual-C1 context and aggregate review",
+  "source_pin_sha256": "f4e404df68513ad5d929ce73c933a14c0eed209142291bb404c8b5d216849b91",
+  "production_pins_verified": 97,
+  "selected_acceptance_pins_verified": 160,
+  "prepared_input_pins_verified": 142,
+  "formatter_body_equivalence_verified": {
+    "original_sha256": "3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd",
+    "compiled_sha256": "327dee099efab3f4ff66906a08b738cac408bad309a9e28bc8b5b2ff990a65e9",
+    "matches": true
+  },
+  "verified_retained_execution": {
+    "unit_sha256": "1effbbd51ab5ef4044ecdb4c4cb47e1b88c8fae9a23c791df30282de6f4954aa",
+    "unit_bytes": 26943544,
+    "library_passed": 365,
+    "library_failed": 0,
+    "ignored": 0,
+    "filtered": 0,
+    "actual_C1_calls": 82,
+    "admitted": 41,
+    "ResourceLimit": 41,
+    "positive_full_report_hashes_match": 41
+  },
+  "later_worktree_changes_not_rebound": [
+    "src/lib.rs"
+  ],
+  "reviewer_target_executions": 0,
+  "production_edits": false,
+  "identified_definite_production_defects": [],
+  "original_public_oracle_result": {
+    "matching": 204,
+    "expectation_mismatches": 1,
+    "separate_adjudication_pending": true,
+    "reference_negative_masked": true
+  },
+  "native_clippy": "Executed failure on compiled test duplicate-result else-if; separately dated correction pending",
+  "finite_context_and_aggregate_proof_gaps": "closed on exact source for independently supplied finite controls",
+  "whole_slice_acceptance": "conditional; original public polygon oracle adjudication/new controls and remaining exact-source integration/resource/platform/CI proof pending",
+  "files": {
+    "coordinator-context-executions.json": {
+      "bytes": 69171,
+      "sha256": "922b446784a1586542e0bb7a8cff9b3a83562235adee6ebde62cef118596d2b7"
+    },
+    "coordinator-library-receipt.json": {
+      "bytes": 740,
+      "sha256": "fc2669f45a204866b2a0ea15756fe4dad248d1f76a378b3588c6e174967eba37"
+    },
+    "coordinator-library.log": {
+      "bytes": 87287,
+      "sha256": "c8027c53c384b020b48c44846f6f14b670d7124121c95c0c1ad8b23ad88c47c7"
+    },
+    "coordinator-native-clippy-failure.log": {
+      "bytes": 1353,
+      "sha256": "7f88dd99f9620c69817e43b76a3329a88aa407911808ece40d254ad4065582c5"
+    },
+    "execution-verification.json": {
+      "bytes": 822,
+      "sha256": "1a16d312d169064953d5a8cd48e6917c61eee8cb3c4e1072cb855c870b91a405"
+    },
+    "input-verification.json": {
+      "bytes": 3188,
+      "sha256": "1bd137d549bdd87d82923e5d64610ea2f7090e47a5f23e5db4eee86b6d7d0f63"
+    },
+    "original-public-oracle-failure.json": {
+      "bytes": 3419,
+      "sha256": "1cb15a3d7d91ca633f256ef78d4fe1187f193a27679246124947a0530cde56e3"
+    },
+    "review.md": {
+      "bytes": 9936,
+      "sha256": "42f2be107757ad1b53e90bf636c5efe42c69a98fc8a819685c93c371b1024e08"
+    },
+    "source-pin.json": {
+      "bytes": 43263,
+      "sha256": "f4e404df68513ad5d929ce73c933a14c0eed209142291bb404c8b5d216849b91"
+    },
+    "verify_execution.py": {
+      "bytes": 5403,
+      "sha256": "94b972cf61c75d7171bc690f935cbad4be7d3890f2ea94bbb847db5efa7a192e"
+    },
+    "verify_inputs.py": {
+      "bytes": 9080,
+      "sha256": "c1fd8655a8cc3d0bceffcf6aa6dae870864b538fcb3779f22a6fa7ef3f85abb5"
+    }
+  },
+  "scope": "bounded C1 only; no A2, main, tag, publication, release or #113/#121 closure"
+}

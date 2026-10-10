@@ -1,0 +1,25 @@
+{
+  "reviewer": "/root/payload_final_source_review",
+  "date": "2026-10-10",
+  "sourceHead": "5fdf6fb0bb15ccb404217b7e18f1414efc075a39",
+  "failedRun": 38049923044,
+  "failedRustJob": 114206817691,
+  "executedCiCaptureDefect": true,
+  "productionAssertionDefectObserved": false,
+  "approvedChange": "Add only --test-threads=1 to existing CI native cargo --nocapture capture step",
+  "frozenIndependentModuleAndParserUnchangedRequired": true,
+  "localScheduleProbe": "13 actual context tests /82 calls, existing hash-verified unit; explicitly not a new367 result",
+  "ownedThreadAndChildConcurrencyAssertionsRemain": true,
+  "discardOrRepairOriginalRecordsAuthorized": false,
+  "correctedCaptureAccepted": false,
+  "remoteAccepted": false,
+  "mergeAccepted": false,
+  "reviewerUsedCargo": false,
+  "reviewerExecutedTarget": false,
+  "reviewerMutatedRepository": false,
+  "phaseFilesSha256": {
+    "decision.md": "11234ff3549ad2adfceb937cbe091cf54f2f8f4732344d1383c55edbeaa891de",
+    "verification.json": "fb025f89d4595e1cb5fb5ec0148e2799352094686f91f2623b2449688d4ad53d",
+    "verify_failed_capture.py": "c228c168cd40c77c07e51e1612e678469ffc1bf1b433e7b0544d616e1c2208e7"
+  }
+}

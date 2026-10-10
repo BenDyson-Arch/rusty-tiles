@@ -1,0 +1,33 @@
+    Checking serde_json v1.0.151
+   Compiling libsqlite3-sys v0.38.2
+   Compiling rusty-tiles v0.4.0 (/tmp/rusty-tiles-c1-payload-foundation)
+    Checking rusqlite v0.40.2
+    Checking gltf-json v1.4.1
+    Checking geojson v0.24.2
+    Checking referencing v0.33.0
+    Checking jsonschema v0.33.0
+    Checking gltf v1.4.1
+    Checking geozero v0.15.1
+error: this `if` has identical blocks
+   --> src/../bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls.rs:355:34
+    |
+355 |               } else if count == 2 {
+    |  __________________________________^
+356 | |                 2
+357 | |             } else {
+    | |_____________^
+    |
+note: same as this
+   --> src/../bench/architecture_audit/c1_payload_integrity/production_controls/compiled_private_controls.rs:357:20
+    |
+357 |               } else {
+    |  ____________________^
+358 | |                 2
+359 | |             }
+    | |_____________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#if_same_then_else
+    = note: `-D clippy::if-same-then-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::if_same_then_else)]`
+
+error: could not compile `rusty-tiles` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

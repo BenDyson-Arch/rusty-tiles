@@ -1,0 +1,148 @@
+{
+  "record": "Independent reference and sensitive source-exception plan; no new execution acceptance",
+  "date": "2026-10-10",
+  "acceptance_claim": false,
+  "primary_references": [
+    {
+      "name": "Published glTF 2.0.1",
+      "revision": "8e798b02d254cea97659a333cfcb20875b62bdd4",
+      "url": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
+      "pinned_source_url": "https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc",
+      "rules": [
+        "little-endian scalars",
+        "raw accessor min/max independent of normalized flag",
+        "matrix column start alignment with omitted final padding",
+        "JSON integer-valued decimal/exponent syntax",
+        "viewless nonsparse min/max exemption",
+        "GLB envelope and BIN padding"
+      ],
+      "verification": "Separately verified by primary-controls owner: registry header identifies selected commit; fetched exact pinned source and accessor schema retained in lossless raw bundle. Contract author inspected receipts/hashes only.",
+      "source_sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+      "source_bytes": 148064
+    },
+    {
+      "name": "KHR_mesh_quantization",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "url": "https://github.com/KhronosGroup/glTF/blob/70b5e4101725950fb8f3f94dd72c37e758ce5daf/extensions/2.0/Khronos/KHR_mesh_quantization/README.md",
+      "verification": "Fresh exact pinned bytes fetched/read by separate primary owner; all eight references including table dependencies reviewed independently by nonauthor. Author inspected receipts/hashes only. No new codec execution.",
+      "source_sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "source_bytes": 12593,
+      "retained_raw_path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_quantization.md"
+    },
+    {
+      "name": "EXT_meshopt_compression",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "url": "https://github.com/KhronosGroup/glTF/blob/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "verification": "Fresh exact pinned bytes fetched/read by separate primary owner; all eight references including table dependencies reviewed independently by nonauthor. Author inspected receipts/hashes only. No new codec execution.",
+      "source_sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "source_bytes": 35576,
+      "retained_raw_path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/EXT_meshopt_compression.md"
+    },
+    {
+      "name": "Modern b3dm v1",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "url": "https://github.com/CesiumGS/3d-tiles/blob/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/Batched3DModel/README.adoc",
+      "verification": "Fresh exact pinned bytes fetched/read by separate primary owner; all eight references including table dependencies reviewed independently by nonauthor. Author inspected receipts/hashes only. No new codec execution.",
+      "source_sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e",
+      "source_bytes": 11172,
+      "retained_raw_path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/modern-b3dm.adoc"
+    },
+    {
+      "name": "Pinned draft KHR_mesh_primitive_restart",
+      "revision": "9811e8407d4533500cfc6b10e3bc408345035a6f",
+      "url": "https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md",
+      "verification": "Fresh exact pinned bytes fetched/read by separate primary owner; all eight references including table dependencies reviewed independently by nonauthor. Author inspected receipts/hashes only. No new codec execution.",
+      "source_sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707",
+      "source_bytes": 4364,
+      "retained_raw_path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/KHR_mesh_primitive_restart-draft.md"
+    },
+    {
+      "name": "Upstream meshoptimizer golden bytes",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+      "url": "https://github.com/zeux/meshoptimizer/blob/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "known_fixture": {
+        "compressed_bytes": 85,
+        "decoded_bytes": 48,
+        "count": 4,
+        "stride": 12,
+        "mode": "ATTRIBUTES",
+        "filter": "NONE"
+      },
+      "verification": "Fresh exact pinned bytes fetched/read by separate primary owner; all eight references including table dependencies reviewed independently by nonauthor. Author inspected receipts/hashes only. No new codec execution.",
+      "source_sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "source_bytes": 16220,
+      "retained_raw_path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/meshopt_decoder.test.js"
+    }
+  ],
+  "local_primary_read": {
+    "path": "/home/bend/.cache/rusty-tiles-f1b3-gltf-spec.adoc",
+    "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+    "selected_revision_proven": true,
+    "read_sections": [
+      "JSON encoding (line 521)",
+      "Data Alignment (1121 onward)",
+      "Accessors Bounds (1205 onward)",
+      "normalized integer equations (2562 onward)"
+    ],
+    "limit": "Byte-identical exact selected source established independently in primary_controls receipts; no own network fetch or execution."
+  },
+  "source_exception_sensitive_fixture_plan": [
+    {
+      "id": "integer-decimal-exponent",
+      "positive": "Analytic glTF/GLB identical integer semantic properties written as 3, 3.0 and 3e0 (counts), and 5126, 5126.0 and 5.126e3 (component type), with byteLength/view/index references covered separately",
+      "negative": "One-property fractional count 3.5, negative count -3, nonnumeric string, host-range/overflow numeric forms",
+      "oracle": "Selected published JSON Encoding integer rule + separately checked numeric value; valid integral syntax must not be mislabeled InvalidInput",
+      "before_code": "Five valid integral-notation outcome defects demonstrated independently. Correct at owner using separately approved A14 borrowed raw exact-integrality/native-or-Overflow representation, before f64 rounding."
+    },
+    {
+      "id": "viewless-minmax-exemption",
+      "positive": "No bufferView and no sparse, finite FLOAT VEC3 POSITION count 3 with both min/max finite but different from generated zero values; no resource resolver calls; matched zero-bounds control",
+      "negative": "Same arbitrary bounds on actual stored zero accessor must fail decoded-bound equality; malformed/nonfinite/wrong-sized bound arrays still invalid; missing referenced BIN is distinct",
+      "oracle": "Selected published Accessors Bounds exemption; viewless values remain zero for index/attribute integrity; bounds exemption cannot claim rendered geometry",
+      "before_code": "Valid arbitrary viewless bounds rejected and identical arbitrary stored-zero bound correctly rejected in independent receipt. Apply pinned bounds exemption while preserving decoded zero values and stored-bound checks; no profile exclusion selected."
+    },
+    {
+      "id": "padding-and-normalization",
+      "positive": "Independently packed MAT3 U8 11-byte occupied view; signed-min normalized endpoint -1; unnormalized raw min/max with normalized attribute",
+      "negative": "One-byte short occupied matrix range; one raw-bound mismatch; signed-min mistakenly divided without clamping",
+      "oracle": "Published matrix alignment and normalization equations, independent little-endian unpack; no production helper oracle"
+    }
+  ],
+  "open_proof_limits": [
+    "A13 accepted reader/rebase identity cleared by immutable coordinator baseline and separate93-pin/30-record verification; final frozen-contract incorporation review precedes coding",
+    "A14 precode representation selected, not final production capacities/lifetimes/typed-range/limit-propagation proof",
+    "53 frozen-mechanism controls and 14 original primary controls are finite separate evidence, not complete retained C1 codec/report acceptance",
+    "Earlier exploratory live binary overwritten; only corrected d5c53 artifact independently rerun; historical source/receipts immutable",
+    "Full A2 external-template normative hold and broader geometry/metadata/release obligations remain"
+  ],
+  "independent_evidence_binding": "primary-evidence-binding-20261010.json",
+  "selected_table_integer_authority": {
+    "b3dm_revision": "4d781014b52294759834018a931223b98ac1ce47",
+    "schema_draft": "2020-12",
+    "web_observed_primary": "https://json-schema.org/draft/2020-12/json-schema-validation#section-6.1.1",
+    "retained_observation": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/json-schema-observation.json",
+    "rule": "Integer is zero fractional mathematical value; numeric BATCH_LENGTH0.0/0e0 admit before uint32 range. Current as_u64 seam statically observed, not separately executed.",
+    "complete_html_retained": false
+  },
+  "precode_provenance_status": "A9 closed by separate nonauthor after exact eight-source pins/read and literal golden comparison; no broad conformance acceptance",
+  "nonauthor_disposition_binding": "prereq-disposition-binding-20261010.json",
+  "selected_numeric_mechanism": {
+    "decision": "Corrected iterative raw_value-only borrowed admission and exact consumed unsigned native/Overflow records",
+    "decision_sha256": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+    "manifest_sha256": "0026d03177e0fb66ec5fb7dcb372cd6aa7310d474af081163f72217bc333f4ec",
+    "frozen_binary_sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "independent_rerun_controls": 53,
+    "no_arbitrary_precision": true,
+    "no_global_normalization": true,
+    "payload_return": "Actual schemaUri string plus existing counters/exclusions, no owned payload Value",
+    "ordinary_adapter": "Owned Value only after raw grammar/Unicode/unique-key/depth/node admission; representation failure Unsupported without text matching",
+    "presence_rule": "Absent optional field may default; present null remains type-invalid. No Option<&RawValue> null-to-None collapse for actual consumed fields."
+  },
+  "numeric_mechanism_binding": "a14-mechanism-binding-20261010.json",
+  "accepted_baseline": {
+    "head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+    "tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+    "coordinator_record_sha256": "913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead",
+    "independent_verification_sha256": "bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8"
+  }
+}

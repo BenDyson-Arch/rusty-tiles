@@ -1,0 +1,120 @@
+{
+  "claim": "Finite independent arithmetic model only",
+  "numbers": [
+    {
+      "token": "3",
+      "classification": "admitted",
+      "value": 3,
+      "float_appears_integer": true
+    },
+    {
+      "token": "3.0",
+      "classification": "admitted",
+      "value": 3,
+      "float_appears_integer": true
+    },
+    {
+      "token": "3e0",
+      "classification": "admitted",
+      "value": 3,
+      "float_appears_integer": true
+    },
+    {
+      "token": "3.0000000000000001",
+      "classification": "invalid",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "30000000000000001e-16",
+      "classification": "invalid",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "5126.0",
+      "classification": "admitted",
+      "value": 5126,
+      "float_appears_integer": true
+    },
+    {
+      "token": "5.126e3",
+      "classification": "admitted",
+      "value": 5126,
+      "float_appears_integer": true
+    },
+    {
+      "token": "-0.0",
+      "classification": "admitted",
+      "value": 0,
+      "float_appears_integer": true
+    },
+    {
+      "token": "-3",
+      "classification": "invalid",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "1e-99999",
+      "classification": "invalid",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "0e99999",
+      "classification": "admitted",
+      "value": 0,
+      "float_appears_integer": true
+    },
+    {
+      "token": "18446744073709551615.0",
+      "classification": "admitted",
+      "value": 18446744073709551615,
+      "float_appears_integer": true
+    },
+    {
+      "token": "18446744073709551616.0",
+      "classification": "range",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "18446744073709551614.9",
+      "classification": "invalid",
+      "value": null,
+      "float_appears_integer": true
+    },
+    {
+      "token": "9007199254740993.0",
+      "classification": "admitted",
+      "value": 9007199254740993,
+      "float_appears_integer": true
+    }
+  ],
+  "base64": {
+    "AA==": {
+      "actual": 1,
+      "allocation_estimate": 3,
+      "pad": 2
+    },
+    "AAA=": {
+      "actual": 2,
+      "allocation_estimate": 3,
+      "pad": 1
+    },
+    "AAAA": {
+      "actual": 3,
+      "allocation_estimate": 3,
+      "pad": 0
+    },
+    "AB==": null,
+    "AAB=": null,
+    "AA=": null,
+    "AA===": null,
+    "=AAA": null,
+    "AAAA\n": null,
+    "???=": null,
+    "": null
+  }
+}

@@ -40,19 +40,26 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Test native build
-        run: cargo test --locked --features native-jpeg
+        shell: bash
+        run: |
+          cargo test --locked --features native-jpeg -- --nocapture --test-threads=1 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
       - name: Independently check validation controls and finite work
         run: |
           python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"
           python3 -B bench/architecture_audit/c1/resource_probe.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-resources" --output "${{ runner.temp }}/c1-resources.json"
           python3 -B tests/c1_producer_alignment.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/c1-producer" --output "${{ runner.temp }}/c1-producer.json"
           python3 -B tests/archive_read_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/archive-read-corpus" --output "${{ runner.temp }}/c1-archive-read.json"
+          python3 -B tests/payload_integrity_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-integrity-corpus" --output "${{ runner.temp }}/c1-payload-integrity.json"
+          python3 -B tests/payload_meshopt_stride_oracle.py --binary target/debug/rusty-tiles --work "${{ runner.temp }}/payload-stride-corpus" --output "${{ runner.temp }}/c1-payload-stride.json"
       - name: Retain validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: c1-validation-evidence
-          path: ${{ runner.temp }}/c1-*.json
+          path: |
+            ${{ runner.temp }}/c1-*.json
+            ${{ runner.temp }}/c1-library.log
           if-no-files-found: error
       - name: Independently decode local mesh candidates and corruption controls
         run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles

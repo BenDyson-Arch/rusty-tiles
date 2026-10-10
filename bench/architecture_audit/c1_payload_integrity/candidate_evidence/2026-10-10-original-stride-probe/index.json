@@ -1,0 +1,110 @@
+{
+  "scope": "Root-authored actual postreview2eb false InvalidInput reproduction; expected outcomes independently primary-adjudicated, not replacement additive acceptance",
+  "source_commit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "records": [
+    {
+      "path": "absent-parent-baseline.3tz.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-baseline.3tz",
+      "raw_bytes": 1400,
+      "raw_sha256": "b6ac6e9d12242d52bcc4ac6453d4edda52336a22f23af0191cd37e357ba67348",
+      "stored_bytes": 713,
+      "stored_sha256": "2e6b1ec529b7456513a40ac356bdb9e20ba0b991a6edb0fc9ca1991ca2f84d6d"
+    },
+    {
+      "path": "absent-parent-baseline.stderr.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-baseline.stderr",
+      "raw_bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "absent-parent-baseline.stdout.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-baseline.stdout",
+      "raw_bytes": 1113,
+      "raw_sha256": "8ae351c294aaa0a2c9304e315e49b244966377359c6e2cbb89b407dd5a408678",
+      "stored_bytes": 601,
+      "stored_sha256": "93d0f60e9c2f04112b7b2dfd0ddc83acdcd52f0e5c824ba1e31b224e592da607"
+    },
+    {
+      "path": "absent-parent-scalar-range-over.3tz.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-scalar-range-over.3tz",
+      "raw_bytes": 1465,
+      "raw_sha256": "7aea20fd8e601a6a466678fee806b2b0cd15ee907245a06ce3b00b09326f7f54",
+      "stored_bytes": 732,
+      "stored_sha256": "544766a1fc8913744a48ea55a13219eaeb36454307c20ef706b8037b8e4e3a67"
+    },
+    {
+      "path": "absent-parent-scalar-range-over.stderr.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-scalar-range-over.stderr",
+      "raw_bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "absent-parent-scalar-range-over.stdout.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-scalar-range-over.stdout",
+      "raw_bytes": 106,
+      "raw_sha256": "b39f398ad9c39078524d6db1ee0d8e110260e78a51d8124b3e0478983d772321",
+      "stored_bytes": 113,
+      "stored_sha256": "1fbae53a0e6cc624df26603531521db0d7ff6ab2ffb0732c03187a73ec1ad8bd"
+    },
+    {
+      "path": "absent-parent-unused-packed-scalar.3tz.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-unused-packed-scalar.3tz",
+      "raw_bytes": 1465,
+      "raw_sha256": "f22ec53911153a00c1b6a4c383c523a5e1a217d0474c0da8c36cf41e414c6c9c",
+      "stored_bytes": 731,
+      "stored_sha256": "f726d2de678c9a85ff53c7723c35d3f5fa93e149acb94ca5410a882bc300e09b"
+    },
+    {
+      "path": "absent-parent-unused-packed-scalar.stderr.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-unused-packed-scalar.stderr",
+      "raw_bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "absent-parent-unused-packed-scalar.stdout.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-unused-packed-scalar.stdout",
+      "raw_bytes": 123,
+      "raw_sha256": "33b0b892b77eeca153d39d1cdf11acabbaf3388f08ce0a9222a72708f1e92672",
+      "stored_bytes": 120,
+      "stored_sha256": "d8e635cfe25aedd88bed4a57250d573c0810d167826b953aa41188a97b1d4836"
+    },
+    {
+      "path": "explicit-parent-unused-scalar.3tz.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/explicit-parent-unused-scalar.3tz",
+      "raw_bytes": 1480,
+      "raw_sha256": "cde8b4db7ed169a2d665f282a5a584e3cbeef493e111a1efe828ec37ae39b358",
+      "stored_bytes": 729,
+      "stored_sha256": "9d6db9abda28cba9d34157285d45fcf3873fd5c7d2fb1f05bd4ac8bce4e6ad24"
+    },
+    {
+      "path": "explicit-parent-unused-scalar.stderr.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/explicit-parent-unused-scalar.stderr",
+      "raw_bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "explicit-parent-unused-scalar.stdout.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/explicit-parent-unused-scalar.stdout",
+      "raw_bytes": 1120,
+      "raw_sha256": "6d0e7d7c9a359e175648952e92d5129bb2e2c90c28142657a3e49bfede1884fe",
+      "stored_bytes": 609,
+      "stored_sha256": "5dede372713af023de2061caabc21fafb1b4bccc44ed276f93d63adb665cb433"
+    },
+    {
+      "path": "receipt.json.gz",
+      "original_path": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/receipt.json",
+      "raw_bytes": 7691,
+      "raw_sha256": "d5f926df13a691b68295b001db5a19223ca328e6c170cdaedcbd06df088ab0de",
+      "stored_bytes": 2712,
+      "stored_sha256": "604741de8b416cb275f959afc48e88e6824f69a37f4d45381551e114f62c98f5"
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "record": "Current contract binding of immutable nonauthor A14 approval and corrected frozen mechanism proof",
+  "date": "2026-10-10",
+  "authorship": "Coordinator authored/executed proof; nonauthor verified/independently reran corrected artifact and approved representation; contract author inspected pins and copied inputs without execution",
+  "precode_A14_selection_approved": true,
+  "whole_slice_implementation_ready": false,
+  "pending_precode_gate": "Final nonauthor incorporation decision bound to completed contract freeze (A13 and A14 prerequisite choices already settled)",
+  "implementation_acceptance_claim": false,
+  "decision_sha256": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+  "decision_pins_sha256": "1c4050e4eef8bcd13cbadfc7282118fba261dd53c0c99267b87c48703179bd70",
+  "snapshot_manifest_sha256": "4027c4b3796dbf5977783672cd6a69c52a9119ddb08fb088e82b25ded187aca4",
+  "snapshot_manifest_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-a14/snapshot-manifest.json",
+  "corrected_manifest_sha256": "0026d03177e0fb66ec5fb7dcb372cd6aa7310d474af081163f72217bc333f4ec",
+  "corrected_frozen_artifact": {
+    "frozen_binary_path": "/tmp/rusty-tiles-payload-serde-proof/artifacts/unicode-d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "bytes": 9068248,
+    "matches_dated_manifest_binary": true,
+    "prior_phase_artifact_status": "First exploratory manifest records then-live actual binary hash; later tinyprobe rebuild replaced that mutabletarget path. The old phase remains historical source/log/receipt provenance, not newly independently verified binary. Only this final snapshot is available for executable reinspection. Prior manifest/source/receipt files remain unchanged."
+  },
+  "independent_rerun": {
+    "record": "Independent NONAUTHOR tiny frozen mechanism rerun, no Cargo or production codec",
+    "artifact": "/tmp/rusty-tiles-payload-serde-proof/artifacts/unicode-d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "artifact_sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+    "artifact_bytes": 9068248,
+    "exit_code": 0,
+    "elapsed_seconds": 0.325436544000695,
+    "cpu_policy": {
+      "absolute_nice": 10,
+      "affinity": [
+        0,
+        1
+      ]
+    },
+    "stdout_path": "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun.json",
+    "stdout_sha256": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+    "stderr": "",
+    "exact_json_match_to_original_receipt": true,
+    "finite_rows": 22,
+    "raw_rows": 31,
+    "production_acceptance": false
+  },
+  "approved_requirements": [
+    "One iterative shared raw owner; byte/root then grammar/trailing admission",
+    "Logical child node/depth charge before child raw skip/retention; one decoder at a time",
+    "Unicode scalar string decode returning unit; decoded unique keys",
+    "Immediate-container key/child admission before descendants, controlled compound order",
+    "Borrowed actual consumed records with exact native/Overflow number semantics and type guard",
+    "No AP/number normalization/numeric marker/sidecar/owned payload Value",
+    "Return actual schemaUri+counters/exclusions; caller owns schema resolution",
+    "Ordinary owned adapter after shared admission: representational refusal Unsupported, no error-text matching",
+    "O(B+N) requested storage; <=(D+1)*B raw-substring skip bound, additional bounded key/string/lookup work",
+    "Presence-aware actual record fields: present null never becomes absent/default"
+  ],
+  "proof_limits": [
+    "53 tiny corrected controls do not certify final production codec/whole C1 profile",
+    "Earlier original phase mutable executable overwritten; old source/log/receipt provenance only",
+    "Final checked capacities/borrowed lifetimes/all numeric gates/typed causes/no-forbidden-resource admission still required"
+  ],
+  "historical_foreign_pin_exceptions": [
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/raw-only-tradeoff.md",
+      "historical_sha256": "95a6b831c0e1b115b3b518b71b61a20d175e343ed9f42fc14e36f9140fbaddb0",
+      "current_sha256": "f6f79871684f4ded5661beb2da0720885256d2020b4b87dedfb93aa9536fce5f",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    },
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/receipt.json",
+      "historical_sha256": "762360ead2050531c17b54c14978d13ec86619d0f90214ef01492c3eb2b981a5",
+      "current_sha256": "5dbaddfaaa19f2e08f7084530b089a6907b3e9cded796c542506f67fa3f73865",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    }
+  ],
+  "prior_freeze_sha256": "7080e8d28308695782c2058894dad1a823150a5302405f84aaf16af93ff57e34",
+  "whole_slice_prerequisite_dispositions_settled": true,
+  "accepted_baseline": {
+    "head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+    "tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+    "coordinator_record_sha256": "913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead",
+    "independent_verification_sha256": "bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8"
+  }
+}

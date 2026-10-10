@@ -611,6 +611,7 @@ pub fn expand_tileset(
         manifest,
         &mut read,
         &mut ExpansionBudget::new(1_000_000, 1024 * 1024 * 1024),
+        &producer_json,
     )
 }
 
@@ -619,8 +620,21 @@ pub(crate) fn expand_tileset_bounded(
     manifest: &Value,
     mut read: impl FnMut(&str) -> Result<Vec<u8>, Error>,
     budget: &mut ExpansionBudget,
+    parse_json: &dyn Fn(&[u8]) -> Result<Value, Error>,
 ) -> Result<Value, Error> {
-    expand_document(manifest, &mut read, &mut BTreeSet::new(), 0, budget)
+    expand_document(
+        manifest,
+        &mut read,
+        &mut BTreeSet::new(),
+        0,
+        budget,
+        parse_json,
+    )
+}
+
+// The non-C1 producer explicitly selects its existing document representation.
+fn producer_json(bytes: &[u8]) -> Result<Value, Error> {
+    Ok(serde_json::from_slice(bytes)?)
 }
 
 pub(crate) struct ExpansionBudget {
@@ -628,21 +642,14 @@ pub(crate) struct ExpansionBudget {
     bytes: usize,
     max_nodes: usize,
     max_bytes: usize,
-    parse_json: fn(&[u8]) -> Result<Value, Error>,
 }
 impl ExpansionBudget {
-    /// Select JSON admission for every document interpreted during expansion.
-    pub(crate) fn with_json_parser(mut self, parser: fn(&[u8]) -> Result<Value, Error>) -> Self {
-        self.parse_json = parser;
-        self
-    }
     pub(crate) fn new(max_nodes: usize, max_bytes: usize) -> Self {
         Self {
             nodes: 0,
             bytes: 0,
             max_nodes,
             max_bytes,
-            parse_json: |bytes| Ok(serde_json::from_slice(bytes)?),
         }
     }
 }
@@ -658,6 +665,7 @@ fn expand_document<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
     active: &mut BTreeSet<String>,
     depth: usize,
     budget: &mut ExpansionBudget,
+    parse_json: &dyn Fn(&[u8]) -> Result<Value, Error>,
 ) -> Result<Value, Error> {
     if depth > 32 {
         return Err(invalid("implicit tileset chain exceeds 32 roots"));
@@ -740,6 +748,7 @@ fn expand_document<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
         cache: BTreeMap::new(),
         budget,
         cache_bytes: 0,
+        parse_json,
     };
     let mut expanded = reader.node(Coordinates {
         level: 0,
@@ -761,7 +770,14 @@ fn expand_document<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
             ));
         }
     }
-    expand_links(&mut expanded, reader.read, active, depth, reader.budget)?;
+    expand_links(
+        &mut expanded,
+        reader.read,
+        active,
+        depth,
+        reader.budget,
+        parse_json,
+    )?;
     if let Some(transform) = root.get("transform") {
         expanded["transform"] = transform.clone();
     }
@@ -780,6 +796,7 @@ fn expand_links<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
     active: &mut BTreeSet<String>,
     depth: usize,
     budget: &mut ExpansionBudget,
+    parse_json: &dyn Fn(&[u8]) -> Result<Value, Error>,
 ) -> Result<(), Error> {
     if let Some(uri) = node["content"]["uri"]
         .as_str()
@@ -789,7 +806,7 @@ fn expand_links<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
         if uri.contains(['/', '\\', ':']) || !active.insert(uri.clone()) {
             return Err(invalid("invalid or cyclic implicit tileset link"));
         }
-        let doc = (budget.parse_json)(&read(&uri)?)?;
+        let doc = parse_json(&read(&uri)?)?;
         if doc["asset"]["version"] != "1.1"
             || doc["root"].get("implicitTiling").is_none()
             || doc["root"].get("transform").is_some()
@@ -800,12 +817,12 @@ fn expand_links<F: FnMut(&str) -> Result<Vec<u8>, Error>>(
                 "implicit tileset link changes boundary bounds, error, or placement",
             ));
         }
-        let mut expanded = expand_document(&doc, read, active, depth + 1, budget)?;
+        let mut expanded = expand_document(&doc, read, active, depth + 1, budget, parse_json)?;
         *node = expanded["root"].take();
         active.remove(&uri);
     } else if let Some(children) = node.get_mut("children").and_then(Value::as_array_mut) {
         for child in children {
-            expand_links(child, read, active, depth, budget)?;
+            expand_links(child, read, active, depth, budget, parse_json)?;
         }
     }
     Ok(())
@@ -847,7 +864,7 @@ fn parse(
     content_count: usize,
     branches: usize,
     metadata_required: bool,
-    parse_json: fn(&[u8]) -> Result<Value, Error>,
+    parse_json: &dyn Fn(&[u8]) -> Result<Value, Error>,
 ) -> Result<Parsed, Error> {
     if bytes.len() < 24 || &bytes[..4] != b"subt" || bytes[4..8] != 1u32.to_le_bytes() {
         return Err(invalid("invalid binary subtree header"));
@@ -1065,6 +1082,7 @@ struct Reader<'a, F> {
     cache: BTreeMap<Coordinates, Parsed>,
     budget: &'a mut ExpansionBudget,
     cache_bytes: usize,
+    parse_json: &'a dyn Fn(&[u8]) -> Result<Value, Error>,
 }
 
 impl<F: FnMut(&str) -> Result<Vec<u8>, Error>> Reader<'_, F> {
@@ -1092,7 +1110,7 @@ impl<F: FnMut(&str) -> Result<Vec<u8>, Error>> Reader<'_, F> {
                     self.templates.len(),
                     self.scheme.branches(),
                     self.metadata_required,
-                    self.budget.parse_json,
+                    self.parse_json,
                 )?,
             );
         }
@@ -1209,15 +1227,143 @@ mod expansion_budget_tests {
         )
     }
     #[test]
+    fn selected_capturing_parser_reaches_subtree_and_nested_extras() {
+        use crate::content_integrity::{json, FormatError, JsonLimits};
+        use std::cell::Cell;
+        // Independent one-row binary columns. Nested extras exceed the same
+        // root-inclusive node ceiling while the subtree document remains below it.
+        let extras = format!("[{}]", vec!["0"; 128].join(",")).into_bytes();
+        let string_start = 104usize;
+        let offset_start = (string_start + extras.len()).next_multiple_of(8);
+        let logical_length = offset_start + 8;
+        let mut binary = vec![0u8; logical_length];
+        for (lane, value) in [0f64, 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 1.]
+            .into_iter()
+            .enumerate()
+        {
+            binary[lane * 8..lane * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        binary[96..104].copy_from_slice(&1f64.to_le_bytes());
+        binary[string_start..string_start + extras.len()].copy_from_slice(&extras);
+        binary[offset_start + 4..offset_start + 8]
+            .copy_from_slice(&(extras.len() as u32).to_le_bytes());
+        let doc = json!({"buffers":[{"byteLength":logical_length}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":96},
+                {"buffer":0,"byteOffset":96,"byteLength":8},
+                {"buffer":0,"byteOffset":104,"byteLength":extras.len()},
+                {"buffer":0,"byteOffset":offset_start,"byteLength":8}],
+            "tileAvailability":{"constant":1},"contentAvailability":[],
+            "childSubtreeAvailability":{"constant":0},"tileMetadata":0,
+            "propertyTables":[{"class":"rustyTile","count":1,"properties":{
+                "boundingBox":{"values":0},"geometricError":{"values":1},
+                "extras":{"values":2,"stringOffsets":3}}}]});
+        let mut encoded = serde_json::to_vec(&doc).unwrap();
+        while !encoded.len().is_multiple_of(8) {
+            encoded.push(b' ');
+        }
+        let mut bytes = b"subt".to_vec();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&(encoded.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&(binary.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&encoded);
+        bytes.extend_from_slice(&binary);
+        let calls = Cell::new(0);
+        let limits = JsonLimits {
+            bytes: 4096,
+            depth: 64,
+            value_nodes: 128,
+        };
+        let parser = |bytes: &[u8]| {
+            calls.set(calls.get() + 1);
+            json::parse(bytes, limits).map_err(|error| match error {
+                FormatError::ResourceLimit(message) => expansion_limit(&message),
+                other => invalid(&other.to_string()),
+            })
+        };
+        assert!(matches!(
+            parse(&bytes, 1, 4, 0, 4, true, &parser),
+            Err(Error::Validation(
+                crate::validate::ValidationFailure::ResourceLimit(_)
+            ))
+        ));
+        assert_eq!(calls.get(), 2);
+        // A capturing parser also reaches a regular subtree through Reader.
+        calls.set(0);
+        expand_tileset_bounded(
+            &manifest(1),
+            |_| Ok(subtree()),
+            &mut ExpansionBudget::new(4, 4096),
+            &parser,
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn selected_parser_reaches_recursive_external_document() {
+        use crate::content_integrity::{json, FormatError, JsonLimits};
+        use std::cell::Cell;
+        let mut initial = manifest(1);
+        initial["root"]["content"] = json!({"uri":"implicit-tileset-child.json"});
+        let source = String::from_utf8(subtree()[24..].to_vec())
+            .unwrap()
+            .replace(
+                "\"contentAvailability\":[]",
+                "\"contentAvailability\":[{\"constant\":1}]",
+            );
+        let mut subtree_json = source.into_bytes();
+        while !subtree_json.len().is_multiple_of(8) {
+            subtree_json.push(b' ');
+        }
+        let mut subtree_bytes = b"subt".to_vec();
+        subtree_bytes.extend_from_slice(&1u32.to_le_bytes());
+        subtree_bytes.extend_from_slice(&(subtree_json.len() as u64).to_le_bytes());
+        subtree_bytes.extend_from_slice(&0u64.to_le_bytes());
+        subtree_bytes.extend_from_slice(&subtree_json);
+        let mut external = manifest(1);
+        external["extras"] = json!(vec![0; 128]);
+        let external_bytes = serde_json::to_vec(&external).unwrap();
+        let calls = Cell::new(0);
+        let limits = JsonLimits {
+            bytes: 4096,
+            depth: 64,
+            value_nodes: 128,
+        };
+        let parser = |bytes: &[u8]| {
+            calls.set(calls.get() + 1);
+            json::parse(bytes, limits).map_err(|error| match error {
+                FormatError::ResourceLimit(message) => expansion_limit(&message),
+                other => invalid(&other.to_string()),
+            })
+        };
+        let result = expand_tileset_bounded(
+            &initial,
+            |name| {
+                Ok(if name.ends_with(".json") {
+                    external_bytes.clone()
+                } else {
+                    subtree_bytes.clone()
+                })
+            },
+            &mut ExpansionBudget::new(4, 4096),
+            &parser,
+        );
+        assert!(is_limit(result));
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
     fn node_capacity_is_shared_across_documents() {
         let mut budget = ExpansionBudget::new(4, 4096);
         for _ in 0..4 {
-            expand_tileset_bounded(&manifest(1), |_| Ok(subtree()), &mut budget).unwrap();
+            expand_tileset_bounded(&manifest(1), |_| Ok(subtree()), &mut budget, &producer_json)
+                .unwrap();
         }
         assert!(is_limit(expand_tileset_bounded(
             &manifest(1),
             |_| panic!("fail before another resource read"),
-            &mut budget
+            &mut budget,
+            &producer_json
         )));
     }
     #[test]
@@ -1230,13 +1376,15 @@ mod expansion_budget_tests {
                 reads += 1;
                 Ok(subtree())
             },
-            &mut budget
+            &mut budget,
+            &producer_json
         )));
         assert_eq!(reads, 1);
         assert!(is_limit(expand_tileset_bounded(
             &manifest(16),
             |_| panic!("admission before resource read"),
-            &mut ExpansionBudget::new(64, 4096)
+            &mut ExpansionBudget::new(64, 4096),
+            &producer_json
         )));
     }
 }

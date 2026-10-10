@@ -1,0 +1,1596 @@
+{
+  "cases": [
+    {
+      "aggregateEquality": null,
+      "bytes": 4284,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 3325,
+          "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root-tileset": {
+          "bytes": 3325,
+          "depth": 20,
+          "nodes": 1580,
+          "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "root-tileset",
+      "path": "fixtures/root-tileset/input.3tz",
+      "sha256": "6d1ccd3303c9f999cc2c0cac64be6e3721d224a5a0897548e8d38073f2d170aa",
+      "successfulUniqueComponents": 3,
+      "target": "root-tileset"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4598,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 2,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 2
+      },
+      "memberPins": {
+        "external.json": {
+          "bytes": 3325,
+          "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+        },
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 188,
+          "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+        }
+      },
+      "metrics": {
+        "external-tileset": {
+          "bytes": 3325,
+          "depth": 20,
+          "nodes": 1580,
+          "sha256": "52c1addb0b0a407dd8e41dabeb2bdd05b687edda52af131a3b874301582b8b3e"
+        },
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root-tileset": {
+          "bytes": 188,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "2c1eabcbbec8e59ca7cf0f080e50ef4065cae9755ae5c5b9861c35ac1acfb7f0"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "external-tileset",
+      "path": "fixtures/external-tileset/input.3tz",
+      "sha256": "20c9065440985368f3c6039beb40594577d9bfdabc0bc83dd8b9d329264608a2",
+      "successfulUniqueComponents": 3,
+      "target": "external-tileset"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4260,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 404,
+          "sha256": "b2302dc14f2f5eaed47c8db951c24e5414bef2f7adb5883299ad655a00a060f4"
+        },
+        "schema.json": {
+          "bytes": 3180,
+          "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+        },
+        "tileset.json": {
+          "bytes": 184,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 364,
+          "depth": 6,
+          "nodes": 35,
+          "sha256": "33245e3855da6f0583b97b5e10f09863eeba57278841a5e2f0b43e1e60524833"
+        },
+        "metadata-schema-root": {
+          "bytes": 3180,
+          "depth": 20,
+          "nodes": 1560,
+          "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+        },
+        "root-tileset": {
+          "bytes": 184,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "name": "metadata-schema-root",
+      "path": "fixtures/metadata-schema-root/input.3tz",
+      "sha256": "103ae0a8c092b3d2a64b138af0918521315a91e5f5b36ad8331809312b257b82",
+      "successfulUniqueComponents": 3,
+      "target": "metadata-schema-root"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4258,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 3180,
+          "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+        },
+        "tileset.json": {
+          "bytes": 158,
+          "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "metadata-schema-payload": {
+          "bytes": 3180,
+          "depth": 20,
+          "nodes": 1560,
+          "sha256": "c21651deca40c5509f8d941de49f65dae8ce265555601ca974e05a18df883e3b"
+        },
+        "root-tileset": {
+          "bytes": 158,
+          "depth": 4,
+          "nodes": 22,
+          "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+        }
+      },
+      "name": "metadata-schema-payload",
+      "path": "fixtures/metadata-schema-payload/input.3tz",
+      "sha256": "9474d0853c149f6ef2fe865cf2b6576cf859b94c20cad79e4da5d6ad1ef48887",
+      "successfulUniqueComponents": 3,
+      "target": "metadata-schema-payload"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4415,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "conversion.json": {
+          "bytes": 3142,
+          "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+        },
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 184,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "metrics": {
+        "conversion-report": {
+          "bytes": 3142,
+          "depth": 20,
+          "nodes": 1558,
+          "sha256": "2ff66a74d95de77033277558fd4eab7f4a6ebedc7604fb8904034c9de639cf88"
+        },
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root-tileset": {
+          "bytes": 184,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "conversion-report",
+      "path": "fixtures/conversion-report/input.3tz",
+      "sha256": "09cf3099dff01a1fc0b9f80abab7c80940e4e112a43f2249d7282b9dc60a437f",
+      "successfulUniqueComponents": 3,
+      "target": "conversion-report"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4391,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.gltf",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.gltf": {
+          "bytes": 3545,
+          "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 185,
+          "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+        },
+        "zero.bin": {
+          "bytes": 12,
+          "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+        }
+      },
+      "metrics": {
+        "local-gltf": {
+          "bytes": 3545,
+          "depth": 20,
+          "nodes": 1594,
+          "sha256": "c96eacb9e26d18266f1ec3c6927cbb806d66e87607d2852dc6f479eb003b57b0"
+        },
+        "root-tileset": {
+          "bytes": 185,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "7934c427bf8062cf813d05bcbf8180e19cff9c903c779bf22c2a6fcdd7dc8d90"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "local-gltf",
+      "path": "fixtures/local-gltf/input.3tz",
+      "sha256": "6b3385c32fc16c7947131080af935148ae9b2978ba88e8b37f33b214a361cdaf",
+      "successfulUniqueComponents": 3,
+      "target": "local-gltf"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4283,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 3568,
+          "sha256": "3f3c32ad2434a38809a6f56ff0ad5fb9123406bc5aa6a04f43884ac31da293a0"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 184,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 3528,
+          "depth": 20,
+          "nodes": 1593,
+          "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+        },
+        "root-tileset": {
+          "bytes": 184,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "glb-json",
+      "path": "fixtures/glb-json/input.3tz",
+      "sha256": "eebb69abaea9db237cd7de5eefe45a48f1cb8a5af8ef38205ae506ed18962040",
+      "successfulUniqueComponents": 3,
+      "target": "glb-json"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4342,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "b3dm feature and batch table semantics",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.b3dm",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.b3dm": {
+          "bytes": 3624,
+          "sha256": "4ec5cbd7496017988db84c1276b286725287821b94ed5019036eb10becb9b909"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 185,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        }
+      },
+      "metrics": {
+        "b3dm-feature-table": {
+          "bytes": 3164,
+          "depth": 20,
+          "nodes": 1559,
+          "sha256": "ad64b1f3789fd07f4c368e2aa93701324ba3d077eb10a221fb9e1ff69f67ac63"
+        },
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root-tileset": {
+          "bytes": 185,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "b3dm-feature-table",
+      "path": "fixtures/b3dm-feature-table/input.3tz",
+      "sha256": "782bc10758152cefda98029d04084f0a7b89a695b9eca445bfee762c929be38f",
+      "successfulUniqueComponents": 3,
+      "target": "b3dm-feature-table"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4406,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "b3dm feature and batch table semantics",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "point.b3dm",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.b3dm": {
+          "bytes": 3688,
+          "sha256": "d47e8de43c3564236f87af0e928d391fb405c518abf24e2771ccd6b2f530f02f"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 185,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        }
+      },
+      "metrics": {
+        "b3dm-batch-table": {
+          "bytes": 3144,
+          "depth": 20,
+          "nodes": 1558,
+          "sha256": "9d7ba99167ea82e2570f442c607357474d6278c1277b73339db8c8661c0ced2b"
+        },
+        "b3dm-feature-table": {
+          "bytes": 20,
+          "depth": 1,
+          "nodes": 2,
+          "sha256": "8444e5bb865c6cdbe25c55ef3ef43b514328838291700e96f4117f04d7fdf89f"
+        },
+        "glb-json": {
+          "bytes": 452,
+          "depth": 6,
+          "nodes": 41,
+          "sha256": "613850903089b8807195f0d2bb05c8d94410053d883529788e53cb43fcf0d35a"
+        },
+        "root-tileset": {
+          "bytes": 185,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "b3dm-batch-table",
+      "path": "fixtures/b3dm-batch-table/input.3tz",
+      "sha256": "2b5a8bf891e35031e4ba78c00f697cdc8be433c3290005d4be12024e3d0ec30a",
+      "successfulUniqueComponents": 4,
+      "target": "b3dm-batch-table"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4334,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "b3dm feature and batch table semantics",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.b3dm",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.b3dm": {
+          "bytes": 3616,
+          "sha256": "0440cf5d9e0730b5b83e6678e68e309f99046a55db2f56921f9f9139f312bd56"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 185,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        }
+      },
+      "metrics": {
+        "b3dm-embedded-glb": {
+          "bytes": 3528,
+          "depth": 20,
+          "nodes": 1593,
+          "sha256": "58b179ed189c1a8ded41407c1673c0e8501d4e435c8bfcb8f88e80eaca56cb2c"
+        },
+        "b3dm-feature-table": {
+          "bytes": 20,
+          "depth": 1,
+          "nodes": 2,
+          "sha256": "fa75a81f9df14de52ed7afc502854ab87cbdc73850418e685d67f6d351bc6892"
+        },
+        "root-tileset": {
+          "bytes": 185,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "a16125a3353d8bad1ab9d57f6f9731a7c04ab8c2806f93a7dca3dab03b9e5635"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "b3dm-embedded-glb",
+      "path": "fixtures/b3dm-embedded-glb/input.3tz",
+      "sha256": "cf16bff34af499c10a141240a0bc6e7cb2c9a5aa69c35da3db2cb13ad847666f",
+      "successfulUniqueComponents": 3,
+      "target": "b3dm-embedded-glb"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 4718,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "implicitAddressingAndAvailability",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point-0-0-0.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "0-0-0.subtree": {
+          "bytes": 3288,
+          "sha256": "f7fbd2fe2f13d891b34705e62713c981a0dace1d30bdf3ac40a15302d66807c4"
+        },
+        "point-0-0-0.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 333,
+          "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root-tileset": {
+          "bytes": 333,
+          "depth": 4,
+          "nodes": 29,
+          "sha256": "cefae185f1927e7559a2c812713e5afb229382149580823288733eceb4f089be"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "subtree-json": {
+          "bytes": 3264,
+          "depth": 20,
+          "nodes": 1565,
+          "sha256": "e4f248460ce05b241ed8e908a59c940bc8a54e8b2005076cd8476ab2ea6aad2c"
+        }
+      },
+      "name": "subtree-json",
+      "path": "fixtures/subtree-json/input.3tz",
+      "sha256": "eeeacdc497e16f2e8935c9e2400e1ba52dd4462f99e99372a95737f570c3ab3d",
+      "successfulUniqueComponents": 3,
+      "target": "subtree-json"
+    },
+    {
+      "aggregateEquality": null,
+      "bytes": 5550,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "implicitAddressingAndAvailability",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point-0-0-0.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "0-0-0.subtree": {
+          "bytes": 3832,
+          "sha256": "2260060f33b105cfcbfc4d4dd68a2805a55bb8f0e8c73273df763013c8c205fa"
+        },
+        "point-0-0-0.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 621,
+          "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+        }
+      },
+      "metrics": {
+        "glb-json": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "nested-metadata-extras": {
+          "bytes": 3131,
+          "depth": 19,
+          "nodes": 1557,
+          "sha256": "5af37d232c5054fc14b1fefd3145a00cee57616fd6e79a8ea94ed2c6d0a7b84b"
+        },
+        "root-tileset": {
+          "bytes": 621,
+          "depth": 6,
+          "nodes": 45,
+          "sha256": "d494df4b87ba4c5c1f82be34568567f1301d7bcd7f73cd0cba33a1d613cfff7d"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "subtree-json": {
+          "bytes": 560,
+          "depth": 5,
+          "nodes": 42,
+          "sha256": "21734d44b6c1a3add15c03f1dc69434edce7a5ab74d2caa56bf6e599d5a2c41d"
+        }
+      },
+      "name": "nested-metadata-extras",
+      "path": "fixtures/nested-metadata-extras/input.3tz",
+      "sha256": "c17bad1fbcab3cb8b17f7a7794f9ae61210ab7a0e435d49bfec865ad20ce9f55",
+      "successfulUniqueComponents": 3,
+      "target": "nested-metadata-extras"
+    },
+    {
+      "aggregateEquality": 3,
+      "bytes": 1261,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 2,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 2
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 302,
+          "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+        }
+      },
+      "metrics": {
+        "glb": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root": {
+          "bytes": 302,
+          "depth": 6,
+          "nodes": 42,
+          "sha256": "8b0e294c5578f3b7151ba56afc124a316fba703dade37b9082897dae1f1c6a0e"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "same-uri-cache",
+      "path": "fixtures/same-uri-cache/input.3tz",
+      "sha256": "de9e51602dedf23f488f45935b759827430fec6077a9c99de693ab97864523d9",
+      "successfulUniqueComponents": 3,
+      "target": null
+    },
+    {
+      "aggregateEquality": 3,
+      "bytes": 1263,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 2,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 2
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 304,
+          "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+        }
+      },
+      "metrics": {
+        "glb": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root": {
+          "bytes": 304,
+          "depth": 6,
+          "nodes": 42,
+          "sha256": "c8945b6528b8424d97b00f848080b4cfd7b4707f6ad616db089ebb38a305394d"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "resolved-alias-cache",
+      "path": "fixtures/resolved-alias-cache/input.3tz",
+      "sha256": "2fee5ae155fdd2ea6ae9f62078cac8d17bd194431ebcf81fdd8f159b1a40275a",
+      "successfulUniqueComponents": 3,
+      "target": null
+    },
+    {
+      "aggregateEquality": 6,
+      "bytes": 1807,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 2,
+        "entries": 5,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "alias.glb",
+            "vertices": 1
+          },
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 2
+      },
+      "memberPins": {
+        "alias.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "point.glb": {
+          "bytes": 428,
+          "sha256": "92f047ab9d46ed0df798bd5c9c1c9b4cd899fabf1c26bd7e603c85925432807c"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 302,
+          "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+        }
+      },
+      "metrics": {
+        "glb": {
+          "bytes": 388,
+          "depth": 6,
+          "nodes": 36,
+          "sha256": "46562d6ccbf9c1cdb15da035be38265c2f143226fc81d33fa8f5f58e6e488a36"
+        },
+        "root": {
+          "bytes": 302,
+          "depth": 6,
+          "nodes": 42,
+          "sha256": "33c05ed28546bb77120dc19f6f733a3932621f5394a62b6a73a9bdb7282a1dc5"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "distinct-byte-identical-members",
+      "path": "fixtures/distinct-byte-identical-members/input.3tz",
+      "sha256": "903bf1adc338c2d967e22700fb38e02e9f95ad0b6e1e9cb7c2965667f711c5cb",
+      "successfulUniqueComponents": 6,
+      "target": null
+    },
+    {
+      "aggregateEquality": 3,
+      "bytes": 1183,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 2,
+            "uri": "point.glb",
+            "vertices": 2
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 468,
+          "sha256": "c100157eb20f50724c2141875b9982fc3a630d97fc051f2edaba67d199ba0362"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 184,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "metrics": {
+        "glb": {
+          "bytes": 428,
+          "depth": 6,
+          "nodes": 40,
+          "sha256": "adb073d3f319dd9455c5c1e5665e4b7b47fe38bd80fe96219736857913c9aaaa"
+        },
+        "root": {
+          "bytes": 184,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "shared-position-primitives",
+      "path": "fixtures/shared-position-primitives/input.3tz",
+      "sha256": "b68a252c72f16e2625c5339155f22b8aa49aded41764b07294d21a0d2de1cf24",
+      "successfulUniqueComponents": 3,
+      "target": null
+    },
+    {
+      "aggregateEquality": 4,
+      "bytes": 1191,
+      "expectation": "Same valid archive admits at exact selected target fact, ResourceLimit at one less; positive full report and immutable archive bytes.",
+      "expectedReport": {
+        "archive": "$INPUT",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": "$SELECTED",
+        "notInspected": [
+          "EXT_structural_metadata",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "memberPins": {
+        "point.glb": {
+          "bytes": 476,
+          "sha256": "b8838da02df68bc8eb1b4550d18e3044fe90d8c0b636a5c318dcf72caf7e6aab"
+        },
+        "schema.json": {
+          "bytes": 39,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        },
+        "tileset.json": {
+          "bytes": 184,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        }
+      },
+      "metrics": {
+        "glb": {
+          "bytes": 436,
+          "depth": 6,
+          "nodes": 40,
+          "sha256": "b8b8cc7bc8652822d57b46f3528fdc98333b0690e4c8d075dc0df3438ec28279"
+        },
+        "root": {
+          "bytes": 184,
+          "depth": 4,
+          "nodes": 23,
+          "sha256": "b93f3de0c56de28b0b71e038622076c9516672c75a56c4a80998859ba82db281"
+        },
+        "schema": {
+          "bytes": 39,
+          "depth": 1,
+          "nodes": 3,
+          "sha256": "66a1e0e14106059127adf3924a3e33136e0ff5a6840f889f503329c61ddfe99d"
+        }
+      },
+      "name": "unused-viewless-accessor",
+      "path": "fixtures/unused-viewless-accessor/input.3tz",
+      "sha256": "1b8a57d97596b33eb6f94d940e7bf0981417f83b9db6197d050e6e7ae60e7f86",
+      "successfulUniqueComponents": 4,
+      "target": null
+    }
+  ],
+  "date": "2026-10-10",
+  "generatorSha256": "8734c2017b00d64967644203b1de0669e5e4894c5d6dfb06a074cb68557af429",
+  "logicalJsonRule": "Root counts as node/depth0; scalar/container values count, object keys do not; chunk/table padding remains supplied bytes.",
+  "referencePins": [
+    {
+      "bytes": 32526,
+      "httpStatus": 200,
+      "path": "references/implicit-tiling.adoc",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "sha256": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/ImplicitTiling/README.adoc"
+    },
+    {
+      "bytes": 36602,
+      "httpStatus": 200,
+      "path": "references/metadata.adoc",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "sha256": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/README.adoc"
+    },
+    {
+      "bytes": 15134,
+      "httpStatus": 200,
+      "path": "references/metadata-semantics.adoc",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "sha256": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/specification/Metadata/Semantics/README.adoc"
+    },
+    {
+      "bytes": 1468,
+      "path": "bench/architecture_audit/c1_payload_integrity/production_controls/fixture-bundle.json",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "37ac87283ed2aedc8687e1e1017e922bd648ce22906845704700362827cf29ea"
+    },
+    {
+      "bytes": 51003,
+      "path": "bench/architecture_audit/c1_payload_integrity/production_controls/driver.py",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "5bcd8e1e0a34e86fa39339eb1d499e95851a871a2841d142145dc8cbb911f5d7"
+    },
+    {
+      "bytes": 14019,
+      "path": "bench/architecture_audit/c1_payload_integrity/production_controls/private_controls.rs",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "99d5b29c96b84ede9050d3e2a7977f40614e23c2733fd0e34cae336ae0faec74"
+    },
+    {
+      "bytes": 2894,
+      "path": "bench/architecture_audit/c1_payload_integrity/production_controls/2026-10-10-component-bounds-decision.md",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "735d3621f41cf10aebc6b1bf16b145615d430ccd6f4c752b14f9263f4c95e1d4"
+    },
+    {
+      "bytes": 35453,
+      "path": "docs/architecture/c1-payload-integrity-contract.md",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    {
+      "bytes": 39692,
+      "path": "docs/schema/tileset.schema.json",
+      "role": "Existing independent proof binding or selected bounded profile/schema, not a producer oracle",
+      "sha256": "3609542d2d0754f308eaa7115638a2a2e05d7fbc22bc644f06bdd02443f7598e"
+    },
+    {
+      "accessorSchemaSha256": "86f9aacb0b616e1f6a1d5b8ff81e92294602e9e3c98c7f13d2cefdf987c87e35",
+      "b3dmRevision": "4d781014b52294759834018a931223b98ac1ce47",
+      "b3dmSourceSha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e",
+      "publishedGltfRevision": "8e798b02d254cea97659a333cfcb20875b62bdd4",
+      "sourceSha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff"
+    }
+  ],
+  "schemaVersion": 1,
+  "scope": "Actual bounded C1 selected-limit context and aggregate/cache proof inputs; no full A2/implicit/release acceptance.",
+  "status": "Prepared expectations and fixture bytes; no target execution claim."
+}

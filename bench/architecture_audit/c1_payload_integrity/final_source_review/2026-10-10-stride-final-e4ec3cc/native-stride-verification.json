@@ -1,0 +1,70 @@
+{
+  "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+  "receiptSha256": "4fda0da476c7c17675c3ad358e53a2dced3c8265ec9967dc0dfe1d8d3763dd9a",
+  "frozenOriginalIntegrityFiles": {
+    "stride6": 36,
+    "parent1": 15
+  },
+  "exactSixLineProductionRemoval": true,
+  "originalToFormattedRustfmtEquivalent": true,
+  "twoPaddingPredicatesEquivalent": true,
+  "independentLiteralPrimaryGoldensVerified": true,
+  "consumedPrimaryRulesIdenticalToPublishedRevision": true,
+  "onlyPrimaryRevisionDelta": "Three bytes be in unrelated inverseBindMatrices sentence",
+  "cases": [
+    {
+      "lane": "stride6",
+      "case": "absent-parent-baseline",
+      "components": 12,
+      "scalarWindowEnd": null,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "stride6",
+      "case": "unused-packed-scalar",
+      "components": 24,
+      "scalarWindowEnd": 48,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "stride6",
+      "case": "unused-packed-scalar-offset",
+      "components": 23,
+      "scalarWindowEnd": 48,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "stride6",
+      "case": "explicit-parent-stride",
+      "components": 16,
+      "scalarWindowEnd": 40,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "stride6",
+      "case": "scalar-real-range",
+      "components": 25,
+      "scalarWindowEnd": 52,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "stride6",
+      "case": "wrong-parent-stride",
+      "components": 12,
+      "scalarWindowEnd": null,
+      "physicalDecodedBytes": 48
+    },
+    {
+      "lane": "parent1",
+      "case": "unmasked-parent-stride-disagreement",
+      "components": 16,
+      "scalarWindowEnd": 28,
+      "physicalDecodedBytes": 48
+    }
+  ],
+  "actualPublicCases": 7,
+  "positiveCompleteReports": 4,
+  "rawStreamsHashChecked": 14,
+  "unmaskedParentCompleteTypedErrorVerified": true,
+  "limitations": "Embedded/placeholder private controls establish actual24/23 components and48/47 decoded boundaries; zero resolver calls do not independently prove external-resource preflight."
+}

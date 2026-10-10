@@ -1,0 +1,110 @@
+{
+  "bundles": {
+    "corrected-205": {
+      "bundleBytes": 66058,
+      "bundleSha256": "c05406cdb264e386d1ad209abfded1ecc0b2b97da8c8b32ad8ff911263aa46a4",
+      "cases": 205,
+      "manifestBytes": 312006,
+      "manifestSha256": "40fae6bf9a0dec2fbdf6e900ac257e61a8732f0987fbdb9e1d84bd6e52510620",
+      "memberPinsSha256": "217c82f122bef8429cdc46517dff6eba3f062f992d000dc7561c4be8053fb79d",
+      "members": 843,
+      "tarBytes": 1331200,
+      "tarSha256": "52be77307141e04df8b38d21e834612b2ef05257975dbf01654d01b80f26785c",
+      "unchangedOriginalArchives": 203
+    },
+    "polygon-sensitive-5": {
+      "bundleBytes": 5780,
+      "bundleSha256": "add990418822a1118c9c3be2faff04fa0722ae926c2d97769353f90c928a6f2c",
+      "cases": 5,
+      "manifestBytes": 16244,
+      "manifestSha256": "a26782e50b63b5449652bcd3ccb1370723d1b2f3493e7678705b9f3fc7dc9a84",
+      "memberPinsSha256": "dce55ea9d74f9968b21e3dc839df88013ddc5c1d5987f7fbd0669b11dcbe2bd9",
+      "members": 21,
+      "tarBytes": 61440,
+      "tarSha256": "ac03620acd86358134d2d6caf26cdc4ad93970878618718f06eb94e332e155e2",
+      "unchangedOriginalArchives": 0
+    }
+  },
+  "changedExistingCases": [
+    "polygon-optional-reference-profile",
+    "polygon-reference-oob"
+  ],
+  "date": "2026-10-10",
+  "decision": "Invalid original positive oracle; primary-justified production rejection; no source correction required at polygon mode/indices gate.",
+  "files": {
+    "README.md": {
+      "bytes": 1696,
+      "sha256": "4230c279088c1351d6168206b5d2f4edd0c6f3cb12df731d84aec53bc1e11942"
+    },
+    "adjudication.md": {
+      "bytes": 3414,
+      "sha256": "3ce5c65bbd70a20e04c09af991fee5430d52362ac1cb1d0c95fbf336cf272c79"
+    },
+    "corrected-205-fixtures.tar.gz": {
+      "bytes": 66058,
+      "sha256": "c05406cdb264e386d1ad209abfded1ecc0b2b97da8c8b32ad8ff911263aa46a4"
+    },
+    "corrected-205-members.json.gz": {
+      "bytes": 29387,
+      "sha256": "217c82f122bef8429cdc46517dff6eba3f062f992d000dc7561c4be8053fb79d"
+    },
+    "corrected-binary.bin": {
+      "bytes": 60,
+      "sha256": "17e0445139888640a7456caeefe14a16cfc8c950f273c3b1e85d9e8dcc4161c0"
+    },
+    "corrected-indexed-triangle.json": {
+      "bytes": 949,
+      "sha256": "f16d2bd2dab37b95bd81f60310e46e069ab3c775e08d3b9990296c3882ac20c9"
+    },
+    "corrected-reference-oob.json": {
+      "bytes": 951,
+      "sha256": "6b382fee6198eefdf6e2ced5eb6ab2aadd602d22d2c14dadffdaafa6fe486806"
+    },
+    "generate.py": {
+      "bytes": 11247,
+      "sha256": "b0ae15309533d11707956748dd0e1425004d75a6a86140bd7dff8038bae3f924"
+    },
+    "original-failed-205.json.gz": {
+      "bytes": 60627,
+      "sha256": "e7bcef98c04f5512da867cd7eb02b0352286b866ef1cbe679811bcfd98ae3889"
+    },
+    "original-failure.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "original-failure.stdout": {
+      "bytes": 116,
+      "sha256": "73b57724195edc2030285dd1c5a5d93c58e419ae4f61fa8f6f9efec77fc553cb"
+    },
+    "polygon-sensitive-5-fixtures.tar.gz": {
+      "bytes": 5780,
+      "sha256": "add990418822a1118c9c3be2faff04fa0722ae926c2d97769353f90c928a6f2c"
+    },
+    "polygon-sensitive-5-members.json.gz": {
+      "bytes": 992,
+      "sha256": "dce55ea9d74f9968b21e3dc839df88013ddc5c1d5987f7fbd0669b11dcbe2bd9"
+    },
+    "references/EXT_mesh_polygon.md": {
+      "bytes": 7129,
+      "sha256": "777c13228de2de5838a8f0eed5c4f653674a5278c30306124bb8ccbe2fe1016d"
+    },
+    "references/retrieval-receipt.json": {
+      "bytes": 425,
+      "sha256": "e3863206de71d82a5929569bf3b07c8c2e747903a0a80ba98a090381b38b67cf"
+    }
+  },
+  "originalExecution": {
+    "binarySha256": "5480b1147d177425da87cfa115c0ef78e1d126b28ab4da0dc78259bd73304885",
+    "cases": 205,
+    "failures": 1,
+    "passes": 204,
+    "receiptSha256": "7133de14242c20364a95f3b49c97e5f6a337b04c0056b8eb03ada3559039bed1",
+    "sourcePayloadSha256": "80fb98f59c826c08b1bec268da9d8202261483ff2e530982f5db2a16f2899d8c",
+    "sourcePinSha256": "0d2dd989b80211b206a2a9624c1608394dcea4d9dc84e008a937c9e83fee48be"
+  },
+  "originalFrozenDriverSha256": "5bcd8e1e0a34e86fa39339eb1d499e95851a871a2841d142145dc8cbb911f5d7",
+  "originalFrozenManifestSha256": "1b3913464d6152f10b267506a41288492baba38a56a79bdd1cda1c42860dc4e5",
+  "schemaVersion": 1,
+  "status": "Frozen independent oracle adjudication and corrected inputs/expectations; no corrected-lane target execution claimed.",
+  "unchangedExistingCaseRecordsVerified": 203
+}

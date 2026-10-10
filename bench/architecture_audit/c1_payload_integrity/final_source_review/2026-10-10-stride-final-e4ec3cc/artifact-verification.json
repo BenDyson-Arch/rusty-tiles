@@ -1,0 +1,152 @@
+{
+  "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+  "sourceTree": "dd6bf3dc696f9adf1a44f5fe9e5b0c9ea873813b",
+  "sourcePinSha256": "744afbee34cb3ef13955101cfd3dd17d19328e9540a4dc7d1f67af479baa7969",
+  "productionFilesVerified": 97,
+  "acceptanceFilesVerified": 237,
+  "unchangedExistingAcceptanceFiles": 178,
+  "onlyExistingAcceptanceChange": "CI workflow adds independent stride lane",
+  "actualArtifactBuildsAndChecks": [
+    {
+      "name": "library",
+      "receiptSha256": "bc38b42601a4177c6bed2a9d8f684e58c6a280525fff1e7766a6a62c95f358e0",
+      "exitCode": 0,
+      "artifactSha256": "e952cb6309597e51f3797b3ccd1743dd532721cfd08828262c5ba4e189685847",
+      "artifactBytes": 27011512,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "cargo",
+        "test",
+        "--locked",
+        "--release",
+        "--no-default-features",
+        "--lib",
+        "--",
+        "--nocapture"
+      ]
+    },
+    {
+      "name": "portable-cli",
+      "receiptSha256": "bd7a1b1c0399881c784ca02af86b303dc780ce002dc82b7cd3925786f8e94196",
+      "exitCode": 0,
+      "artifactSha256": "fbe4c46b578a54f5de0958b56aae8531ddd34b4c371040c18663df33199c03f5",
+      "artifactBytes": 21195568,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--bin",
+        "rusty-tiles",
+        "--no-default-features"
+      ]
+    },
+    {
+      "name": "native-cli",
+      "receiptSha256": "75caffd3335ea068ffdb77e95c94709f415e7e51cb46cffe4e885963dc7e1783",
+      "exitCode": 0,
+      "artifactSha256": "bcdd0f3bcc0a504a20bf5f3a7653416bac75f9270233b1531a916b2423466dec",
+      "artifactBytes": 18808008,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "env",
+        "LIBSQLITE3_SYS_USE_PKG_CONFIG=1",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--bin",
+        "rusty-tiles",
+        "--features",
+        "native-geospatial,native-jpeg"
+      ]
+    },
+    {
+      "name": "native-clippy",
+      "receiptSha256": "97e3305696523414f62da5eaa32e24d88679c5557ad921147323e28b1feca33b",
+      "exitCode": 0,
+      "artifactSha256": null,
+      "artifactBytes": null,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "env",
+        "LIBSQLITE3_SYS_USE_PKG_CONFIG=1",
+        "cargo",
+        "clippy",
+        "--locked",
+        "--release",
+        "--all-targets",
+        "--features",
+        "native-geospatial,native-jpeg",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    {
+      "name": "bindings-clippy",
+      "receiptSha256": "91b92747c4915ed0b6cd862afeecb78fd0cb89f6a90a92aea71c38ac499d4222",
+      "exitCode": 0,
+      "artifactSha256": null,
+      "artifactBytes": null,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "env",
+        "LIBSQLITE3_SYS_USE_PKG_CONFIG=1",
+        "cargo",
+        "clippy",
+        "--locked",
+        "--release",
+        "-p",
+        "rusty-tiles-python",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    {
+      "name": "context-parser",
+      "receiptSha256": "31db945e64fa7573c6f9e3fea403772a801a2c80d9a1dfdcae69b44abcc7e84c",
+      "exitCode": 0,
+      "artifactSha256": null,
+      "artifactBytes": null,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "python3",
+        "/tmp/rusty-tiles-archive-read-final-evidence/run-controlled.py",
+        "python3",
+        "-B",
+        "tests/payload_context_receipt.py",
+        "--log",
+        "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/library.log",
+        "--output",
+        "/tmp/rusty-tiles-payload-final-evidence/stride-final-build/context-harness-receipt.json"
+      ]
+    }
+  ],
+  "ciHarnessesRead": true,
+  "remoteCiExecutedByReviewer": false
+}

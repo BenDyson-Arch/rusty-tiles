@@ -1,0 +1,93 @@
+{
+  "source_receipt_sha256": "7133de14242c20364a95f3b49c97e5f6a337b04c0056b8eb03ada3559039bed1",
+  "binarySha256": "5480b1147d177425da87cfa115c0ef78e1d126b28ab4da0dc78259bd73304885",
+  "sourcePinSha256": "0d2dd989b80211b206a2a9624c1608394dcea4d9dc84e008a937c9e83fee48be",
+  "passes": 204,
+  "failures": 1,
+  "fixturesUnchanged": true,
+  "sourceAndBinaryUnchanged": true,
+  "failed_rows": [
+    {
+      "archiveSha256": "82d920a5646c3414424bc65930f7638b8660cc6c119e62a934b1220212a7fbab",
+      "command": [
+        "/tmp/rusty-tiles-payload-final-evidence/context-build/portable-cli-ca9b4a1-5480b1147d177425da87cfa115c0ef78e1d126b28ab4da0dc78259bd73304885",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-payload-final-evidence/portable-205/fixtures/polygon-optional-reference-profile/input.3tz"
+      ],
+      "elapsedSeconds": 0.0284934549999889,
+      "exitCode": 3,
+      "expectedCategory": "admitted",
+      "expectedReport": {
+        "archive": "/tmp/rusty-tiles-payload-final-evidence/portable-205/fixtures/polygon-optional-reference-profile/input.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "EXT_mesh_polygon",
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 4,
+            "primitivesChecked": 1,
+            "uri": "tile.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "name": "polygon-optional-reference-profile",
+      "observedCategory": "invalid_input",
+      "passed": false,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "polygon extension requires indexed TRIANGLES"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "73b57724195edc2030285dd1c5a5d93c58e419ae4f61fa8f6f9efec77fc553cb"
+    }
+  ],
+  "review": "Executed expectation mismatch; static original fixture mode0/unindexed explains owning draw-profile refusal, separate dated adjudication pending; original negative reference gate masked."
+}

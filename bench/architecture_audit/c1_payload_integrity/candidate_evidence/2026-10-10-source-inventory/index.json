@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "records": [
+    {
+      "file": "source-package-list.log.gz",
+      "bytes": 131072,
+      "sha256": "b5e200668901ea25e066621b04fb3419230a8f858cfa94ec474fbb2181a8ef94",
+      "gzipSha256": "ed77513afc0a64736f8a05f7b9b0b97bd76a7de8742cab220c3cc8081602aef2"
+    },
+    {
+      "file": "source-package-list-receipt.json.gz",
+      "bytes": 548,
+      "sha256": "50090a866823af8ccb61c32a28450351e3d037ff3137682fea93135409396613",
+      "gzipSha256": "66017a406ca1ba1451bd43ce584ffad24b225a0443d33d59dcbc15158b6a187e"
+    }
+  ],
+  "scope": "Supplemental package inventory only; original local45index unchanged."
+}

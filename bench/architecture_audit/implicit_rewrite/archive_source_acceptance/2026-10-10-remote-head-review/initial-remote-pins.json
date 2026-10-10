@@ -1,0 +1,94 @@
+{
+  "head": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+  "merge_preview": "2f0df910c18af4da938a5e83cc674a9e96ae6f8c",
+  "tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+  "merge_parents": [
+    "9d2973db06967f87d759c87c34d8fdd0921c86ed",
+    "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440"
+  ],
+  "unchanged_prior_inputs": {
+    "production": 93,
+    "acceptance": 7
+  },
+  "archive45": {
+    "binary_sha256": "c50c76c19dfbde1f0c33832807ec886fb9b5339205091ed3a2ffa2f715046844",
+    "source_commit": "2f0df910c18af4da938a5e83cc674a9e96ae6f8c",
+    "read_only": true,
+    "fixture_hashes_and_independent_categories_verified": 45,
+    "categories": {
+      "admitted": 14,
+      "unsupported": 7,
+      "invalid_input": 24
+    }
+  },
+  "remote_record_sha256": {
+    "wheel-artifacts-partial.json": "b14d9eb39c488afb27a8f4e148a1c579337a39522009c145ee538f34fd9a2f98",
+    "wheel-run.json": "845fb4f9d1b5566167d3ff2cc75a38beff03a667fbbbd6fd22aca2d101f35ba9",
+    "main-run.json": "0561e2d114406d03799dbec6eb6018d0a3f816e7cbdbadad1d3f3f52b3643893",
+    "main/c1-validation-evidence/c1-validation.json": "fb6826c506c1a9d9b293960312dd2bdc9bfafa733a30a625a76d457fd7efa03d",
+    "main/c1-validation-evidence/c1-resources.json": "acc084f69c2afccf77ad70def43097dfb45e4909e4028fdbd9b81b8ace5b01e2",
+    "main/c1-validation-evidence/c1-producer.json": "afa56be6bd4987350eef1713ffbe19dee94bda885f7ba4b4dc7377faa1707ab4",
+    "main/c1-validation-evidence/c1-archive-read.json": "407c36cc3670abc8d9f14be3b58de69b4e0611659a97932d4535aca2ba59814e"
+  },
+  "pending_gates": [
+    "Fresh final main jobs/check rollup",
+    "Complete wheel installed-artifact receipts including macOS x86",
+    "Official Blender receipt/artifact binding",
+    "Durable final remote retention"
+  ],
+  "resources20": {
+    "all_outcomes_verified": 20,
+    "binary_sha256": "c50c76c19dfbde1f0c33832807ec886fb9b5339205091ed3a2ffa2f715046844",
+    "read_only": true,
+    "rss_range_KiB": [
+      78092,
+      99796
+    ],
+    "wall_range_seconds": [
+      0.12489898900000185,
+      0.29172901699999443
+    ],
+    "descriptor_peak_range": [
+      6,
+      6
+    ],
+    "descriptor_permission_denials": 32,
+    "limitations": "Fresh-process Linux wait4 observations only, not a universal RSS ceiling; shared geometry stresses bounded work without enormous payload."
+  },
+  "producer_control": {
+    "binary_sha256": "c50c76c19dfbde1f0c33832807ec886fb9b5339205091ed3a2ffa2f715046844",
+    "source_sha256": "e3a0cc6821d5a80a3fc29e7e6533e03579a63f34f80e04220e551e377a19f7b5",
+    "archive_sha256": "e6aa1a25a6a99b1b176ba2eabe6762a54294eede887c3fd6d0473c3f1fc3653f",
+    "recorded_b3dm_controls": 8,
+    "source_facts_verified": {
+      "ringVertices": 50,
+      "planarAreaSquareMetres": 300.0,
+      "sourceCrs": "local"
+    },
+    "limits": {
+      "maxVertices": 32,
+      "maxBytes": 16384
+    },
+    "scope": "Inspected executed checker receipt and checker source; remote archive/binary bytes not yet downloaded for reviewer hashing."
+  },
+  "c1_corpus135": {
+    "records": 135,
+    "read_only": true,
+    "exit_code_report_consistency": true,
+    "scope": "Ancillary regression receipt inspection, not fresh independent contract proof for all135 semantics."
+  },
+  "main-run.json": {
+    "id": 38040463690,
+    "head_sha": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+    "status": "in_progress",
+    "conclusion": null,
+    "note": "Early snapshot; no final job conclusion inferred."
+  },
+  "wheel-run.json": {
+    "id": 38040463666,
+    "head_sha": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+    "status": "in_progress",
+    "conclusion": null,
+    "note": "Early snapshot; no final job conclusion inferred."
+  }
+}

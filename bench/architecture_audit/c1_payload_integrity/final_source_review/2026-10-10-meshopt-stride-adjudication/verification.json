@@ -1,0 +1,257 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "binarySha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+  "probeReceiptSha256": "d5f926df13a691b68295b001db5a19223ca328e6c170cdaedcbd06df088ab0de",
+  "primaryPins": [
+    {
+      "bytes": 35576,
+      "path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/EXT_meshopt_compression.md",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md"
+    },
+    {
+      "bundle": "bench/architecture_audit/c1_payload_integrity/primary_controls/raw-evidence.tar.gz",
+      "bytes": 148064,
+      "member": "pinned-Specification.adoc",
+      "revision": "8e798b02d254cea97659a333cfcb20875b62bdd4",
+      "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff"
+    },
+    {
+      "bytes": 85,
+      "literalSource": "meshopt_decoder.test.js decodeVertexBuffer encoded",
+      "path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-compressed.bin",
+      "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a"
+    },
+    {
+      "bytes": 48,
+      "literalSource": "meshopt_decoder.test.js decodeVertexBuffer expected",
+      "path": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/golden-expected.bin",
+      "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
+    },
+    {
+      "bytes": 35453,
+      "path": "docs/architecture/c1-payload-integrity-contract.md",
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    {
+      "bytes": 11923,
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-whole-slice-implementation-ready.md",
+      "sha256": "d94d50b8f53fc81da6532053e1ba29258e7846ca421e62791f0592cbd42bc15f"
+    }
+  ],
+  "fourArchiveIdentitiesVerified": true,
+  "eightRawStreamsVerified": true,
+  "finitePackedScalars": 12,
+  "codecDecodedBytes": 48,
+  "packedAccessorBytes": 48,
+  "rangeOverBytes": 52,
+  "expectedComponentWorkForCorrectedPackedCase": 24,
+  "twoActualPositiveCompleteReportsVerified": true,
+  "exactMutationBackgroundVerified": true,
+  "inheritedBaselineRuleConfirmed": true,
+  "executedFalseInvalidInput": true,
+  "cases": [
+    {
+      "name": "absent-parent-baseline",
+      "independentExpected": "admitted",
+      "observedExit": 0,
+      "archiveSha256": "b6ac6e9d12242d52bcc4ac6453d4edda52336a22f23af0191cd37e357ba67348",
+      "stdoutSha256": "8ae351c294aaa0a2c9304e315e49b244966377359c6e2cbb89b407dd5a408678",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expectedCompleteReport": {
+        "archive": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-baseline.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "absent-parent-unused-packed-scalar",
+      "independentExpected": "admitted",
+      "observedExit": 3,
+      "archiveSha256": "f22ec53911153a00c1b6a4c383c523a5e1a217d0474c0da8c36cf41e414c6c9c",
+      "stdoutSha256": "33b0b892b77eeca153d39d1cdf11acabbaf3388f08ce0a9222a72708f1e92672",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expectedCompleteReport": {
+        "archive": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/absent-parent-unused-packed-scalar.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "explicit-parent-unused-scalar",
+      "independentExpected": "admitted",
+      "observedExit": 0,
+      "archiveSha256": "cde8b4db7ed169a2d665f282a5a584e3cbeef493e111a1efe828ec37ae39b358",
+      "stdoutSha256": "6d0e7d7c9a359e175648952e92d5129bb2e2c90c28142657a3e49bfede1884fe",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expectedCompleteReport": {
+        "archive": "/tmp/rusty-tiles-payload-final-evidence/meshopt-stride-adjudication/explicit-parent-unused-scalar.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 4,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "uri": "tile.gltf",
+            "vertices": 4
+          }
+        ],
+        "tiles": 1
+      }
+    },
+    {
+      "name": "absent-parent-scalar-range-over",
+      "independentExpected": "invalid_input",
+      "observedExit": 3,
+      "archiveSha256": "7aea20fd8e601a6a466678fee806b2b0cd15ee907245a06ce3b00b09326f7f54",
+      "stdoutSha256": "b39f398ad9c39078524d6db1ee0d8e110260e78a51d8124b3e0478983d772321",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expectedCompleteReport": null
+    }
+  ],
+  "thirteenLosslessProbeRecordsVerified": true,
+  "retainedProbeIndexSha256": "78cb677034fa90ed4f528a15906bc08dd8be90e89bcb8347074ab01c2faf0f0c",
+  "decision": "Approve minimal owner correction before merge; no corrected-source acceptance yet"
+}

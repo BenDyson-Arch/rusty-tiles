@@ -1,0 +1,28 @@
+{
+  "receipt": "/tmp/rusty-tiles-payload-final-evidence/stride-final-integrations-executable/native-payload210.json",
+  "receiptSha256": "d756caf5153aa94c9418feb355446fc11d068e269d7da691052add543a3d2686",
+  "phases": [
+    {
+      "phase": "corrected205",
+      "cases": 205,
+      "fullReportsVerified": 77,
+      "rawStreamsHashChecked": 410,
+      "binarySha256": "bcdd0f3bcc0a504a20bf5f3a7653416bac75f9270233b1531a916b2423466dec",
+      "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    },
+    {
+      "phase": "polygon5",
+      "cases": 5,
+      "fullReportsVerified": 1,
+      "rawStreamsHashChecked": 10,
+      "binarySha256": "bcdd0f3bcc0a504a20bf5f3a7653416bac75f9270233b1531a916b2423466dec",
+      "sourceCommit": "e4ec3cc6ecf95eeba5c610dc7decb4c83a15696a",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    }
+  ],
+  "sourceAndFixturesUnchanged": true,
+  "scope": "Verified retained exact-source public execution; no reviewer target execution"
+}

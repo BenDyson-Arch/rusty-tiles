@@ -1,0 +1,62 @@
+{
+  "record": "Static actual unsigned-number consumers supplement; not new execution",
+  "date": "2026-10-10",
+  "source_sha256": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+  "owner_requirement": "One exact integer rule across real consumed fields; no new scene/node claims",
+  "central_helpers": [
+    "uint",
+    "field",
+    "off",
+    "at"
+  ],
+  "raw_and_comparison_seams": [
+    {
+      "line": 27,
+      "source": "v.as_u64()"
+    },
+    {
+      "line": 304,
+      "source": ".and_then(Value::as_u64)"
+    },
+    {
+      "line": 394,
+      "source": ".as_u64()"
+    },
+    {
+      "line": 550,
+      "source": "if ![34962, 34963].contains(&uint(target)?) {"
+    },
+    {
+      "line": 647,
+      "source": ".and_then(Value::as_u64)"
+    },
+    {
+      "line": 799,
+      "source": ".is_some_and(|target| target != 34963)"
+    },
+    {
+      "line": 871,
+      "source": "if view_docs[v].get(\"target\").is_some_and(|v| v != 34962) {"
+    },
+    {
+      "line": 955,
+      "source": "|| view_docs[v].get(\"target\").is_some_and(|v| v != 34963)"
+    }
+  ],
+  "consumed_domains": [
+    "buffer/view/accessor/meshopt counts,lengths,offsets,strides",
+    "componentType/primitive mode/view target",
+    "attribute/POSITION/indices/material/image/texture/sampler references",
+    "optional polygon count/table accessor references",
+    "b3dm BATCH_LENGTH before uint32 admission"
+  ],
+  "classification_obligations": [
+    "Nonzero fractional or negative nonzero unsigned property: InvalidInput",
+    "Exact count exceeding admitted component/work ceiling: ResourceLimit before host truncation",
+    "Exact reference outside actual array: InvalidInput",
+    "Numeric BATCH_LENGTH outside uint32 range: InvalidInput",
+    "Valid opaque numbers outside u64 must not become invalid merely to simplify unused integer parsing"
+  ],
+  "mechanism_status": "A14 selected: corrected iterative borrowed admission plus exact unsigned native-or-Overflow actual records; no AP/global normalization/owned payload Value. Final consuming-graph proof still required.",
+  "returned_consumer": "schemaUri only plus counters/exclusions; C1 retains resolution/reference/schema-document reads"
+}

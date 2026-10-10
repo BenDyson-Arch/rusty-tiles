@@ -1,7 +1,8 @@
 //! Read-only validation of self-contained explicit and native implicit 3TZ packages.
 use crate::archive3tz::TZ_INDEX_NAME;
-mod json;
-mod payload;
+use crate::content_integrity::{
+    json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
+};
 mod types;
 pub use types::{
     PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
@@ -20,6 +21,43 @@ use std::{
 type Archive = crate::archive3tz::StoredArchive<File>;
 fn invalid(message: impl Into<String>) -> Error {
     Error::InvalidInput(message.into())
+}
+// Select and host-admit the six consumed format facts once at the operation boundary.
+fn content_limits(limits: &ValidationLimits) -> Result<PayloadLimits, Error> {
+    let host = |value: u64| {
+        usize::try_from(value).map_err(|_| Error::limit("content limit exceeds host range"))
+    };
+    Ok(PayloadLimits {
+        member_bytes: host(limits.member_bytes)?,
+        decoded_bytes: host(limits.document_decoded_bytes)?,
+        accessor_components: limits.accessor_elements,
+        json: JsonLimits {
+            bytes: host(limits.json_bytes)?,
+            depth: limits.json_depth,
+            value_nodes: host(limits.document_items)?,
+        },
+    })
+}
+fn format_error(error: FormatError) -> Error {
+    match error {
+        FormatError::InvalidInput(message) => Error::InvalidInput(message),
+        FormatError::Unsupported(message) => Error::Unsupported(message),
+        FormatError::ResourceLimit(message) => Error::ResourceLimit(message),
+    }
+}
+fn payload_error(error: PayloadError<Error>) -> Error {
+    match error {
+        PayloadError::Format(error) => format_error(error),
+        PayloadError::Resolver(error) => error,
+    }
+}
+// A real resolver I/O cause bypasses retained generic archive conversions.
+fn implicit_error(error: crate::Error) -> Error {
+    match error {
+        crate::Error::Io(error) => Error::Io(error),
+        crate::Error::Validation(error) => error,
+        other => other.into(),
+    }
 }
 fn number(value: &Value, label: &str) -> Result<f64, Error> {
     value
@@ -303,6 +341,7 @@ struct ArchiveResources<'a> {
     names: HashSet<String>,
     used: HashSet<String>,
     limits: ValidationLimits,
+    content_limits: PayloadLimits,
     bytes_read: u64,
     reference_visits: u64,
 }
@@ -315,7 +354,7 @@ impl ArchiveResources<'_> {
             &self.limits,
             self.limits.json_bytes,
         )?;
-        json::parse(&bytes)
+        json::parse(&bytes, self.content_limits.json).map_err(format_error)
     }
     fn reference(&mut self, name: String) -> Result<(), Error> {
         self.reference_visits = self
@@ -372,26 +411,42 @@ impl Check<'_> {
             self.resources.limits.member_bytes,
         )?;
         let remaining = self.resources.limits.total_payload_elements - self.elements;
-        let facts = payload::inspect(name, &bytes, remaining, |value| {
-            let resource = uri(name, value)?;
-            self.resources.reference(resource.clone())?;
-            read_member(
-                self.resources.archive,
-                &resource,
-                &mut self.resources.bytes_read,
-                &self.resources.limits,
-                self.resources.limits.member_bytes,
-            )
-        })?;
+        let kind = match name.to_ascii_lowercase().rsplit_once('.') {
+            Some((_, "glb")) => payload::PayloadKind::Glb,
+            Some((_, "gltf")) => payload::PayloadKind::LocalGltf,
+            Some((_, "b3dm")) => payload::PayloadKind::B3dm,
+            _ => {
+                return Err(Error::unsupported(
+                    "payload format outside GLB/local glTF 2.0",
+                ))
+            }
+        };
+        let facts = payload::inspect(
+            kind,
+            &bytes,
+            self.resources.content_limits,
+            remaining,
+            |value, maximum| {
+                let resource = uri(name, value)?;
+                self.resources.reference(resource.clone())?;
+                read_member(
+                    self.resources.archive,
+                    &resource,
+                    &mut self.resources.bytes_read,
+                    &self.resources.limits,
+                    maximum as u64,
+                )
+            },
+        )
+        .map_err(payload_error)?;
         self.elements = self
             .elements
             .checked_add(facts.elements_checked)
             .filter(|&n| n <= self.resources.limits.total_payload_elements)
             .ok_or_else(|| Error::limit("payload elements exceed 16 million"))?;
-        self.metadata_schema(
-            name,
-            &facts.document["extensions"]["EXT_structural_metadata"],
-        )?;
+        if let Some(value) = facts.schema_uri.as_deref() {
+            self.schema_uri(name, value)?;
+        }
         self.not_inspected.extend(facts.not_inspected);
         let report = PayloadReport {
             uri: name.into(),
@@ -407,10 +462,14 @@ impl Check<'_> {
             let value = value
                 .as_str()
                 .ok_or_else(|| invalid("schemaUri must be a string"))?;
-            let name = uri(base, value)?;
-            self.resources.reference(name.clone())?;
-            self.resources.read_json(&name)?;
+            self.schema_uri(base, value)?;
         }
+        Ok(())
+    }
+    fn schema_uri(&mut self, base: &str, value: &str) -> Result<(), Error> {
+        let name = uri(base, value)?;
+        self.resources.reference(name.clone())?;
+        self.resources.read_json(&name)?;
         Ok(())
     }
     fn tileset(
@@ -514,6 +573,7 @@ impl Check<'_> {
                 .insert("implicitAddressingAndAvailability".into());
             let resources = &mut self.resources;
             let schema = &self.schema;
+            let json_limits = resources.content_limits.json;
             doc = crate::implicit::expand_tileset_bounded(
                 &doc,
                 |value| {
@@ -535,7 +595,9 @@ impl Check<'_> {
                     )
                     .map_err(crate::Error::from)?;
                     if source.ends_with(".json") {
-                        let doc = json::parse(&bytes).map_err(crate::Error::from)?;
+                        let doc = json::parse(&bytes, json_limits)
+                            .map_err(format_error)
+                            .map_err(crate::Error::from)?;
                         schema.validate(&doc).map_err(|e| {
                             crate::Error::from(invalid(format!("tileset schema: {e}")))
                         })?;
@@ -543,7 +605,13 @@ impl Check<'_> {
                     Ok(bytes)
                 },
                 &mut self.expansion_budget,
-            )?;
+                &|bytes| {
+                    json::parse(bytes, json_limits)
+                        .map_err(format_error)
+                        .map_err(crate::Error::from)
+                },
+            )
+            .map_err(implicit_error)?;
         }
         Ok(doc)
     }
@@ -729,11 +797,20 @@ fn open_archive(path: &Path) -> Result<File, Error> {
 /// Inspect a bounded archive using only declared archive-local resources.
 /// Success certifies the named checks, not uninspected scene/source semantics.
 pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
+    inspect_selected(request, ValidationLimits::default())
+}
+
+// C1 selects its profile above. Explicit limits also permit bounded internal
+// controls to exercise the actual operation and every resource/parser consumer.
+pub(crate) fn inspect_selected(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<ValidationReport, Error> {
     let path = request.input();
     let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
-    let limits = ValidationLimits::default();
+    let content_limits = content_limits(&limits)?;
     let archive_limits = crate::archive3tz::ReadLimits {
         source_archive_bytes: limits.source_archive_bytes,
         central_directory_bytes: limits.central_directory_bytes,
@@ -775,27 +852,32 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
         hashes.insert(name, hash);
     }
     let report = if names.contains("conversion.json") {
-        json::parse(&read_member(
-            &mut archive,
-            "conversion.json",
-            &mut bytes_read,
-            &limits,
-            limits.json_bytes,
-        )?)?
+        json::parse(
+            &read_member(
+                &mut archive,
+                "conversion.json",
+                &mut bytes_read,
+                &limits,
+                limits.json_bytes,
+            )?,
+            content_limits.json,
+        )
+        .map_err(format_error)?
     } else {
         Value::Null
     };
     let mut check = Check {
         expansion_budget: crate::implicit::ExpansionBudget::new(
-            limits.hierarchy_visits as usize,
-            limits.document_decoded_bytes as usize,
-        )
-        .with_json_parser(|bytes| json::parse(bytes).map_err(crate::Error::from)),
+            usize::try_from(limits.hierarchy_visits)
+                .map_err(|_| Error::limit("hierarchy limit exceeds host range"))?,
+            content_limits.decoded_bytes,
+        ),
         resources: ArchiveResources {
             archive: &mut archive,
             names,
             used: HashSet::from([TZ_INDEX_NAME.into()]),
             limits,
+            content_limits,
             bytes_read,
             reference_visits: 0,
         },
@@ -905,6 +987,59 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_bridges_preserve_causal_io_and_typed_format_categories() {
+        #[derive(Debug)]
+        struct Cause;
+        impl std::fmt::Display for Cause {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("resource limit: duplicate JSON key; actual resolver cause")
+            }
+        }
+        impl std::error::Error for Cause {}
+        for kind in [
+            std::io::ErrorKind::InvalidData,
+            std::io::ErrorKind::UnexpectedEof,
+        ] {
+            for implicit in [false, true] {
+                let io = std::io::Error::new(kind, Cause);
+                let failure = if implicit {
+                    implicit_error(crate::Error::Io(io))
+                } else {
+                    payload_error(PayloadError::Resolver(Error::Io(io)))
+                };
+                let Error::Io(io) = failure else {
+                    panic!("causal I/O must stay I/O")
+                };
+                assert_eq!(io.kind(), kind);
+                assert!(io.get_ref().unwrap().downcast_ref::<Cause>().is_some());
+                assert_eq!(
+                    io.to_string(),
+                    "resource limit: duplicate JSON key; actual resolver cause"
+                );
+            }
+        }
+        for (format, category) in [
+            (
+                FormatError::InvalidInput("resource limit: lookalike".into()),
+                "invalid_input",
+            ),
+            (
+                FormatError::ResourceLimit("duplicate key lookalike".into()),
+                "resource_limit",
+            ),
+            (
+                FormatError::Unsupported("invalid syntax lookalike".into()),
+                "unsupported",
+            ),
+        ] {
+            assert_eq!(
+                payload_error(PayloadError::Format(format)).category().0,
+                category
+            );
+        }
+    }
     #[derive(Debug)]
     struct InjectedReadFailure;
     impl std::fmt::Display for InjectedReadFailure {

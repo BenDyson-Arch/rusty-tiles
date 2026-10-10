@@ -1,0 +1,46 @@
+{
+  "reviewed_head": "7cbc0884e79d7057d58e9a1fce79dd4d6e1c9440",
+  "wheels_verified": [
+    {
+      "target": "aarch64-apple-darwin",
+      "path": "wheels/wheel-aarch64-apple-darwin/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_arm64.whl",
+      "sha256": "1dd5173d9be2bb7ae2b700d60bd14fa34328397fbdbf5eaf6866f8d99a299cf9",
+      "bytes": 6383014,
+      "reports": [
+        "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.10.json",
+        "wheel-evidence/evidence-wheel-aarch64-apple-darwin/python-3.14.json"
+      ]
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "path": "wheels/wheel-aarch64-unknown-linux-gnu/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+      "sha256": "4cdb22af15236852cb0df92893af27f384f7ca0ce70f0915cb8095379be060a1",
+      "bytes": 7027657,
+      "reports": [
+        "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.10.json",
+        "wheel-evidence/evidence-wheel-aarch64-unknown-linux-gnu/python-3.14.json"
+      ]
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "path": "wheels/wheel-x86_64-apple-darwin/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_x86_64.whl",
+      "sha256": "90cfc193498bdd68ca2334e2c24265b3a511a52c02118b000ac0850ad9341f96",
+      "bytes": 6634900,
+      "reports": [
+        "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.10.json",
+        "wheel-evidence/evidence-wheel-x86_64-apple-darwin/python-3.14.json"
+      ]
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "path": "wheels/wheel-x86_64-unknown-linux-gnu/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+      "sha256": "dcec93407c4da89bac1171c8eedb33afc4dc9c6358d5d337d38cd20298d2e67c",
+      "bytes": 7155177,
+      "reports": [
+        "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.10.json",
+        "wheel-evidence/evidence-wheel-x86_64-unknown-linux-gnu/python-3.14.json"
+      ]
+    }
+  ],
+  "scope": "Actual downloaded wheel hashes matched paired successful isolated installed CPython receipts; official Blender gates pending."
+}

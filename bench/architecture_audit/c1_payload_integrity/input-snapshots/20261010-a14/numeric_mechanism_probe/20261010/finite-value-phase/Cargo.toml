@@ -1,0 +1,8 @@
+[package]
+name = "c1-payload-serde-proof"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["float_roundtrip", "raw_value"] }

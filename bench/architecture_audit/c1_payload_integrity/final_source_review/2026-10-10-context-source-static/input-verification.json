@@ -1,0 +1,127 @@
+{
+  "preparedFilesVerified": 142,
+  "contexts": 12,
+  "aggregateCases": 5,
+  "cases": [
+    {
+      "case": "root-tileset",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "external-tileset",
+      "suppliedSlices": 4,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "metadata-schema-root",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "metadata-schema-payload",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "conversion-report",
+      "suppliedSlices": 4,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "local-gltf",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "glb-json",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "b3dm-feature-table",
+      "suppliedSlices": 4,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "b3dm-batch-table",
+      "suppliedSlices": 5,
+      "targetDominanceVerified": true,
+      "components": 4,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "b3dm-embedded-glb",
+      "suppliedSlices": 4,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "subtree-json",
+      "suppliedSlices": 4,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "nested-metadata-extras",
+      "suppliedSlices": 5,
+      "targetDominanceVerified": true,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "same-uri-cache",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": false,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "resolved-alias-cache",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": false,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "distinct-byte-identical-members",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": false,
+      "components": 6,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "shared-position-primitives",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": false,
+      "components": 3,
+      "fullReportTruthVerified": true
+    },
+    {
+      "case": "unused-viewless-accessor",
+      "suppliedSlices": 3,
+      "targetDominanceVerified": false,
+      "components": 4,
+      "fullReportTruthVerified": true
+    }
+  ],
+  "scope": "Independent static supplied-slice/metric/archive/report review; no target execution"
+}

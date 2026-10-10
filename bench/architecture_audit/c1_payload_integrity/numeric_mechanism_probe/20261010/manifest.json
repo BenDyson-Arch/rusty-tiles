@@ -1,0 +1,60 @@
+{
+  "classification": "Actual coordinator-owned pinned serde finite Value-first exploratory phase and selected iterative borrowed raw mechanism; no production acceptance",
+  "at": "2026-10-10T09:16:22.203194+00:00",
+  "files": {
+    "Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "build-iterative-raw-initial-node-expectation-failure.log": "c69417ff1a2dfc00114cd5568b05475672e646a48009541ab7919a9dd54d4182",
+    "build-portable-source-final.log": "d3574cac645b58531e1690416e13ccda7e0fbaad9f8aa93cbd22e0c5c24d58f5",
+    "build.log": "62964548b373437e07afa672f7ed5a1bf68b0dd2d8bf9fa555a30e8967add173",
+    "finite-value-phase/Cargo.lock": "80458a011fe2f97b7161c1a6bc116ba63bb5d1d0f288941e044a5b55f8777768",
+    "finite-value-phase/Cargo.toml": "82483cefcd2c2a04fac13172c3cd5cfafd0a7bf6d6a36298aa2e9fe7a0f23617",
+    "finite-value-phase/build-actual-pinned-serde.log": "4ee378c3bac234d73ff57cdb322065fb4d42997e95f07b0efd6aacfdac2b9b8a",
+    "finite-value-phase/main.rs": "d5d5df28438d24ae791e226288c91c26175cd68300fbf48d9a3c9c1278bd66e0",
+    "finite-value-phase/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "finite-value-phase/receipt.json": "67f527366f8d2072782c1a0835a7f96049e3b5d9e3d3ddf0595b877d882b6cf3",
+    "receipt-portable-source-final.json": "a1bcaa2f51f0a1a65d9cc922b48a92514a131e7ba1c8a7f9764d59cf0084da75",
+    "src/main.rs": "cd6f27e71ef93743d17bff6f2dde841c99c724b5a76ffac9deee4ee0f10c29e1",
+    "src/original-json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/raw_admission.rs": "d49badd15af3673611f00e2a7a6e00657df0ad4eefb0d07e49212ae5a5c56246"
+  },
+  "argv": [
+    "cargo",
+    "run",
+    "--offline",
+    "--locked",
+    "--manifest-path",
+    "/tmp/rusty-tiles-payload-serde-proof/Cargo.toml"
+  ],
+  "exit_code": 0,
+  "binary": {
+    "path": "/tmp/rusty-tiles-payload-serde-proof-target/debug/c1-payload-serde-proof",
+    "sha256": "1cfe2242f9b68ce42d26888b163369bc21501c8fe185b4320e9270b9ab8a6290"
+  },
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "cpu_policy": {
+    "absolute_nice": 10,
+    "affinity": [
+      0,
+      1
+    ],
+    "cargo_jobs": 2,
+    "rayon_threads": 2,
+    "test_threads": 2
+  },
+  "limits": {
+    "json_bytes": 8388608,
+    "depth": 64,
+    "logical_nodes": 65536
+  },
+  "probe_corrections": [
+    "Initial serde1.0.228 offline resolution failed; actual pinnedprojectserde1.0.229 corrected before execution.",
+    "Initial root node expected7 incorrect; actual6 logicalvalues, probe expectation corrected. Failedlog preserved."
+  ],
+  "proof_limits": [
+    "Not a payload production implementation or codec acceptance.",
+    "Existing first owned Value route only covers finiteFP64 domain; iterative raw route admits1e400 and distinguishesexact unsigned overflow/fractionals withoutglobalAP or normalization.",
+    "Temporary rawskip allocation/scan and record extraction bounds require separate source adjudication.",
+    "Compounderror precedence differs: immediatecontainer duplicate/admission before descendantprocessing."
+  ]
+}

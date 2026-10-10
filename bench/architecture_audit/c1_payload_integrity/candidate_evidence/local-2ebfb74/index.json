@@ -1,0 +1,369 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourceTree": "1881bb5a90cf94f261925a44fd80720bf16084fb",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "records": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/aborted-fixture-packaging-build/library.log",
+      "file": "aborted-fixture-packaging-build__library.log.gz",
+      "bytes": 73,
+      "sha256": "6ac5bdf3a6a2c88fe37962ba48be9e0393fdfd19a51b4fb47d96a680d579b3ca",
+      "gzipBytes": 84,
+      "gzipSha256": "bc2e5a90a3ba6b9a3f9e8adb7d6be932d48406fb690da5a865b3b7195562cab1"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/aborted-fixture-packaging-build/receipt.json",
+      "file": "aborted-fixture-packaging-build__receipt.json.gz",
+      "bytes": 544,
+      "sha256": "565d22b1332f1421feb545a5be4315bd67bbd74d2b7c60bfdf95a86b9d3f135e",
+      "gzipBytes": 355,
+      "gzipSha256": "f1ecd2ef57d9d99d8dde4f04660fcc46de95174df8708c87373b580ae3f8cfdb"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/c1-producer-local-two-workers-binding.json",
+      "file": "c1-producer-local-two-workers-binding.json.gz",
+      "bytes": 623,
+      "sha256": "11a7622ff2f9ed6f8810b4c0c21adf2edf9f4b5d36b41d55acc95c2751889078",
+      "gzipBytes": 423,
+      "gzipSha256": "2acdcf064facf9d4d69fd589e9ccd160d2b38840ce0dd4460f032626e7698a8c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/c1-producer-local-two-workers.py",
+      "file": "c1-producer-local-two-workers.py.gz",
+      "bytes": 3047,
+      "sha256": "19dc9b4f1b4c3e5995b0eef992b8742f59e05f88d2c2f097a348c397c40f1e1d",
+      "gzipBytes": 1409,
+      "gzipSha256": "337c2d42b31fd6ae76e6b00f3340ccf7ada2e4c687e314c5cce31ed21af268be"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/bindings-clippy-receipt.json",
+      "file": "final-build__bindings-clippy-receipt.json.gz",
+      "bytes": 663,
+      "sha256": "9b68870e1f1caea776175e12fe7a92f14dbada18272305b4731e2e4281405366",
+      "gzipBytes": 429,
+      "gzipSha256": "eb05f466893fbcbd5f37d24fc41f5e159083a3ab357cc1b2cfdc6074d4a19508"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/bindings-clippy.log",
+      "file": "final-build__bindings-clippy.log.gz",
+      "bytes": 297,
+      "sha256": "1e4f7feea3b54df448fe312c48f69a2913de07fc79a86666ff88a5780936b01a",
+      "gzipBytes": 187,
+      "gzipSha256": "7fcdd24db1b34b0e10b58aa70419753ef9552e0df251b8885d223b4768149853"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/context-executions.json",
+      "file": "final-build__context-executions.json.gz",
+      "bytes": 69171,
+      "sha256": "8c157291839cba22339724464c022e2d70581b0fddc983576755cc32c03b9333",
+      "gzipBytes": 4495,
+      "gzipSha256": "db207433cc329e8528f454e720885eb3ece33dec19a5b3868071d69add091b1c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/context-harness-receipt.json",
+      "file": "final-build__context-harness-receipt.json.gz",
+      "bytes": 115036,
+      "sha256": "69ead205c232a21504ac2ff4c95181f3a806d734a80610f8e7ab25d1721133d1",
+      "gzipBytes": 14835,
+      "gzipSha256": "f0b01c3791bcf5b774548e4a446c2e3c7980775fd3031328f132ea1146f6c2d1"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/format-check.log",
+      "file": "final-build__format-check.log.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/library.log",
+      "file": "final-build__library.log.gz",
+      "bytes": 87353,
+      "sha256": "d0cd9859bbc2845a69560c4419b66829c5967bf7a989bd01344af18946c2ca73",
+      "gzipBytes": 14157,
+      "gzipSha256": "8f0137a26f2b1bf2b83485ed9676fe58ecf34b280fc25fd6e954e266058126ea"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/native-cli-build.log",
+      "file": "final-build__native-cli-build.log.gz",
+      "bytes": 286,
+      "sha256": "e757bbb32d6c3413eb00965427c5053a1fc3aa7b321cf387b5b05ccd1b32ed28",
+      "gzipBytes": 184,
+      "gzipSha256": "b6af637097d6200b13c34596b13a25a136d68158b477caddeca74a4084bcf3c7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/native-cli-receipt.json",
+      "file": "final-build__native-cli-receipt.json.gz",
+      "bytes": 743,
+      "sha256": "b3006141bec73d5ba5c8aac3b8fb00b042d45e13a543c61d9d5742310c8d1f42",
+      "gzipBytes": 463,
+      "gzipSha256": "561e2462b70167c10b41ec35b524df4151dfa91247e1ff935b782b4aa5cef206"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/native-clippy-receipt.json",
+      "file": "final-build__native-clippy-receipt.json.gz",
+      "bytes": 703,
+      "sha256": "b96b008a6a4b28681719708d730378a421847920693b1de223ddd17ebf1d97e0",
+      "gzipBytes": 447,
+      "gzipSha256": "ab9c12601888088bb1595befc3dc843f692e51276d2baad0317e2c3603de076f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/native-clippy.log",
+      "file": "final-build__native-clippy.log.gz",
+      "bytes": 201,
+      "sha256": "2a3455b460a1a8996240265f8cdde9fb80362ebe7e03a28705b3fd61d4517246",
+      "gzipBytes": 163,
+      "gzipSha256": "21e155429f4c143cdc0cef1f9443166c5bd14f7f58cd0f645adfb42af2e771ee"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-build.log",
+      "file": "final-build__portable-cli-build.log.gz",
+      "bytes": 202,
+      "sha256": "b62e7349569331b501304c38d200ad6ebfc8d42011f9485fd81345aed3924d86",
+      "gzipBytes": 156,
+      "gzipSha256": "077e70bdf67c1410748ddb480e2184ba1b36f3ad3eab17c51242cf099e18ffb2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/portable-cli-receipt.json",
+      "file": "final-build__portable-cli-receipt.json.gz",
+      "bytes": 661,
+      "sha256": "e6154001de0d1046197c98bc8624807219a21b5fb6651fbd74a478032be4ce96",
+      "gzipBytes": 397,
+      "gzipSha256": "f5c22056ea41a086ccd4f6cd870ff900eb21370dae1f07c66ec725e3ef736c4b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/receipt.json",
+      "file": "final-build__receipt.json.gz",
+      "bytes": 738,
+      "sha256": "1eeb520bf1b39ce6c308053f8399fb67892812882f3ccc2b830aa9f996f22589",
+      "gzipBytes": 428,
+      "gzipSha256": "d585be1b74f65da6b5adb17893e778b298322ffaa0c518da92a11f458668172d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-build/source-pin.json",
+      "file": "final-build__source-pin.json.gz",
+      "bytes": 46896,
+      "sha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+      "gzipBytes": 11091,
+      "gzipSha256": "74fe0565d8d7fe72c1ec1c7d5201bbf116259860ae4f51695b9b4781bba3f5b4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-native-210.json",
+      "file": "final-native-210.json.gz",
+      "bytes": 829902,
+      "sha256": "ecbc4486c4e5973ccbcb7ef67460309ae10daa05a764a345bb7e8d37022a1fe1",
+      "gzipBytes": 85537,
+      "gzipSha256": "34e7b7fbedb58a314cf5bc96d06ead351b6c382154f714b3088dcbff602a7fef"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-native-210.log",
+      "file": "final-native-210.log.gz",
+      "bytes": 22751,
+      "sha256": "88d48b3395b08c3a282b9a91c337a601128e4ffb0c8ba60dccd23f2bbffcd78f",
+      "gzipBytes": 1862,
+      "gzipSha256": "2017d881214fccc352825c64152aa6c1412c41bd1f08a60713e020aecbe6ee49"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-portable-210.json",
+      "file": "final-portable-210.json.gz",
+      "bytes": 831362,
+      "sha256": "b74c034f326988e5848adc35b0e35e489b06118fa6a24bd71fd300488f417c4e",
+      "gzipBytes": 85689,
+      "gzipSha256": "b7bfcf361d50ec94df1df1834df9836ed92aa0e67948e1ce758021595535d8d9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/final-portable-210.log",
+      "file": "final-portable-210.log.gz",
+      "bytes": 22753,
+      "sha256": "ce56b8dc98c2daab85155c9b14a526ccc63811aee75150c85b44108c0a3ff182",
+      "gzipBytes": 1865,
+      "gzipSha256": "8b784b1316d644b57a6c7fdaa7f0fc102c53e795b8dcb699cc32bc3acd3dc956"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/initial-build/library.log",
+      "file": "initial-build__library.log.gz",
+      "bytes": 34211,
+      "sha256": "c989263a4a6a23c349323ef66c0930940ffcc336a07f9ce30c6fdc3e8b88abb7",
+      "gzipBytes": 8825,
+      "gzipSha256": "63e25b13ddbc3d12201f71864f8e9bcd90a9ea2003f82566f2ec77cfa516da05"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/initial-build/receipt.json",
+      "file": "initial-build__receipt.json.gz",
+      "bytes": 745,
+      "sha256": "3edc02b1c56fd903ea81da0f153e78f3920baf26e563a17a12274ffff27a2b68",
+      "gzipBytes": 445,
+      "gzipSha256": "2e3373268e249eb683086489ec72dcf19a46de6de3b92e8ed73e56342c6bce06"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/initial-build/source-pin.json",
+      "file": "initial-build__source-pin.json.gz",
+      "bytes": 10023,
+      "sha256": "a6f605b05861767d5119e0eda501972f54e1702ba87d0e578a109f90af6782c7",
+      "gzipBytes": 4958,
+      "gzipSha256": "781f061e10728e9163a6eb74c4e48f07f26a8280111ceb300a05ca45732a95fa"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/integration-executions.json",
+      "file": "integration-executions.json.gz",
+      "bytes": 8217,
+      "sha256": "bae02836ff47374292ad8d0745558f6e91ea921cba2dcface0dcd8fc9d38f962",
+      "gzipBytes": 1459,
+      "gzipSha256": "24c5056f122d9654771f5b8c0bdac7a0a1040925f27e92602e828b80bdce8394"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/integration-executions.log",
+      "file": "integration-executions.log.gz",
+      "bytes": 7326,
+      "sha256": "73141ae01198a67b224c71fad34d728eb6771215e1bad4c42fd8a377c40b7dbf",
+      "gzipBytes": 1416,
+      "gzipSha256": "041c84cfa28b819c0dd08fedf640f64140e7d66d52f98e78c760083799079215"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-archive45.json",
+      "file": "native-archive45.json.gz",
+      "bytes": 48723,
+      "sha256": "574ddc4d46d4044cac6a055226b9ac5a2ac2494f86c3e92b93c566140ba83f62",
+      "gzipBytes": 4627,
+      "gzipSha256": "c0c31e66e4b78bd663a0ef43226b19c3f93ca97d413a73395aae903388c9e461"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-archive45.log",
+      "file": "native-archive45.log.gz",
+      "bytes": 103,
+      "sha256": "1aa001655bc676d82e31845957f471c018e51c13110f5b52ecacf719d992f3cb",
+      "gzipBytes": 108,
+      "gzipSha256": "51aa878e8a6b4d49f64e878762a24551216be57c130bbb21dedb3e75ec82d7b9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-c1-corpus.json",
+      "file": "native-c1-corpus.json.gz",
+      "bytes": 96437,
+      "sha256": "aa3bf3003ab083a769f92fa19fa8a78af6b7d87f43e556ee713671acd37a88ab",
+      "gzipBytes": 3987,
+      "gzipSha256": "40fd2fb82490a4ec2f493603b9a7cee4c3ce561733922281d697b97ed1e65edd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-c1-corpus.log",
+      "file": "native-c1-corpus.log.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-producer.json",
+      "file": "native-producer.json.gz",
+      "bytes": 2539,
+      "sha256": "9fe8d04124b8ca3f820cf3863429eb2b8e473ebf91b32a20e9cffb90597ac866",
+      "gzipBytes": 960,
+      "gzipSha256": "5397efbdcd9a35a67fda82f4e39d2eba89669dc39eb78c72c5555942a6be82e5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-producer.log",
+      "file": "native-producer.log.gz",
+      "bytes": 32,
+      "sha256": "c9a39dffe6d5d37775c3aec7af3f80139987fa8d3fc9dd7bca0d0fcfcbba7ccd",
+      "gzipBytes": 51,
+      "gzipSha256": "8929a3341c7d30ef61c52817ab27e435cc2919badcd1f753028b305951c1e40a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-resources20.json",
+      "file": "native-resources20.json.gz",
+      "bytes": 17261,
+      "sha256": "0ae2740a2acfbcbedd2df3ff5ece38d7d5f2f512a04cc8a915a4273926593cf4",
+      "gzipBytes": 1883,
+      "gzipSha256": "1294bb282e25cf47d079906364e211aaeedf8102f13d856b76a17c737a9f4e5a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/native-resources20.log",
+      "file": "native-resources20.log.gz",
+      "bytes": 104,
+      "sha256": "a3fb766eae6b38406e89735fa6d512bae5ec5bf8e553d675c60614c54ee9f8f8",
+      "gzipBytes": 109,
+      "gzipSha256": "f34d58362ae20a12def07c1fc63aac6f3722114343101a5f15dd70b1a4b694a9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-archive45.json",
+      "file": "portable-archive45.json.gz",
+      "bytes": 48931,
+      "sha256": "f548e4d7a3fc584b5a4d33f53593aeead39832fe73b46a0f4697c3c23c6216b4",
+      "gzipBytes": 4632,
+      "gzipSha256": "4e01158571138ce00425bc62e7a1130abe4944a52058a207ab9365b8ccbf0207"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-archive45.log",
+      "file": "portable-archive45.log.gz",
+      "bytes": 105,
+      "sha256": "53a091e1e642d5d803f6fb9af34006ab43c08e4855d029188c0952e5fc25c329",
+      "gzipBytes": 109,
+      "gzipSha256": "9bbf17ac809b5ba7fdc5113dec2a4705a1bfed8f41632b13796122f572c1b454"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-c1-corpus.json",
+      "file": "portable-c1-corpus.json.gz",
+      "bytes": 96515,
+      "sha256": "29c61c8bab5a0c0029e9225f70bcbe383b396758b44ffbf538a2fae30c18e309",
+      "gzipBytes": 3988,
+      "gzipSha256": "03ba5c21fc8620ef1f6bb9e675f0f1a51a16c5519c67cba5f145f45c641cd729"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-c1-corpus.log",
+      "file": "portable-c1-corpus.log.gz",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipBytes": 20,
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-producer.json",
+      "file": "portable-producer.json.gz",
+      "bytes": 2957,
+      "sha256": "05cfd0a7a6e558eef32a8bbe29ac876e58ded28f9ca84a66325916bfb4c95bad",
+      "gzipBytes": 1032,
+      "gzipSha256": "b8bc4971426a8d2df5cdff75b44fa1c71d5e56cafeca091aa25e651ae9914e5c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-producer.log",
+      "file": "portable-producer.log.gz",
+      "bytes": 32,
+      "sha256": "07be06361f68334f8d4d84e3399c352feb27f6d26ed66f5a5cf5712470c8725c",
+      "gzipBytes": 51,
+      "gzipSha256": "7ac6c91caa49b429bdd36653d4f8ab253af2c7c697889b1b3e3698e57a3ef306"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-resources20.json",
+      "file": "portable-resources20.json.gz",
+      "bytes": 17276,
+      "sha256": "4a711c679ba67eaad21aa60326b65b193d752708700954bcd7de294b4b32e3c9",
+      "gzipBytes": 1901,
+      "gzipSha256": "b870985f3897d02a22ebff17b55dd48856ce23102deec5acea5426bee3f04a25"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-resources20.log",
+      "file": "portable-resources20.log.gz",
+      "bytes": 106,
+      "sha256": "244a02acf42dda5bc4e2fbaff7be9692693437c393d28eb3456af58bd62db51d",
+      "gzipBytes": 110,
+      "gzipSha256": "55ddb5fc61ec46114d041a6956be6514630252060d739661c0e76383e67d9775"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/run-final-integrations.py",
+      "file": "run-final-integrations.py.gz",
+      "bytes": 2063,
+      "sha256": "433879e787b233894091c14f565a0e48cf956194ee105f3bfe463a01ebfc0949",
+      "gzipBytes": 913,
+      "gzipSha256": "a00c847df22c69eef7cdf251e4e88da58a69f63a8d9c9c556a0d8139a2aa5406"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-payload-final-evidence/portable-205/runs",
+      "file": "historical-original-205-streams.tar.gz",
+      "bytes": 399360,
+      "sha256": "f5e750b50c139e05ffb59c019dafd7d65dca1ac00406fce005a7150fa787b617",
+      "gzipBytes": 9639,
+      "gzipSha256": "f61d1d3f213882fcb851dbf6e11fb7a78d2dbf0b9f2d3a37a28029e9884f71fa",
+      "scope": "Historical original205 raw stdout/stderr; actual204/1 remainsfailed."
+    }
+  ],
+  "scope": "Lossless local finite source/artifact/execution evidence; independent review and exact remote gates remain separate."
+}

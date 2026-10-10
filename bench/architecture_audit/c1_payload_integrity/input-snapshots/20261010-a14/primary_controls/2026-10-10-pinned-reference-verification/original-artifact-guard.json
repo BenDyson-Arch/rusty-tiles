@@ -1,0 +1,27 @@
+{
+  "additionalCliExecutionCount": 0,
+  "originalExecutionCount": 14,
+  "records": {
+    "adjudication.json": {
+      "matchesOriginalPin": true,
+      "sha256": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64"
+    },
+    "evidence-manifest.json": {
+      "matchesOriginalPin": true,
+      "sha256": "a17658126c251f71a3a050d1ee984d71f3e4582f4751d1225a382412c9fc7f85"
+    },
+    "probe.py": {
+      "matchesOriginalPin": true,
+      "sha256": "6ae3697e1fd07e5bce0809d16dd1fac4f9a78a5e6f4b9e2c6e9f355496023fb9"
+    },
+    "raw-evidence.tar.gz": {
+      "matchesOriginalPin": true,
+      "sha256": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead"
+    },
+    "receipt.json": {
+      "matchesOriginalPin": true,
+      "sha256": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174"
+    }
+  },
+  "schemaVersion": 1
+}

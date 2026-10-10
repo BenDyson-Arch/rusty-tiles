@@ -1,0 +1,35 @@
+{
+  "originalUploadSha256": "669eb8f547b8b868292a3ffcb9ce28feceef85505beef5706976ec25ba857023",
+  "originalUploadBytes": 133158,
+  "originalApiLogSha256": "a6ef3061719aa8dc4d790abd3a41424d34ca8379f6fca19709dedd7f80334d7f",
+  "fullLibraryPassed": 367,
+  "diagnosticIntactRecords": 77,
+  "diagnosticCorruptMarkerLines": [
+    {
+      "error": "Expecting ':' delimiter: line 1 column 333 (char 332)",
+      "originalLine": "{\"actualReportSha256\":\"4ba38a0d12bdcc3e5c86655e4fbdd7ca800a3fab8a15c7ad91d1d9778b473538\",\"archiveSha256\":\"b68a252c72f16e2625c5339155f22b8aa49aded41764b07294d21a0d2de1cf24\",\"fact\":\"totalPayloadElements\",\"independentContextControl\":\"shared-position-primitives\",\"outcome\":\"admitted\",\"readOnly\":true,\"selectedLimits\":{\"accessorElements\"test payload_context_acceptance::actual_c1_batch_table_selected_limits ... :4096,ok\""
+    },
+    {
+      "error": "Expecting ':' delimiter: line 1 column 412 (char 411)",
+      "originalLine": "{\"actualReportSha256\":null,\"archiveSha256\":\"9474d0853c149f6ef2fe865cf2b6576cf859b94c20cad79e4da5d6ad1ef48887\",\"fact\":\"depth\",\"independentContextControl\":\"metadata-schema-payload\",\"outcome\":\"resource_limit\",\"readOnly\":true,\"selectedLimits\":{\"accessorElements\":4096,\"archiveEntries\":256,\"archiveStoredBytes\":1048576,\"centralDirectoryBytes\":65536,\"documentDecodedBytes\":262144,\"documentItems\":8192,\"hierarchyDepth\"test payload_context_acceptance::actual_c1_glb_json_selected_limits ... ok"
+    },
+    {
+      "error": "Unterminated string starting at: line 1 column 154 (char 153)",
+      "originalLine": "{\"actualReportSha256\":null,\"archiveSha256\":\"6d1ccd3303c9f999cc2c0cac64be6e3721d224a5a0897548e8d38073f2d170aa\",\"fact\":\"nodes\",\"independentContextControl\":\"root-tilesettest payload_integrity_acceptance::independent_meshopt_real_decoder_admission_and_primary_golden ... ok"
+    }
+  ],
+  "intactStartMarkers": 80,
+  "accepted82RecordReceipt": false,
+  "reconstructedOrDroppedRecords": false,
+  "selectedContextEmitterHasNoSpawnedWriters": true,
+  "ownedScopedThreadAndChildConcurrencyRemainsInTests": true,
+  "observedPrecodeInputsSha256": {
+    "bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/compiled_context_controls.rs": "327dee099efab3f4ff66906a08b738cac408bad309a9e28bc8b5b2ff990a65e9",
+    "tests/payload_context_receipt.py": "d981ccd2880c0b06c4056f782cbc00848371103a21803c5f5ab35eba016a664a",
+    "src/validate.rs": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563",
+    "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+    "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+    ".github/workflows/ci.yml": "c4dc1d436c4f9369c5c1c6bfaead6acc68ce983a215acab5552a61bfad326960"
+  },
+  "decision": "CI-only outer harness serialization is justified; actual corrected capture remains required"
+}

@@ -1,0 +1,70 @@
+{
+  "files": {
+    "EXT_meshopt_compression.md": {
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+    },
+    "KHR_mesh_primitive_restart-draft.md": {
+      "bytes": 4364,
+      "sha256": "44276f9cd67e65efe0c8ccc1cae23f2a845c1e34bf190935eb0c0333a2536707"
+    },
+    "KHR_mesh_quantization.md": {
+      "bytes": 12593,
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc"
+    },
+    "b3dm.featureTable.schema.json": {
+      "bytes": 1033,
+      "sha256": "c34c532c835f1bc73d4737b36a9f8b0e665421671f9d57830c970299637eb8d7"
+    },
+    "feature-table.adoc": {
+      "bytes": 6905,
+      "sha256": "3158281f21460941ccfd90a41dc0bffda04aeae5e5de296a5ba8197cc1934ece"
+    },
+    "featureTable.schema.json": {
+      "bytes": 5937,
+      "sha256": "a6500378c38d9af3f756bc8c3b23347f8329b37b12e0017a8729e2484a674587"
+    },
+    "fetch-receipt.json": {
+      "bytes": 4507,
+      "sha256": "05bf12891d71ce392cf56ed3ae910c61566a6cda238747355beb86912a0e9e21"
+    },
+    "golden-byte-comparison.json": {
+      "bytes": 1358,
+      "sha256": "9c14e31eda72a4a25d4cff019f3e25ec3ce811e6751107e52a56c0a38411c1f7"
+    },
+    "golden-compressed.bin": {
+      "bytes": 85,
+      "sha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a"
+    },
+    "golden-expected.bin": {
+      "bytes": 48,
+      "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
+    },
+    "json-schema-observation.json": {
+      "bytes": 608,
+      "sha256": "43812848dc41f79a4ce103a9c8487e7e2710c24fb2d8f8db6ad41ec743061083"
+    },
+    "meshopt_decoder.test.js": {
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+    },
+    "modern-b3dm.adoc": {
+      "bytes": 11172,
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e"
+    },
+    "original-artifact-guard.json": {
+      "bytes": 860,
+      "sha256": "91b4da8576d49ba5236edf17b0042358ed616212a8aba2868239547218f669da"
+    },
+    "verification.md": {
+      "bytes": 6480,
+      "sha256": "b49002ba5c41bb59c965b4c0f006f7a46724dbe127a049135c3437f7dceb43d3"
+    },
+    "verify_golden.py": {
+      "bytes": 3649,
+      "sha256": "11c999cf1d112b2ad8c8cca45c0e92b266adb0dbe539382e0931521906ee0295"
+    }
+  },
+  "schemaVersion": 1,
+  "scope": "Dated supplemental primary retrieval/read and golden literal identity only; original execution evidence unchanged."
+}

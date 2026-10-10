@@ -1,0 +1,14 @@
+{
+  "unchangedOriginalCases": 203,
+  "unchangedOriginalFiles": 834,
+  "correctedCases": 2,
+  "supplementalCases": 5,
+  "exactOriginalMalformedArchiveRetained": true,
+  "separateLittleEndianScalarsVerified": true,
+  "uniqueCCWLoopVerified": true,
+  "fullPositiveReportVerified": true,
+  "isolatedReferenceNegativeVerified": true,
+  "supplementalOnePropertySensitivityVerified": true,
+  "noFailureOverride": true,
+  "scope": "Static independent supplied bytes/expectations only; no target execution"
+}
