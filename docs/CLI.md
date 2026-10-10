@@ -355,8 +355,8 @@ is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 
 `--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. Schema 6/profile
-`f1d1-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`, output
+`conversion.json`, plus `cleanupDiagnostics`. Schema 7/profile
+`f1d2-adaptive-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`, output
 `coordinates` (`local-gltf` or `wgs84-ecef`), tagged `placement` with normalized
 parameters, and the exact emitted `root_transform`. It counts the root document
 as `source_bytes`; `external_files` and `external_bytes` count unique captured
@@ -369,14 +369,19 @@ retain all accepted triangles. An explicit root proxy is available with paired
 E must be finite and positive. The first proxy profile accepts opaque, untextured,
 positions-only geometry. It requires actual reduction, preserves authored
 components and material factors, and certifies a complete surface-distance bound
-before staging. The emitted root error is E after the bound is proved at most E;
-`meshReport.approximation` records the achieved count and actual certificate.
+before staging. Complete dyadic proof patches tighten the bound without changing
+the emitted geometry. The emitted root error is E after the bound is proved at
+most E; `meshReport.approximation.certificate` records `error_metres`, performed
+`patch_face_tests`, `accepted_patches` and `max_depth`. The fixed proof profile
+allows depth 24 and 16,777,216 global patch/target-face evaluations. Exhausting
+these limits means the requested bound could not be certified, even when the
+true distance is zero.
 Coarse picks expose `proxy_region` membership arrays; fine leaves retain exact
 `source_triangle` picking. Unsupported profile, target, error or work requests
-fail before staging. The [F1d1 contract](architecture/mesh-approximation-contract.md)
+fail before staging. The [F1d2 contract](architecture/f1d2-certificate-contract.md)
 records proof limits, including a potentially loose certificate and no general
 appearance guarantee. The
-[bounded evidence](../bench/architecture_audit/mesh_approximation/README.md)
+[bounded evidence](../bench/architecture_audit/mesh_approximation_f1d2/README.md)
 records independent decoding, public consumer queries and separate review.
 
 ## Machine output

@@ -1,0 +1,70 @@
+{
+  "scope": "Frozen CLI authored nonuniform fixture feasibility, all failures truthfully classified; no claimed depth control before actual gate",
+  "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+  "source_sha256": "1cda7eafa833f350042a474c492cb8fefda8ccd7345b56e8dc891b41a75521c0",
+  "cases": [
+    {
+      "limit": 31,
+      "budget": 1e-06,
+      "timeout": true
+    },
+    {
+      "limit": 30,
+      "budget": 1e-06,
+      "timeout": true
+    },
+    {
+      "limit": 16,
+      "budget": 1e-06,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/16-1e-06/result.3tz",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "16",
+        "--max-proxy-error-metres",
+        "1e-06"
+      ],
+      "source_sha256": "1cda7eafa833f350042a474c492cb8fefda8ccd7345b56e8dc891b41a75521c0",
+      "exit_code": 2,
+      "stdout": "{\"error\":{\"code\":\"unsupported\",\"kind\":\"unsupported\",\"message\":\"root proxy proposal did not achieve the requested actual reduction\",\"recovery\":null,\"retainedPaths\":[],\"secondaryDiagnostics\":[]},\"exitCode\":2,\"ok\":false}\n",
+      "stderr": "",
+      "output_parent_exists": false
+    },
+    {
+      "limit": 31,
+      "budget": 0.0001,
+      "timeout": true
+    },
+    {
+      "limit": 31,
+      "budget": 0.01,
+      "command": [
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "--json",
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/source.glb",
+        "-o",
+        "/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/31-0.01/result.3tz",
+        "--leaf-triangles",
+        "16",
+        "--root-proxy-triangles",
+        "31",
+        "--max-proxy-error-metres",
+        "0.01"
+      ],
+      "source_sha256": "1cda7eafa833f350042a474c492cb8fefda8ccd7345b56e8dc891b41a75521c0",
+      "exit_code": 0,
+      "stdout": "{\"cleanupDiagnostics\":[],\"conversionReport\":{\"archive\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/31-0.01/result.3tz\",\"entry\":\"conversion.json\"},\"counts\":{\"leaf_tiles\":2,\"triangles\":32},\"meshReport\":{\"approximation\":{\"appearance\":\"opaque-untextured-factors\",\"certificate\":{\"accepted_patches\":1587,\"error_metres\":0.007812500000001358,\"max_depth\":7,\"patch_face_tests\":65992},\"geometric_error_metres\":0.01,\"kind\":\"root_proxy\",\"regions\":1,\"triangle_limit\":31,\"triangles\":31},\"coordinates\":\"local-gltf\",\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_tiles\":2,\"leaf_triangles\":16,\"placement\":{\"kind\":\"local\"},\"profile\":\"f1d2-adaptive-root-proxy-gltf-v1\",\"root_transform\":[1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0],\"routing_geometric_error_metres\":1000000.0000080006,\"schema_version\":7,\"source_bytes\":1456,\"source_coordinates\":\"local-gltf\",\"triangles\":32},\"ok\":true,\"output\":\"/home/bend/.cache/rusty-tiles-f1d2-evidence/depth-nonuniform-probes/31-0.01/result.3tz\",\"reuse\":null,\"settings\":{\"external_bytes\":0,\"external_files\":0,\"image_bytes\":0,\"image_pixels\":0,\"images\":0,\"leaf_triangles\":16,\"routing_geometric_error_metres\":1000000.0000080006,\"schema_version\":7,\"source_bytes\":1456},\"skippedFeatures\":null}\n",
+      "stderr": "",
+      "output_parent_exists": true
+    }
+  ]
+}

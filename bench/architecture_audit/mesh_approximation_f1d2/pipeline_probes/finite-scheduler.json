@@ -1,0 +1,87 @@
+{
+  "kind": "independent_design_accounting_model",
+  "production_executed": false,
+  "baseline_supplied_by_coordinator": "3b5703231bf3991c2e37caef99989214308cc08d",
+  "source_sha256": {
+    "AGENTS.md": "eeca6a4e55e7cbd3beb84df63dafdfbc599006b8f38bdab7fb1d2fb30a7f70bc",
+    "docs/architecture/README.md": "978c2234f7f3d22368bf56b0579ceb42b4620eb87c367500e69cf5dd3e4f33e7",
+    "src/mesh_archive.rs": "59ed5f4d7a2f5f62209aa74befd13aa9980eb0f321e6c9d052d136f6edf8fae1",
+    "src/mesh_archive/approximation.rs": "42d9b6ca892ad31ba45d0b9911d95464181f7e55bf9294389857ee5a9256fc98",
+    "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+    "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+    "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+    "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+    "bindings/python/src/lib.rs": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9"
+  },
+  "driver_sha256": "f6f8fcdb7c31968664b91283382dfdf207864ef384dc416c43b80837e97d02df",
+  "profile_proposal": {
+    "work_limit": 16777216,
+    "depth_limit": 24,
+    "max_pending_per_root": 73
+  },
+  "cases": {
+    "base_refusal_without_evaluations": {
+      "outcome": "base_refusal",
+      "work": 0,
+      "base": 8,
+      "peak_pending": 0
+    },
+    "exact_cap_acceptance": {
+      "outcome": "accepted",
+      "work": 8,
+      "base": 8,
+      "visited": 2,
+      "accepted": 2,
+      "splits": 0,
+      "peak_pending": 1,
+      "checkpoints": [
+        0
+      ]
+    },
+    "complete_depth_one": {
+      "outcome": "accepted",
+      "work": 40,
+      "base": 8,
+      "visited": 10,
+      "accepted": 8,
+      "splits": 2,
+      "peak_pending": 4,
+      "checkpoints": [
+        0
+      ]
+    },
+    "dynamic_refusal_after_admitted_base": {
+      "outcome": "dynamic_refusal",
+      "work": 39,
+      "base": 8,
+      "peak_pending": 4,
+      "checkpoints": [
+        0
+      ]
+    },
+    "depth_refusal_does_not_assert_true_distance": {
+      "outcome": "depth_refusal",
+      "work": 4,
+      "base": 8,
+      "peak_pending": 1,
+      "checkpoints": [
+        0
+      ]
+    },
+    "bounded_checkpoint_cancellation": {
+      "outcome": "cancelled",
+      "work": 64,
+      "base": 8,
+      "peak_pending": 13,
+      "checkpoints": [
+        0,
+        64
+      ]
+    }
+  },
+  "limits": [
+    "Uses scripted acceptance depth rather than geometry.",
+    "Does not execute Rust, meshopt, F0, adapters or filesystem publication.",
+    "Establishes accounting-model consistency, not production resource guarantees."
+  ]
+}

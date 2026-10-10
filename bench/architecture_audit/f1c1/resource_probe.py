@@ -172,7 +172,7 @@ def finite(values):
 
 def inspect(output, expected, limit, payload, placed):
     report = payload['meshReport']
-    require(report['profile'] == 'f1d1-root-proxy-gltf-v1' and report['schema_version'] == 6, 'report profile/version')
+    require(report['profile'] == 'f1d2-adaptive-root-proxy-gltf-v1' and report['schema_version'] == 7, 'report profile/version')
     require(report['approximation'] == {'kind': 'full_detail'}, 'full-detail approximation mode')
     require(report['coordinates'] == ('wgs84-ecef' if placed else 'local-gltf'), 'coordinate mode')
     require(report['placement']['kind'] == ('wgs84' if placed else 'local'), 'placement kind')

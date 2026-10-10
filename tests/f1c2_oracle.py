@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import zipfile
 
-PROFILE = 'f1d1-root-proxy-gltf-v1'
+PROFILE = 'f1d2-adaptive-root-proxy-gltf-v1'
 LABELS = ('source_primitive', 'source_triangle')
 KEYS = ('node_index', 'mesh_index', 'primitive_index', 'triangle_index')
 SCHEMAS = (
@@ -268,7 +268,7 @@ def inspect_members(source, members, leaf_limit):
     remaining = set(truth)
     manifest = json.loads(members['tileset.json'])
     report = json.loads(members['conversion.json'])
-    require(report['schema_version'] == 6 and report['profile'] == PROFILE, 'report profile/schema')
+    require(report['schema_version'] == 7 and report['profile'] == PROFILE, 'report profile/schema')
     leaves = []
 
     def visit(tile):
@@ -503,7 +503,7 @@ def synthetic_members(source):
     if not doc['materials']:
         doc.pop('materials')
     return {'t/0.glb': glb(doc, binary), 'tileset.json': json.dumps(manifest).encode(),
-            'conversion.json': json.dumps({'schema_version': 6, 'profile': PROFILE}).encode()}
+            'conversion.json': json.dumps({'schema_version': 7, 'profile': PROFILE}).encode()}
 
 
 def self_test():

@@ -1,0 +1,1366 @@
+{
+  "schema_version": 1,
+  "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+  "report_schema_version": 7,
+  "status": "Complete bounded F1d2 observations and separate NONAUTHOR acceptance; no production/evidence blocker in this slice. Does not close #121/#113 or authorize release.",
+  "identities": {
+    "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+    "native_binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+    "release_binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9"
+  },
+  "receipt_index": "storage-index.json",
+  "coordinator_receipt": "coordinator-checks.json",
+  "artifact_runs": [
+    {
+      "receipt": "portable-oracle.json",
+      "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+      "driver_sha256": {
+        "f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+        "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+        "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+        "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+      },
+      "cases": [
+        {
+          "name": "grid",
+          "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+          "archive_sha256": "0922c5e74ba6d6d87f9f69b90a2e47d72ad03a415f9e9ee91fe0f60fd62560ce",
+          "member_sha256": {
+            "tileset.json": "eadcb83cd8b0c3a441f143b38832ff66c652482017a939bf46885d6da8228572",
+            "conversion.json": "dbe7a5ceb310b363a47f983e3461ac73672e2e4401ccf31760db079a5d4c5610",
+            "t/0.glb": "abc031741a1de36a11d580e0e2819f2165dea7feaf8200569f03f26b1b9b0b23",
+            "t/1.glb": "35eadc610b64e71cbddc02744e2458639816d1dd33925df466e9e728f87b687c",
+            "t/root.glb": "c3a644cfa661f0c22a0f8c2b90a12f4063ac8a64c189444b224f8900332b4d49"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "materialless",
+          "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+          "archive_sha256": "b63291b33c7d95a94f5deda0188a59ba8d69e7244a6bd4669099146736abe9d4",
+          "member_sha256": {
+            "tileset.json": "eadcb83cd8b0c3a441f143b38832ff66c652482017a939bf46885d6da8228572",
+            "conversion.json": "5a1b6e3cdf5991735bf8b18bdec25d3b5b87073c04ae4ed3f195464599507d39",
+            "t/0.glb": "b8411b56b24dd3710f7a04066201b952c646b055591f0dd97082862d7248cb94",
+            "t/1.glb": "0dd83c96a9faa6b396f8f2adf40aa6d720d85fc43e08be9c95f5bac9f759770b",
+            "t/root.glb": "3cb61a925892d236c05717c8adf56b9e8551ed48e0e85f3e57dbd8f33a5cff5c"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "instances",
+          "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+          "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+          "member_sha256": {
+            "tileset.json": "49442241f6c03336e75e818fded58f3cd3dfcc23272846437766fa95d5c18383",
+            "conversion.json": "744d60c0b9391d04ca9c7d7a352efe775882a57a00537a6954aee1a972192730",
+            "t/0.glb": "e39ab34b95eb6dfc0ffd5a89f851e6b3f8907c674d92f92f2f3b28312a32afe6",
+            "t/1.glb": "3de1edc49cba1eb2b5f79c918d885fa9d3d2ed87e055b695c80b667c59ff33be",
+            "t/10.glb": "1e6fd1da27f27382f2cf3c2ae5b726745bc1f54bfbd286fa8651ecb92931c0ed",
+            "t/11.glb": "8ff2d3f140596a341d190b6756dd834acc5a8fb95d221bf31b9703b255763004",
+            "t/12.glb": "61895937d123378d8bb104ca2ca9f1e4d0820cadec602d09486b2047ed75f639",
+            "t/13.glb": "13ba2556319ca108406aa8032b19fb52ca6048d783653ef303a997ae374a7bca",
+            "t/14.glb": "1721727fcf83973d5c4c2fb09f8e82a741771b84ffee9b7aa1a6201112e06a4c",
+            "t/15.glb": "b71c0571b438de801e85ade63f1b8beffeb22a048bb6b5237ef68ac185e1c095",
+            "t/2.glb": "f6e98b5ef464cbf4717e290b806f854cdd5c349ad67130298050a4ace154ddd3",
+            "t/3.glb": "b2125d47a9705586f86a19cf12881b02571c3a317c01f9ef502be4e011ca4388",
+            "t/4.glb": "26ace09d28e909de9c387a733af914d002f95bac2cc333d2869a11b30b84293b",
+            "t/5.glb": "2608ec662266a9c285b4130c0eeb1bc4577621bbaa8861863852dfb3c690a0c4",
+            "t/6.glb": "33d62f782b26374f43dd34b9927dceb3854327e00c5f46126e8e7a12f47391f2",
+            "t/7.glb": "a6325992c2300e2d7e4a554908164fb7fa5ad05d94b6cf7cb09b81a92db59709",
+            "t/8.glb": "6ec2d0f1e5e74164a645db30f4cc6a652db2f3bbc7142e5947affe4079d808b8",
+            "t/9.glb": "e521eee724c9c20b95a9aeac2a66cd593497ab9bcbf8074f3f2f50accb160fa6",
+            "t/root.glb": "c1c36e37dd2411d52467518d6c007eb886fb7547b26c50d392363ed195cd1184"
+          },
+          "source_faces": 192,
+          "proxy_faces": 44,
+          "regions": 6,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 2816,
+            "root_patches": 236,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "780bf82143b08a6c31b27029b09ca00a3114082a57d426ead60b2535d082a2ac",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "f6420b946625646ef38ef8b6b4b0c39e66de291f292a7d3be82a32924f150451",
+                "proxy_sha256": "8a045447668f417e0f31d54f4554a04648b90f75a27c9ba335e978df0d3e5c28",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "3b52207e1bd0b4fd1197c21eb0f2f09c09616e2ccd39eb680b590b9a3df2ba66",
+                "proxy_sha256": "89699a520013b3c9ca953591c402a57360ebe15fb23bb3cda4b6b10c890d35b1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "c3dc80325e3dfe01ab0ef20ca9a15e4f8a5c71743ea4c74d826a8b213f2ec042",
+                "proxy_sha256": "87dd8c105bbc0edf262da0c3638a9d534be34558ab71a5173951d99bc36c86e1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "59b7f46670d94502b16e346be441f6d691945eebc2424534018fa6e42ad31bc8",
+                "proxy_sha256": "49f4add83e3f609055091dcc2e7c6f8c7e506449436a8be780d4f51ba161bc22",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "197619a537877294f23a3155334d6ddfaa73b773b55fda4b5c62f2aeb6324248",
+                "proxy_sha256": "bc23f2810c3a4c80f25ef7b5e790105241f7e6b51a99ad802b137ffdd0630a47",
+                "source_faces": 32,
+                "proxy_faces": 7
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "viewer",
+          "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+          "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+          "member_sha256": {
+            "tileset.json": "49442241f6c03336e75e818fded58f3cd3dfcc23272846437766fa95d5c18383",
+            "conversion.json": "744d60c0b9391d04ca9c7d7a352efe775882a57a00537a6954aee1a972192730",
+            "t/0.glb": "e39ab34b95eb6dfc0ffd5a89f851e6b3f8907c674d92f92f2f3b28312a32afe6",
+            "t/1.glb": "3de1edc49cba1eb2b5f79c918d885fa9d3d2ed87e055b695c80b667c59ff33be",
+            "t/10.glb": "1e6fd1da27f27382f2cf3c2ae5b726745bc1f54bfbd286fa8651ecb92931c0ed",
+            "t/11.glb": "8ff2d3f140596a341d190b6756dd834acc5a8fb95d221bf31b9703b255763004",
+            "t/12.glb": "61895937d123378d8bb104ca2ca9f1e4d0820cadec602d09486b2047ed75f639",
+            "t/13.glb": "13ba2556319ca108406aa8032b19fb52ca6048d783653ef303a997ae374a7bca",
+            "t/14.glb": "1721727fcf83973d5c4c2fb09f8e82a741771b84ffee9b7aa1a6201112e06a4c",
+            "t/15.glb": "b71c0571b438de801e85ade63f1b8beffeb22a048bb6b5237ef68ac185e1c095",
+            "t/2.glb": "f6e98b5ef464cbf4717e290b806f854cdd5c349ad67130298050a4ace154ddd3",
+            "t/3.glb": "b2125d47a9705586f86a19cf12881b02571c3a317c01f9ef502be4e011ca4388",
+            "t/4.glb": "26ace09d28e909de9c387a733af914d002f95bac2cc333d2869a11b30b84293b",
+            "t/5.glb": "2608ec662266a9c285b4130c0eeb1bc4577621bbaa8861863852dfb3c690a0c4",
+            "t/6.glb": "33d62f782b26374f43dd34b9927dceb3854327e00c5f46126e8e7a12f47391f2",
+            "t/7.glb": "a6325992c2300e2d7e4a554908164fb7fa5ad05d94b6cf7cb09b81a92db59709",
+            "t/8.glb": "6ec2d0f1e5e74164a645db30f4cc6a652db2f3bbc7142e5947affe4079d808b8",
+            "t/9.glb": "e521eee724c9c20b95a9aeac2a66cd593497ab9bcbf8074f3f2f50accb160fa6",
+            "t/root.glb": "c1c36e37dd2411d52467518d6c007eb886fb7547b26c50d392363ed195cd1184"
+          },
+          "source_faces": 192,
+          "proxy_faces": 44,
+          "regions": 6,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 2816,
+            "root_patches": 236,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "780bf82143b08a6c31b27029b09ca00a3114082a57d426ead60b2535d082a2ac",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "f6420b946625646ef38ef8b6b4b0c39e66de291f292a7d3be82a32924f150451",
+                "proxy_sha256": "8a045447668f417e0f31d54f4554a04648b90f75a27c9ba335e978df0d3e5c28",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "3b52207e1bd0b4fd1197c21eb0f2f09c09616e2ccd39eb680b590b9a3df2ba66",
+                "proxy_sha256": "89699a520013b3c9ca953591c402a57360ebe15fb23bb3cda4b6b10c890d35b1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "c3dc80325e3dfe01ab0ef20ca9a15e4f8a5c71743ea4c74d826a8b213f2ec042",
+                "proxy_sha256": "87dd8c105bbc0edf262da0c3638a9d534be34558ab71a5173951d99bc36c86e1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "59b7f46670d94502b16e346be441f6d691945eebc2424534018fa6e42ad31bc8",
+                "proxy_sha256": "49f4add83e3f609055091dcc2e7c6f8c7e506449436a8be780d4f51ba161bc22",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "197619a537877294f23a3155334d6ddfaa73b773b55fda4b5c62f2aeb6324248",
+                "proxy_sha256": "bc23f2810c3a4c80f25ef7b5e790105241f7e6b51a99ad802b137ffdd0630a47",
+                "source_faces": 32,
+                "proxy_faces": 7
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "coincident-keys",
+          "source_sha256": "4529c304584207e388e14c6bd3cf30f6a1f72b73cc0d4e2c196f56b056ef2b9b",
+          "archive_sha256": "2a57fee0f5e67bbcbffb3d6bf7c79f71c493688ac1c4af34f2cb1fc91a674981",
+          "member_sha256": {
+            "tileset.json": "6a3e2750dc0ff480be17b2d2d25e6b4f12b370bcb336ba002884d757981f7686",
+            "conversion.json": "e25004e8ad390b7a98954ac647ac040a2b9b46588b63d798e9ccad73ff30866f",
+            "t/0.glb": "326628a71640acb0e3165312233e548ba81fbd713f03920bf5e1bc8b693c4a88",
+            "t/1.glb": "c551ba8cb9ad1d6ce6c8cd18d0007d5247582901355dab2a8aceae33ad299c39",
+            "t/2.glb": "3a548d477c929e35192efa474a7264b3aa749d08cf160654ac6786033539457d",
+            "t/3.glb": "911e4458ef8dfd5cea43e2d4c641cdd22f7674efddc340a8800c1e09da76c639",
+            "t/root.glb": "3f87d423898805c3be929b582046057f86bc2a6d9957cae1551a739797fd3969"
+          },
+          "source_faces": 64,
+          "proxy_faces": 14,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 1792,
+            "accepted_patches": 78,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 1792,
+            "root_patches": 78,
+            "patch_face_tests": 1792,
+            "accepted_patches": 78,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "cbf26c772c2250aff2af8c3c25e3655f76746920788c72eb8066b53dfb058d85",
+                "proxy_sha256": "8539883a2bdc9ffd6af4d3ae3ef533ced6245f6d7f4b8445f62bb099775ae3a1",
+                "source_faces": 64,
+                "proxy_faces": 14
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "useful-tightening",
+          "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+          "archive_sha256": "ec89c660bce5ec3b2085d6101c4ffe54e3d3ad29c84e8c87b95a222091754eeb",
+          "member_sha256": {
+            "tileset.json": "68a82f488a593cd924e5e8f0c566354096ddecabfc005caadec53497d96a64cf",
+            "conversion.json": "6a722161b55f552d1d6e9eccaba8b9da2caaf8a69a6c2a426ea2f40e96954e07",
+            "t/0.glb": "abc031741a1de36a11d580e0e2819f2165dea7feaf8200569f03f26b1b9b0b23",
+            "t/1.glb": "35eadc610b64e71cbddc02744e2458639816d1dd33925df466e9e728f87b687c",
+            "t/root.glb": "c3a644cfa661f0c22a0f8c2b90a12f4063ac8a64c189444b224f8900332b4d49"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 0.5,
+          "certificate": {
+            "error_metres": 0.4850712500726813,
+            "patch_face_tests": 9912,
+            "accepted_patches": 260,
+            "max_depth": 3
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 9912,
+            "accepted_patches": 260,
+            "max_depth": 3,
+            "ideal_cover_squared": "4/17",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 24,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "nonzero-bump",
+          "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+          "archive_sha256": "2f8ec1bd11844df9aa8ce26118f7f83fdc0714d98dadeb39f8ed0ddf36131624",
+          "member_sha256": {
+            "tileset.json": "f293604da96f3292c2c5c14f9a3c67dfbefbc7534e31ca7699f3f7033f3d9d84",
+            "conversion.json": "5d9602313126ca032a9c963a31f0b9b293bfdd68ddcd360e15147aa7b7996a92",
+            "t/0.glb": "75c29628977800a53fe1ed21fb6c845efc721a9b83f4bb12f647865d2dc06dd6",
+            "t/1.glb": "1bc801b59a872cf85df396821de65889f3ef566e28268928651704cfc9c7902b",
+            "t/root.glb": "08c55b48239d2de7819435eda4f389794784d8add6cdde2e1dc3c10c6a38b3c1"
+          },
+          "source_faces": 32,
+          "proxy_faces": 2,
+          "regions": 1,
+          "requested_error_metres": 0.5,
+          "certificate": {
+            "error_metres": 0.25000000000000017,
+            "patch_face_tests": 1408,
+            "accepted_patches": 64,
+            "max_depth": 2
+          },
+          "historical_unpartitioned_squared": "5",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 128,
+            "root_patches": 34,
+            "patch_face_tests": 1408,
+            "accepted_patches": 64,
+            "max_depth": 2,
+            "ideal_cover_squared": "1/16",
+            "regions": [
+              {
+                "source_sha256": "48fbd2882be13602d49bb850bae287db58595c0e1f2712a4586c81bc6d5370b4",
+                "proxy_sha256": "da2a7f44436504455e5f0c36b03c28569e9252cd8d17f18cf9a8ef1a15b72b04",
+                "source_faces": 32,
+                "proxy_faces": 2
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 25,
+          "cli_report_matches_published": true
+        }
+      ],
+      "baseline_refusals": 11,
+      "additional_proposal_refusal": {
+        "observed_gate": "budget-sensitive candidate proposal; no depth/work certificate gate claimed",
+        "output_parent_absent": true,
+        "forced_replacement_directory_unchanged": true
+      }
+    },
+    {
+      "receipt": "native-oracle.json",
+      "binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+      "driver_sha256": {
+        "f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+        "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+        "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+        "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+      },
+      "cases": [
+        {
+          "name": "grid",
+          "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+          "archive_sha256": "0922c5e74ba6d6d87f9f69b90a2e47d72ad03a415f9e9ee91fe0f60fd62560ce",
+          "member_sha256": {
+            "tileset.json": "eadcb83cd8b0c3a441f143b38832ff66c652482017a939bf46885d6da8228572",
+            "conversion.json": "dbe7a5ceb310b363a47f983e3461ac73672e2e4401ccf31760db079a5d4c5610",
+            "t/0.glb": "abc031741a1de36a11d580e0e2819f2165dea7feaf8200569f03f26b1b9b0b23",
+            "t/1.glb": "35eadc610b64e71cbddc02744e2458639816d1dd33925df466e9e728f87b687c",
+            "t/root.glb": "c3a644cfa661f0c22a0f8c2b90a12f4063ac8a64c189444b224f8900332b4d49"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "materialless",
+          "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+          "archive_sha256": "b63291b33c7d95a94f5deda0188a59ba8d69e7244a6bd4669099146736abe9d4",
+          "member_sha256": {
+            "tileset.json": "eadcb83cd8b0c3a441f143b38832ff66c652482017a939bf46885d6da8228572",
+            "conversion.json": "5a1b6e3cdf5991735bf8b18bdec25d3b5b87073c04ae4ed3f195464599507d39",
+            "t/0.glb": "b8411b56b24dd3710f7a04066201b952c646b055591f0dd97082862d7248cb94",
+            "t/1.glb": "0dd83c96a9faa6b396f8f2adf40aa6d720d85fc43e08be9c95f5bac9f759770b",
+            "t/root.glb": "3cb61a925892d236c05717c8adf56b9e8551ed48e0e85f3e57dbd8f33a5cff5c"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 960,
+            "accepted_patches": 47,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "instances",
+          "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+          "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+          "member_sha256": {
+            "tileset.json": "49442241f6c03336e75e818fded58f3cd3dfcc23272846437766fa95d5c18383",
+            "conversion.json": "744d60c0b9391d04ca9c7d7a352efe775882a57a00537a6954aee1a972192730",
+            "t/0.glb": "e39ab34b95eb6dfc0ffd5a89f851e6b3f8907c674d92f92f2f3b28312a32afe6",
+            "t/1.glb": "3de1edc49cba1eb2b5f79c918d885fa9d3d2ed87e055b695c80b667c59ff33be",
+            "t/10.glb": "1e6fd1da27f27382f2cf3c2ae5b726745bc1f54bfbd286fa8651ecb92931c0ed",
+            "t/11.glb": "8ff2d3f140596a341d190b6756dd834acc5a8fb95d221bf31b9703b255763004",
+            "t/12.glb": "61895937d123378d8bb104ca2ca9f1e4d0820cadec602d09486b2047ed75f639",
+            "t/13.glb": "13ba2556319ca108406aa8032b19fb52ca6048d783653ef303a997ae374a7bca",
+            "t/14.glb": "1721727fcf83973d5c4c2fb09f8e82a741771b84ffee9b7aa1a6201112e06a4c",
+            "t/15.glb": "b71c0571b438de801e85ade63f1b8beffeb22a048bb6b5237ef68ac185e1c095",
+            "t/2.glb": "f6e98b5ef464cbf4717e290b806f854cdd5c349ad67130298050a4ace154ddd3",
+            "t/3.glb": "b2125d47a9705586f86a19cf12881b02571c3a317c01f9ef502be4e011ca4388",
+            "t/4.glb": "26ace09d28e909de9c387a733af914d002f95bac2cc333d2869a11b30b84293b",
+            "t/5.glb": "2608ec662266a9c285b4130c0eeb1bc4577621bbaa8861863852dfb3c690a0c4",
+            "t/6.glb": "33d62f782b26374f43dd34b9927dceb3854327e00c5f46126e8e7a12f47391f2",
+            "t/7.glb": "a6325992c2300e2d7e4a554908164fb7fa5ad05d94b6cf7cb09b81a92db59709",
+            "t/8.glb": "6ec2d0f1e5e74164a645db30f4cc6a652db2f3bbc7142e5947affe4079d808b8",
+            "t/9.glb": "e521eee724c9c20b95a9aeac2a66cd593497ab9bcbf8074f3f2f50accb160fa6",
+            "t/root.glb": "c1c36e37dd2411d52467518d6c007eb886fb7547b26c50d392363ed195cd1184"
+          },
+          "source_faces": 192,
+          "proxy_faces": 44,
+          "regions": 6,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 2816,
+            "root_patches": 236,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "780bf82143b08a6c31b27029b09ca00a3114082a57d426ead60b2535d082a2ac",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "f6420b946625646ef38ef8b6b4b0c39e66de291f292a7d3be82a32924f150451",
+                "proxy_sha256": "8a045447668f417e0f31d54f4554a04648b90f75a27c9ba335e978df0d3e5c28",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "3b52207e1bd0b4fd1197c21eb0f2f09c09616e2ccd39eb680b590b9a3df2ba66",
+                "proxy_sha256": "89699a520013b3c9ca953591c402a57360ebe15fb23bb3cda4b6b10c890d35b1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "c3dc80325e3dfe01ab0ef20ca9a15e4f8a5c71743ea4c74d826a8b213f2ec042",
+                "proxy_sha256": "87dd8c105bbc0edf262da0c3638a9d534be34558ab71a5173951d99bc36c86e1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "59b7f46670d94502b16e346be441f6d691945eebc2424534018fa6e42ad31bc8",
+                "proxy_sha256": "49f4add83e3f609055091dcc2e7c6f8c7e506449436a8be780d4f51ba161bc22",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "197619a537877294f23a3155334d6ddfaa73b773b55fda4b5c62f2aeb6324248",
+                "proxy_sha256": "bc23f2810c3a4c80f25ef7b5e790105241f7e6b51a99ad802b137ffdd0630a47",
+                "source_faces": 32,
+                "proxy_faces": 7
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "viewer",
+          "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+          "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+          "member_sha256": {
+            "tileset.json": "49442241f6c03336e75e818fded58f3cd3dfcc23272846437766fa95d5c18383",
+            "conversion.json": "744d60c0b9391d04ca9c7d7a352efe775882a57a00537a6954aee1a972192730",
+            "t/0.glb": "e39ab34b95eb6dfc0ffd5a89f851e6b3f8907c674d92f92f2f3b28312a32afe6",
+            "t/1.glb": "3de1edc49cba1eb2b5f79c918d885fa9d3d2ed87e055b695c80b667c59ff33be",
+            "t/10.glb": "1e6fd1da27f27382f2cf3c2ae5b726745bc1f54bfbd286fa8651ecb92931c0ed",
+            "t/11.glb": "8ff2d3f140596a341d190b6756dd834acc5a8fb95d221bf31b9703b255763004",
+            "t/12.glb": "61895937d123378d8bb104ca2ca9f1e4d0820cadec602d09486b2047ed75f639",
+            "t/13.glb": "13ba2556319ca108406aa8032b19fb52ca6048d783653ef303a997ae374a7bca",
+            "t/14.glb": "1721727fcf83973d5c4c2fb09f8e82a741771b84ffee9b7aa1a6201112e06a4c",
+            "t/15.glb": "b71c0571b438de801e85ade63f1b8beffeb22a048bb6b5237ef68ac185e1c095",
+            "t/2.glb": "f6e98b5ef464cbf4717e290b806f854cdd5c349ad67130298050a4ace154ddd3",
+            "t/3.glb": "b2125d47a9705586f86a19cf12881b02571c3a317c01f9ef502be4e011ca4388",
+            "t/4.glb": "26ace09d28e909de9c387a733af914d002f95bac2cc333d2869a11b30b84293b",
+            "t/5.glb": "2608ec662266a9c285b4130c0eeb1bc4577621bbaa8861863852dfb3c690a0c4",
+            "t/6.glb": "33d62f782b26374f43dd34b9927dceb3854327e00c5f46126e8e7a12f47391f2",
+            "t/7.glb": "a6325992c2300e2d7e4a554908164fb7fa5ad05d94b6cf7cb09b81a92db59709",
+            "t/8.glb": "6ec2d0f1e5e74164a645db30f4cc6a652db2f3bbc7142e5947affe4079d808b8",
+            "t/9.glb": "e521eee724c9c20b95a9aeac2a66cd593497ab9bcbf8074f3f2f50accb160fa6",
+            "t/root.glb": "c1c36e37dd2411d52467518d6c007eb886fb7547b26c50d392363ed195cd1184"
+          },
+          "source_faces": 192,
+          "proxy_faces": 44,
+          "regions": 6,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 2816,
+            "root_patches": 236,
+            "patch_face_tests": 2816,
+            "accepted_patches": 236,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "780bf82143b08a6c31b27029b09ca00a3114082a57d426ead60b2535d082a2ac",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "f6420b946625646ef38ef8b6b4b0c39e66de291f292a7d3be82a32924f150451",
+                "proxy_sha256": "8a045447668f417e0f31d54f4554a04648b90f75a27c9ba335e978df0d3e5c28",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "3b52207e1bd0b4fd1197c21eb0f2f09c09616e2ccd39eb680b590b9a3df2ba66",
+                "proxy_sha256": "89699a520013b3c9ca953591c402a57360ebe15fb23bb3cda4b6b10c890d35b1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "c3dc80325e3dfe01ab0ef20ca9a15e4f8a5c71743ea4c74d826a8b213f2ec042",
+                "proxy_sha256": "87dd8c105bbc0edf262da0c3638a9d534be34558ab71a5173951d99bc36c86e1",
+                "source_faces": 32,
+                "proxy_faces": 8
+              },
+              {
+                "source_sha256": "59b7f46670d94502b16e346be441f6d691945eebc2424534018fa6e42ad31bc8",
+                "proxy_sha256": "49f4add83e3f609055091dcc2e7c6f8c7e506449436a8be780d4f51ba161bc22",
+                "source_faces": 32,
+                "proxy_faces": 7
+              },
+              {
+                "source_sha256": "197619a537877294f23a3155334d6ddfaa73b773b55fda4b5c62f2aeb6324248",
+                "proxy_sha256": "bc23f2810c3a4c80f25ef7b5e790105241f7e6b51a99ad802b137ffdd0630a47",
+                "source_faces": 32,
+                "proxy_faces": 7
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "coincident-keys",
+          "source_sha256": "4529c304584207e388e14c6bd3cf30f6a1f72b73cc0d4e2c196f56b056ef2b9b",
+          "archive_sha256": "2a57fee0f5e67bbcbffb3d6bf7c79f71c493688ac1c4af34f2cb1fc91a674981",
+          "member_sha256": {
+            "tileset.json": "6a3e2750dc0ff480be17b2d2d25e6b4f12b370bcb336ba002884d757981f7686",
+            "conversion.json": "e25004e8ad390b7a98954ac647ac040a2b9b46588b63d798e9ccad73ff30866f",
+            "t/0.glb": "326628a71640acb0e3165312233e548ba81fbd713f03920bf5e1bc8b693c4a88",
+            "t/1.glb": "c551ba8cb9ad1d6ce6c8cd18d0007d5247582901355dab2a8aceae33ad299c39",
+            "t/2.glb": "3a548d477c929e35192efa474a7264b3aa749d08cf160654ac6786033539457d",
+            "t/3.glb": "911e4458ef8dfd5cea43e2d4c641cdd22f7674efddc340a8800c1e09da76c639",
+            "t/root.glb": "3f87d423898805c3be929b582046057f86bc2a6d9957cae1551a739797fd3969"
+          },
+          "source_faces": 64,
+          "proxy_faces": 14,
+          "regions": 1,
+          "requested_error_metres": 8.0,
+          "certificate": {
+            "error_metres": 2.0000000000000013,
+            "patch_face_tests": 1792,
+            "accepted_patches": 78,
+            "max_depth": 0
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 1792,
+            "root_patches": 78,
+            "patch_face_tests": 1792,
+            "accepted_patches": 78,
+            "max_depth": 0,
+            "ideal_cover_squared": "4",
+            "regions": [
+              {
+                "source_sha256": "cbf26c772c2250aff2af8c3c25e3655f76746920788c72eb8066b53dfb058d85",
+                "proxy_sha256": "8539883a2bdc9ffd6af4d3ae3ef533ced6245f6d7f4b8445f62bb099775ae3a1",
+                "source_faces": 64,
+                "proxy_faces": 14
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 23,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "useful-tightening",
+          "source_sha256": "ef84b99ca92cef007323dfd68efa2cce21797b3723f2fa78659c58ad406926e9",
+          "archive_sha256": "ec89c660bce5ec3b2085d6101c4ffe54e3d3ad29c84e8c87b95a222091754eeb",
+          "member_sha256": {
+            "tileset.json": "68a82f488a593cd924e5e8f0c566354096ddecabfc005caadec53497d96a64cf",
+            "conversion.json": "6a722161b55f552d1d6e9eccaba8b9da2caaf8a69a6c2a426ea2f40e96954e07",
+            "t/0.glb": "abc031741a1de36a11d580e0e2819f2165dea7feaf8200569f03f26b1b9b0b23",
+            "t/1.glb": "35eadc610b64e71cbddc02744e2458639816d1dd33925df466e9e728f87b687c",
+            "t/root.glb": "c3a644cfa661f0c22a0f8c2b90a12f4063ac8a64c189444b224f8900332b4d49"
+          },
+          "source_faces": 32,
+          "proxy_faces": 15,
+          "regions": 1,
+          "requested_error_metres": 0.5,
+          "certificate": {
+            "error_metres": 0.4850712500726813,
+            "patch_face_tests": 9912,
+            "accepted_patches": 260,
+            "max_depth": 3
+          },
+          "historical_unpartitioned_squared": "4",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 960,
+            "root_patches": 47,
+            "patch_face_tests": 9912,
+            "accepted_patches": 260,
+            "max_depth": 3,
+            "ideal_cover_squared": "4/17",
+            "regions": [
+              {
+                "source_sha256": "018561aaaf734b83244af9e118f23e3125704547d246f5b633aa5a025c924882",
+                "proxy_sha256": "279f80e8e87bf41d7e8bda224ad15560434ed2b928c2e3b20a892f5121a6d36c",
+                "source_faces": 32,
+                "proxy_faces": 15
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 24,
+          "cli_report_matches_published": true
+        },
+        {
+          "name": "nonzero-bump",
+          "source_sha256": "c561c4d30e3ea7f7072088b0927017624e6c7f9c92a38253f208009ec0307e6a",
+          "archive_sha256": "2f8ec1bd11844df9aa8ce26118f7f83fdc0714d98dadeb39f8ed0ddf36131624",
+          "member_sha256": {
+            "tileset.json": "f293604da96f3292c2c5c14f9a3c67dfbefbc7534e31ca7699f3f7033f3d9d84",
+            "conversion.json": "5d9602313126ca032a9c963a31f0b9b293bfdd68ddcd360e15147aa7b7996a92",
+            "t/0.glb": "75c29628977800a53fe1ed21fb6c845efc721a9b83f4bb12f647865d2dc06dd6",
+            "t/1.glb": "1bc801b59a872cf85df396821de65889f3ef566e28268928651704cfc9c7902b",
+            "t/root.glb": "08c55b48239d2de7819435eda4f389794784d8add6cdde2e1dc3c10c6a38b3c1"
+          },
+          "source_faces": 32,
+          "proxy_faces": 2,
+          "regions": 1,
+          "requested_error_metres": 0.5,
+          "certificate": {
+            "error_metres": 0.25000000000000017,
+            "patch_face_tests": 1408,
+            "accepted_patches": 64,
+            "max_depth": 2
+          },
+          "historical_unpartitioned_squared": "5",
+          "independent_certificate": {
+            "proved": true,
+            "base_patch_face_tests": 128,
+            "root_patches": 34,
+            "patch_face_tests": 1408,
+            "accepted_patches": 64,
+            "max_depth": 2,
+            "ideal_cover_squared": "1/16",
+            "regions": [
+              {
+                "source_sha256": "48fbd2882be13602d49bb850bae287db58595c0e1f2712a4586c81bc6d5370b4",
+                "proxy_sha256": "da2a7f44436504455e5f0c36b03c28569e9252cd8d17f18cf9a8ef1a15b72b04",
+                "source_faces": 32,
+                "proxy_faces": 2
+              }
+            ],
+            "checker_limits": {
+              "max_depth": 24,
+              "max_patch_face_tests": 100000,
+              "max_seconds": 10,
+              "time_limit_is_cooperative": true
+            }
+          },
+          "corrupted_controls_rejected": 25,
+          "cli_report_matches_published": true
+        }
+      ],
+      "baseline_refusals": 11,
+      "additional_proposal_refusal": {
+        "observed_gate": "budget-sensitive candidate proposal; no depth/work certificate gate claimed",
+        "output_parent_absent": true,
+        "forced_replacement_directory_unchanged": true
+      }
+    }
+  ],
+  "limits": [
+    "Exact Fraction closed-triangle distances and independent canonical complete covers prove decoded local scalar for bounded artifacts, not topology/appearance/world-space/recursive LOD.",
+    "Checker ceiling100000 tests/depth24/cooperative10seconds; exhaustion leaves scalar unproven.",
+    "Checker work/leaves/depth provide necessary inequalities only; compatible inflated operational counters can pass and require source/unit/nonauthor review.",
+    "Coincident component coordinates do not identify authored face origin; original-key unit controls and source review remain separate.",
+    "Meshopt proposal depends on requested error; budget.125 bump refusal is a proposal gate, not depth or mathematical distance proof.",
+    "No actual CLI depth-gate artifact accepted; explicit private unit depth controls and actual optimized dynamic-cap refusal are distinct evidence.",
+    "Finite witness lattice and outward intervals can refuse equal surfaces; no universal tightness/convergence, total RSS or meshopt cancellation-latency guarantee.",
+    "Large optimized common-box reference proves requested100m only; published7.000000000000003m remains independently unproved at that size.",
+    "Previous portable cargo test output was tool-session-only; final retained release replay passed290core unit tests plus integrations, with distinct test-portable.log. No historical log reconstructed."
+  ],
+  "consumers": [
+    {
+      "receipt": "local-browser.json",
+      "archive_sha256": "26aa250f3f0cad867e79b7aa0c0a8faae48f223fd05a70cc61b26a02a4e1369b",
+      "cesium_version": "1.146.0",
+      "browser_version": "153.0.8010.12",
+      "packages": {
+        "cesium": {
+          "version": "1.146.0",
+          "package_json_sha256": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11"
+        },
+        "playwright": {
+          "version": "1.63.0",
+          "package_json_sha256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998"
+        }
+      },
+      "stages": [
+        {
+          "label": "proxy_region",
+          "stage": "coarse",
+          "visible_faces": 44,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 6
+        },
+        {
+          "label": "proxy_region",
+          "stage": "fine",
+          "visible_faces": 192,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 0
+        },
+        {
+          "label": "source_triangle",
+          "stage": "coarse",
+          "visible_faces": 44,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 0
+        },
+        {
+          "label": "source_triangle",
+          "stage": "fine",
+          "visible_faces": 192,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 6
+        }
+      ],
+      "page_errors": [],
+      "failed_requests": [],
+      "external_requests": [],
+      "scope": "Finite local planar cameras, unchanged screen-space-error threshold, public tileVisible traversal and getProperty arrays/exact tuples. No textured appearance, coincident selection, world-distance or general topology acceptance."
+    },
+    {
+      "receipt": "placed-browser.json",
+      "archive_sha256": "018e41510e5853910e92b2e360ef64d912d764e86bf986e74f648a42085767cd",
+      "cesium_version": "1.146.0",
+      "browser_version": "153.0.8010.12",
+      "packages": {
+        "cesium": {
+          "version": "1.146.0",
+          "package_json_sha256": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11"
+        },
+        "playwright": {
+          "version": "1.63.0",
+          "package_json_sha256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998"
+        }
+      },
+      "stages": [
+        {
+          "label": "proxy_region",
+          "stage": "coarse",
+          "visible_faces": 44,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 6
+        },
+        {
+          "label": "proxy_region",
+          "stage": "fine",
+          "visible_faces": 192,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 0
+        },
+        {
+          "label": "source_triangle",
+          "stage": "coarse",
+          "visible_faces": 44,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 0
+        },
+        {
+          "label": "source_triangle",
+          "stage": "fine",
+          "visible_faces": 192,
+          "maximum_screen_space_error": 16,
+          "model_matrix_is_identity": true,
+          "matching_public_queries": 6
+        }
+      ],
+      "page_errors": [],
+      "failed_requests": [],
+      "external_requests": [],
+      "scope": "One Brisbane WGS84 anchor, default identity orientation and zero offset, independently positioned ECEF cameras/targets, unchanged identity modelMatrix and natural SSE16 coarse-to-fine traversal. Six coarse complete membership-array queries and six fine original-triangle queries. Local stored geometry/bounds checked independently. No exact world Hausdorff, general placement/topology or textured appearance claim.",
+      "placement_accuracy": {
+        "maximum_basis_component_error": 1.1863174139341632e-16,
+        "maximum_origin_component_error_metres": 8.845845404077495e-10,
+        "basis_component_limit": 2e-15,
+        "origin_component_limit_metres": 1e-08
+      },
+      "independent_matrix_controls_rejected": [
+        "missing-root-placement",
+        "wrong-height",
+        "swapped-east-north"
+      ],
+      "historical_f1d1_pin_booleans": {
+        "binary": false,
+        "source": false
+      },
+      "historical_pin_meaning": "False compares historical F1d1 constants, not supplied current source pins; actual F1d2 source/binary independently verified."
+    }
+  ],
+  "installed_wheel": {
+    "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "package_version": "0.4.0",
+    "package_file": "/tmp/rusty-tiles-wheel-xo8acefr/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+    "wheel_sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7",
+    "empty_path": true,
+    "tests_run": 44,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "ok": true
+  },
+  "optimized_resources": {
+    "receipt": "resource-release.json",
+    "status": "pass",
+    "binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+    "limits": [
+      "Three fixed serial process observations on this Linux host; no total-RSS, allocation, cancellation-latency or performance guarantee.",
+      "wait4 ru_maxrss may include inherited Python launcher residency before exec; it is not pure converter steady-state residency.",
+      "Thread/descriptor/procfs RSS/scratch peaks are sampled and may miss short peaks. ru_maxrss is the child process high-water observation.",
+      "All converter children launch before large artifact decoding to reduce parent-decoder inheritance bias, without claiming its removal.",
+      "The large success independently proves the requested100m budget by common-box diameter. Its smaller published certificate is explicitly not re-certified here.",
+      "Timeout uses process-group SIGKILL and synchronous wait4 reap; sampling is cooperative and the timeout is not a hard latency guarantee."
+    ],
+    "cases": [
+      {
+        "label": "accepted-near-base-cap",
+        "elapsed_seconds": 17.439025473000584,
+        "peak_rss_kib_wait4": 26388,
+        "sampled_peaks": {
+          "rss_kib": 14088,
+          "threads": 1,
+          "file_descriptors": 3,
+          "scratch_files": 3,
+          "scratch_bytes": 475920
+        },
+        "child_reaped": true,
+        "timed_out": false,
+        "artifact": {
+          "source_triangles": 8192,
+          "proxy_triangles": 1023,
+          "leaves": 4,
+          "base_patch_face_tests": 16760832,
+          "certificate": {
+            "error_metres": 7.000000000000003,
+            "patch_face_tests": 16760832,
+            "accepted_patches": 9215,
+            "max_depth": 0
+          },
+          "base_ceiling_fraction": 0.9990234375,
+          "actual_ceiling_fraction": 0.9990234375,
+          "archive_sha256": "540123c38953f607781c4dd742ae291edc393ba841d27f80c22cc5b9b7aa085c",
+          "archive_bytes": 819964,
+          "member_sha256": {
+            "tileset.json": "3d4506e05dc313a176548df90bd32eb92f2f37972c2aaadb0724d102861baef8",
+            "conversion.json": "691e48250d6199c0cc98baafdb09d463b82841f8ade21149b68addb590e33773",
+            "t/0.glb": "48d31516144ad2020adcbe24ce979e7833c2704ef2db44a06d05f2e5aa0c4b1d",
+            "t/1.glb": "5218f7b2420e953eaa33c8e27ca8a8836bf0cdc660a988d810e9d1d014b6eece",
+            "t/2.glb": "6f7d45226ede8c94c149939e801f40410a3b08fecc68f930439d93464d5f3254",
+            "t/3.glb": "d193578e8688e998db9473fc127520e189b3e17c37ab636e0eafcff20f13590b",
+            "t/root.glb": "7cd3960756be56a4e5c396a30f74b5e158176708e25eedb25b10af22b217ff97"
+          },
+          "output_parent_entries_after_completion": [
+            "result.3tz"
+          ],
+          "independent_geometry_reference": {
+            "kind": "exact_common_box_diameter",
+            "squared_diameter_metres2": 8192,
+            "requested_budget_squared_metres2": "10000",
+            "requested_budget_proved": true,
+            "published_smaller_certificate_independently_proved": false,
+            "scope": "Both decoded nonempty supports lie in the same closed box. Their whole-support Hausdorff distance is <=sqrt(8192)<100m. The reported smaller scalar and precise operational counts are not independently replayed at this size."
+          }
+        }
+      },
+      {
+        "label": "refused-above-base-cap",
+        "elapsed_seconds": 0.010520593999899575,
+        "peak_rss_kib_wait4": 27828,
+        "sampled_peaks": {
+          "rss_kib": 24,
+          "threads": 1,
+          "file_descriptors": 3,
+          "scratch_files": 0,
+          "scratch_bytes": 0
+        },
+        "child_reaped": true,
+        "timed_out": false,
+        "refusal": {
+          "output_parent_absent": true,
+          "error": {
+            "code": "unsupported",
+            "kind": "unsupported",
+            "message": "root proxy certificate exceeds the admitted base face-pair work limit of 16777216",
+            "recovery": null,
+            "retainedPaths": [],
+            "secondaryDiagnostics": []
+          }
+        }
+      },
+      {
+        "label": "dynamic-cap-control",
+        "elapsed_seconds": 17.772849335999126,
+        "peak_rss_kib_wait4": 28416,
+        "sampled_peaks": {
+          "rss_kib": 13832,
+          "threads": 1,
+          "file_descriptors": 3,
+          "scratch_files": 0,
+          "scratch_bytes": 0
+        },
+        "child_reaped": true,
+        "timed_out": false,
+        "refusal": {
+          "output_parent_absent": true,
+          "error": {
+            "code": "unsupported",
+            "kind": "unsupported",
+            "message": "root proxy could not certify the requested maximum within the patch-face work limit",
+            "recovery": null,
+            "retainedPaths": [],
+            "secondaryDiagnostics": []
+          }
+        }
+      }
+    ]
+  },
+  "prior_replays": {
+    "full_detail_receipt": "full-detail-replay.json",
+    "drivers": [
+      "f1a",
+      "f1b",
+      "f1b2",
+      "f1b3",
+      "f1c1",
+      "f1c2 --large"
+    ],
+    "pbr_resource_cases": 4,
+    "placement_resource_cases": 10,
+    "native_python_cli_tests": 127,
+    "native_python_cli_skips": 2,
+    "khronos_core_entries": 51,
+    "khronos_scope": "Core glTF only; metadata truth comes from independent decoder/public queries."
+  },
+  "nonacceptance": [
+    {
+      "receipt": "preliminary-native-oracle.log",
+      "meaning": "Preliminary broad runs stopped on incorrect depth assertion; no whole-run JSON accepted. Corrected final portable/native runs use fresh directories."
+    },
+    {
+      "receipts": [
+        "preliminary-local-browser.log",
+        "preliminary-placed-browser.log"
+      ],
+      "meaning": "Driver editing TypeError before browser start. Corrected local/placed executions have distinct accepted receipts."
+    },
+    {
+      "receipt": "depth-fixture-feasibility.json",
+      "meaning": "Exploratory timeouts/proposal refusals and successful depth7 case do not establish actual CLI depth exhaustion."
+    }
+  ],
+  "final_slots": {
+    "installed-wheel": {
+      "reference": "wheel-api.json",
+      "status": "complete"
+    },
+    "native-artifact": {
+      "reference": "native-oracle.json",
+      "status": "complete"
+    },
+    "nonauthor-final-review": {
+      "reference": "review.md",
+      "status": "complete"
+    },
+    "package-pin": {
+      "reference": "package-checks.json",
+      "status": "complete"
+    },
+    "placed-consumer": {
+      "reference": "placed-browser.json",
+      "status": "complete"
+    },
+    "portable-artifact": {
+      "reference": "portable-oracle.json",
+      "status": "complete"
+    },
+    "portable-retained-test-log": {
+      "reference": "test-portable.log",
+      "status": "complete"
+    }
+  },
+  "source_artifact_receipt": "final-source-artifacts.json",
+  "package": {
+    "receipt": "package-checks.json",
+    "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+    "package_bytes": 3473125,
+    "exit_code": 0,
+    "normalized_metadata": {
+      "Cargo.lock": {
+        "original_sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+        "packaged_sha256": "a0f3da4afb1161dfc6b735f4167e63f39b63dc4faf5a1a5ed95fbacbf4189c74",
+        "removed_package_keys": [
+          [
+            "portable-atomic",
+            "1.15.0"
+          ],
+          [
+            "pyo3",
+            "0.29.3"
+          ],
+          [
+            "pyo3-build-config",
+            "0.29.3"
+          ],
+          [
+            "pyo3-ffi",
+            "0.29.3"
+          ],
+          [
+            "pyo3-macros",
+            "0.29.3"
+          ],
+          [
+            "pyo3-macros-backend",
+            "0.29.3"
+          ],
+          [
+            "rusty-tiles-python",
+            "0.4.0"
+          ],
+          [
+            "target-lexicon",
+            "0.13.5"
+          ]
+        ],
+        "added_package_keys": [],
+        "changed_package_keys": [],
+        "meaning": "Workspace Python binding package plus seven Python-only dependency entries removed; no remaining package changed or new package added."
+      },
+      "Cargo.toml": {
+        "original_manifest_sha256": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+        "packaged_manifest_sha256": "f9112c8e138c088cf1349527a276f8c533441cdf2b7baf35842910f6aa851646",
+        "original_manifest_member": "Cargo.toml.orig",
+        "meaning": "Cargo normalizes registry manifest; original manifest byte-identical. Root crate production source unchanged."
+      }
+    },
+    "omitted_workspace_binding_files": {
+      "bindings/python/Cargo.toml": "Workspace binding crate intentionally excluded from root crate package; separately built/tested installed wheel.",
+      "bindings/python/src/lib.rs": "Workspace binding crate intentionally excluded from root crate package; separately built/tested installed wheel."
+    },
+    "required_docs_and_oracles_sha256": {
+      "docs/architecture/f1d2-certificate-contract.md": "342f064c991ab3f2fcbb753b8629dc237f9a40aebb54e1c256485d3a576d340d",
+      "docs/architecture/f1d2-implementation.md": "f55068a77da26aabc1953ff54a4890cd834166a32d20ddf6b907b412ae887eca",
+      "bench/architecture_audit/mesh_approximation_f1d2/README.md": "cff244d61fce84a0d6fce1f6845b3be0b56ea3c7a3db5d23764a3b8b906df8c4",
+      "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+      "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+    },
+    "package_verification_scope": "Exact root production bytes plus normalized Cargo metadata and included current docs/oracles. No build verification of the packaged archive, publication, tag or release. Evidence-only final review/coordinator receipts can be added after this package.",
+    "verified_root_production_files": 89
+  },
+  "independent_controls": {
+    "preimplementation_math": "math_probes/results.json",
+    "preimplementation_scheduler": "pipeline_probes/finite-scheduler.json",
+    "preimplementation_proof_checker": "probes/proof-checker-receipt.json",
+    "exact_checker_controls": "certificate-controls.json",
+    "synthetic_artifact_controls": "oracle-self-test.json",
+    "reviewer_controls": [
+      {
+        "receipt": "review_probes/interval-enclosure.json",
+        "passed": true,
+        "scope": "Nonauthor exact-reference checks of the inspected interval operations.\n\nThis is a Python arithmetic reproduction, not execution of Rust or a producer\ncertificate. Exact Fraction addresses supply the independent enclosure truth.",
+        "paired_corner_cases": 12000,
+        "exact_corner_enclosures": 24000,
+        "exact_squared_and_norm_enclosures": 12000,
+        "inspected_certificate_sha256": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7"
+      },
+      {
+        "receipt": "review_probes/checker-controls.json",
+        "passed": true,
+        "scope": "Authored exact supports and checker controls only; no converter artifact acceptance or Rust execution.",
+        "inflated_metrics_can_pass_necessary_inequalities": {
+          "error_metres": 0,
+          "patch_face_tests": 80,
+          "accepted_patches": 11,
+          "max_depth": 2
+        },
+        "metrics_limit": "Independent proof metrics are necessary lower bounds, not authentication of exact producer counters."
+      },
+      {
+        "receipt": "review_probes/producer-replay.json",
+        "passed": true,
+        "scope": "Reviewer-authored planar GLB through a frozen CLI and independent reader.\n\nThe literal fixture is separate from the producer/evidence owners' fixtures.\nArtifacts are temporary; the receipt retains source/archive/member identities.",
+        "cli_report_corruptions_rejected": [
+          "stale-certificate",
+          "missing-report",
+          "false-success",
+          "wrong-profile",
+          "synthetic-boolean-one-collision"
+        ],
+        "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      {
+        "receipt": "review_probes/frozen-identities.json",
+        "passed": true,
+        "scope": "Final frozen production source and portable binary identities checked against supplied manifest. No build/Git execution."
+      }
+    ]
+  },
+  "nonauthor_final_review": {
+    "document": "review.md",
+    "sha256": "00589d64d2b9ded6374a58bbc39ed05dfb6610c8ed64b49e77b861b1a075e855",
+    "disposition": "bounded F1d2 acceptance; no production/evidence blocker",
+    "receipts": [
+      "review_probes/resume-checker-controls.json",
+      "review_probes/resume-evidence-bindings.json",
+      "review_probes/resume-identities.json",
+      "review_probes/resume-interval-enclosure.json",
+      "review_probes/resume-package-storage.json",
+      "review_probes/resume-producer-replay.json"
+    ],
+    "binding_receipt_sha256": "f8c681f459246360445dc14ef398985000efff3ca5f02ff37aa7ea455b7efe41",
+    "storage_snapshot_scope": "Reviewer package/storage receipt verifies an earlier49entry snapshot; final archive adds immutable coordinator/package/reviewer entries. Final verifier checks every current entry."
+  }
+}

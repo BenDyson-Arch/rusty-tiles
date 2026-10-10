@@ -1,0 +1,541 @@
+{
+  "rational_controls": {
+    "subdivision_face_pair_certificate_metres": 4,
+    "subdivision_true_distance_metres": 0,
+    "spike_distance_metres": 100,
+    "degenerate_distance_metres": 5,
+    "mixed_magnitude_squared_distance": "1/1152921504606846976",
+    "admitted_boundary_squared_distance": "1/1152921504606846976",
+    "hole_center_distance_metres": 3
+  },
+  "synthetic_positive": {
+    "source_sha256": "5ae1d7f348dd076e114ee85b1534b1c696c82d8651916293e3a807ad1f0618b0",
+    "source_triangles": 48,
+    "proxy_triangles": 12,
+    "regions": 6,
+    "authored_components": [
+      {
+        "region": [
+          0,
+          0,
+          0
+        ],
+        "count": 1
+      },
+      {
+        "region": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      {
+        "region": [
+          1,
+          0,
+          0
+        ],
+        "count": 1
+      },
+      {
+        "region": [
+          1,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      {
+        "region": [
+          2,
+          0,
+          0
+        ],
+        "count": 1
+      },
+      {
+        "region": [
+          2,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    ],
+    "base_patch_face_tests": 192,
+    "historical_whole_face_squared": "2",
+    "independent_certificate": {
+      "proved": true,
+      "base_patch_face_tests": 192,
+      "root_patches": 60,
+      "patch_face_tests": 192,
+      "accepted_patches": 60,
+      "max_depth": 0,
+      "ideal_cover_squared": "2",
+      "regions": [
+        {
+          "source_sha256": "43e73311eb581e8fe4e58d9529aaa28da21b91d2501ab29cc16d473783ae011f",
+          "proxy_sha256": "4d0e91808af984aeaea06b7f601e9d28bd62f7090f00325f034ceb42d6b5cd10",
+          "source_faces": 8,
+          "proxy_faces": 2
+        },
+        {
+          "source_sha256": "14b9c91b03ca77efb58b72524bd07d7c1f4825c2f99bd764cba96ed799c0cdf6",
+          "proxy_sha256": "c9ccfeaa926d61d2877eb97470ddfaabe537bc5dc22506f617085215dc2b9f29",
+          "source_faces": 8,
+          "proxy_faces": 2
+        },
+        {
+          "source_sha256": "ee3b8b9dc0d45df7971d3525c8b4e6bd78f6c42ff338b68779c9c46337e6bc95",
+          "proxy_sha256": "e7c79a17190cfbaaf95253bfcb38dca1b16b964ede113d832c79a2f24729cab0",
+          "source_faces": 8,
+          "proxy_faces": 2
+        },
+        {
+          "source_sha256": "845ad0e2988fe156941668109602f8445c3e7875c606e7b5574bc9032de0b38d",
+          "proxy_sha256": "ba57348c4cf95541de4fe081a54bf2481ec8791f464c6f655cf0bb0547c3fb5a",
+          "source_faces": 8,
+          "proxy_faces": 2
+        },
+        {
+          "source_sha256": "2191a69214636f926dd23c37d39868ab97c84ec9a0343a2dced9dad4356e0f03",
+          "proxy_sha256": "44d1312f1bdb2d90e20d60e138e91c39fb5c149eb9adfc157968ec2f6bcf87ee",
+          "source_faces": 8,
+          "proxy_faces": 2
+        },
+        {
+          "source_sha256": "ff08bd6f02d5baacac66cd8e4154bea33941a7e2b81979c86101fafb89ad818d",
+          "proxy_sha256": "b8238d40371d3c290e0e0a21ad7b9cf1350934632b82b9a067c12f28d124bafa",
+          "source_faces": 8,
+          "proxy_faces": 2
+        }
+      ],
+      "checker_limits": {
+        "max_depth": 24,
+        "max_patch_face_tests": 100000,
+        "max_seconds": 10,
+        "time_limit_is_cooperative": true
+      }
+    },
+    "leaves": 1,
+    "emitted_name_bytes": 72,
+    "report": {
+      "schema_version": 7,
+      "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+      "triangles": 48,
+      "leaf_tiles": 1,
+      "leaf_triangles": 100,
+      "approximation": {
+        "kind": "root_proxy",
+        "triangle_limit": 16,
+        "triangles": 12,
+        "regions": 6,
+        "geometric_error_metres": 8,
+        "certificate": {
+          "error_metres": 8,
+          "patch_face_tests": 192,
+          "accepted_patches": 60,
+          "max_depth": 0
+        },
+        "appearance": "opaque-untextured-factors"
+      }
+    },
+    "proxy_member": "t/root.glb",
+    "member_sha256": {
+      "t/0.glb": "e919cdc00cc1b81677d5624b0951439d2711c7af8eafeb93927f88ca60a993ea",
+      "tileset.json": "64af45e3ef459a2dbb51e0855705c9ddd15582ed6586ab3514ff390ffc45e594",
+      "conversion.json": "f1079eaa60113f276142f78a03af407bdb035d7d7bf1966206034c250160286c",
+      "t/root.glb": "01fd4cda8c87e3af910e02c3ac33a67a8eedaaf02313b3e237d37ac6ad1849b8"
+    }
+  },
+  "artifact_controls": [
+    {
+      "name": "false-source-triangle-label",
+      "rejected": true,
+      "reason": "sole proxy_region feature label"
+    },
+    {
+      "name": "wrong-material-factors",
+      "rejected": true,
+      "reason": "exact proxy region PBR factors/omissions"
+    },
+    {
+      "name": "proxy-vertex-not-original",
+      "rejected": true,
+      "reason": "candidate only original decoded positions of its region"
+    },
+    {
+      "name": "invented-original-membership",
+      "rejected": true,
+      "reason": "unique tuple-sorted proxy membership"
+    },
+    {
+      "name": "unequal-proxy-arrays",
+      "rejected": true,
+      "reason": "array storage lengths"
+    },
+    {
+      "name": "wrong-proxy-count",
+      "rejected": true,
+      "reason": "report independently decoded proxy count"
+    },
+    {
+      "name": "wrong-region-count",
+      "rejected": true,
+      "reason": "report region count independently decoded"
+    },
+    {
+      "name": "false-appearance-profile",
+      "rejected": true,
+      "reason": "exact admitted appearance report"
+    },
+    {
+      "name": "removed-pair-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "removed-certificate-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "negative-certificate",
+      "rejected": true,
+      "reason": "finite admitted certificate"
+    },
+    {
+      "name": "wrong-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "excess-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "wrong-proof-leaves",
+      "rejected": true,
+      "reason": "reported accepted patches cover independent proof"
+    },
+    {
+      "name": "excess-proof-depth",
+      "rejected": true,
+      "reason": "reported depth covers independent proof"
+    },
+    {
+      "name": "nonintegral-proof-depth",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "boolean-proof-work",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "wrong-profile",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "wrong-schema",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "zero-root-refinement-budget",
+      "rejected": true,
+      "reason": "root declared positive budget/refinement"
+    },
+    {
+      "name": "child-box-outside-root",
+      "rejected": true,
+      "reason": "root box contains complete child boxes"
+    },
+    {
+      "name": "leaf-winding-reversed",
+      "rejected": true,
+      "reason": "oriented source geometry/key association (2, 0, 1, 7)"
+    },
+    {
+      "name": "leaf-invented-source-ordinal",
+      "rejected": true,
+      "reason": "dense unique sorted source keys"
+    }
+  ],
+  "coincident_component_control": {
+    "positive": {
+      "source_sha256": "e52fabdd24dad01346adfba0d66a8f6b5e37d90439e5e1752206a09c30ccc2b6",
+      "source_triangles": 16,
+      "proxy_triangles": 2,
+      "regions": 1,
+      "authored_components": [
+        {
+          "region": [
+            0,
+            0,
+            0
+          ],
+          "count": 2
+        }
+      ],
+      "base_patch_face_tests": 64,
+      "historical_whole_face_squared": "1",
+      "independent_certificate": {
+        "proved": true,
+        "base_patch_face_tests": 64,
+        "root_patches": 18,
+        "patch_face_tests": 64,
+        "accepted_patches": 18,
+        "max_depth": 0,
+        "ideal_cover_squared": "1",
+        "regions": [
+          {
+            "source_sha256": "1ed6773d0de8964b1f006cf259fe91afd1ebe1b36d1347050a4f04f4bc9fe96b",
+            "proxy_sha256": "4d0e91808af984aeaea06b7f601e9d28bd62f7090f00325f034ceb42d6b5cd10",
+            "source_faces": 16,
+            "proxy_faces": 2
+          }
+        ],
+        "checker_limits": {
+          "max_depth": 24,
+          "max_patch_face_tests": 100000,
+          "max_seconds": 10,
+          "time_limit_is_cooperative": true
+        }
+      },
+      "leaves": 1,
+      "emitted_name_bytes": 0,
+      "report": {
+        "schema_version": 7,
+        "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+        "triangles": 16,
+        "leaf_tiles": 1,
+        "leaf_triangles": 100,
+        "approximation": {
+          "kind": "root_proxy",
+          "triangle_limit": 16,
+          "triangles": 2,
+          "regions": 1,
+          "geometric_error_metres": 8,
+          "certificate": {
+            "error_metres": 8,
+            "patch_face_tests": 64,
+            "accepted_patches": 18,
+            "max_depth": 0
+          },
+          "appearance": "opaque-untextured-factors"
+        }
+      },
+      "proxy_member": "t/root.glb",
+      "member_sha256": {
+        "t/0.glb": "e3471c23ba2efa7b960d35fa74d4a1f0cb1017abbe578faa13d653a2085ccb24",
+        "tileset.json": "801762619f38b401ec40b0ddba6985c044b9e72baa46800a76d2ae9c24f8e69a",
+        "conversion.json": "30cc7272c5ed0bcdf45825a6717c5678cffc2c8c57aeff3066c1d9a59d185fb5",
+        "t/root.glb": "8e150351157e02de5322f5a3538b0acfc5cf579ba41769c1d1af1c08a44be3d6"
+      }
+    },
+    "one_face_control": {
+      "rejected": true,
+      "reason": "candidate has at least one face per authored-key component"
+    },
+    "limit": "Face floor detects impossible count; identical position-only supports cannot independently identify component origin per output face. Production-key tests and source review remain required."
+  },
+  "materialless_positive": {
+    "source_sha256": "5a87e4c182d769db083cdaab3f3390db7c22db164a7d038ecdb84a00fa3f81ac",
+    "source_triangles": 8,
+    "proxy_triangles": 2,
+    "regions": 1,
+    "authored_components": [
+      {
+        "region": [
+          0,
+          0,
+          0
+        ],
+        "count": 1
+      }
+    ],
+    "base_patch_face_tests": 32,
+    "historical_whole_face_squared": "1",
+    "independent_certificate": {
+      "proved": true,
+      "base_patch_face_tests": 32,
+      "root_patches": 10,
+      "patch_face_tests": 32,
+      "accepted_patches": 10,
+      "max_depth": 0,
+      "ideal_cover_squared": "1",
+      "regions": [
+        {
+          "source_sha256": "43e73311eb581e8fe4e58d9529aaa28da21b91d2501ab29cc16d473783ae011f",
+          "proxy_sha256": "4d0e91808af984aeaea06b7f601e9d28bd62f7090f00325f034ceb42d6b5cd10",
+          "source_faces": 8,
+          "proxy_faces": 2
+        }
+      ],
+      "checker_limits": {
+        "max_depth": 24,
+        "max_patch_face_tests": 100000,
+        "max_seconds": 10,
+        "time_limit_is_cooperative": true
+      }
+    },
+    "leaves": 1,
+    "emitted_name_bytes": 0,
+    "report": {
+      "schema_version": 7,
+      "profile": "f1d2-adaptive-root-proxy-gltf-v1",
+      "triangles": 8,
+      "leaf_tiles": 1,
+      "leaf_triangles": 100,
+      "approximation": {
+        "kind": "root_proxy",
+        "triangle_limit": 16,
+        "triangles": 2,
+        "regions": 1,
+        "geometric_error_metres": 8,
+        "certificate": {
+          "error_metres": 8,
+          "patch_face_tests": 32,
+          "accepted_patches": 10,
+          "max_depth": 0
+        },
+        "appearance": "opaque-untextured-factors"
+      }
+    },
+    "proxy_member": "t/root.glb",
+    "member_sha256": {
+      "t/0.glb": "4703f2a0d996b10fb2ee14ffa4b4cfd92c9ed38977a88964448fbb6f606deb67",
+      "tileset.json": "801762619f38b401ec40b0ddba6985c044b9e72baa46800a76d2ae9c24f8e69a",
+      "conversion.json": "02a33bc1801655c7b94f0a3885fbc8dd8a4f294aa77432657a407b033b7b720c",
+      "t/root.glb": "937aaa915e12bd052167b873f3ae379add0cc7e3657d6c8d72bd6f226a6599e4"
+    }
+  },
+  "materialless_controls": [
+    {
+      "name": "false-source-triangle-label",
+      "rejected": true,
+      "reason": "sole proxy_region feature label"
+    },
+    {
+      "name": "invented-default-material",
+      "rejected": true,
+      "reason": "exact proxy region PBR factors/omissions"
+    },
+    {
+      "name": "proxy-vertex-not-original",
+      "rejected": true,
+      "reason": "candidate only original decoded positions of its region"
+    },
+    {
+      "name": "invented-original-membership",
+      "rejected": true,
+      "reason": "unique tuple-sorted proxy membership"
+    },
+    {
+      "name": "unequal-proxy-arrays",
+      "rejected": true,
+      "reason": "array storage lengths"
+    },
+    {
+      "name": "wrong-proxy-count",
+      "rejected": true,
+      "reason": "report independently decoded proxy count"
+    },
+    {
+      "name": "wrong-region-count",
+      "rejected": true,
+      "reason": "report region count independently decoded"
+    },
+    {
+      "name": "false-appearance-profile",
+      "rejected": true,
+      "reason": "exact admitted appearance report"
+    },
+    {
+      "name": "removed-pair-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "removed-certificate-field",
+      "rejected": true,
+      "reason": "removed unpartitioned certificate fields"
+    },
+    {
+      "name": "negative-certificate",
+      "rejected": true,
+      "reason": "finite admitted certificate"
+    },
+    {
+      "name": "wrong-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "excess-proof-work",
+      "rejected": true,
+      "reason": "performed patch-face tests cover base within ceiling"
+    },
+    {
+      "name": "wrong-proof-leaves",
+      "rejected": true,
+      "reason": "reported accepted patches cover independent proof"
+    },
+    {
+      "name": "excess-proof-depth",
+      "rejected": true,
+      "reason": "reported depth covers independent proof"
+    },
+    {
+      "name": "nonintegral-proof-depth",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "boolean-proof-work",
+      "rejected": true,
+      "reason": "integral proof metrics"
+    },
+    {
+      "name": "wrong-profile",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "wrong-schema",
+      "rejected": true,
+      "reason": "F1d2 report schema/profile"
+    },
+    {
+      "name": "zero-root-refinement-budget",
+      "rejected": true,
+      "reason": "root declared positive budget/refinement"
+    },
+    {
+      "name": "child-box-outside-root",
+      "rejected": true,
+      "reason": "root box contains complete child boxes"
+    },
+    {
+      "name": "leaf-winding-reversed",
+      "rejected": true,
+      "reason": "oriented source geometry/key association (0, 0, 0, 7)"
+    },
+    {
+      "name": "leaf-invented-source-ordinal",
+      "rejected": true,
+      "reason": "dense unique sorted source keys"
+    }
+  ],
+  "scope": "Independent synthetic artifact and exact-rational checker controls only; no converter acceptance.",
+  "driver_sha256": {
+    "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+    "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+    "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+  }
+}

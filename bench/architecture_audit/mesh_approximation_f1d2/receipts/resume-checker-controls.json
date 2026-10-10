@@ -1,0 +1,104 @@
+{
+  "scope": "Authored exact supports and checker controls only; no converter artifact acceptance or Rust execution.",
+  "driver_sha256": "31debbcd2a2d14a7e05c1ca3bbf3b457942634b895defe95a5c52bd83c8eb282",
+  "checker_sha256": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+  "equal_support": {
+    "proved": true,
+    "base_patch_face_tests": 8,
+    "root_patches": 5,
+    "patch_face_tests": 24,
+    "accepted_patches": 8,
+    "max_depth": 1,
+    "ideal_cover_squared": "0",
+    "regions": [
+      {
+        "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "proxy_sha256": "1879a34e43d6bf07695d7067d8a6f5d2adef9ff95fa4d8faee3b58f1128e1072",
+        "source_faces": 1,
+        "proxy_faces": 4
+      }
+    ],
+    "checker_limits": {
+      "max_depth": 24,
+      "max_patch_face_tests": 100000,
+      "max_seconds": 10,
+      "time_limit_is_cooperative": true
+    }
+  },
+  "offset_support": {
+    "proved": true,
+    "base_patch_face_tests": 8,
+    "root_patches": 5,
+    "patch_face_tests": 24,
+    "accepted_patches": 8,
+    "max_depth": 1,
+    "ideal_cover_squared": "1/64",
+    "regions": [
+      {
+        "source_sha256": "83f0283718fa1f6ddc2547e84ab71be3e7705861af10fae3a2ba21f06e632e59",
+        "proxy_sha256": "c9e39576efc369b84f4156d07ed6adc167a82b03cdc0c5b714366a9034a8fbf5",
+        "source_faces": 1,
+        "proxy_faces": 4
+      }
+    ],
+    "checker_limits": {
+      "max_depth": 24,
+      "max_patch_face_tests": 100000,
+      "max_seconds": 10,
+      "time_limit_is_cooperative": true
+    }
+  },
+  "interior_gap_squared": "32/9",
+  "bounded_refusals": [
+    {
+      "name": "positive-offset-false-zero",
+      "classification": "unproven",
+      "message": "independent exact cover depth ceiling; published scalar unproven"
+    },
+    {
+      "name": "interior-hole-false-zero",
+      "classification": "unproven",
+      "message": "independent exact cover depth ceiling; published scalar unproven"
+    },
+    {
+      "name": "cover-needs-depth-one",
+      "classification": "unproven",
+      "message": "independent exact cover depth ceiling; published scalar unproven"
+    },
+    {
+      "name": "cover-needs-work-24",
+      "classification": "unproven",
+      "message": "independent exact cover work ceiling"
+    }
+  ],
+  "rejected_metric_controls": [
+    {
+      "key": "patch_face_tests",
+      "value": 23
+    },
+    {
+      "key": "accepted_patches",
+      "value": 5
+    },
+    {
+      "key": "max_depth",
+      "value": 0
+    },
+    {
+      "key": "patch_face_tests",
+      "value": true
+    },
+    {
+      "key": "max_depth",
+      "value": 25
+    }
+  ],
+  "inflated_metrics_can_pass_necessary_inequalities": {
+    "error_metres": 0,
+    "patch_face_tests": 80,
+    "accepted_patches": 11,
+    "max_depth": 2
+  },
+  "metrics_limit": "Independent proof metrics are necessary lower bounds, not authentication of exact producer counters.",
+  "passed": true
+}

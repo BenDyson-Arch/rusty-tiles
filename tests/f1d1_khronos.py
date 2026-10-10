@@ -48,7 +48,7 @@ def main():
         completed = subprocess.run(['node', str(helper), str(a.validator_modules.resolve(strict=True)), str(root)], text=True, capture_output=True, timeout=120)
         oracle.require(completed.returncode == 0, 'official core validation ' + completed.stdout + completed.stderr)
         receipt = json.loads(completed.stdout)
-    paths = [Path(__file__), helper, Path(__file__).with_name('f1d1_oracle.py'), Path(__file__).with_name('f1c2_oracle.py')]
+    paths = [Path(__file__), helper, Path(__file__).with_name('f1d1_oracle.py'), Path(__file__).with_name('f1c2_oracle.py'), Path(__file__).with_name('f1d2_certificate.py')]
     receipt.update(artifacts=checked, authored_driver_sha256={p.name: oracle.digest(p.read_bytes()) for p in paths},
         scope='Official core errors/warnings for independent sources, roots and leaves; zero-position-view sensitive control. Metadata meaning belongs to the independent decoder and public Cesium queries.')
     a.json_output.parent.mkdir(parents=True, exist_ok=True)

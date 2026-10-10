@@ -1,0 +1,14 @@
+   Compiling pyo3-build-config v0.29.3
+   Compiling rusty-tiles v0.4.0 (/tmp/rusty-tiles-f1d2-resume)
+   Compiling pyo3-ffi v0.29.3
+   Compiling pyo3 v0.29.3
+   Compiling rusty-tiles-python v0.4.0 (/tmp/rusty-tiles-f1d2-resume/bindings/python)
+    Finished `release` profile [optimized] target(s) in 20.07s
+     Running unittests src/lib.rs (/tmp/rusty-tiles-f1d2-final-target/release/deps/rusty_tiles-7a2ad1d471418f61)
+
+running 2 tests
+test recovery_tests::committed_cleanup_diagnostic_remains_a_result_value ... ok
+test recovery_tests::failed_restore_maps_primary_secondary_and_distinct_recovery_paths ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

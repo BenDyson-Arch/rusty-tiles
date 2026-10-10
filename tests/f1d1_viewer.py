@@ -81,7 +81,7 @@ window.viewer=new Cesium.Viewer('viewer',{globe:false,baseLayer:false,skyBox:fal
                 oracle.require(child.returncode==0,'public viewer '+stdout+stderr)
                 browser=json.loads(stdout)
         finally:server.shutdown();server.server_close();thread.join()
-    paths=(Path(__file__),Path(__file__).with_name('f1d1_oracle.py'),Path(__file__).with_name('f1c2_oracle.py'),Path(__file__).parent/'fixtures/f1d1_viewer.cjs')
+    paths=(Path(__file__),Path(__file__).with_name('f1d1_oracle.py'),Path(__file__).with_name('f1c2_oracle.py'),Path(__file__).parent/'fixtures/f1d1_viewer.cjs',Path(__file__).with_name('f1d2_certificate.py'))
     result={'mode':'independent-synthetic-consumer-feasibility' if a.synthetic else 'candidate-published-archive','source_sha256':oracle.digest(source),'archive_sha256':oracle.digest(a.archive.read_bytes()),
         'artifact':checked,'browser':browser,'driver_sha256':{str(path.relative_to(Path(__file__).parent)):oracle.digest(path.read_bytes()) for path in paths},
         'cesium_js_sha256':oracle.digest((runtime/'Cesium.js').read_bytes()),

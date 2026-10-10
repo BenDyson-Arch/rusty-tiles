@@ -1,0 +1,48 @@
+{
+  "nonauthor": true,
+  "scope": "Independent package bytes/lock normalization and storage roundtrip; no Cargo, packaged build, publication or release acceptance",
+  "package_receipt_sha256": "c25683a948acb6b501add697078edc1c697ab7c5bed7056d953e933acd3fafd9",
+  "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+  "package_path": "/tmp/rusty-tiles-f1d2-final-target/package/rusty-tiles-0.4.0.crate",
+  "root_production_files_verified": 89,
+  "package_members": 1264,
+  "removed_workspace_only_lock_packages": [
+    [
+      "portable-atomic",
+      "1.15.0"
+    ],
+    [
+      "pyo3",
+      "0.29.3"
+    ],
+    [
+      "pyo3-build-config",
+      "0.29.3"
+    ],
+    [
+      "pyo3-ffi",
+      "0.29.3"
+    ],
+    [
+      "pyo3-macros",
+      "0.29.3"
+    ],
+    [
+      "pyo3-macros-backend",
+      "0.29.3"
+    ],
+    [
+      "rusty-tiles-python",
+      "0.4.0"
+    ],
+    [
+      "target-lexicon",
+      "0.13.5"
+    ]
+  ],
+  "added_or_changed_lock_packages": [],
+  "storage_index_snapshot_sha256": "ae167fec40e75e567605e0d6da3ad6f4c31c970f122629d40a829dd334719406",
+  "stored_receipts_verified": 49,
+  "raw_original_paths_matched_when_still_available": 49,
+  "passed": true
+}

@@ -1,0 +1,14 @@
+    Checking archmage v0.9.28
+    Checking thiserror v1.0.69
+    Checking gltf-json v1.4.1
+   Compiling rusty-tiles v0.4.0 (/tmp/rusty-tiles-f1d2-resume)
+    Checking wkt v0.14.0
+    Checking proj4wkt v0.1.1
+    Checking magetypes v0.9.28
+    Checking garb v0.2.8
+    Checking geozero v0.15.1
+    Checking gltf v1.4.1
+    Checking linear-srgb v0.6.12
+    Checking zenyuv v0.1.3
+    Checking zenwebp v0.4.4
+    Finished `release` profile [optimized] target(s) in 7.37s

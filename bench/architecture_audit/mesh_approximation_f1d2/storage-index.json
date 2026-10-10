@@ -1,0 +1,1618 @@
+{
+  "entries": [
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 72,
+      "original_name": "build-native.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/build-native.log",
+      "original_sha256": "8a2933ae25e59188be988ea6218274cb341f13d8bc4b533f57b12ececd4be8b3",
+      "path": "receipts/build-native.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 72,
+      "stored_sha256": "8a2933ae25e59188be988ea6218274cb341f13d8bc4b533f57b12ececd4be8b3"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 147,
+      "original_name": "build-portable.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/build-portable.log",
+      "original_sha256": "f4f849d88efdbf1d958b4c70a258040ad795560c25b18a4ffe91a985f889e374",
+      "path": "receipts/build-portable.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 147,
+      "stored_sha256": "f4f849d88efdbf1d958b4c70a258040ad795560c25b18a4ffe91a985f889e374"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 138,
+      "original_name": "build-release.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/build-release.log",
+      "original_sha256": "85f25185f1b043be3f8087a7afd5a69193f557ac26c1173c0e58ba09ec263b49",
+      "path": "receipts/build-release.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 138,
+      "stored_sha256": "85f25185f1b043be3f8087a7afd5a69193f557ac26c1173c0e58ba09ec263b49"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 719,
+      "original_name": "build-wheel.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/build-wheel.log",
+      "original_sha256": "ad54f882b214dd9b4c96601d856d36c60b3700a668976569c0130d28603f0b74",
+      "path": "receipts/build-wheel.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 719,
+      "stored_sha256": "ad54f882b214dd9b4c96601d856d36c60b3700a668976569c0130d28603f0b74"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 213,
+      "original_name": "clippy-native.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/clippy-native.log",
+      "original_sha256": "8f0777382227413ec51dca873097152f2050fbe27c58733ca7707026b98ee1c7",
+      "path": "receipts/clippy-native.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 213,
+      "stored_sha256": "8f0777382227413ec51dca873097152f2050fbe27c58733ca7707026b98ee1c7"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 214,
+      "original_name": "clippy-portable.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/clippy-portable.log",
+      "original_sha256": "f9b16951895e5dbc79502ca81d0ab91ef2f40c780a47a63491477d3dfb2f393e",
+      "path": "receipts/clippy-portable.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 214,
+      "stored_sha256": "f9b16951895e5dbc79502ca81d0ab91ef2f40c780a47a63491477d3dfb2f393e"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 6667,
+      "original_name": "clippy-python-binding.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/clippy-python-binding.log",
+      "original_sha256": "dc56fa72c465100b0abe0cbd630167d3a3c63bf4511fe5700731e3fc75c51249",
+      "path": "receipts/clippy-python-binding.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 6667,
+      "stored_sha256": "dc56fa72c465100b0abe0cbd630167d3a3c63bf4511fe5700731e3fc75c51249"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 19784,
+      "original_name": "coordinator-checks.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/coordinator-checks.json",
+      "original_sha256": "9868abf9ba3e00f011d44dac6bcd33a9530d9b957f359b6ccfbefbd31c47a9b0",
+      "path": "receipts/coordinator-checks.json.gz",
+      "receipt_provenance": {
+        "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      "scope": "Coordinator-owned final build/test/lint/format/package commands and results; historical receipt/command limitations retained.",
+      "stored_bytes": 3585,
+      "stored_sha256": "03316ec34a52afbc9497a2dde74e51e37a5fc1d7351ccbf8d90ff87b26d7f990"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "raw",
+      "original_bytes": 2586,
+      "original_name": "execution-input-pins.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/execution-input-pins.json",
+      "original_sha256": "3ca4678a72c1302f40e8869c8255fd5adcbacaadaf87761930ee4c94179b4ba8",
+      "path": "receipts/execution-input-pins.json",
+      "receipt_provenance": {
+        "files": {
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533": {
+            "bytes": 232850280,
+            "sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3"
+          },
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533": {
+            "bytes": 251600984,
+            "sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": {
+            "bytes": 10975,
+            "sha256": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1a_oracle.py": {
+            "bytes": 34852,
+            "sha256": "d3ef051ccfc217cda3c28fc0cd8a96a9b173ebea31b89c7beb78adc5fe32d211"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1b2_oracle.py": {
+            "bytes": 35737,
+            "sha256": "8b5f758fed8f2f4f4e3a1c84cbb794d4c181f0b775115aaae7f157cb456cd89c"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1b3_oracle.py": {
+            "bytes": 40613,
+            "sha256": "2e4eb2051f50f2044b99d3a95c5149a6586a2e56ef3f6bc962b5e8bcb08ad56e"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1b_oracle.py": {
+            "bytes": 56023,
+            "sha256": "075da4f36ca1537a662a3d417ea4913aa50991f245bb2373eb811142106de5fc"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1c1_oracle.py": {
+            "bytes": 33998,
+            "sha256": "f87c6e843a48fa74481cc0d47047f954b226f99f21db60d32ce400d1290606d2"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1c2_oracle.py": {
+            "bytes": 37393,
+            "sha256": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1d1_oracle.py": {
+            "bytes": 43518,
+            "sha256": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1d1_viewer.py": {
+            "bytes": 6512,
+            "sha256": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1d2_certificate.py": {
+            "bytes": 7383,
+            "sha256": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/f1d2_oracle.py": {
+            "bytes": 10625,
+            "sha256": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+          },
+          "/tmp/rusty-tiles-f1d2-resume/tests/fixtures/f1d1_viewer.cjs": {
+            "bytes": 4629,
+            "sha256": "8a95206dc6858ea0c18edef72a2611ad74bca8ca9a6739a846492acf685d2890"
+          }
+        },
+        "source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 2586,
+      "stored_sha256": "3ca4678a72c1302f40e8869c8255fd5adcbacaadaf87761930ee4c94179b4ba8"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "gzip",
+      "original_bytes": 40556,
+      "original_name": "f1a-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1a-full-detail.log",
+      "original_sha256": "a042bcbc85cbafcc1a0758459925bebe0b811b9298f0ae822a29313e5509a769",
+      "path": "receipts/f1a-full-detail.log.gz",
+      "receipt_provenance": {},
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 1595,
+      "stored_sha256": "3a0a7e292b5aa10502e15d0fa45745f87da7af4c65a396e4665e1363ae2ccbaf"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 164662,
+      "original_name": "f1b-full-detail.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b-full-detail.json",
+      "original_sha256": "ebb61c365b5d06c3a3754b5593e9617dd297a03c23be7d60b5a34ba89aa57005",
+      "path": "receipts/f1b-full-detail.json.gz",
+      "receipt_provenance": {},
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 11028,
+      "stored_sha256": "0871ccc50cf3f3f9774018f35d03bb291d63644062266b09a1480b6f4a9b9064"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "f1b-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b-full-detail.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/f1b-full-detail.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 198859,
+      "original_name": "f1b2-full-detail.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b2-full-detail.json",
+      "original_sha256": "3f008b0b2b8f679206ace35bb507f72f7f14e61cf6a157f0365350166ff4d613",
+      "path": "receipts/f1b2-full-detail.json.gz",
+      "receipt_provenance": {},
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 12277,
+      "stored_sha256": "dcc3fce8edb8bdf5609a0f7ce6fbf02f2cab87d364dbe8f5d21f15d558750414"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "f1b2-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b2-full-detail.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/f1b2-full-detail.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 211559,
+      "original_name": "f1b3-full-detail.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b3-full-detail.json",
+      "original_sha256": "fb5ca7854d7bf91ed69ba626b9b02a57bf297917ad1afe72749da161397472d2",
+      "path": "receipts/f1b3-full-detail.json.gz",
+      "receipt_provenance": {},
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 11372,
+      "stored_sha256": "129a865efa3f9a4af6e6d8b1f14eb6647ea3eb987d1c4e85d2ee3e46378cea3d"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "f1b3-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b3-full-detail.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/f1b3-full-detail.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "raw",
+      "original_bytes": 16253,
+      "original_name": "f1b3-resource.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b3-resource.json",
+      "original_sha256": "a92db6df17eec2ffc7022fd6ef47d784364bdee89eef22941c2b747637526401",
+      "path": "receipts/f1b3-resource.json",
+      "receipt_provenance": {
+        "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+        "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+        "probe_sha256": "35c543f3d72fb2949c1eab8b981dbfbe01e905c16589728c04287a74bd2e91a3"
+      },
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 16253,
+      "stored_sha256": "a92db6df17eec2ffc7022fd6ef47d784364bdee89eef22941c2b747637526401"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 285,
+      "original_name": "f1b3-resource.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1b3-resource.log",
+      "original_sha256": "1deb91bda3fea63344a4bbb99b1b5b924b7deee779b3c2747b186810a9a94f5b",
+      "path": "receipts/f1b3-resource.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 285,
+      "stored_sha256": "1deb91bda3fea63344a4bbb99b1b5b924b7deee779b3c2747b186810a9a94f5b"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 972007,
+      "original_name": "f1c1-full-detail.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c1-full-detail.json",
+      "original_sha256": "154ecdd2bb6ae379b57425f5d77e2b233d0a1219c9b6a971d754fba806647ddc",
+      "path": "receipts/f1c1-full-detail.json.gz",
+      "receipt_provenance": {},
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 36762,
+      "stored_sha256": "d84398efe1b7d4d13f8f8445326cb4945cec38e20a51dff446fcd5c7b02e7853"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "f1c1-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c1-full-detail.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/f1c1-full-detail.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 61256,
+      "original_name": "f1c1-resource.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c1-resource.json",
+      "original_sha256": "3b6d5c34129ed72e3742db5520e6df4547eff5804cb32e8a9959c741d2603c3f",
+      "path": "receipts/f1c1-resource.json.gz",
+      "receipt_provenance": {
+        "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+        "generator_sha256": "35c543f3d72fb2949c1eab8b981dbfbe01e905c16589728c04287a74bd2e91a3",
+        "passed": true,
+        "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+        "png_generator_sha256": "25b61127f8827f6c972c95f502a693504ab6b304fa15781ef74653ffb5ac4ecd",
+        "probe_sha256": "6965322032270f709212a16e0c2103dd974b400887f968d0a4df43c4cf82e67c"
+      },
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 10211,
+      "stored_sha256": "956ef208b42ca4d8a46fe67986a410429e38bd36cf48d42a5ef87a72b86ae718"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 906,
+      "original_name": "f1c1-resource.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c1-resource.log",
+      "original_sha256": "c96de8f44dda8216fc63ec2ca6d62472deb0dc910c6736f7b466ec7b1a212df2",
+      "path": "receipts/f1c1-resource.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 906,
+      "stored_sha256": "c96de8f44dda8216fc63ec2ca6d62472deb0dc910c6736f7b466ec7b1a212df2"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 51345,
+      "original_name": "f1c2-full-detail.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c2-full-detail.json",
+      "original_sha256": "2415ec263fa736e93ed190c8657ff2ba4dfb6f352c7dfcd3c2c093f54910c8ba",
+      "path": "receipts/f1c2-full-detail.json.gz",
+      "receipt_provenance": {
+        "oracle_sha256": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf"
+      },
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 4693,
+      "stored_sha256": "8269fbd15848a58d474bb3e1406e1224ed4d08bd72e23ef771411b6ed891b11f"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "f1c2-full-detail.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/f1c2-full-detail.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/f1c2-full-detail.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "gzip",
+      "original_bytes": 16954,
+      "original_name": "final-artifact-summary.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/final-artifact-summary.json",
+      "original_sha256": "f4e1d4152a4b241796578752517d4a24db2edb3fa4ff0a5f2a2483be3f993db9",
+      "path": "receipts/final-artifact-summary.json.gz",
+      "receipt_provenance": {
+        "source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      "scope": "Final coordinator source/artifact identity or retained check log; detailed acceptance and command status owned by coordinator-checks.",
+      "stored_bytes": 3955,
+      "stored_sha256": "9890f774d72436ac57d272fac6b9ab2b4e2db21733e3c631fa6180192414e8e0"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 468,
+      "original_name": "final-clippy-portable.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/clippy-portable.log",
+      "original_sha256": "46cf2a4b1570f7a1c69a7004556064544e20941a22c73247b44a2d402bc6a175",
+      "path": "receipts/final-clippy-portable.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final coordinator source/artifact identity or retained check log; detailed acceptance and command status owned by coordinator-checks.",
+      "stored_bytes": 468,
+      "stored_sha256": "46cf2a4b1570f7a1c69a7004556064544e20941a22c73247b44a2d402bc6a175"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "raw",
+      "original_bytes": 12773,
+      "original_name": "final-source-artifacts.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/source-artifacts.json",
+      "original_sha256": "2503b6048c019873d01c78af26453407beb05b9dd66e19056b9026ede9672dba",
+      "path": "receipts/final-source-artifacts.json",
+      "receipt_provenance": {
+        "binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+        "final_driver_sha256": {
+          ".github/workflows/ci.yml": "1260d6b29d7f3d74eb812500c97ff6c556d0b1242a0b4fa3f56b4e7660155bfa",
+          "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204",
+          "bindings/python/tests/test_api.py": "9f192ed37ac701692c48124f8a6a2e966d8a4da1f9c54d8476726663f7e0a4ed",
+          "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+          "scripts/wheel_acceptance.py": "2a7170529cf44ad8081c64ef569057c7bdddc5eca18395c32902c340ba86dda1",
+          "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "tests/f1d1_khronos.py": "a6109e38a1c1c742beec0dd81ee975eb5c9e2c6469ab6ae340a9be4921ad8f92",
+          "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "tests/f1d1_viewer.py": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943",
+          "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+          "tests/test_c1_validation.py": "e7d957830a0fbf0e071c6e319d7503a40beae5f31b6c165300dcf74f41a0273c"
+        },
+        "native_binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+        "native_binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+        "production_sha256": {
+          "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+          "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+          "bindings/python/Cargo.toml": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77",
+          "bindings/python/src/lib.rs": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9",
+          "build.rs": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+          "src/archive3tz.rs": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+          "src/bbox.rs": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+          "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+          "src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+          "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+          "src/error.rs": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc",
+          "src/fixtures.rs": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+          "src/georef.rs": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+          "src/geospatial.rs": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+          "src/geospatial/native.rs": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+          "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+          "src/glb_write.rs": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+          "src/gpu_texture.rs": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+          "src/grid.rs": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+          "src/hlod.rs": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+          "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+          "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+          "src/jpeg.rs": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+          "src/lib.rs": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc",
+          "src/lossless.rs": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+          "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+          "src/mesh.rs": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+          "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+          "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+          "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+          "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+          "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+          "src/mesh_archive/encode/identity.rs": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+          "src/mesh_archive/encode/proxy_identity.rs": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+          "src/mesh_archive/model.rs": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+          "src/mesh_archive/partition.rs": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+          "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+          "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+          "src/mesh_archive/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+          "src/mesh_archive/source/material.rs": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+          "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+          "src/mesh_archive/source/texture.rs": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+          "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+          "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+          "src/output.rs": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+          "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+          "src/pack.rs": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+          "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+          "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+          "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+          "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+          "src/point_sampling.rs": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+          "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+          "src/raster.rs": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+          "src/raster/native.rs": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+          "src/raster_directory.rs": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+          "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+          "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+          "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+          "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+          "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+          "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+          "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+          "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+          "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+          "src/texture.rs": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+          "src/tile.rs": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+          "src/tileset.rs": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+          "src/tileset/resources.rs": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+          "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+          "src/validate.rs": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+          "src/validate/admission.rs": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+          "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+          "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+          "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+          "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+          "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+          "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+          "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+          "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+          "src/vector/pipeline/aggregation.rs": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+          "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+          "src/vector/pipeline/geometry.rs": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+          "src/vector/pipeline/geometry/countries_tests.rs": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+          "src/vector/pipeline/geometry/native.rs": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+          "src/vector/pipeline/geometry/portable.rs": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+          "src/vector/pipeline/reuse.rs": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+          "src/vector/pipeline/source.rs": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+          "src/vector/pipeline/source_native.rs": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+          "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+          "src/vector/portable.rs": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+          "src/vector/source_fields.rs": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+          "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+        },
+        "python": "3.14.7",
+        "release_binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "release_binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+        "source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "wheel": {
+          "acceptance_receipt": "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.json",
+          "build_command": [
+            "maturin",
+            "build",
+            "--release",
+            "--locked",
+            "--offline",
+            "--out",
+            "/tmp/rusty-tiles-f1d2-final-evidence/wheels"
+          ],
+          "build_environment": {
+            "CARGO_TARGET_DIR": "/tmp/rusty-tiles-f1d2-final-target",
+            "RUSTY_TILES_DISABLE_NATIVE_JPEG": "1"
+          },
+          "bytes": 7213993,
+          "maturin_version": "maturin 1.15.0",
+          "members_sha256": {
+            "rusty_tiles-0.4.0.dist-info/METADATA": "4988814a6a8552d0be468c3649abed5b60fc861e013da386c19ceaa47536fbf0",
+            "rusty_tiles-0.4.0.dist-info/RECORD": "95f7d46b0f2faa4d073b60131c46b8074651950c64d08895e8b37cfdacbff4fe",
+            "rusty_tiles-0.4.0.dist-info/WHEEL": "de0ed507ada8e7fb009ef102440568e148c86d69e3333ad5e18af775f2b9604d",
+            "rusty_tiles-0.4.0.dist-info/licenses/LICENSE": "ba002ea4be422ff9c226b2d9d1d9ae0ad82319661ac46046b47ef38751382e1e",
+            "rusty_tiles-0.4.0.dist-info/sboms/rusty-tiles-python.cyclonedx.json": "ca4b7254a04901f6e4187e9048e533dadb1cd6dd40ce98551acb9ec963ffa85c",
+            "rusty_tiles/__init__.py": "9203c419c58a0ad416c613175a308057d1a4518e845258f8e3d63a2c99bb0463",
+            "rusty_tiles/rusty_tiles.abi3.so": "369aaa86fc19177a0a039cef174de714e1500c85f876dde698d286dedfc85d29"
+          },
+          "path": "/tmp/rusty-tiles-f1d2-final-evidence/wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl",
+          "scope": "Local linux_x86_64 stable ABI wheel; no manylinux, other Python/platform or release acceptance claim",
+          "sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7"
+        }
+      },
+      "scope": "Final coordinator frozen source, all binaries, wheel members and driver identities; exact original bytes retained.",
+      "stored_bytes": 12773,
+      "stored_sha256": "2503b6048c019873d01c78af26453407beb05b9dd66e19056b9026ede9672dba"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "fmt.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/fmt.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/fmt.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final coordinator source/artifact identity or retained check log; detailed acceptance and command status owned by coordinator-checks.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "raw",
+      "original_bytes": 2677,
+      "original_name": "full-detail-replay.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/full-detail-replay.json",
+      "original_sha256": "a9014c49d86202d4fd750ed54f581240be09ead3a5199eba66a18f492c459363",
+      "path": "receipts/full-detail-replay.json",
+      "receipt_provenance": {
+        "execution_pins": "Original bytes preserve individual command/log records; no new driver identity inferred.",
+        "kind": "json-list"
+      },
+      "scope": "Six full-detail subprocess successes from handoff; exact commands/log hashes retained.",
+      "stored_bytes": 2677,
+      "stored_sha256": "a9014c49d86202d4fd750ed54f581240be09ead3a5199eba66a18f492c459363"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 206581,
+      "original_name": "khronos.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/khronos.json",
+      "original_sha256": "ffe68deddd3a323927afdd2453709149235b41cde4103ea45d17e853e61f2791",
+      "path": "receipts/khronos.json.gz",
+      "receipt_provenance": {
+        "authored_driver_sha256": {
+          "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "f1c2_validate.cjs": "aa48dfcb23bc8c64969bd36ed7b71f6e0e1be1e62434097dbbf3e15a37e1a582",
+          "f1d1_khronos.py": "a6109e38a1c1c742beec0dd81ee975eb5c9e2c6469ab6ae340a9be4921ad8f92",
+          "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7"
+        },
+        "driver_sha256": "aa48dfcb23bc8c64969bd36ed7b71f6e0e1be1e62434097dbbf3e15a37e1a582",
+        "scope": "Official core errors/warnings for independent sources, roots and leaves; zero-position-view sensitive control. Metadata meaning belongs to the independent decoder and public Cesium queries."
+      },
+      "scope": "51 official glTF core entries and sensitive control; metadata semantics excluded.",
+      "stored_bytes": 9949,
+      "stored_sha256": "5e79d92db3a67b48f828cfffea506f75b5739c3c4acff8e582eeef3ba77df58a"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 89,
+      "original_name": "khronos.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/khronos.log",
+      "original_sha256": "1d31d43981c8369d1ac873dd20cb2a8cae562865d4372f4bb82e600a7373e1c9",
+      "path": "receipts/khronos.log",
+      "receipt_provenance": {},
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 89,
+      "stored_sha256": "1d31d43981c8369d1ac873dd20cb2a8cae562865d4372f4bb82e600a7373e1c9"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "local-browser-final.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/local-browser-final.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/local-browser-final.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 76074,
+      "original_name": "local-browser.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/local-browser.json",
+      "original_sha256": "f473772bde7330180a66eb618c85e228183112e9f5cdbf94aedc03115cad29cd",
+      "path": "receipts/local-browser.json.gz",
+      "receipt_provenance": {
+        "driver_sha256": {
+          "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "f1d1_viewer.py": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943",
+          "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "fixtures/f1d1_viewer.cjs": "8a95206dc6858ea0c18edef72a2611ad74bca8ca9a6739a846492acf685d2890"
+        },
+        "invocation": [
+          "/usr/bin/python3",
+          "tests/f1d1_viewer.py",
+          "--source",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/native-artifacts/baseline/viewer/source.glb",
+          "--archive",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/native-artifacts/baseline/viewer/result.3tz",
+          "--cesium-dir",
+          "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
+          "--node-modules",
+          "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules",
+          "--chromium",
+          "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+          "--json-output",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/local-browser.json"
+        ],
+        "scope": "Finite local planar cameras, unchanged screen-space-error threshold, public tileVisible traversal and getProperty arrays/exact tuples. No textured appearance, coincident selection, world-distance or general topology acceptance.",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739"
+      },
+      "scope": "Corrected local public consumer only; preliminary broad driver does not gain acceptance from this receipt.",
+      "stored_bytes": 5193,
+      "stored_sha256": "1c5eb3fbb4bc1d01031414e92e074d3d2c282edb001bc176a5837f0982cb7a8d"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 106163,
+      "original_name": "native-oracle.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/native-oracle.json",
+      "original_sha256": "cc0812d9598ac3dca39c131038e5beec344aae6177305b9f21af6e1b2ca1d266",
+      "path": "receipts/native-oracle.json.gz",
+      "receipt_provenance": {
+        "driver_sha256": {
+          "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+        },
+        "execution": {
+          "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+          "binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+          "scope": "Actual bounded F1d2 reductions independently decoded and re-certified; no topology/appearance/world-distance/recursive acceptance"
+        },
+        "python": "3.14.7"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 11609,
+      "stored_sha256": "910448162577cfc5005237243c6fcd6f87270da946c1ffe56854cb4fbf3d0013"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "native-oracle.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/native-oracle.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/native-oracle.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "raw",
+      "original_bytes": 11879,
+      "original_name": "package-checks.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/package-checks.json",
+      "original_sha256": "c25683a948acb6b501add697078edc1c697ab7c5bed7056d953e933acd3fafd9",
+      "path": "receipts/package-checks.json",
+      "receipt_provenance": {
+        "command": [
+          "cargo",
+          "package",
+          "--locked",
+          "--offline",
+          "--no-verify",
+          "--allow-dirty"
+        ],
+        "exit_code": 0,
+        "normalized_metadata": {
+          "Cargo.lock": {
+            "added_package_keys": [],
+            "changed_package_keys": [],
+            "meaning": "Workspace Python binding package plus seven Python-only dependency entries removed; no remaining package changed or new package added.",
+            "original_sha256": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+            "packaged_sha256": "a0f3da4afb1161dfc6b735f4167e63f39b63dc4faf5a1a5ed95fbacbf4189c74",
+            "removed_package_keys": [
+              [
+                "portable-atomic",
+                "1.15.0"
+              ],
+              [
+                "pyo3",
+                "0.29.3"
+              ],
+              [
+                "pyo3-build-config",
+                "0.29.3"
+              ],
+              [
+                "pyo3-ffi",
+                "0.29.3"
+              ],
+              [
+                "pyo3-macros",
+                "0.29.3"
+              ],
+              [
+                "pyo3-macros-backend",
+                "0.29.3"
+              ],
+              [
+                "rusty-tiles-python",
+                "0.4.0"
+              ],
+              [
+                "target-lexicon",
+                "0.13.5"
+              ]
+            ]
+          },
+          "Cargo.toml": {
+            "meaning": "Cargo normalizes registry manifest; original manifest byte-identical. Root crate production source unchanged.",
+            "original_manifest_member": "Cargo.toml.orig",
+            "original_manifest_sha256": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+            "packaged_manifest_sha256": "f9112c8e138c088cf1349527a276f8c533441cdf2b7baf35842910f6aa851646"
+          }
+        },
+        "package_path": "/tmp/rusty-tiles-f1d2-final-target/package/rusty-tiles-0.4.0.crate",
+        "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+        "package_verification_scope": "Exact root production bytes plus normalized Cargo metadata and included current docs/oracles. No build verification of the packaged archive, publication, tag or release. Evidence-only final review/coordinator receipts can be added after this package.",
+        "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "required_docs_and_oracles_sha256": {
+          "bench/architecture_audit/mesh_approximation_f1d2/README.md": "cff244d61fce84a0d6fce1f6845b3be0b56ea3c7a3db5d23764a3b8b906df8c4",
+          "docs/architecture/f1d2-certificate-contract.md": "342f064c991ab3f2fcbb753b8629dc237f9a40aebb54e1c256485d3a576d340d",
+          "docs/architecture/f1d2-implementation.md": "f55068a77da26aabc1953ff54a4890cd834166a32d20ddf6b907b412ae887eca",
+          "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+        },
+        "verified_production_sha256": {
+          "build.rs": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+          "src/archive3tz.rs": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+          "src/bbox.rs": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+          "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+          "src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+          "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+          "src/error.rs": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc",
+          "src/fixtures.rs": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+          "src/georef.rs": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+          "src/geospatial.rs": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+          "src/geospatial/native.rs": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+          "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+          "src/glb_write.rs": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+          "src/gpu_texture.rs": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+          "src/grid.rs": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+          "src/hlod.rs": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+          "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+          "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+          "src/jpeg.rs": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+          "src/lib.rs": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc",
+          "src/lossless.rs": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+          "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+          "src/mesh.rs": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+          "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+          "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+          "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+          "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+          "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+          "src/mesh_archive/encode/identity.rs": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+          "src/mesh_archive/encode/proxy_identity.rs": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+          "src/mesh_archive/model.rs": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+          "src/mesh_archive/partition.rs": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+          "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+          "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+          "src/mesh_archive/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+          "src/mesh_archive/source/material.rs": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+          "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+          "src/mesh_archive/source/texture.rs": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+          "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+          "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+          "src/output.rs": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+          "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+          "src/pack.rs": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+          "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+          "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+          "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+          "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+          "src/point_sampling.rs": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+          "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+          "src/raster.rs": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+          "src/raster/native.rs": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+          "src/raster_directory.rs": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+          "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+          "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+          "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+          "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+          "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+          "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+          "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+          "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+          "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+          "src/texture.rs": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+          "src/tile.rs": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+          "src/tileset.rs": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+          "src/tileset/resources.rs": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+          "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+          "src/validate.rs": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+          "src/validate/admission.rs": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+          "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+          "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+          "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+          "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+          "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+          "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+          "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+          "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+          "src/vector/pipeline/aggregation.rs": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+          "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+          "src/vector/pipeline/geometry.rs": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+          "src/vector/pipeline/geometry/countries_tests.rs": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+          "src/vector/pipeline/geometry/native.rs": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+          "src/vector/pipeline/geometry/portable.rs": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+          "src/vector/pipeline/reuse.rs": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+          "src/vector/pipeline/source.rs": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+          "src/vector/pipeline/source_native.rs": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+          "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+          "src/vector/portable.rs": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+          "src/vector/source_fields.rs": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+          "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+        }
+      },
+      "scope": "Executed package production-byte identity, normalized Cargo metadata and docs/oracle snapshot. No packaged build verification/publication.",
+      "stored_bytes": 11879,
+      "stored_sha256": "c25683a948acb6b501add697078edc1c697ab7c5bed7056d953e933acd3fafd9"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 116,
+      "original_name": "package.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/package.log",
+      "original_sha256": "c9e1a5e70de0a146bebd4e79674d82942653c75a3a505f167fd4128e6852f2b9",
+      "path": "receipts/package.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Coordinator cargo package exit0; receipt contains precise production/metadata verification.",
+      "stored_bytes": 116,
+      "stored_sha256": "c9e1a5e70de0a146bebd4e79674d82942653c75a3a505f167fd4128e6852f2b9"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 58623,
+      "original_name": "placed-browser.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser.json",
+      "original_sha256": "21207b9155b938bf74897c0ec80e085b9c03fe42f7bf24e15138b1ddafccf5fb",
+      "path": "receipts/placed-browser.json.gz",
+      "receipt_provenance": {
+        "binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+        "binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+        "driver_sha256": {
+          "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204",
+          "tests/f1a_oracle.py": "d3ef051ccfc217cda3c28fc0cd8a96a9b173ebea31b89c7beb78adc5fe32d211",
+          "tests/f1b2_oracle.py": "8b5f758fed8f2f4f4e3a1c84cbb794d4c181f0b775115aaae7f157cb456cd89c",
+          "tests/f1b3_oracle.py": "2e4eb2051f50f2044b99d3a95c5149a6586a2e56ef3f6bc962b5e8bcb08ad56e",
+          "tests/f1b_oracle.py": "075da4f36ca1537a662a3d417ea4913aa50991f245bb2373eb811142106de5fc",
+          "tests/f1c1_oracle.py": "f87c6e843a48fa74481cc0d47047f954b226f99f21db60d32ce400d1290606d2",
+          "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "tests/f1d1_viewer.py": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943",
+          "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "tests/fixtures/f1d1_viewer.cjs": "8a95206dc6858ea0c18edef72a2611ad74bca8ca9a6739a846492acf685d2890"
+        },
+        "invocation": [
+          "/usr/bin/python3",
+          "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py",
+          "--binary",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+          "--binary-sha256",
+          "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+          "--source-commit",
+          "4553533e64c1494e706888a2c8e3a38a6867ce56",
+          "--artifact-dir",
+          "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser-artifacts",
+          "--cesium-dir",
+          "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
+          "--node-modules",
+          "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules",
+          "--chromium",
+          "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+          "--json-output",
+          "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser.json"
+        ],
+        "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "scope": "One Brisbane WGS84 anchor, default identity orientation and zero offset, independently positioned ECEF cameras/targets, unchanged identity modelMatrix and natural SSE16 coarse-to-fine traversal. Six coarse complete membership-array queries and six fine original-triangle queries. Local stored geometry/bounds checked independently. No exact world Hausdorff, general placement/topology or textured appearance claim.",
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 6658,
+      "stored_sha256": "d402257088a8f91ca6d3c6af5dd29880b20b1d758e289fc26bba91042e11fc4a"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 671,
+      "original_name": "placed-browser.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/placed-browser.log",
+      "original_sha256": "8571d62acfa68259854fc2c2eb09ab03d58bd2485b71de3969d990a9589969a5",
+      "path": "receipts/placed-browser.log",
+      "receipt_provenance": {
+        "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 671,
+      "stored_sha256": "8571d62acfa68259854fc2c2eb09ab03d58bd2485b71de3969d990a9589969a5"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 106315,
+      "original_name": "portable-oracle.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/portable-oracle.json",
+      "original_sha256": "fc2b6ab49aafa1e550fe0b15b5e343347352b64145bb4759befcff509f2c1a86",
+      "path": "receipts/portable-oracle.json.gz",
+      "receipt_provenance": {
+        "driver_sha256": {
+          "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf"
+        },
+        "execution": {
+          "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+          "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+          "scope": "Actual bounded F1d2 reductions independently decoded and re-certified; no topology/appearance/world-distance/recursive acceptance"
+        },
+        "python": "3.14.7"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 11620,
+      "stored_sha256": "c86feae91f954c3fafdb9a444881bfac8a1f72c7c415550d5157e7b2aadd0afb"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 0,
+      "original_name": "portable-oracle.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/portable-oracle.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "receipts/portable-oracle.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 0,
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "classification": "nonacceptance",
+      "encoding": "raw",
+      "original_bytes": 675,
+      "original_name": "preliminary-local-browser.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/local-browser.log",
+      "original_sha256": "026e6cfc2668c4b67d0d4a73f7ebcdd250d6c81c76d44c9479d0c9a98d2a5fc0",
+      "path": "receipts/preliminary-local-browser.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Driver str() editing TypeError before browser start; this attempt does not establish consumer acceptance.",
+      "stored_bytes": 675,
+      "stored_sha256": "026e6cfc2668c4b67d0d4a73f7ebcdd250d6c81c76d44c9479d0c9a98d2a5fc0"
+    },
+    {
+      "classification": "nonacceptance",
+      "encoding": "raw",
+      "original_bytes": 919,
+      "original_name": "preliminary-native-oracle.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/native-oracle.log",
+      "original_sha256": "5b186e0697926341faca9c4e3cad544ff400a81853028c219ab268853499c0c3",
+      "path": "receipts/preliminary-native-oracle.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Broad driver failed incorrect actual-depth-gate expectation after positives; no completed broad receipt.",
+      "stored_bytes": 919,
+      "stored_sha256": "5b186e0697926341faca9c4e3cad544ff400a81853028c219ab268853499c0c3"
+    },
+    {
+      "classification": "nonacceptance",
+      "encoding": "raw",
+      "original_bytes": 848,
+      "original_name": "preliminary-placed-browser.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/placed-browser.log",
+      "original_sha256": "bd9df2b83c4f3c114f35649b91e0da55bb94e0fb8f039bac6b1bc8fae2a55999",
+      "path": "receipts/preliminary-placed-browser.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Driver str() editing TypeError before browser start; this attempt does not establish consumer acceptance.",
+      "stored_bytes": 848,
+      "stored_sha256": "bd9df2b83c4f3c114f35649b91e0da55bb94e0fb8f039bac6b1bc8fae2a55999"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "gzip",
+      "original_bytes": 16951,
+      "original_name": "python-cli.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/python-cli.log",
+      "original_sha256": "1c194520c8263cc7c79d0d54632b7050c338904f261f687480e699d9dffb1c54",
+      "path": "receipts/python-cli.log.gz",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 2889,
+      "stored_sha256": "13cb54442725d0349ee4482182c647a70ff3d99923573738d531b19ae0edbb58"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "raw",
+      "original_bytes": 12770,
+      "original_name": "resource-release.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-release.json",
+      "original_sha256": "4fbde697a46ef49bc190ec59cc352d95476b2fdd6adc5a9146ee4f532378b5ab",
+      "path": "receipts/resource-release.json",
+      "receipt_provenance": {
+        "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+        "driver_sha256": {
+          "bench/architecture_audit/mesh_approximation_f1d2/resource_probe.py": "bae4ea54eb874b9a6d607befb05363c54dbbeacd81034b38f3af72a7ccb9cbea",
+          "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7"
+        },
+        "invocation": [
+          "/usr/bin/python3",
+          "bench/architecture_audit/mesh_approximation_f1d2/resource_probe.py",
+          "--binary",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+          "--expected-binary-sha256",
+          "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+          "--production-source",
+          "4553533e64c1494e706888a2c8e3a38a6867ce56",
+          "--artifact-dir",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-cases",
+          "--json-output",
+          "/home/bend/.cache/rusty-tiles-f1d2-evidence/resource-release.json"
+        ],
+        "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+        "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+        "source_sha256": {
+          "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+          "docs/architecture/f1d2-certificate-contract.md": "342f064c991ab3f2fcbb753b8629dc237f9a40aebb54e1c256485d3a576d340d",
+          "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+          "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+          "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+          "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+          "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+          "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8"
+        },
+        "status": "pass"
+      },
+      "scope": "Three optimized serial workloads; requested100m common-box proved, smaller scalar unproved.",
+      "stored_bytes": 12770,
+      "stored_sha256": "4fbde697a46ef49bc190ec59cc352d95476b2fdd6adc5a9146ee4f532378b5ab"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "raw",
+      "original_bytes": 2951,
+      "original_name": "resume-checker-controls.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-checker-controls.json",
+      "original_sha256": "9a3593b55481a15033649f16ce01cec3ed46f823326654a8171ac3e63e379522",
+      "path": "receipts/resume-checker-controls.json",
+      "receipt_provenance": {
+        "checker_sha256": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+        "driver_sha256": "31debbcd2a2d14a7e05c1ca3bbf3b457942634b895defe95a5c52bd83c8eb282",
+        "passed": true,
+        "scope": "Authored exact supports and checker controls only; no converter artifact acceptance or Rust execution."
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 2951,
+      "stored_sha256": "9a3593b55481a15033649f16ce01cec3ed46f823326654a8171ac3e63e379522"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "gzip",
+      "original_bytes": 17634,
+      "original_name": "resume-evidence-bindings.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-evidence-bindings.json",
+      "original_sha256": "f8c681f459246360445dc14ef398985000efff3ca5f02ff37aa7ea455b7efe41",
+      "path": "receipts/resume-evidence-bindings.json.gz",
+      "receipt_provenance": {
+        "driver_sha256": "b5e159917b294bfaf0b57b5bc7508932739fe00494a73c82bce37dfca8916533",
+        "final_driver_sha256": {
+          ".github/workflows/ci.yml": "1260d6b29d7f3d74eb812500c97ff6c556d0b1242a0b4fa3f56b4e7660155bfa",
+          "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": "77dc36049707e30a41864b26a2e3e2bb259d371d73da14bcdfd8e78292635204",
+          "bindings/python/tests/test_api.py": "9f192ed37ac701692c48124f8a6a2e966d8a4da1f9c54d8476726663f7e0a4ed",
+          "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+          "scripts/wheel_acceptance.py": "2a7170529cf44ad8081c64ef569057c7bdddc5eca18395c32902c340ba86dda1",
+          "tests/f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "tests/f1d1_khronos.py": "a6109e38a1c1c742beec0dd81ee975eb5c9e2c6469ab6ae340a9be4921ad8f92",
+          "tests/f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "tests/f1d1_viewer.py": "815d0cf204337814c8aede1dd2a629d78c95caadb6fcf352a607fe2d147fe943",
+          "tests/f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7",
+          "tests/f1d2_oracle.py": "e1af1fbf244870347dd45aed050d0057d481e6ca6c3c5969ffbcfede12ae22bf",
+          "tests/test_c1_validation.py": "e7d957830a0fbf0e071c6e319d7503a40beae5f31b6c165300dcf74f41a0273c"
+        },
+        "passed": true,
+        "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "scope": "Nonauthor final-receipt binding checks; no producer build or geometry claim.",
+        "wheel": {
+          "api": {
+            "empty_path": true,
+            "errors": 0,
+            "failures": 0,
+            "machine": "x86_64",
+            "ok": true,
+            "package_file": "/tmp/rusty-tiles-wheel-xo8acefr/venv/lib/python3.14/site-packages/rusty_tiles/__init__.py",
+            "package_version": "0.4.0",
+            "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+            "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+            "skipped": 0,
+            "tests_run": 44,
+            "wheel_sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7"
+          },
+          "path": "/tmp/rusty-tiles-f1d2-final-evidence/wheels/rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl",
+          "sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7"
+        }
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 3503,
+      "stored_sha256": "66a43e19c381daa883376e1799fe5e287dd9205f54624d0ae7cace85c9b9cded"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "raw",
+      "original_bytes": 9983,
+      "original_name": "resume-identities.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-identities.json",
+      "original_sha256": "de4a768f3413367b62892b36da485e65d0e6f653ece15ded7eaf22c9ed0f716d",
+      "path": "receipts/resume-identities.json",
+      "receipt_provenance": {
+        "passed": true,
+        "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 9983,
+      "stored_sha256": "de4a768f3413367b62892b36da485e65d0e6f653ece15ded7eaf22c9ed0f716d"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "raw",
+      "original_bytes": 774,
+      "original_name": "resume-interval-enclosure.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-interval-enclosure.json",
+      "original_sha256": "61a68629e03a609c75d8cddceed59b725a08a8a3d74b22f9ce44562d66d695ab",
+      "path": "receipts/resume-interval-enclosure.json",
+      "receipt_provenance": {
+        "driver_sha256": "939b217164a2aec818864e846b818add8ebfdaeb4a525adda3ae2a261579697a",
+        "passed": true,
+        "python": "3.14.7",
+        "scope": "Nonauthor exact-reference checks of the inspected interval operations.\n\nThis is a Python arithmetic reproduction, not execution of Rust or a producer\ncertificate. Exact Fraction addresses supply the independent enclosure truth."
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 774,
+      "stored_sha256": "61a68629e03a609c75d8cddceed59b725a08a8a3d74b22f9ce44562d66d695ab"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "raw",
+      "original_bytes": 1214,
+      "original_name": "resume-package-storage.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-package-storage.json",
+      "original_sha256": "ba716265e539e76a3f0f1e269228e6dc357380cfd1aadb655500f03076bef854",
+      "path": "receipts/resume-package-storage.json",
+      "receipt_provenance": {
+        "package_path": "/tmp/rusty-tiles-f1d2-final-target/package/rusty-tiles-0.4.0.crate",
+        "package_sha256": "0a94bfcdb123c4b67a463ae17ce5b6f62fb3d644a1657b671827558044314ffd",
+        "passed": true,
+        "scope": "Independent package bytes/lock normalization and storage roundtrip; no Cargo, packaged build, publication or release acceptance"
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 1214,
+      "stored_sha256": "ba716265e539e76a3f0f1e269228e6dc357380cfd1aadb655500f03076bef854"
+    },
+    {
+      "classification": "independent-control",
+      "encoding": "raw",
+      "original_bytes": 7370,
+      "original_name": "resume-producer-replay.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume-producer-replay.json",
+      "original_sha256": "e4a69d300589e82fb1689f21ffea37b9b15515c202fe4100c32f4a2b90325340",
+      "path": "receipts/resume-producer-replay.json",
+      "receipt_provenance": {
+        "binary_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+        "driver_sha256": "cfc09a7311a560e3df074cbf24591e9d8771b93a3b7bc6e0ab23fc4aa32eac3d",
+        "exit_code": 0,
+        "oracle_sha256": {
+          "f1c2_oracle.py": "42b0804e4f7615f047d65e66accd14372be397077ccd486367af13d4ef1a7dbf",
+          "f1d1_oracle.py": "ac155f43347cd22bc06e5b7885f7e626fcf7381cf14a35abcaf5a8a4e0089ead",
+          "f1d2_certificate.py": "8f64bd8bd0e9a54c7e44b26a2e89f4f341dd5c88c7a7ac64ff3ff134039c75d7"
+        },
+        "passed": true,
+        "production_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+        "scope": "Reviewer-authored planar GLB through a frozen CLI and independent reader.\n\nThe literal fixture is separate from the producer/evidence owners' fixtures.\nArtifacts are temporary; the receipt retains source/archive/member identities.",
+        "source_sha256": "c6aa4fa6ff7482f692ffa6ca06f4caaa1a672644d6529b17d673185515ab83a8"
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 7370,
+      "stored_sha256": "e4a69d300589e82fb1689f21ffea37b9b15515c202fe4100c32f4a2b90325340"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "raw",
+      "original_bytes": 11413,
+      "original_name": "resume_evidence_bindings.py",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review_probes/resume_evidence_bindings.py",
+      "original_sha256": "b5e159917b294bfaf0b57b5bc7508932739fe00494a73c82bce37dfca8916533",
+      "path": "receipts/resume_evidence_bindings.py",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from text storage.",
+        "kind": "raw-text"
+      },
+      "scope": "Fresh NONAUTHOR reviewer-owned source identity, exact controls, separate actual-artifact replay or final source/artifact/wheel/package/storage bindings; original receipt scope preserved.",
+      "stored_bytes": 11413,
+      "stored_sha256": "b5e159917b294bfaf0b57b5bc7508932739fe00494a73c82bce37dfca8916533"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "gzip",
+      "original_bytes": 20036,
+      "original_name": "review.md",
+      "original_path": "/tmp/rusty-tiles-f1d2-resume/bench/architecture_audit/mesh_approximation_f1d2/review.md",
+      "original_sha256": "00589d64d2b9ded6374a58bbc39ed05dfb6610c8ed64b49e77b861b1a075e855",
+      "path": "receipts/review.md.gz",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from text storage.",
+        "kind": "raw-text"
+      },
+      "scope": "Final separate NONAUTHOR bounded source/artifact/evidence disposition; explicit proof limits retained.",
+      "stored_bytes": 8377,
+      "stored_sha256": "d52ca7fd099561b61ca4fcf68400952ce1fcc641d6ee21e5dc048dc3e5c6a53f"
+    },
+    {
+      "classification": "source-provenance",
+      "encoding": "raw",
+      "original_bytes": 9717,
+      "original_name": "source-artifacts.json",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/source-artifacts.json",
+      "original_sha256": "2b12c0b49ca2c0970f95c2801af93360deecacb3e4a348fcc9e8db660b64a385",
+      "path": "receipts/source-artifacts.json",
+      "receipt_provenance": {
+        "binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-portable-4553533",
+        "binary_sha256": "aa71fd57614844488d336dbc991df551fd9294c6d31d82027e1b4a43aedbf64b",
+        "native_binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-native-4553533",
+        "native_binary_sha256": "c4c4a64ed25ddfd706e2dcaebb830c9323928dc299ebc2664569f563ca0a52e3",
+        "production_sha256": {
+          "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+          "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+          "bindings/python/Cargo.toml": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77",
+          "bindings/python/src/lib.rs": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9",
+          "build.rs": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+          "src/archive3tz.rs": "fd50902db643bac7ff08ac04aaadd150e75d9ce12817854c0e758b6126a49649",
+          "src/bbox.rs": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+          "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+          "src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+          "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+          "src/error.rs": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc",
+          "src/fixtures.rs": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+          "src/georef.rs": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+          "src/geospatial.rs": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+          "src/geospatial/native.rs": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+          "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+          "src/glb_write.rs": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+          "src/gpu_texture.rs": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+          "src/grid.rs": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+          "src/hlod.rs": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+          "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+          "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+          "src/jpeg.rs": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+          "src/lib.rs": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc",
+          "src/lossless.rs": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+          "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+          "src/mesh.rs": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+          "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+          "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+          "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+          "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+          "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+          "src/mesh_archive/encode/identity.rs": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+          "src/mesh_archive/encode/proxy_identity.rs": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+          "src/mesh_archive/model.rs": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+          "src/mesh_archive/partition.rs": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+          "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+          "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+          "src/mesh_archive/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+          "src/mesh_archive/source/material.rs": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+          "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+          "src/mesh_archive/source/texture.rs": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+          "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+          "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+          "src/output.rs": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+          "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+          "src/pack.rs": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+          "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+          "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+          "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+          "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+          "src/point_sampling.rs": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+          "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+          "src/raster.rs": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+          "src/raster/native.rs": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+          "src/raster_directory.rs": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+          "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+          "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+          "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+          "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+          "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+          "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+          "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+          "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+          "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+          "src/texture.rs": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+          "src/tile.rs": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+          "src/tileset.rs": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+          "src/tileset/resources.rs": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+          "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+          "src/validate.rs": "ba41574690d56b77837ab1910a67c0b3c95994202cf395b659df7ee3cc74eda1",
+          "src/validate/admission.rs": "bf544eb09896f5c5cbaa1488650fd6d3ef895c41579b6f148479d13bc20ab002",
+          "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+          "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+          "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+          "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+          "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+          "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+          "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+          "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+          "src/vector/pipeline/aggregation.rs": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+          "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+          "src/vector/pipeline/geometry.rs": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+          "src/vector/pipeline/geometry/countries_tests.rs": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+          "src/vector/pipeline/geometry/native.rs": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+          "src/vector/pipeline/geometry/portable.rs": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+          "src/vector/pipeline/reuse.rs": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+          "src/vector/pipeline/source.rs": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+          "src/vector/pipeline/source_native.rs": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+          "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+          "src/vector/portable.rs": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+          "src/vector/source_fields.rs": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+          "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+        },
+        "release_binary": "/home/bend/.cache/rusty-tiles-f1d2-evidence/rusty-tiles-release-4553533",
+        "release_binary_sha256": "d1e86e4f38b458262d5652b425df7a02c88924519089d505eda8da09ed5797d9",
+        "source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56"
+      },
+      "scope": "Prior bounded full-detail/resource receipt accepted by recovery handoff; original profile/domain only.",
+      "stored_bytes": 9717,
+      "stored_sha256": "2b12c0b49ca2c0970f95c2801af93360deecacb3e4a348fcc9e8db660b64a385"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "gzip",
+      "original_bytes": 60739,
+      "original_name": "test-native.log",
+      "original_path": "/home/bend/.cache/rusty-tiles-f1d2-evidence/test-native.log",
+      "original_sha256": "0552f58cb9fc0c4e93ef2fe5bbf471cbe37b9126779ab04df3be6195bb299a71",
+      "path": "receipts/test-native.log.gz",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Retained prior execution log; commands/outcome/source binding belong to coordinator-checks and source-artifacts. Empty logs mean silence, not independent success.",
+      "stored_bytes": 15319,
+      "stored_sha256": "96e157da02e83f123b6060e126815a22cc9b23ddf80cb895514026d8f4b6a2db"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "gzip",
+      "original_bytes": 53692,
+      "original_name": "test-portable.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/test-portable.log",
+      "original_sha256": "9a12d70993f1734f265046f4ff2cbd21011ce5331df09cf24b750060475dd854",
+      "path": "receipts/test-portable.log.gz",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final coordinator source/artifact identity or retained check log; detailed acceptance and command status owned by coordinator-checks.",
+      "stored_bytes": 13527,
+      "stored_sha256": "e802e95b4220068b5a59bffd862faf10d30bdc0623e3d24cfc5377ec5a5ca528"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "raw",
+      "original_bytes": 707,
+      "original_name": "test-python-binding.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/test-python-binding.log",
+      "original_sha256": "585984cda92191502c32d6692d292d3e79529b66be58a0a9f1c0eba558ab66b7",
+      "path": "receipts/test-python-binding.log",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 707,
+      "stored_sha256": "585984cda92191502c32d6692d292d3e79529b66be58a0a9f1c0eba558ab66b7"
+    },
+    {
+      "classification": "accepted-bounded",
+      "encoding": "raw",
+      "original_bytes": 491,
+      "original_name": "wheel-api.json",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.json",
+      "original_sha256": "e24278c7869a897aff1f2c1dd5f4827df2a1154a5e4d4d2b2bd2a85e9a255581",
+      "path": "receipts/wheel-api.json",
+      "receipt_provenance": {
+        "empty_path": true,
+        "ok": true,
+        "package_version": "0.4.0",
+        "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+        "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+        "tests_run": 44,
+        "wheel_sha256": "028cadd7f78de1beff544eb46f243108658759cab09d12ff1f75a5dc3d9c70c7"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 491,
+      "stored_sha256": "e24278c7869a897aff1f2c1dd5f4827df2a1154a5e4d4d2b2bd2a85e9a255581"
+    },
+    {
+      "classification": "prior-check-log",
+      "encoding": "gzip",
+      "original_bytes": 85094,
+      "original_name": "wheel-api.log",
+      "original_path": "/tmp/rusty-tiles-f1d2-final-evidence/wheel-api.log",
+      "original_sha256": "1055a3a50c2ff0de9eb1a19dd539f79b06a6b71b24e9c1e963637dd422a6dc4f",
+      "path": "receipts/wheel-api.log.gz",
+      "receipt_provenance": {
+        "execution_pins": "See associated receipt/coordinator-checks; not inferred from log storage.",
+        "kind": "raw-log"
+      },
+      "scope": "Final resume execution; receipt-authored source/driver/binary pins preserved. Log success is recorded by coordinator-checks.",
+      "stored_bytes": 4130,
+      "stored_sha256": "1ee1abc9b6eaea2469ecd73a688a1a9b4d73b67dc6bd888bcb04e00c3b9b68e4"
+    }
+  ],
+  "final_slots": {
+    "installed-wheel": {
+      "reference": "wheel-api.json",
+      "status": "complete"
+    },
+    "native-artifact": {
+      "reference": "native-oracle.json",
+      "status": "complete"
+    },
+    "nonauthor-final-review": {
+      "reference": "review.md",
+      "status": "complete"
+    },
+    "package-pin": {
+      "reference": "package-checks.json",
+      "status": "complete"
+    },
+    "placed-consumer": {
+      "reference": "placed-browser.json",
+      "status": "complete"
+    },
+    "portable-artifact": {
+      "reference": "portable-oracle.json",
+      "status": "complete"
+    },
+    "portable-retained-test-log": {
+      "reference": "test-portable.log",
+      "status": "complete"
+    }
+  },
+  "production_source_commit": "4553533e64c1494e706888a2c8e3a38a6867ce56",
+  "schema_version": 1,
+  "storage": "Exact raw bytes; files >=16384 bytes use gzip level9 with mtime0 and no filename. Smaller files remain raw. Compression creates no new acceptance."
+}
