@@ -1,0 +1,7 @@
+{
+  "phase": "formatter-only compiled copy",
+  "original_private_controls_sha256": "99d5b29c96b84ede9050d3e2a7977f40614e23c2733fd0e34cae336ae0faec74",
+  "compiled_private_controls_sha256": "403c05f33da985f6e9c165d95a480f0b77d171f342f5a371311f72b8f194dbc7",
+  "formatter": "rustfmt 1.9.0-stable (88d9e12ae1 2026-08-18)",
+  "scope": "Root selected separately formatted identical-control source for cfg(test); original frozen private input and fixture bundle remain byte-identical. No target execution claim."
+}

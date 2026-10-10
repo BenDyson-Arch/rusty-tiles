@@ -831,7 +831,10 @@ pub(crate) fn inspect<E>(
             primitives = primitives
                 .checked_add(1)
                 .ok_or_else(|| limit("primitive count overflow"))?;
-            let mode = p.mode.map_or(Ok(4), |v| uint(Some(v)))?;
+            let mode = p.mode.map_or(Ok(4), |v| {
+                usize::try_from(domain(Some(v), 6)?)
+                    .map_err(|_| invalid("primitive mode outside host range"))
+            })?;
             if ![0, 1, 3, 4].contains(&mode) {
                 return Err(unsupported(format!("primitive mode {mode}")).into());
             }

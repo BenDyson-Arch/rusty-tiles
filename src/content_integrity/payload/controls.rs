@@ -300,3 +300,52 @@ fn consumed_decimal_references_targets_strides_and_viewless_bounds() {
         3
     );
 }
+#[test]
+fn real_meshopt_owner_admits_output_before_touching_invalid_compressed_stream() {
+    let admitted = json::admit(
+        br#"{"buffer":0,"byteLength":1,"count":2,"byteStride":4,"mode":"ATTRIBUTES"}"#,
+        limits().json,
+    )
+    .unwrap();
+    let extension: records::Meshopt<'_> = record(Some(admitted.raw())).unwrap();
+    let buffers = [Cow::Borrowed(&[0u8][..])];
+    assert!(matches!(
+        decode_meshopt(&extension, 0, &buffers, 7),
+        Err(FormatError::ResourceLimit(_))
+    ));
+    assert!(matches!(
+        decode_meshopt(&extension, 0, &buffers, 8),
+        Err(FormatError::InvalidInput(_))
+    ));
+}
+#[test]
+fn primitive_mode_preserves_defined_profile_refusals_and_rejects_undefined_enums() {
+    for token in ["7", "18446744073709551615", "1e400"] {
+        let source = format!(
+            r#"{{"asset":{{"version":"2.0"}},"meshes":[{{"primitives":[{{"mode":{token}}}]}}]}}"#
+        );
+        assert!(
+            matches!(
+                direct(source.as_bytes(), limits(), 9, |_, _| panic!(
+                    "no resources"
+                )),
+                Err(PayloadError::Format(FormatError::InvalidInput(_)))
+            ),
+            "{token}"
+        );
+    }
+    for token in ["2", "5.0", "6e0"] {
+        let source = format!(
+            r#"{{"asset":{{"version":"2.0"}},"meshes":[{{"primitives":[{{"mode":{token}}}]}}]}}"#
+        );
+        assert!(
+            matches!(
+                direct(source.as_bytes(), limits(), 9, |_, _| panic!(
+                    "no resources"
+                )),
+                Err(PayloadError::Format(FormatError::Unsupported(_)))
+            ),
+            "{token}"
+        );
+    }
+}

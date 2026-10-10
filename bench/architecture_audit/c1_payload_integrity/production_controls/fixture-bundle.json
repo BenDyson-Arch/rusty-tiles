@@ -1,0 +1,37 @@
+{
+  "bundleBytes": 65419,
+  "bundleSha256": "4cf05918b328821893fb63198d730ec76cec790cac8aa8e580051c33efc38c79",
+  "cases": 205,
+  "files": {
+    "2026-10-10-component-bounds-decision.md": {
+      "bytes": 2894,
+      "sha256": "735d3621f41cf10aebc6b1bf16b145615d430ccd6f4c752b14f9263f4c95e1d4"
+    },
+    "README.md": {
+      "bytes": 6227,
+      "sha256": "9aa9d755e85a90978b2568f0b0c9ebbb46d501c2baabbc2d4acc5be626a59280"
+    },
+    "driver.py": {
+      "bytes": 51003,
+      "sha256": "5bcd8e1e0a34e86fa39339eb1d499e95851a871a2841d142145dc8cbb911f5d7"
+    },
+    "fixtures/meshopt-none-placeholder-gltf/tile.gltf": {
+      "bytes": 675,
+      "sha256": "d5b099c77f10034328f9ec06800e0ff3e342fd3b4230156874b9f323ef9d4a68"
+    },
+    "private_controls.rs": {
+      "bytes": 14019,
+      "sha256": "99d5b29c96b84ede9050d3e2a7977f40614e23c2733fd0e34cae336ae0faec74"
+    }
+  },
+  "fullReportPositives": 77,
+  "manifestBytes": 309546,
+  "manifestSha256": "1b3913464d6152f10b267506a41288492baba38a56a79bdd1cda1c42860dc4e5",
+  "memberPinCompressedSha256": "73b2ba265d6c11c799e44dc56221fcf7fdca0f0c05c09a34928ff9c3927fc4e0",
+  "members": 843,
+  "schemaVersion": 1,
+  "scope": "Finite independently authored format/category/report controls; no full C1/A2/release claim.",
+  "status": "Prepared and frozen independent inputs/expectations; no target execution claimed.",
+  "tarBytes": 1331200,
+  "tarSha256": "d12423862edb59c083afbae5c486fb6f87bddb9447fa4dd5810ea8bd5116070a"
+}
