@@ -5,7 +5,6 @@ use crate::{JobError, JobErrorKind};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-const MAX_EMITTED_NAME_BYTES: usize = 8 * 1024 * 1024;
 type PrimitiveKey = (u32, u32, u32);
 
 pub(super) struct Plan<'a> {
@@ -189,11 +188,11 @@ fn append_view(
     id
 }
 
-pub(super) fn validate_budget(
+pub(super) fn name_bytes(
     geometry: &Geometry,
     leaves: &[Leaf],
     mut check: impl FnMut() -> Result<(), JobError>,
-) -> Result<(), JobError> {
+) -> Result<usize, JobError> {
     let mut total = 0usize;
     for leaf in leaves {
         let mut keys = BTreeSet::new();
@@ -218,15 +217,9 @@ pub(super) fn validate_budget(
                 .ok_or_else(|| {
                     JobError::new(JobErrorKind::Unsupported, "emitted source names overflow")
                 })?;
-            if total > MAX_EMITTED_NAME_BYTES {
-                return Err(JobError::new(
-                    JobErrorKind::Unsupported,
-                    "emitted source node names exceed 8 MiB archive ceiling",
-                ));
-            }
         }
     }
-    Ok(())
+    Ok(total)
 }
 
 #[cfg(test)]
@@ -243,6 +236,7 @@ mod tests {
                         ..Default::default()
                     },
                     positions: [[0.; 3]; 3],
+                    vertex_indices: [0, 1, 2],
                     normals: None,
                     tangents: None,
                     texcoords: [None; 2],
@@ -269,8 +263,38 @@ mod tests {
     fn repeated_names_have_a_strict_archive_wide_byte_cap() {
         let geometry = geometry(2049, Some("🦉".repeat(1024)));
         let leaves: Vec<_> = (0..2049).map(leaf).collect();
-        validate_budget(&geometry, &leaves[..2048], || Ok(())).unwrap();
-        let error = validate_budget(&geometry, &leaves, || Ok(())).unwrap_err();
+        super::super::validate_identity_budget(&geometry, &leaves[..2048], None, || Ok(()))
+            .unwrap();
+        let error = super::super::validate_identity_budget(&geometry, &leaves, None, || Ok(()))
+            .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    }
+    #[test]
+    fn root_region_name_counts_once_in_the_shared_archive_budget() {
+        use crate::mesh_archive::approximation::{ProxyGeometry, ProxyRegion, ProxyTriangle};
+        let geometry = geometry(2048, Some("🦉".repeat(1024)));
+        let leaves: Vec<_> = (0..2048).map(leaf).collect();
+        let proxy = ProxyGeometry {
+            regions: vec![ProxyRegion {
+                members: geometry
+                    .triangles
+                    .iter()
+                    .map(|triangle| triangle.source)
+                    .collect(),
+                material: None,
+            }],
+            triangles: vec![ProxyTriangle {
+                positions: [[0.; 3]; 3],
+                region: 0,
+            }],
+            certified_error_metres: 0.,
+            comparison_pairs: 0,
+        };
+        super::super::validate_identity_budget(&geometry, &leaves[..2047], Some(&proxy), || Ok(()))
+            .unwrap();
+        let error =
+            super::super::validate_identity_budget(&geometry, &leaves, Some(&proxy), || Ok(()))
+                .unwrap_err();
         assert_eq!(error.kind(), JobErrorKind::Unsupported);
     }
     #[test]

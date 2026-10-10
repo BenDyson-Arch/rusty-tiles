@@ -15,9 +15,9 @@ use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest, ModelManifestResult,
-    ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy, RasterDirectoryRequest,
-    RasterDirectoryResult, Reporter, RunControl, RunEvent,
+    MeshApproximation, MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest,
+    ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
+    RasterDirectoryRequest, RasterDirectoryResult, Reporter, RunControl, RunEvent,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -534,6 +534,12 @@ struct LocalMeshArgs {
     /// Positive maximum triangle count per leaf; not a byte or memory budget
     #[arg(long = "leaf-triangles")]
     leaf_triangles: usize,
+    /// Maximum triangles in one certified coarse root; requires --max-proxy-error-metres
+    #[arg(long, requires = "max_proxy_error_metres")]
+    root_proxy_triangles: Option<usize>,
+    /// Finite positive geometric error budget in local metres; requires --root-proxy-triangles
+    #[arg(long, requires = "root_proxy_triangles")]
+    max_proxy_error_metres: Option<f64>,
     #[command(flatten)]
     placement: RigidPlacementArgs,
 }
@@ -1169,9 +1175,18 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 OutputPolicy::CreateNew
             };
             let placement = a.placement.resolve()?;
+            let approximation = match (a.root_proxy_triangles, a.max_proxy_error_metres) {
+                (Some(triangle_limit), Some(max_error_metres)) => MeshApproximation::RootProxy {
+                    triangle_limit,
+                    max_error_metres,
+                },
+                (None, None) => MeshApproximation::FullDetail,
+                _ => unreachable!("clap requires paired proxy arguments"),
+            };
             let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
                 .with_policy(policy)
-                .with_placement(placement);
+                .with_placement(placement)
+                .with_approximation(approximation);
             Outcome::Mesh(Box::new(mesh_to_archive(request, &run)?))
         }
         Command::MeshTo3tz(a) => {
@@ -1497,6 +1512,38 @@ mod tests {
             panic!("wrong command");
         };
         assert!(parsed.force);
+    }
+
+    #[test]
+    fn root_proxy_arguments_are_one_explicit_choice() {
+        let base = [
+            "rusty-tiles",
+            "mesh-local-to-3tz",
+            "-i",
+            "in.glb",
+            "-o",
+            "out.3tz",
+            "--leaf-triangles",
+            "32",
+        ];
+        for partial in [
+            ["--root-proxy-triangles", "8"],
+            ["--max-proxy-error-metres", "2"],
+        ] {
+            assert!(Cli::try_parse_from(base.into_iter().chain(partial)).is_err());
+        }
+        let parsed = Cli::try_parse_from(base.into_iter().chain([
+            "--root-proxy-triangles",
+            "8",
+            "--max-proxy-error-metres",
+            "2",
+        ]))
+        .unwrap();
+        let Command::MeshLocalTo3tz(args) = parsed.command else {
+            panic!("wrong command")
+        };
+        assert_eq!(args.root_proxy_triangles, Some(8));
+        assert_eq!(args.max_proxy_error_metres, Some(2.0));
     }
 
     #[test]

@@ -1,0 +1,16 @@
+{
+  "checks": {
+    "degenerate_point_squared_bound": "1",
+    "hole_vertex_only_squared_distance": "0",
+    "hole_whole_face_squared_bound": "49",
+    "mixed_magnitude_identical_squared_bound": "0",
+    "planar_subdivided_cover_squared_bound": "0",
+    "planar_whole_face_squared_bound": "16",
+    "spike_reverse_squared_bound": "10000",
+    "spike_squared_bound": "10000"
+  },
+  "driver_sha256": "80e9c6427ef1e99d972f7caf1ce75a381145e051032181b09d4ba0b8a78a38b3",
+  "passed": true,
+  "python": "3.14.7",
+  "scope": "Exact analytic contract probes; no production execution or artifact acceptance"
+}

@@ -12,6 +12,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod approximation;
 mod binding;
 mod encode;
 mod model;
@@ -26,6 +27,32 @@ pub use model::{
 use placement::ResolvedPlacement;
 pub use placement::{MeshPlacement, MeshPlacementReport};
 
+/// Full-detail delivery or one bounded coarse root over unchanged leaves.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum MeshApproximation {
+    #[default]
+    FullDetail,
+    RootProxy {
+        triangle_limit: usize,
+        max_error_metres: f64,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MeshApproximationReport {
+    FullDetail,
+    RootProxy {
+        triangle_limit: u64,
+        triangles: u64,
+        regions: u64,
+        certified_error_metres: f64,
+        geometric_error_metres: f64,
+        comparison_pairs: u64,
+        appearance: &'static str,
+    },
+}
+
 #[derive(Clone, Debug)]
 pub struct MeshRequest {
     input: PathBuf,
@@ -33,6 +60,7 @@ pub struct MeshRequest {
     leaf_triangles: usize,
     policy: OutputPolicy,
     placement: MeshPlacement,
+    approximation: MeshApproximation,
 }
 impl MeshRequest {
     pub fn local_gltf(
@@ -46,6 +74,7 @@ impl MeshRequest {
             leaf_triangles,
             policy: OutputPolicy::CreateNew,
             placement: MeshPlacement::Local,
+            approximation: MeshApproximation::FullDetail,
         }
     }
     pub fn with_policy(mut self, policy: OutputPolicy) -> Self {
@@ -54,6 +83,10 @@ impl MeshRequest {
     }
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
         self.placement = placement;
+        self
+    }
+    pub fn with_approximation(mut self, approximation: MeshApproximation) -> Self {
+        self.approximation = approximation;
         self
     }
 }
@@ -75,6 +108,7 @@ pub struct MeshReport {
     pub image_bytes: u64,
     pub image_pixels: u64,
     pub routing_geometric_error_metres: f64,
+    pub approximation: MeshApproximationReport,
 }
 #[derive(Debug)]
 pub struct MeshResult {
@@ -94,6 +128,15 @@ struct PreparedMesh {
     leaves: Vec<partition::Leaf>,
     bounds: partition::Bounds,
     images: Vec<usize>,
+    root: PreparedRoot,
+}
+enum PreparedRoot {
+    FullDetail,
+    Proxy {
+        geometry: approximation::ProxyGeometry,
+        triangle_limit: usize,
+        max_error_metres: f64,
+    },
 }
 struct Workspace(tempfile::TempDir);
 impl Workspace {
@@ -136,6 +179,9 @@ struct CompletedMesh {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ProducerStage {
     Decode,
+    Approximate,
+    EncodeProxy,
+    WriteProxy,
     EncodeLeaf,
     WriteImage,
     WriteLeaf,
@@ -190,6 +236,16 @@ fn validate(request: &MeshRequest) -> Result<(), JobError> {
             "mesh output must use .3tz or .3dtiles.zip",
         ));
     }
+    if let MeshApproximation::RootProxy {
+        triangle_limit,
+        max_error_metres,
+    } = request.approximation
+    {
+        if triangle_limit == 0 || !max_error_metres.is_finite() || max_error_metres <= 0.0 {
+            return Err(invalid(JobErrorKind::InvalidRequest,
+                "root proxy requires a positive triangle limit and finite positive maximum error metres"));
+        }
+    }
     Ok(())
 }
 
@@ -206,6 +262,7 @@ fn prepare(
         leaf_triangles,
         policy,
         placement,
+        approximation,
     } = request;
     let placement = ResolvedPlacement::resolve(&placement)?;
     crate::runtime::file_publication_supported()?;
@@ -228,7 +285,39 @@ fn prepare(
         source::MAX_LEAVES,
         || attempt.check(),
     )?;
-    encode::validate_identity_budget(&geometry, &leaves, || attempt.check())?;
+    let root = match approximation {
+        MeshApproximation::FullDetail => PreparedRoot::FullDetail,
+        MeshApproximation::RootProxy {
+            triangle_limit,
+            max_error_metres,
+        } => {
+            operations.stage(ProducerStage::Approximate)?;
+            attempt.emit(&RunEvent::Progress {
+                phase: "mesh_approximation",
+                done: 0,
+                total: Some(1),
+            })?;
+            let proxy =
+                approximation::prepare(&geometry, triangle_limit, max_error_metres, || {
+                    attempt.check()
+                })?;
+            attempt.emit(&RunEvent::Progress {
+                phase: "mesh_approximation",
+                done: 1,
+                total: Some(1),
+            })?;
+            PreparedRoot::Proxy {
+                geometry: proxy,
+                triangle_limit,
+                max_error_metres,
+            }
+        }
+    };
+    let proxy = match &root {
+        PreparedRoot::FullDetail => None,
+        PreparedRoot::Proxy { geometry, .. } => Some(geometry),
+    };
+    encode::validate_identity_budget(&geometry, &leaves, proxy, || attempt.check())?;
     let images = encode::used_images(&geometry).map_err(|e| {
         invalid(
             JobErrorKind::InvalidState,
@@ -247,6 +336,7 @@ fn prepare(
         leaves,
         bounds,
         images,
+        root,
     })
 }
 fn write_member(
@@ -323,11 +413,52 @@ fn produce(
             total: Some(prepared.leaves.len() as u64),
         })?;
     }
-    let routing_error = prepared.bounds.diagonal().max(1.0);
+    let omission_error = prepared.bounds.diagonal().max(1.0);
+    let (root_content, approximation, routing_error) = match &prepared.root {
+        PreparedRoot::FullDetail => (
+            encode::RootContent::Routing {
+                omission_error_metres: omission_error,
+            },
+            MeshApproximationReport::FullDetail,
+            omission_error,
+        ),
+        PreparedRoot::Proxy {
+            geometry,
+            triangle_limit,
+            max_error_metres,
+        } => {
+            operations.stage(ProducerStage::EncodeProxy)?;
+            let bytes = encode::proxy(&prepared.geometry, geometry, || attempt.check())?;
+            operations.stage(ProducerStage::WriteProxy)?;
+            members.push(write_member(
+                workspace,
+                encode::ROOT_PROXY_NAME,
+                &bytes,
+                attempt,
+                operations,
+            )?);
+            (
+                encode::RootContent::Proxy {
+                    geometric_error_metres: *max_error_metres,
+                },
+                MeshApproximationReport::RootProxy {
+                    triangle_limit: *triangle_limit as u64,
+                    triangles: geometry.triangles.len() as u64,
+                    regions: geometry.regions.len() as u64,
+                    certified_error_metres: geometry.certified_error_metres,
+                    geometric_error_metres: *max_error_metres,
+                    comparison_pairs: geometry.comparison_pairs,
+                    appearance: "opaque-untextured-factors",
+                },
+                omission_error.max(*max_error_metres),
+            )
+        }
+    };
     let manifest = encode::tileset(
         &prepared.leaves,
         prepared.bounds,
         prepared.placement.transform(),
+        root_content,
         routing_error,
         || attempt.check(),
     )
@@ -346,8 +477,8 @@ fn produce(
         operations,
     )?);
     let report = MeshReport {
-        schema_version: 5,
-        profile: "f1c2-source-identity-gltf-v1",
+        schema_version: 6,
+        profile: "f1d1-root-proxy-gltf-v1",
         source_coordinates: "local-gltf",
         coordinates: prepared.placement.coordinates(),
         placement: prepared.placement.report(),
@@ -373,6 +504,7 @@ fn produce(
             })
             .sum(),
         routing_geometric_error_metres: routing_error,
+        approximation,
     };
     let bytes = serde_json::to_vec(&report).map_err(|e| {
         invalid(
@@ -554,6 +686,34 @@ mod tests {
                 {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
             "images":[{"bufferView":2,"mimeType":"image/png"}],"textures":[{"source":0}],
             "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        fixture_glb(document, bin)
+    }
+    fn proxy_fixture() -> Vec<u8> {
+        let mut bin = Vec::new();
+        for y in 0..=4 {
+            for x in 0..=4 {
+                for v in [x as f32, y as f32, 0.0] {
+                    bin.extend(v.to_le_bytes());
+                }
+            }
+        }
+        let position_bytes = bin.len();
+        for y in 0..4 {
+            for x in 0..4 {
+                let a = (y * 5 + x) as u32;
+                for i in [a, a + 1, a + 5, a + 1, a + 6, a + 5] {
+                    bin.extend(i.to_le_bytes());
+                }
+            }
+        }
+        let document = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],"buffers":[{"byteLength":bin.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":position_bytes},{"buffer":0,"byteOffset":position_bytes,"byteLength":bin.len()-position_bytes}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":25,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                {"bufferView":1,"componentType":5125,"count":96,"type":"SCALAR"}]});
+        fixture_glb(document, bin)
+    }
+    fn fixture_glb(document: serde_json::Value, mut bin: Vec<u8>) -> Vec<u8> {
         let mut json = serde_json::to_vec(&document).unwrap();
         while !json.len().is_multiple_of(4) {
             json.push(b' ');
@@ -790,5 +950,62 @@ mod tests {
         assert!(failure.retained_paths.is_empty());
         assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
         assert!(!control.cancellation_handle().cancel());
+    }
+    #[test]
+    fn proxy_failures_preserve_replace_target_and_cleanup_owned_candidates() {
+        for target in [
+            ProducerStage::Approximate,
+            ProducerStage::EncodeProxy,
+            ProducerStage::WriteProxy,
+        ] {
+            let (work, input, output) = setup();
+            fs::write(&input, proxy_fixture()).unwrap();
+            let mut operations = FailStage {
+                target,
+                reached: false,
+            };
+            let control = RunControl::default();
+            let failure = mesh_to_archive_with_operations(
+                MeshRequest::local_gltf(&input, &output, 8)
+                    .with_policy(OutputPolicy::Replace)
+                    .with_approximation(MeshApproximation::RootProxy {
+                        triangle_limit: 8,
+                        max_error_metres: 10.0,
+                    }),
+                &control,
+                &mut operations,
+            )
+            .unwrap_err();
+            assert!(operations.reached);
+            assert_eq!(failure.error.kind(), JobErrorKind::Io);
+            assert_eq!(fs::read(&output).unwrap(), b"previous");
+            assert!(failure.retained_paths.is_empty());
+            assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
+            assert!(!control.cancellation_handle().cancel());
+        }
+        let (work, input, output) = setup();
+        fs::write(&input, proxy_fixture()).unwrap();
+        let mut operations = PartialWrite {
+            target: ProducerStage::WriteProxy,
+            current: ProducerStage::Decode,
+            reached: false,
+        };
+        let control = RunControl::default();
+        let failure = mesh_to_archive_with_operations(
+            MeshRequest::local_gltf(&input, &output, 8)
+                .with_policy(OutputPolicy::Replace)
+                .with_approximation(MeshApproximation::RootProxy {
+                    triangle_limit: 8,
+                    max_error_metres: 10.0,
+                }),
+            &control,
+            &mut operations,
+        )
+        .unwrap_err();
+        assert!(operations.reached);
+        assert_eq!(failure.error.kind(), JobErrorKind::Io);
+        assert_eq!(fs::read(&output).unwrap(), b"previous");
+        assert!(failure.retained_paths.is_empty());
+        assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
     }
 }

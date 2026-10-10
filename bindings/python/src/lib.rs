@@ -17,9 +17,9 @@ use tiles_core::{
     report::ndjson,
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
-    Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshPlacement,
-    MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer, OutputPolicy,
-    Reporter, RunControl, RunEvent, SourceAxes,
+    Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshApproximation,
+    MeshPlacement, MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer,
+    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -275,13 +275,15 @@ impl MeshResult {
 
 /// Convert bounded core-PBR local metre/Y-up glTF with optional rigid WGS84 placement.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, leaf_triangles, force=false, anchor=None, orientation_xyzw=None, scene_offset=None, callback=None))]
+#[pyo3(signature = (input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None, force=false, anchor=None, orientation_xyzw=None, scene_offset=None, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_local_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
     leaf_triangles: usize,
+    root_proxy_triangles: Option<usize>,
+    max_proxy_error_metres: Option<f64>,
     force: bool,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
@@ -294,9 +296,30 @@ fn mesh_local_to_3tz(
         OutputPolicy::CreateNew
     };
     let placement = rigid_placement(anchor, orientation_xyzw, scene_offset)?;
+    let approximation =
+        match (root_proxy_triangles, max_proxy_error_metres) {
+            (Some(triangle_limit), Some(max_error_metres)) => MeshApproximation::RootProxy {
+                triangle_limit,
+                max_error_metres,
+            },
+            (None, None) => MeshApproximation::FullDetail,
+            _ => return Err(job_failure_to_python(
+                py,
+                JobFailure {
+                    error: JobError::new(
+                        JobErrorKind::InvalidRequest,
+                        "root_proxy_triangles and max_proxy_error_metres must be supplied together",
+                    ),
+                    secondary: vec![],
+                    retained_paths: vec![],
+                    recovery: None,
+                },
+            )),
+        };
     let request = MeshRequest::local_gltf(input, output, leaf_triangles)
         .with_policy(policy)
-        .with_placement(placement);
+        .with_placement(placement)
+        .with_approximation(approximation);
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_archive(request, run)
     })?;

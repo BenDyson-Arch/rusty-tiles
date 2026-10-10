@@ -48,9 +48,13 @@ impl Bounds {
         let values = self.box_values();
         [values[3], values[7], values[11]]
             .into_iter()
-            .map(|h| (2.0 * h).powi(2))
-            .sum::<f64>()
+            .map(|h| {
+                let d = 2.0 * h;
+                (d * d).next_up()
+            })
+            .fold(0.0, |sum, square| (sum + square).next_up())
             .sqrt()
+            .next_up()
     }
 }
 fn centroid(triangle: &Triangle, axis: usize) -> f64 {
@@ -149,6 +153,7 @@ mod tests {
     fn mixed_magnitude_boxes_enclose_stored_positions_without_inward_rounding() {
         let triangle = Triangle {
             source: Default::default(),
+            vertex_indices: [0, 1, 2],
             positions: [[-1e-38, 0.0, 0.0], [1e6, 0.0, 0.0], [1.0, 0.0, 0.0]],
             normals: None,
             tangents: None,
@@ -168,6 +173,7 @@ mod tests {
     fn coincident_triangles_keep_multiplicity_and_obey_actual_leaf_cap() {
         let triangle = Triangle {
             source: Default::default(),
+            vertex_indices: [0, 1, 2],
             positions: [[0.0; 3]; 3],
             normals: None,
             tangents: None,

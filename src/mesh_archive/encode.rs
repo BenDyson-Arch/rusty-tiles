@@ -1,11 +1,13 @@
 //! Uncompressed GLB geometry with prepared shared image references.
 //! No filesystem, source discovery, or publication policy.
 use super::{
+    approximation::ProxyGeometry,
     partition::{Bounds, Leaf},
     source::{Geometry, Image, Triangle},
 };
 use serde_json::{json, Value};
 mod identity;
+mod proxy_identity;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
@@ -34,13 +36,22 @@ pub(super) fn leaf_name(id: usize) -> String {
     format!("t/{id}.glb")
 }
 
+pub(super) const ROOT_PROXY_NAME: &str = "t/root.glb";
+
+#[derive(Clone, Copy)]
+pub(super) enum RootContent {
+    Routing { omission_error_metres: f64 },
+    Proxy { geometric_error_metres: f64 },
+}
+
 /// One explicit hierarchy in tile-local metres. Placement is already resolved;
 /// root transforms apply to both content and conservative local box half axes.
 pub(super) fn tileset<E>(
     leaves: &[Leaf],
     bounds: Bounds,
     root_transform: [f64; 16],
-    routing_error: f64,
+    root_content: RootContent,
+    omission_error_metres: f64,
     mut check: impl FnMut() -> Result<(), E>,
 ) -> Result<Vec<u8>, EncodeError<E>> {
     let mut children = Vec::with_capacity(leaves.len());
@@ -52,17 +63,28 @@ pub(super) fn tileset<E>(
             "content": {"uri": leaf_name(id)}
         }));
     }
-    let document = json!({
+    let root_error = match root_content {
+        RootContent::Routing {
+            omission_error_metres,
+        } => omission_error_metres,
+        RootContent::Proxy {
+            geometric_error_metres,
+        } => geometric_error_metres,
+    };
+    let mut document = json!({
         "asset": {"version": "1.1"},
-        "geometricError": routing_error,
+        "geometricError": omission_error_metres,
         "root": {
             "boundingVolume": {"box": bounds.box_values()},
             "transform": root_transform,
-            "geometricError": routing_error,
+            "geometricError": root_error,
             "refine": "REPLACE",
             "children": children
         }
     });
+    if matches!(root_content, RootContent::Proxy { .. }) {
+        document["root"]["content"] = json!({"uri":ROOT_PROXY_NAME});
+    }
     serde_json::to_vec(&document).map_err(EncodeError::Json)
 }
 
@@ -166,9 +188,123 @@ fn write_attribute<E, const N: usize>(
 pub(super) fn validate_identity_budget(
     geometry: &Geometry,
     leaves: &[Leaf],
-    check: impl FnMut() -> Result<(), crate::JobError>,
+    proxy: Option<&ProxyGeometry>,
+    mut check: impl FnMut() -> Result<(), crate::JobError>,
 ) -> Result<(), crate::JobError> {
-    identity::validate_budget(geometry, leaves, check)
+    let leaf_bytes = identity::name_bytes(geometry, leaves, &mut check)?;
+    let proxy_bytes = proxy.map_or(Ok(0), |proxy| {
+        proxy_identity::name_bytes(geometry, proxy, &mut check)
+    })?;
+    let total = leaf_bytes.checked_add(proxy_bytes).ok_or_else(|| {
+        crate::JobError::new(
+            crate::JobErrorKind::Unsupported,
+            "emitted source names overflow",
+        )
+    })?;
+    if total > 8 * 1024 * 1024 {
+        return Err(crate::JobError::new(
+            crate::JobErrorKind::Unsupported,
+            "emitted source node names exceed 8 MiB archive ceiling",
+        ));
+    }
+    Ok(())
+}
+
+/// Encode already admitted, certified positions and region provenance. Source
+/// material preparation owns the opaque/untextured eligibility decision.
+pub(super) fn proxy(
+    geometry: &Geometry,
+    proxy: &ProxyGeometry,
+    mut check: impl FnMut() -> Result<(), crate::JobError>,
+) -> Result<Vec<u8>, crate::JobError> {
+    use crate::{JobError, JobErrorKind};
+    let invalid = |message: &str| JobError::new(JobErrorKind::InvalidState, message.to_owned());
+    let identity = proxy_identity::Plan::new(geometry, proxy, &mut check)?;
+    let mut groups: BTreeMap<Option<usize>, Vec<usize>> = BTreeMap::new();
+    for (index, triangle) in proxy.triangles.iter().enumerate() {
+        check()?;
+        groups
+            .entry(proxy.regions[triangle.region].material)
+            .or_default()
+            .push(index);
+    }
+    let material_ids: BTreeMap<_, _> = groups
+        .keys()
+        .flatten()
+        .copied()
+        .enumerate()
+        .map(|(local, source)| (source, local))
+        .collect();
+    let mut materials = Vec::with_capacity(material_ids.len());
+    for &source in material_ids.keys() {
+        check()?;
+        let material = geometry
+            .materials
+            .get(source)
+            .ok_or_else(|| invalid("prepared proxy material index"))?;
+        materials.push(
+            material
+                .remap(&BTreeMap::new())
+                .map_err(|_| invalid("prepared proxy material has unresolved textures"))?,
+        );
+    }
+    let mut buffer = Vec::new();
+    let mut views = Vec::new();
+    let mut accessors = Vec::new();
+    let mut primitives = Vec::new();
+    for (material, triangles) in groups {
+        let offset = buffer.len();
+        let mut minimum = [f32::INFINITY; 3];
+        let mut maximum = [f32::NEG_INFINITY; 3];
+        for &index in &triangles {
+            check()?;
+            for position in proxy.triangles[index].positions {
+                for axis in 0..3 {
+                    if !position[axis].is_finite() {
+                        return Err(invalid("prepared proxy nonfinite position"));
+                    }
+                    minimum[axis] = minimum[axis].min(position[axis]);
+                    maximum[axis] = maximum[axis].max(position[axis]);
+                }
+                append_vector(&mut buffer, position);
+            }
+        }
+        let view = views.len();
+        views.push(
+            json!({"buffer":0,"byteOffset":offset,"byteLength":buffer.len()-offset,"target":34962}),
+        );
+        let position = accessors.len();
+        accessors.push(json!({"bufferView":view,"componentType":5126,"count":triangles.len()*3,"type":"VEC3","min":minimum,"max":maximum}));
+        let mut attributes = json!({"POSITION":position});
+        let features = identity.append_attributes(
+            &triangles,
+            &mut buffer,
+            &mut views,
+            &mut accessors,
+            &mut attributes,
+            &mut check,
+        )?;
+        let mut primitive =
+            json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":features}});
+        if let Some(material) = material {
+            primitive["material"] = json!(material_ids[&material]);
+        }
+        primitives.push(primitive);
+    }
+    let metadata = identity.append_metadata(&mut buffer, &mut views, &mut check)?;
+    let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles F1d1"},
+        "extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
+        "extensions":{"EXT_structural_metadata":metadata},
+        "buffers":[{"byteLength":buffer.len()}],"bufferViews":views,"accessors":accessors,
+        "meshes":[{"primitives":primitives}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0});
+    if !materials.is_empty() {
+        document["materials"] = Value::Array(materials);
+    }
+    glb(document, buffer).map_err(|error| match error {
+        EncodeError::Invalid(message) => invalid(message),
+        EncodeError::Json(error) => invalid(&format!("encode proxy JSON: {error}")),
+        EncodeError::Checkpoint(error) => error,
+    })
 }
 
 pub(super) fn leaf<E>(
@@ -379,6 +515,13 @@ pub(super) fn leaf<E>(
     if !samplers.is_empty() {
         document["samplers"] = Value::Array(samplers);
     }
+    glb(document, buffer)
+}
+
+/// Shared envelope only: prepared leaf and proxy identities keep separate plans.
+fn glb<E>(mut document: Value, mut buffer: Vec<u8>) -> Result<Vec<u8>, EncodeError<E>> {
+    buffer.resize(buffer.len().next_multiple_of(8), 0);
+    document["buffers"][0]["byteLength"] = json!(buffer.len());
     let mut json = serde_json::to_vec(&document).map_err(EncodeError::Json)?;
     while !(20 + json.len()).is_multiple_of(8) {
         json.push(b' ');
