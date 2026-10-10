@@ -1,0 +1,30 @@
+{
+  "reviewed_head": "5509da98f6cf50b240c2e9197cad688842643593",
+  "main_ci": {
+    "run_id": 38022361920,
+    "conclusion": "success"
+  },
+  "wheel_ci": {
+    "run_id": 38022361905,
+    "failing_jobs": [
+      114125893880,
+      114125893956,
+      114125893958
+    ],
+    "cause": "Canonical path spelling compared with caller path spelling"
+  },
+  "reproduction": "TMPDIR is a symlink to real-temp; unchanged installed wheel fails the original assertion and passes the corrected filesystem identity assertions",
+  "wheel_sha256": "3aa409052ab798588a9ca0056a307bb77662bddbd2af823593f89ecb26b35225",
+  "production_sha256": "22f4b82e6379d889441be2f0f9e364aa51570ec6f391b3c98c95be58ef0d8444",
+  "production_files_verified_unchanged": 91,
+  "drivers_sha256": {
+    "scripts/test_python_wheel.py": "ed19598beee5b2e67420c4a18829655c3883d4a3e6fc6db02542ba60f97676c9",
+    "bindings/python/tests/test_api.py": "9d67d9cc49ac9401cdf8cd72f5a2d42286bd86fe174d148a44c80aaa7aed5bc2"
+  },
+  "independent_review": {
+    "agent": "/root/f1c2_recovery_review",
+    "result": "PASS, no findings",
+    "scope": "Test-only filename, source-directory and published-file identity assertions; existing publication, capture, callback, source-preservation and cleanup controls retained"
+  },
+  "limits": "Local alias replay verifies the failure mechanism; corrected macOS and Windows acceptance remains a CI gate"
+}

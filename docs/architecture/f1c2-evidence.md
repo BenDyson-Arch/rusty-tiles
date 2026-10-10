@@ -86,10 +86,15 @@ corrected-artifact controls, documentation/format gaps, exact pins and limits.
 Earlier S1 failures and S2 passes are retained separately so review history is
 not relabeled as final S3 acceptance.
 
-PR CI must still establish supported portable/native platform builds, wheel
-Python versions, consumer checks in its environment and all pinned official
-Blender platforms. CI now retains identity/format and ordinary unchanged-model
-browser evidence. Do not merge on local checks alone.
+Main CI passed at `5509da98`, including supported portable/native platform
+builds and consumer checks. Installed-wheel acceptance failed on macOS and
+Windows because a new test compared canonical and caller path spellings.
+[Path-identity correction evidence](../../bench/architecture_audit/f1c2/receipts/ci-path-identity/receipt.json)
+records a local symlink-path reproduction (one failure among 42 tests), followed
+by all 42 passing with filesystem identity assertions against the same wheel.
+All 91 production inputs remain unchanged; separate nonauthor review passed.
+Corrected platform wheel checks and pinned official Blender acceptance remain
+CI gates. Do not merge on local checks alone.
 
 Broader mesh, raster pyramid and implicit rewrite retain legacy Job/report
 ownership; shared report helpers and provisional utilities have separate
