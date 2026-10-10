@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import zipfile
 
-PROFILE = 'f1c2-source-identity-gltf-v1'
+PROFILE = 'f1d1-root-proxy-gltf-v1'
 LABELS = ('source_primitive', 'source_triangle')
 KEYS = ('node_index', 'mesh_index', 'primitive_index', 'triangle_index')
 SCHEMAS = (
@@ -216,7 +216,7 @@ def expected_source(data):
                 truth[(n, mesh, primitive_index, triangle)] = {
                     'positions': corners,
                     'colors': [colors[i] for i in ids] if colors else None,
-                    'material': doc['materials'][primitive['material']],
+                    'material': doc['materials'][primitive['material']] if 'material' in primitive else None,
                 }
 
     for root in doc['scenes'][doc.get('scene', 0)]['nodes']:
@@ -268,7 +268,7 @@ def inspect_members(source, members, leaf_limit):
     remaining = set(truth)
     manifest = json.loads(members['tileset.json'])
     report = json.loads(members['conversion.json'])
-    require(report['schema_version'] == 5 and report['profile'] == PROFILE, 'report profile/schema')
+    require(report['schema_version'] == 6 and report['profile'] == PROFILE, 'report profile/schema')
     leaves = []
 
     def visit(tile):
@@ -331,7 +331,8 @@ def inspect_members(source, members, leaf_limit):
                 actual = [positions[i] for i in corners]
                 rotations = [shift for shift in range(3) if all(max(abs(a-b) for a, b in zip(actual[(k+shift)%3], wanted[k])) <= 1e-6 for k in range(3))]
                 require(rotations, 'oriented source geometry/key association '+str(key))
-                require(doc['materials'][primitive['material']] == original['material'], 'source material/key association')
+                material = doc['materials'][primitive['material']] if 'material' in primitive else None
+                require(material == original['material'], 'source material/key association including exact omission')
                 require((colors is None) == (original['colors'] is None), 'source companion layout')
                 if colors:
                     shift = rotations[0]
@@ -453,12 +454,16 @@ def synthetic_members(source):
                  '_FEATURE_ID_0': array(primitive_ids, 'SCALAR'), '_FEATURE_ID_1': array(triangle_ids, 'SCALAR')}
         if colors:
             attrs['COLOR_0'] = array([p for key in keys for p in truth[key]['colors']], 'VEC4')
-        mat = len(doc['materials'])
-        doc['materials'].append(json.loads(material))
-        doc['meshes'][0]['primitives'].append({'attributes': attrs, 'material': mat,
+        mat = len(doc['materials']) if json.loads(material) is not None else None
+        if mat is not None:
+            doc['materials'].append(json.loads(material))
+        generated = {'attributes': attrs,
             'extensions': {'EXT_mesh_features': {'featureIds': [
                 {'featureCount': len(set(ids)), 'attribute': t, 'propertyTable': t, 'label': LABELS[t]}
-                for t, ids in enumerate((primitive_ids, triangle_ids))]}}})
+                for t, ids in enumerate((primitive_ids, triangle_ids))]}}}
+        if mat is not None:
+            generated['material'] = mat
+        doc['meshes'][0]['primitives'].append(generated)
     tables_out = []
     schema = {'id': 'independent_f1c2_feasibility', 'classes': {}}
     for t, keys in enumerate((primitive_keys, triangle_keys)):
@@ -495,8 +500,10 @@ def synthetic_members(source):
     manifest = {'asset': {'version': '1.1'}, 'geometricError': 1000,
                 'root': {'transform': list(IDENTITY), 'boundingVolume': {'box': box}, 'geometricError': 1000, 'refine': 'REPLACE',
                          'children': [{'boundingVolume': {'box': box}, 'geometricError': 0, 'content': {'uri': 't/0.glb'}}]}}
+    if not doc['materials']:
+        doc.pop('materials')
     return {'t/0.glb': glb(doc, binary), 'tileset.json': json.dumps(manifest).encode(),
-            'conversion.json': json.dumps({'schema_version': 5, 'profile': PROFILE}).encode()}
+            'conversion.json': json.dumps({'schema_version': 6, 'profile': PROFILE}).encode()}
 
 
 def self_test():

@@ -21,7 +21,7 @@ import f1b_oracle as texture
 require = texture.require
 OracleError = texture.OracleError
 MIB = 1024 * 1024
-PROFILE = 'f1c2-source-identity-gltf-v1'
+PROFILE = 'f1d1-root-proxy-gltf-v1'
 
 
 class SourceError(OracleError):

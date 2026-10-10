@@ -1,0 +1,265 @@
+{
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "binary_sha256": "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+  "source_sha256": "533a7bd8d306521e026bbb51c1e3a4a7e953f68e59fae9fc7695c426817d7739",
+  "archive_sha256": "95ecbbd227ccb52ff7e64d8831b5fbf4e82f730696394dfe7dcb34a9312bd4fc",
+  "placement_request": {
+    "anchor": [
+      153.02,
+      -27.47,
+      25.0
+    ]
+  },
+  "placement_accuracy": {
+    "maximum_basis_component_error": 1.1863174139341632e-16,
+    "maximum_origin_component_error_metres": 8.845845404077495e-10,
+    "basis_component_limit": 2e-15,
+    "origin_component_limit_metres": 1e-08
+  },
+  "independent_matrix_controls_rejected": [
+    "missing-root-placement",
+    "wrong-height",
+    "swapped-east-north"
+  ],
+  "browser_executable_sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e",
+  "cesium_js_sha256": "a5ab7e638f51d3bc5a6c710a79c9aecea42d9252b5cd2dad34980ea771c2c9af",
+  "packages": {
+    "cesium": {
+      "version": "1.146.0",
+      "package_json_sha256": "90c19d222d3651480711071627ef1c984f2766467b1238e5775de8022053ab11"
+    },
+    "playwright": {
+      "version": "1.63.0",
+      "package_json_sha256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998"
+    }
+  },
+  "driver_sha256": {
+    "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py": "7c531064477335c6b9a8df93e2b0062ec7ea3c686ac1d450f38721c5f60017b2",
+    "tests/f1a_oracle.py": "3ced3202e8b8bd53149d37656f25041712bc87133f1a6cb5d6e7971100324bc1",
+    "tests/f1b_oracle.py": "c14eecff90ba6c3fde65ad7fedfc9c3846fb5a4d15bc8b457cad99d9a337de03",
+    "tests/f1b2_oracle.py": "d3e2fa2c04b6f45de9e16ea2f2d40593af3087ba2173feedd417ac5b66f5b360",
+    "tests/f1b3_oracle.py": "a30569aa981a9333197a64d75e7aef6ef2002bd812abc6e41ec7dbfbde1ac199",
+    "tests/f1c1_oracle.py": "d42d7d32c6a4f9d968c3f3c072f9a40c469e7647a73de05bb530c1fc5c99d671",
+    "tests/f1c2_oracle.py": "14ae2ff82eb4c719e6466a3b464b0d3cd1c6bf24bad56ae7e603a33ea262b4c7",
+    "tests/f1d1_oracle.py": "31b5a401cb25cf8c1fa39eb5e288ab8e9901ffe44a0e314c5f4245b380357798",
+    "tests/f1d1_viewer.py": "9fa525cc879f4b0a0901b6af6cd4f60c2bc71e5cff91d1c475d952eed7f10928",
+    "tests/fixtures/f1d1_viewer.cjs": "8a95206dc6858ea0c18edef72a2611ad74bca8ca9a6739a846492acf685d2890"
+  },
+  "invocation": [
+    "/usr/bin/python",
+    "bench/architecture_audit/mesh_approximation/placed_proxy_browser.py",
+    "--binary",
+    "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-portable-0eeb906",
+    "--binary-sha256",
+    "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+    "--source-commit",
+    "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+    "--artifact-dir",
+    "/tmp/f1d-independent-review/placed-supplemental-replay",
+    "--cesium-dir",
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
+    "--node-modules",
+    "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules",
+    "--chromium",
+    "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "--json-output",
+    "/tmp/f1d-independent-review/placed-supplemental-replay.json"
+  ],
+  "scope": "One Brisbane WGS84 anchor, default identity orientation and zero offset, independently positioned ECEF cameras/targets, unchanged identity modelMatrix and natural SSE16 coarse-to-fine traversal. Six coarse complete membership-array queries and six fine original-triangle queries. Local stored geometry/bounds checked independently. No exact world Hausdorff, general placement/topology or textured appearance claim.",
+  "raw_replay_receipt_sha256": "0b3f3b1c5ae1a7baf59b1a16359799781718d69dbaf06745be8d5d3866998da7",
+  "browser": {
+    "version": "1.146.0",
+    "browserVersion": "153.0.8010.12",
+    "runs": [
+      {
+        "label": "proxy_region",
+        "stage": "coarse",
+        "visible": [
+          {
+            "url": "http://127.0.0.1:42755/good/t/root.glb",
+            "triangles": 44
+          }
+        ],
+        "maximumScreenSpaceError": 16,
+        "modelMatrixIsIdentity": true,
+        "matching_public_queries": 6
+      },
+      {
+        "label": "proxy_region",
+        "stage": "fine",
+        "visible": [
+          {
+            "url": "http://127.0.0.1:42755/good/t/9.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/10.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/7.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/6.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/3.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/2.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/8.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/11.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/5.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/4.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/12.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/1.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/13.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/0.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/15.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/14.glb",
+            "triangles": 12
+          }
+        ],
+        "maximumScreenSpaceError": 16,
+        "modelMatrixIsIdentity": true,
+        "matching_public_queries": 0
+      },
+      {
+        "label": "source_triangle",
+        "stage": "coarse",
+        "visible": [
+          {
+            "url": "http://127.0.0.1:42755/good/t/root.glb",
+            "triangles": 44
+          }
+        ],
+        "maximumScreenSpaceError": 16,
+        "modelMatrixIsIdentity": true,
+        "matching_public_queries": 0
+      },
+      {
+        "label": "source_triangle",
+        "stage": "fine",
+        "visible": [
+          {
+            "url": "http://127.0.0.1:42755/good/t/9.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/10.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/7.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/6.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/3.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/2.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/8.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/11.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/5.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/4.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/12.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/1.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/13.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/0.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/15.glb",
+            "triangles": 12
+          },
+          {
+            "url": "http://127.0.0.1:42755/good/t/14.glb",
+            "triangles": 12
+          }
+        ],
+        "maximumScreenSpaceError": 16,
+        "modelMatrixIsIdentity": true,
+        "matching_public_queries": 6
+      }
+    ],
+    "pageErrors": [],
+    "failedRequests": [],
+    "externalRequests": []
+  },
+  "successful_queries": [
+    {
+      "label": "proxy_region",
+      "stage": "coarse",
+      "queries": 6,
+      "matches": 6
+    },
+    {
+      "label": "source_triangle",
+      "stage": "fine",
+      "queries": 6,
+      "matches": 6
+    }
+  ]
+}

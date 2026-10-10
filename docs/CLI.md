@@ -321,7 +321,7 @@ uses completed-file replacement. This operation emits an explicit hierarchy
 with full-detail leaf geometry and source-faithful PNG/JPEG core PBR
 textures. Each used image is delivered once in the archive; UV0/UV1 bindings,
 authored tangent frames, linear vertex colors, material factors, alpha masking
-and sampler settings are preserved. There is no coarse LOD or guessed CRS.
+and sampler settings are preserved. Source CRS is explicit local metres/Y-up.
 
 | Placement option | Meaning |
 | --- | --- |
@@ -355,16 +355,29 @@ is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
 does not silently route it through that operation.
 
 `--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. Schema 5/profile
-`f1c2-source-identity-gltf-v1` records `source_coordinates="local-gltf"`, output
+`conversion.json`, plus `cleanupDiagnostics`. Schema 6/profile
+`f1d1-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`, output
 `coordinates` (`local-gltf` or `wgs84-ecef`), tagged `placement` with normalized
 parameters, and the exact emitted `root_transform`. It counts the root document
 as `source_bytes`; `external_files` and `external_bytes` count unique captured
 dependencies, including unused ones. The output is its resolved
 absolute installation path. `--progress json` uses fallible precommit domain
 events; required observer/finalization failures preserve the previous destination.
-The root geometric error is an extent-derived omission/selection metric,
-not a measured simplification bound. Leaves retain all accepted triangles.
+Full-detail mode uses an extent-derived omission/selection root error. Leaves
+retain all accepted triangles. An explicit root proxy is available with paired
+`--root-proxy-triangles N --max-proxy-error-metres E` arguments. N must be positive;
+E must be finite and positive. The first proxy profile accepts opaque, untextured,
+positions-only geometry. It requires actual reduction, preserves authored
+components and material factors, and certifies a complete surface-distance bound
+before staging. The emitted root error is E after the bound is proved at most E;
+`meshReport.approximation` records the achieved count and actual certificate.
+Coarse picks expose `proxy_region` membership arrays; fine leaves retain exact
+`source_triangle` picking. Unsupported profile, target, error or work requests
+fail before staging. The [F1d1 contract](architecture/mesh-approximation-contract.md)
+records proof limits, including a potentially loose certificate and no general
+appearance guarantee. The
+[bounded evidence](../bench/architecture_audit/mesh_approximation/README.md)
+records independent decoding, public consumer queries and separate review.
 
 ## Machine output
 
@@ -426,7 +439,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
-| `mesh-local-to-3tz` | `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |
+| `mesh-local-to-3tz` | `mesh_approximation` when requested, `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |
 
 Events report work units, not time remaining.
 

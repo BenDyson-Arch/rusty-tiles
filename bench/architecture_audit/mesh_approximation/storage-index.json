@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "production_source_commit": "0eeb906f7f043eb608a5223e2817703c6836ea4b",
+  "binary_sha256": "2098adf353e3d0c4eddde66b977e7a38514f7de1e3abd379051c35c2fb3d86e6",
+  "storage": "Deterministic gzip, original JSON bytes preserved without normalization; no execution inferred from compression.",
+  "entries": [
+    {
+      "original_name": "portable-oracle.json",
+      "stored_name": "portable-oracle.json.gz",
+      "original_bytes": 61996,
+      "original_sha256": "5803fe7d56939042966f32e517089159a5574a31617303f35b0d4dca5faccf89",
+      "stored_bytes": 7305,
+      "stored_sha256": "86d22e1ba03aa30ebc294c8d3c2c1f5c3f23f27eb15697184965437571fdfced"
+    },
+    {
+      "original_name": "portable-browser.json",
+      "stored_name": "portable-browser.json.gz",
+      "original_bytes": 73902,
+      "original_sha256": "067d3967bf85b9b3ab39b54472491951037efbd66dea3c0fc92841eae3499a56",
+      "stored_bytes": 4437,
+      "stored_sha256": "3cddf0e216fbf4e364fce84ee6cd951ff345bdf94af7dab867dda058bcd1e4a4"
+    },
+    {
+      "original_name": "synthetic-browser.json",
+      "stored_name": "synthetic-browser.json.gz",
+      "original_bytes": 68605,
+      "original_sha256": "e031fa30310cd7650e35cfe09e7c02c72598820b48e1996af34312bc997d5a36",
+      "stored_bytes": 3515,
+      "stored_sha256": "63e9c1c895e71e2a88f9228cbdcb7ce8b92be559622676ae877dbedcaf392562"
+    },
+    {
+      "original_name": "oracle-controls.json",
+      "stored_name": "oracle-controls.json.gz",
+      "original_bytes": 9565,
+      "original_sha256": "04afc811dbc3cc1ded15879ec088684d8e7a21e851d36f1d2772de4accae6e39",
+      "stored_bytes": 2307,
+      "stored_sha256": "cbd38034af7986dc2f9522b7895d25c0e70dbe69ba78eba1fd99106cc1d89a7c"
+    },
+    {
+      "original_name": "leaf-oracle-controls.json",
+      "stored_name": "leaf-oracle-controls.json.gz",
+      "original_bytes": 3103,
+      "original_sha256": "91650d0523a4b10b380c4a246c2d262c176b0a0908b730fc06b3e3397995c022",
+      "stored_bytes": 931,
+      "stored_sha256": "ef4e0a37af9c917a915e313c3ccaba498bdc271a25b77784c331aaec30cd9f2e"
+    }
+  ],
+  "scope": "Frozen portable F1d1 bounded source/artifact/consumer evidence; separate nonauthor review and proof limits are recorded in review.md. Lifecycle/resources/native/wheel retain separately pinned receipts."
+}

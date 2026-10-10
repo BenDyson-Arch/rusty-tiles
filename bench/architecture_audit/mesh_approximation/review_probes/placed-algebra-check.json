@@ -1,0 +1,8 @@
+{
+  "scope": "Independent alternate-semiaxis double-precision algebra crosscheck; Decimal80 source audit remains the stricter accuracy reference",
+  "placed_archive_sha256": "95ecbbd227ccb52ff7e64d8831b5fbf4e82f730696394dfe7dcb34a9312bd4fc",
+  "basis_difference_max": 0.0,
+  "origin_difference_metres_max": 0.0,
+  "camera_difference_max": 9.313225746154785e-10,
+  "target_difference_metres_max": 9.313225746154785e-10
+}

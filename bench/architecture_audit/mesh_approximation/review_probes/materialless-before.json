@@ -1,0 +1,26 @@
+{
+  "binary_sha256": "28af5e5101baec56d75eb0fbf607184b0218fdfd954b37e0efb81f17909e1027",
+  "source_sha256": "8f853715dc2359b7c8434d7204be90835850d7e3ed5d84a9ee4e45cc596a5279",
+  "command": [
+    "/home/bend/.cache/rusty-tiles-f1d-evidence/rusty-tiles-portable-8fe9bf6",
+    "--json",
+    "mesh-local-to-3tz",
+    "-i",
+    "/tmp/f1d-independent-review/materialless.glb",
+    "-o",
+    "/tmp/f1d-independent-review/materialless.3tz",
+    "--leaf-triangles",
+    "8",
+    "--root-proxy-triangles",
+    "8",
+    "--max-proxy-error-metres",
+    "10",
+    "--force"
+  ],
+  "returncode": 0,
+  "archive_sha256": "e07edb4a03d2782f646406639138216c08c65e6840adf29797a84612ffad2d4c",
+  "oracle_error": {
+    "type": "KeyError",
+    "message": "'materials'"
+  }
+}

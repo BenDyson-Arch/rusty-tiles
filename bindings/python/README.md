@@ -57,7 +57,7 @@ results with required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
+| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
@@ -103,10 +103,11 @@ placed = rusty_tiles.mesh_local_to_3tz(
     scene_offset=(10.0, 2.0, -5.0),
 )
 assert placed.report["coordinates"] == "wgs84-ecef"
-assert placed.report["schema_version"] == 5
+assert placed.report["schema_version"] == 6
 ```
 
-`mesh_local_to_3tz(input, output, *, leaf_triangles, force=False, anchor=None,
+`mesh_local_to_3tz(input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None,
+force=False, anchor=None,
 orientation_xyzw=None, scene_offset=None, callback=None)`
 requires a positive explicit per-leaf triangle limit and interprets the input
 as local metre/Y-up geometry. The bounded [core PBR profile](../../docs/architecture/f1b3-contract.md)
@@ -115,8 +116,8 @@ texture bindings, UV0/UV1, vertex colors and authored normals/tangents. It prese
 selected image bytes and material bindings across spatial leaves. Normal textures
 require authored normals and tangents; tangent-bearing geometry permits accumulated
 rotation, uniform scale and reflection. Extras, extensions, animation and other
-excluded semantics are refused before staging. There is no coarse approximation,
-atlas, generated tangent basis or coordinate guessing. Source resource limits and
+excluded semantics are refused before staging. Full detail is the default. Source CRS remains explicit and no generated tangent
+basis or atlas is introduced. Source resource limits and
 capture rules follow the [F1b2 contract](../../docs/architecture/f1b2-contract.md).
 
 The [F1c1 placement contract](../../docs/architecture/f1c1-contract.md) defines the independently checked rigid frame and numerical domain. `anchor` is `(longitude_degrees, latitude_degrees,
@@ -135,9 +136,23 @@ including elevated anchors and poles; supplied longitude defines the pole
 meridian. Placement is an f64 rigid root transform. Source GLB coordinates,
 normal/tangent frames, UVs, colors and resource associations stay local. Offset
 does not restore a projected E/N/A shift, infer source CRS, or correct a geoid.
-Schema 5/profile `f1c2-source-identity-gltf-v1` records `source_coordinates="local-gltf"`,
+Schema 6/profile `f1d1-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`,
 output `coordinates`, tagged `placement` with normalized parameters, and exact
 `root_transform`, along with existing counters. The [F1c2 candidate](../../docs/architecture/f1c2-contract.md) carries two labeled feature sets: `source_primitive` exposes source node/mesh/primitive indices and optional authored name with an explicit presence flag; `source_triangle` adds the original triangle ordinal. Table row IDs are leaf-local; source keys belong to the unchanged source document, not a persistent business namespace. Imported metadata/extras remain excluded.
+
+For one coarse root, supply both `root_proxy_triangles=N` and
+`max_proxy_error_metres=E`. Positive finite E is the emitted root error budget,
+validated against a separately certified complete surface bound. N bounds the
+achieved proxy count; actual reduction is required. This first profile accepts
+opaque, untextured, positions-only selected geometry. Unsupported requests fail
+before staging with `UnsupportedError`; malformed policy raises
+`InvalidRequestError`. `report["approximation"]` distinguishes `full_detail` and
+`root_proxy`, reports actual bound/counts/work, and names the admitted appearance
+profile. Coarse picking exposes complete `proxy_region` membership arrays while
+unchanged leaves retain exact original triangle identities. See the
+[F1d1 contract](../../docs/architecture/mesh-approximation-contract.md) for
+certificate looseness and appearance limits, and the
+[bounded evidence](../../bench/architecture_audit/mesh_approximation/README.md).
 
 It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
 dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.
