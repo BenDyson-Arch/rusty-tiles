@@ -53,16 +53,35 @@ actual I/O errors through recursive implicit parsing.
 ## Independent evidence and limits
 
 The independently authored [production controls](../../bench/architecture_audit/c1_payload_integrity/production_controls/README.md)
-retain 205 literal archives, 77 declared complete positive reports, eleven
-private sensitive tests and pinned primary sources. A separate additive
+retain the original 205 literal archives, eleven private sensitive tests and
+pinned primary sources. The original execution remains 204 passes and one
+invalid positive-oracle failure. A [dated polygon adjudication](../../bench/architecture_audit/c1_payload_integrity/production_controls/polygon_correction/2026-10-10/adjudication.md)
+preserves that failure, corrects two polygon fixtures against the primary
+indexed-TRIANGLES requirements, and adds five sensitive controls. The corrected
+205 retains 203 original case/archive records and 77 complete positive reports.
+A separate additive
 [context lane](../../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/README.md)
 supplies twelve dominating JSON consumers and five actual C1 cache/aggregate
-pairs. The final portable library checkpoint `ca9b4a1` passed 365 tests; captured
+pairs. The final portable library checkpoint `2ebfb74` passed 365 tests; captured
 logs record all 82 actual context calls, with 41 complete-report admissions and
 41 typed ResourceLimit failures. Earlier source/execution phases and the aborted
-fixture-packaging build remain distinct historical records. Final CLI/native,
-source/artifact, CI, installed-wheel and official Blender acceptance still must
-bind to their exact final source before merge.
+fixture-packaging build remain distinct historical records. Exact local
+portable/native CLI artifacts each passed all 210 corrected/supplemental
+controls, all 135 original C1 cases, 45 archive controls and 20 resource runs.
+Producer framing independently passed eight portable and six native b3dm
+members; this is framing evidence, not geometry or byte equivalence. Native
+all-targets and Python-binding Clippy passed with warnings denied. Cargo's
+source-package inventory includes all 267 selected required source/acceptance
+paths; that check does not compile or certify an installed source archive.
+
+The [45 lossless local records](../../bench/architecture_audit/c1_payload_integrity/candidate_evidence/local-2ebfb74/index.json)
+bind 97 production and 179 selected acceptance inputs, separate unit/portable/
+native executables, raw CLI streams and actual selected-limit outcomes. Linux
+resource observations measured 63,172–71,348 KiB maximum RSS for portable and
+84,308–90,556 KiB for native, with sampled descriptor maxima seven and six.
+These finite observations are not universal process-memory limits. Fresh
+independent source/artifact acceptance and exact final-head CI, installed-wheel
+and official Blender checks remain separate merge gates.
 
 Admission establishes explicit finite source/node/depth/component/read/decode
 ceilings and checked requested allocations, not whole-process recoverable OOM

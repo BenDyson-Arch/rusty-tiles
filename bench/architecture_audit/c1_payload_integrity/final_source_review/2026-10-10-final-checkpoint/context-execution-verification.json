@@ -1,0 +1,22 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "productionFilesVerified": 97,
+  "acceptanceFilesVerified": 179,
+  "unitSha256": "ab0260138191af5c503a42431b81ab9690e3231d10aa32a9113869d463d5d414",
+  "unitBytes": 26943744,
+  "libraryPassed": 365,
+  "libraryFailed": 0,
+  "libraryIgnored": 0,
+  "libraryFiltered": 0,
+  "distinctContextTests": 13,
+  "actualC1Executions": 82,
+  "admitted": 41,
+  "resourceLimit": 41,
+  "allManifestPairsPresent": true,
+  "allSelectedFactsMatch": true,
+  "positiveCompleteReportHashesMatch": true,
+  "rawLogMatchesRetainedRecords": true,
+  "laterWorktreeChangesNotRebound": [],
+  "scope": "Verified retained coordinator execution; reviewer did not execute target"
+}

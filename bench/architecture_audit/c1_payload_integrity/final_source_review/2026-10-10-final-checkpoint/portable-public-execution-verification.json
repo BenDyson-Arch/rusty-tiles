@@ -1,0 +1,28 @@
+{
+  "receipt": "/tmp/rusty-tiles-payload-final-evidence/final-portable-210.json",
+  "receiptSha256": "b74c034f326988e5848adc35b0e35e489b06118fa6a24bd71fd300488f417c4e",
+  "phases": [
+    {
+      "phase": "corrected205",
+      "cases": 205,
+      "fullReportsVerified": 77,
+      "rawStreamsHashChecked": 410,
+      "binarySha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+      "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    },
+    {
+      "phase": "polygon5",
+      "cases": 5,
+      "fullReportsVerified": 1,
+      "rawStreamsHashChecked": 10,
+      "binarySha256": "104a60c7ac278f6cc6932b560136be0f63aa6b7cc8464e6cf64d9b4f122a07f2",
+      "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    }
+  ],
+  "sourceAndFixturesUnchanged": true,
+  "scope": "Verified retained exact-source public execution; no reviewer target execution"
+}

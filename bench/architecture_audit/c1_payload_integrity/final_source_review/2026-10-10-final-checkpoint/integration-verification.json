@@ -1,0 +1,40 @@
+{
+  "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+  "sourcePinSha256": "da9cfaeb8c576b492f66ec6c396c68a80c7a5a8851d88dee9db437be2ec7b12e",
+  "integrationReceiptSha256": "bae02836ff47374292ad8d0745558f6e91ea921cba2dcface0dcd8fc9d38f962",
+  "allEightPassed": true,
+  "all97ProductionAnd179AcceptanceInputsMatch": true,
+  "producerAdapterOnlyPathAndJobs": true,
+  "nativeAllTargetsAndBindingsClippyPassed": true,
+  "results": [
+    {
+      "flavor": "portable",
+      "corpusCases": 135,
+      "archiveTruthCases": 45,
+      "resourceObservations": 20,
+      "independentlyDecodedB3dmMembers": 8,
+      "rssKiBRange": [
+        63172,
+        71348
+      ],
+      "sampledPeakDescriptors": 7,
+      "descriptorPermissionDenials": 0,
+      "maximumWallSeconds": 0.046857015000568936
+    },
+    {
+      "flavor": "native",
+      "corpusCases": 135,
+      "archiveTruthCases": 45,
+      "resourceObservations": 20,
+      "independentlyDecodedB3dmMembers": 6,
+      "rssKiBRange": [
+        84308,
+        90556
+      ],
+      "sampledPeakDescriptors": 6,
+      "descriptorPermissionDenials": 0,
+      "maximumWallSeconds": 0.05904224200276076
+    }
+  ],
+  "limits": "Existing corpus does not compare whole positive reports; separate 210/context controls do. Resource measurements are finite Linux observations, and producer framing is not geometry equivalence."
+}

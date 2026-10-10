@@ -1,0 +1,28 @@
+{
+  "receipt": "/tmp/rusty-tiles-payload-final-evidence/final-native-210.json",
+  "receiptSha256": "ecbc4486c4e5973ccbcb7ef67460309ae10daa05a764a345bb7e8d37022a1fe1",
+  "phases": [
+    {
+      "phase": "corrected205",
+      "cases": 205,
+      "fullReportsVerified": 77,
+      "rawStreamsHashChecked": 410,
+      "binarySha256": "be597bbca0bd4faf3355040f51de07a5e03edb5be559f6307ae7041101119efe",
+      "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    },
+    {
+      "phase": "polygon5",
+      "cases": 5,
+      "fullReportsVerified": 1,
+      "rawStreamsHashChecked": 10,
+      "binarySha256": "be597bbca0bd4faf3355040f51de07a5e03edb5be559f6307ae7041101119efe",
+      "sourceCommit": "2ebfb749e9d71fdb72507fd1203472b226f23156",
+      "allCategoriesAndExitsMatch": true,
+      "archiveAndInputIdentitiesMatch": true
+    }
+  ],
+  "sourceAndFixturesUnchanged": true,
+  "scope": "Verified retained exact-source public execution; no reviewer target execution"
+}
