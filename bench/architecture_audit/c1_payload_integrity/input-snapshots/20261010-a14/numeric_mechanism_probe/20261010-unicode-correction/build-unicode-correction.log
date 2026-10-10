@@ -1,0 +1,35 @@
+   Compiling c1-payload-serde-proof v0.0.0 (/tmp/rusty-tiles-payload-serde-proof)
+warning: field `0` is never read
+ --> src/main.rs:6:39
+  |
+6 | enum ValidationFailure { InvalidInput(String), ResourceLimit(String) }
+  |                          ------------ ^^^^^^
+  |                          |
+  |                          field in this variant
+  |
+  = note: `ValidationFailure` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+  |
+6 - enum ValidationFailure { InvalidInput(String), ResourceLimit(String) }
+6 + enum ValidationFailure { InvalidInput(()), ResourceLimit(String) }
+  |
+
+warning: field `0` is never read
+ --> src/main.rs:6:62
+  |
+6 | enum ValidationFailure { InvalidInput(String), ResourceLimit(String) }
+  |                                                ------------- ^^^^^^
+  |                                                |
+  |                                                field in this variant
+  |
+  = note: `ValidationFailure` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+  |
+6 - enum ValidationFailure { InvalidInput(String), ResourceLimit(String) }
+6 + enum ValidationFailure { InvalidInput(String), ResourceLimit(()) }
+  |
+
+warning: `c1-payload-serde-proof` (bin "c1-payload-serde-proof") generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running `/tmp/rusty-tiles-payload-serde-proof-target/debug/c1-payload-serde-proof`

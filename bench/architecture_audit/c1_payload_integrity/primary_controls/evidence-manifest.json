@@ -1,0 +1,443 @@
+{
+  "bundle": {
+    "bytes": 66149,
+    "compression": "gzip mtime zero; USTAR sorted names, mtime zero",
+    "sha256": "97051022a46c300297f99007e6d033b1dae49398a97767ae739bf9a70b774ead"
+  },
+  "externalWork": "/tmp/rusty-tiles-c1-primary-controls-qrndemti",
+  "files": {
+    "adjudication.json": {
+      "bytes": 5752,
+      "sha256": "d0868592655f023f01633a18411781b08ab59371f2bc7f1e26921c97207cbc64"
+    },
+    "controlled-launch.py": {
+      "bytes": 446,
+      "sha256": "17e3c79ef19f95158612fc8e5b7cb15aa2c4c9b0249d5b4b9b391271fbaebfd7"
+    },
+    "executed-probe.py": {
+      "bytes": 10492,
+      "sha256": "6ae3697e1fd07e5bce0809d16dd1fac4f9a78a5e6f4b9e2c6e9f355496023fb9"
+    },
+    "fixtures/buffer-length-decimal/input.3tz": {
+      "bytes": 900,
+      "sha256": "2ed174d9b2954dd8fd3179f38880757ba71518dfb95701f8d5abbf016e33b18b"
+    },
+    "fixtures/buffer-length-decimal/literal-source.json": {
+      "bytes": 331,
+      "sha256": "91707467d918da01d67686ad059b087db61f994b96cb066ca16bd8fa881c755b"
+    },
+    "fixtures/buffer-length-decimal/point.glb": {
+      "bytes": 372,
+      "sha256": "3131ae0acf048689660aa128272d376bf5606f44cd02e055489aea7e38b9a689"
+    },
+    "fixtures/buffer-length-decimal/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/component-exponent/input.3tz": {
+      "bytes": 900,
+      "sha256": "b0cac28741de7c67634f8b8f60c1b5aad2ef3c2e78be902af26541408e6d05ac"
+    },
+    "fixtures/component-exponent/literal-source.json": {
+      "bytes": 332,
+      "sha256": "4c9b898c28a336ccffc58747b24e3fc76a69eaeed9769bf81f5d40b11d91463a"
+    },
+    "fixtures/component-exponent/point.glb": {
+      "bytes": 372,
+      "sha256": "438a677725fed570a4d69d073369f539199b9ca20b0849f50be539a2045a9440"
+    },
+    "fixtures/component-exponent/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/component-fractional/input.3tz": {
+      "bytes": 900,
+      "sha256": "fdf3f3dc64d38427d9aa3767270e200dc3a292e527ecbb2dd5dcb24376359261"
+    },
+    "fixtures/component-fractional/literal-source.json": {
+      "bytes": 331,
+      "sha256": "b7fc84f4053069375110cefc7c7915d82b714642e7859969e69a81b19bd312a4"
+    },
+    "fixtures/component-fractional/point.glb": {
+      "bytes": 372,
+      "sha256": "9d31079f1b0421509f0c03a50e6b0d9f458c181e8ef3bd037570a60ecd2792fe"
+    },
+    "fixtures/component-fractional/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/count-decimal/input.3tz": {
+      "bytes": 900,
+      "sha256": "180e74e41fce0ac62450899b901adf32b28db442a6058d98de5f3407e92d5ea3"
+    },
+    "fixtures/count-decimal/literal-source.json": {
+      "bytes": 331,
+      "sha256": "6258691e35ba5e2289ee38c83bc3d7725c053dddffa788cca92f96e0f71a5255"
+    },
+    "fixtures/count-decimal/point.glb": {
+      "bytes": 372,
+      "sha256": "0dddb8adf7d8e0b8e9d08302c552a467df27dfd53744d80621a4b3c99cbaf00f"
+    },
+    "fixtures/count-decimal/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/count-fraction-exponent-rounds-to-integer/input.3tz": {
+      "bytes": 920,
+      "sha256": "895ce0f572706b8cfe091a1798776780fbc6f8f4c8dc8800bed902b1fdc24d16"
+    },
+    "fixtures/count-fraction-exponent-rounds-to-integer/literal-source.json": {
+      "bytes": 349,
+      "sha256": "385529f307865c499ef4ded2d5474deb1409a40fb4cfdc49263d525046a3bb89"
+    },
+    "fixtures/count-fraction-exponent-rounds-to-integer/point.glb": {
+      "bytes": 392,
+      "sha256": "2ff2987c32433221ff5025b6ce5c734421778717f4a8f4addcd5b96a6fb3de74"
+    },
+    "fixtures/count-fraction-exponent-rounds-to-integer/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/count-fraction-rounds-to-integer/input.3tz": {
+      "bytes": 916,
+      "sha256": "d819e66ad2beaf306871040f2eaf91b8d468dc74c26e17974ae9281849a7c41b"
+    },
+    "fixtures/count-fraction-rounds-to-integer/literal-source.json": {
+      "bytes": 346,
+      "sha256": "ca7e331f104cc9acf952c26ec53f7219ceaa8592122fe731bd6fc440eea02da9"
+    },
+    "fixtures/count-fraction-rounds-to-integer/point.glb": {
+      "bytes": 388,
+      "sha256": "5ef54da38367d1a0f57803a33d60080b9777fcad3d696100c096605ce0f14d3d"
+    },
+    "fixtures/count-fraction-rounds-to-integer/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/count-fractional/input.3tz": {
+      "bytes": 900,
+      "sha256": "42f0543e21e6ce282de0dea8533ab550f17c79829787c0c3ad0c2c0b9d474306"
+    },
+    "fixtures/count-fractional/literal-source.json": {
+      "bytes": 331,
+      "sha256": "3277876206225460e12cdfc081668294544948313e022571f5cdafdf97b3d610"
+    },
+    "fixtures/count-fractional/point.glb": {
+      "bytes": 372,
+      "sha256": "2d089ae5a0b787612ff8bdfc6bded02a18c17eabbd45a0326fab260b4281325c"
+    },
+    "fixtures/count-fractional/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/local-gltf-integer-representations/input.3tz": {
+      "bytes": 1027,
+      "sha256": "09aff1ed29529ae25459ae9e5f15dede445a01c3923468ccb788eafb73510c3f"
+    },
+    "fixtures/local-gltf-integer-representations/literal-source.json": {
+      "bytes": 368,
+      "sha256": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72"
+    },
+    "fixtures/local-gltf-integer-representations/point.gltf": {
+      "bytes": 368,
+      "sha256": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72"
+    },
+    "fixtures/local-gltf-integer-representations/tileset.json": {
+      "bytes": 159,
+      "sha256": "ddaa02052668a5c0d5912dee0882af48e70bb1203d46a397995c04ec95afd525"
+    },
+    "fixtures/local-gltf-integer-representations/zero.bin": {
+      "bytes": 12,
+      "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    "fixtures/position-reference-exponent/input.3tz": {
+      "bytes": 900,
+      "sha256": "013568b8005d76e16d208a0179ba85239aef07b6eb8a513171d2d42eb590ec28"
+    },
+    "fixtures/position-reference-exponent/literal-source.json": {
+      "bytes": 331,
+      "sha256": "cca9e04608f830f9c72bd83eba7b1978f066583dc031ff8f0375c3827c299276"
+    },
+    "fixtures/position-reference-exponent/point.glb": {
+      "bytes": 372,
+      "sha256": "88a1d35d0b3b4701b349c0f75a753867ff315215d30e46e2d5b4f5ee5a9f341d"
+    },
+    "fixtures/position-reference-exponent/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/position-reference-fractional/input.3tz": {
+      "bytes": 900,
+      "sha256": "040fa9264bd8695bb883cfcfa65c1e5f1cd82a289706012db5ee330859f5a02b"
+    },
+    "fixtures/position-reference-fractional/literal-source.json": {
+      "bytes": 331,
+      "sha256": "a2898d0c063ae9ab418477ae11f9e5192a16a23e01b10b2689953b97c3e1b552"
+    },
+    "fixtures/position-reference-fractional/point.glb": {
+      "bytes": 372,
+      "sha256": "b0115827d225df3b957bf21522870762aeb717b42561c13283e3d5e32cde3436"
+    },
+    "fixtures/position-reference-fractional/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/stored-zero-arbitrary-bounds/input.3tz": {
+      "bytes": 904,
+      "sha256": "14495efa4efb9b735276137430be901bd2a444c7dc1da16636fe9f54257ae4e7"
+    },
+    "fixtures/stored-zero-arbitrary-bounds/literal-source.json": {
+      "bytes": 333,
+      "sha256": "221572636d4e12d948c96309dc99d9c04d8c05789961cb653f69a8269a42834b"
+    },
+    "fixtures/stored-zero-arbitrary-bounds/point.glb": {
+      "bytes": 376,
+      "sha256": "7ecf98c300105dc4dc518ca174c79312786d38bb03b77a910fd6ad036a0bc043"
+    },
+    "fixtures/stored-zero-arbitrary-bounds/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/stored-zero-control/input.3tz": {
+      "bytes": 900,
+      "sha256": "2fbf007e0eeae384a41cbb9e6d801fdf2ef19514a2f7d30e6ac82f625ce30504"
+    },
+    "fixtures/stored-zero-control/literal-source.json": {
+      "bytes": 329,
+      "sha256": "230e1e4c06354ed59ed8347c2b6937085077c0dfe8fc4e2d1e557cebc3a905a1"
+    },
+    "fixtures/stored-zero-control/point.glb": {
+      "bytes": 372,
+      "sha256": "e80968342a1b7d18d0360c2aa0dcdaa495fa1141965191bd97856fc0acffa951"
+    },
+    "fixtures/stored-zero-control/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/viewless-arbitrary-bounds/input.3tz": {
+      "bytes": 792,
+      "sha256": "f5a115a89a63de018cf4ab0e9f3766a617861d37df6ca137cda75c4d9c0db00a"
+    },
+    "fixtures/viewless-arbitrary-bounds/literal-source.json": {
+      "bytes": 243,
+      "sha256": "651ce9596f8f1233826b33522f02ea76f402031f732fab5389bec2f2074a5e00"
+    },
+    "fixtures/viewless-arbitrary-bounds/point.glb": {
+      "bytes": 264,
+      "sha256": "aa086035e4443fa7a942b4ac1362ce1c8187085396bc57135a1bf79221d195e8"
+    },
+    "fixtures/viewless-arbitrary-bounds/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "fixtures/viewless-zero-control/input.3tz": {
+      "bytes": 788,
+      "sha256": "6de3bf1cf6a61197cd0c6e0dc441a59d547180a7b72ecaacfe932f914b5ffdb4"
+    },
+    "fixtures/viewless-zero-control/literal-source.json": {
+      "bytes": 239,
+      "sha256": "344529932aeadb30de0838a2f1dad9111ecc3ffee5d75e5ecd078bb575180ef2"
+    },
+    "fixtures/viewless-zero-control/point.glb": {
+      "bytes": 260,
+      "sha256": "ad460d7a072fe9e3933ad8dc5b04ac665816b45a091d7d19bea5b83fb43c9313"
+    },
+    "fixtures/viewless-zero-control/tileset.json": {
+      "bytes": 158,
+      "sha256": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+    },
+    "pinned-Specification.adoc": {
+      "bytes": 148064,
+      "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff"
+    },
+    "pinned-accessor.schema.json": {
+      "bytes": 6517,
+      "sha256": "86f9aacb0b616e1f6a1d5b8ff81e92294602e9e3c98c7f13d2cefdf987c87e35"
+    },
+    "primary-pin.json": {
+      "bytes": 327,
+      "sha256": "047e34e61eac204fc861632667f244e1dc64c20b0f559e8bfcb5d4538aae0b0a"
+    },
+    "raw/buffer-length-decimal.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/buffer-length-decimal.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/buffer-length-decimal.stdout": {
+      "bytes": 108,
+      "sha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    "raw/component-exponent.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/component-exponent.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/component-exponent.stdout": {
+      "bytes": 108,
+      "sha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    "raw/component-fractional.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/component-fractional.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/component-fractional.stdout": {
+      "bytes": 108,
+      "sha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    "raw/count-decimal.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/count-decimal.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/count-decimal.stdout": {
+      "bytes": 111,
+      "sha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    "raw/count-fraction-exponent-rounds-to-integer.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/count-fraction-exponent-rounds-to-integer.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/count-fraction-exponent-rounds-to-integer.stdout": {
+      "bytes": 111,
+      "sha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    "raw/count-fraction-rounds-to-integer.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/count-fraction-rounds-to-integer.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/count-fraction-rounds-to-integer.stdout": {
+      "bytes": 111,
+      "sha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    "raw/count-fractional.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/count-fractional.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/count-fractional.stdout": {
+      "bytes": 111,
+      "sha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    "raw/local-gltf-integer-representations.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/local-gltf-integer-representations.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/local-gltf-integer-representations.stdout": {
+      "bytes": 111,
+      "sha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    "raw/position-reference-exponent.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/position-reference-exponent.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/position-reference-exponent.stdout": {
+      "bytes": 108,
+      "sha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    "raw/position-reference-fractional.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/position-reference-fractional.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/position-reference-fractional.stdout": {
+      "bytes": 108,
+      "sha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    "raw/stored-zero-arbitrary-bounds.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/stored-zero-arbitrary-bounds.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/stored-zero-arbitrary-bounds.stdout": {
+      "bytes": 123,
+      "sha256": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2"
+    },
+    "raw/stored-zero-control.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/stored-zero-control.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/stored-zero-control.stdout": {
+      "bytes": 1103,
+      "sha256": "79cb25e4c4d5fcf2424cb1e804add68c53650e44e1d38f0a50a503976254e37d"
+    },
+    "raw/viewless-arbitrary-bounds.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/viewless-arbitrary-bounds.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/viewless-arbitrary-bounds.stdout": {
+      "bytes": 123,
+      "sha256": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2"
+    },
+    "raw/viewless-zero-control.runtime.json": {
+      "bytes": 46,
+      "sha256": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197"
+    },
+    "raw/viewless-zero-control.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "raw/viewless-zero-control.stdout": {
+      "bytes": 1105,
+      "sha256": "e37daccf87cda7c534235ffe36bc143f8fc85049b6eb3cd58be38ad2fd58b7b8"
+    },
+    "receipt.json": {
+      "bytes": 53299,
+      "sha256": "0b22cd29d29187e2518f5a852419abe88bd831be54ffd7658f2825e7fc497174"
+    },
+    "root-controlled-helper.py": {
+      "bytes": 277,
+      "sha256": "950b6085802eb1d684f021396111afe3a51b83ac5a75c8e0f8a404e5cd32a485"
+    },
+    "source-pin.json": {
+      "bytes": 10056,
+      "sha256": "913e15540cfe4b387905fdaf00aff270614285ba88d9e12acfe4ffccaa18aa13"
+    }
+  },
+  "schemaVersion": 1
+}

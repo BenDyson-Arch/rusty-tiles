@@ -1,0 +1,15 @@
+{
+  "directRawDownload": "HTTP403; no retained full HTML response bytes claimed.",
+  "integerRule": "Any JSON number with zero fractional part matches integer type.",
+  "mechanism": "web tool open and find",
+  "precisionRule": "JSON Schema adds no arbitrary precision bound to numeric instances.",
+  "recordedAtUtc": "2026-10-10T08:58:04.882099+00:00",
+  "requestedUrl": "https://json-schema.org/draft/2020-12/json-schema-validation.html",
+  "schemaVersion": 1,
+  "sectionsRead": [
+    "4.2",
+    "6.1.1"
+  ],
+  "url": "https://json-schema.org/draft/2020-12/json-schema-validation",
+  "version": "2020-12"
+}

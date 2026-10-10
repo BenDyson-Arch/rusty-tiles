@@ -1,0 +1,7 @@
+{
+  "frozen_binary_path": "/tmp/rusty-tiles-payload-serde-proof/artifacts/unicode-d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+  "sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+  "bytes": 9068248,
+  "matches_dated_manifest_binary": true,
+  "prior_phase_artifact_status": "First exploratory manifest records then-live actual binary hash; later tinyprobe rebuild replaced that mutabletarget path. The old phase remains historical source/log/receipt provenance, not newly independently verified binary. Only this final snapshot is available for executable reinspection. Prior manifest/source/receipt files remain unchanged."
+}

@@ -1,0 +1,18 @@
+{
+  "record": "C1 payload-integrity preimplementation contract freeze",
+  "date": "2026-10-10",
+  "source_head": "c8cbfb187de863ae21fe904275794894aa0a8381",
+  "state": "Pending separate nonauthor adjudication; not implementation authority or acceptance",
+  "acceptance_claim": false,
+  "production_files_unchanged": true,
+  "contract_sha256": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+  "files": {
+    "docs/architecture/c1-payload-integrity-contract.md": "88efd51e854bc02951cab30d1a0bd9a205e67a0ea41e458ea231953bdadac3a4",
+    "bench/architecture_audit/c1_payload_integrity/README.md": "ab460b47e65ef533e7dd0859e7187523246a7cc7a413ce0ae09057979def27e7",
+    "bench/architecture_audit/c1_payload_integrity/adjudication.md": "f09e63bbb2a2850d356d1248a8c5df16d66144757e6029daae2394799b9956ef",
+    "bench/architecture_audit/c1_payload_integrity/next-foundation-audit-20261010.json": "07428a3642dc3c68683d2e5dcc054c6d4a4fb4c790e5db7f744c204433b67a50",
+    "bench/architecture_audit/c1_payload_integrity/reference-plan.json": "0b2cbd0e599c80e4e2e15b776210bb2b41d02207bb2e02878e6f7668cb710390",
+    "bench/architecture_audit/c1_payload_integrity/source-inventory.json": "2928bf989771af6a000b94b6b4aab86bd562e3fb09d53485a1c7ca310676dbdf"
+  },
+  "pending": "A1-A13 in adjudication.md; primary-source exception controls assigned independently by coordinator"
+}

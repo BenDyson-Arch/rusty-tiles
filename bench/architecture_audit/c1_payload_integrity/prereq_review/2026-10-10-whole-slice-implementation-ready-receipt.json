@@ -1,0 +1,69 @@
+{
+  "record": "Separate final whole-slice preimplementation incorporation approval",
+  "date": "2026-10-10",
+  "reviewer": "/root/payload_prereq_review",
+  "whole_slice_implementation_ready": true,
+  "all_A1_A14_prerequisite_choices_settled": true,
+  "open_precode_gates": [],
+  "production_implementation_acceptance": false,
+  "source_head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+  "complete_tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+  "verified_current_production_hashes": 93,
+  "verified_frozen_current_files": 11,
+  "verified_immutable_own_snapshot_files": 12,
+  "verified_copied_foreign_files_and_lengths": 66,
+  "verified_reader_remote_records": 30,
+  "reader_applicable_successes": 21,
+  "prior_corrected_mechanism_independent_rerun_controls": 53,
+  "current_corrected_frozen_artifact_rehashed": true,
+  "no_new_probe_execution_in_final_incorporation_phase": true,
+  "pins": {
+    "docs/architecture/c1-payload-integrity-contract.md": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3",
+    "bench/architecture_audit/c1_payload_integrity/freeze-20261010-a14-selection.json": "44c45ca15958e1068ecaf62349902c720fe93bd8dacd849ca4f4b08919dff8c9",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-whole-slice-implementation-ready.md": "d94d50b8f53fc81da6532053e1ba29258e7846ca421e62791f0592cbd42bc15f",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-reader-prerequisite-verification.json": "bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-mechanism-decision.md": "85a79b46031443274d4d1e199271bbb3989ea4da08365dd11d2a4765bfd55d36",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-mechanism-decision-pins.json": "1c4050e4eef8bcd13cbadfc7282118fba261dd53c0c99267b87c48703179bd70",
+    "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun-receipt.json": "f9fee1ba0e9788406168e90e068db34fbb998009253f50365455860eeab1c35c",
+    "bench/architecture_audit/c1_payload_integrity/precode-settlement-20261010.json": "61bd202687ea288fb89d799a47d743a59e4238b44ad8122795cb9e18f9df72b9"
+  },
+  "gate_dispositions": {
+    "A1": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A2": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A3": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A4": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A5": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A6": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A7": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A8": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A9": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A10": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A11": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A12": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A13": "settled; concrete decision, basis and later implementation obligations in companion report",
+    "A14": "settled; concrete decision, basis and later implementation obligations in companion report"
+  },
+  "authorship": "Contract and proof authored by separate lanes; this reviewer inspected source/evidence, provided independent architectural/numeric adjudication and earlier tiny std capacity/frozen-mechanism execution. No production edits/Cargo/install/heavy/network in review.",
+  "historical_exceptions": [
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/raw-only-tradeoff.md",
+      "historical_sha256": "95a6b831c0e1b115b3b518b71b61a20d175e343ed9f42fc14e36f9140fbaddb0",
+      "current_sha256": "f6f79871684f4ded5661beb2da0720885256d2020b4b87dedfb93aa9536fce5f",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    },
+    {
+      "path": "bench/architecture_audit/c1_payload_integrity/prereq_review/receipt.json",
+      "historical_sha256": "762360ead2050531c17b54c14978d13ec86619d0f90214ef01492c3eb2b981a5",
+      "current_sha256": "5dbaddfaaa19f2e08f7084530b089a6907b3e9cded796c542506f67fa3f73865",
+      "meaning": "Historical mutable foreign document pin; original bytes not newly verified"
+    }
+  ],
+  "old_exploratory_binary": "Overwritten; historical source/log/receipts only, not newly verified executable",
+  "remaining_production_acceptance": "Checked actual source/capacities/lifetimes/all numeric and presence gates, full independent domain/cause/admission/report controls, final source/artifact identity, fresh distinct nonauthor acceptance and applicable CI/wheel/official Blender gates",
+  "scope_limits": [
+    "Full admitted C1 domain preserved; six primary-demonstrated defects must be corrected",
+    "No unused A2 facts or new geometry/metadata claim",
+    "Full A2 literal-template normative hold remains",
+    "No #113/#121 closure or main/tag/publication/release acceptance"
+  ]
+}

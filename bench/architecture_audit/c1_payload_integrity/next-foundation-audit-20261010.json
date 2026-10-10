@@ -1,0 +1,207 @@
+{
+  "record": "Read-only next dependency-ready foundation audit; recommendations, not acceptance",
+  "date": "2026-10-10",
+  "checkout": "/tmp/rusty-tiles-a2-semantics-settlement",
+  "initial_head": "5fc28be272c6bf2ecc080611a537d85e01f3ab67",
+  "final_read_head": "5c68f7b52b72e2f6e72096e930f85d27f2897448",
+  "source_stability": "git diff from initial head to final read head was empty for src/validate.rs, src/validate/json.rs, src/validate/payload.rs, src/validate/types.rs and next-foundation-scopes.md; coordinator advanced CI harness independently.",
+  "method": {
+    "performed": [
+      "Light source/doc reads",
+      "Read-only gh issue views 113,121,125,126,133,120,123,124 and open-issue list",
+      "SHA256 file pins"
+    ],
+    "not_performed": [
+      "Source edits",
+      "Cargo/build/install",
+      "Producer/converter execution",
+      "Acceptance tests/resource measurements",
+      "Browser",
+      "External messages",
+      "Develop/main merges",
+      "Tags/publication/release"
+    ],
+    "acceptance_claim": false
+  },
+  "priority_1": {
+    "name": "Current C1 payload-integrity and bounded-JSON ownership, with limits resolved once",
+    "parents": [
+      125,
+      126,
+      133
+    ],
+    "selection": "Smallest independently useful follow-on after accepted exact archive-reader head. Its actual current consumer is C1 Check::payload and C1 document/implicit JSON inspection. It eliminates live nested default-policy construction and format-to-validation coupling; it does not build unused A2 facts.",
+    "independent_missing_claim": "One C1-selected finite profile controls every nested GLB/local-glTF/b3dm table JSON, buffer/view/meshopt allocation and accessor scan; a private integrity owner consumes that profile and caller aggregate allowance without constructing defaults. Existing C1 document/counters and malformed/unsupported/resource-limit outcomes retain their meaning over the entire currently admitted C1 domain.",
+    "source_observations": [
+      {
+        "pin": "src/validate/payload.rs:2,6-7,62,196,217,337,387,489,512,516,578,1011",
+        "observation": "Payload facts depend directly on ValidationFailure; caps() reconstructs ValidationLimits::default at ten consumed gates. A max_elements argument is the sole caller-owned payload allowance.",
+        "kind": "static ownership observation, not an executed defect"
+      },
+      {
+        "pin": "src/validate/json.rs:7-8,16-24",
+        "observation": "parse(bytes) selects defaults itself; duplicate-key, depth and total-node interpretation is already bounded but cannot consume its caller\u2019s explicit interpretation.",
+        "kind": "static ownership observation"
+      },
+      {
+        "pin": "src/validate/payload.rs:297,350; src/validate.rs:318,538,736,778,793",
+        "observation": "b3dm table JSON, payload JSON, ordinary archive documents and implicit-expander JSON all enter default-selecting parser paths despite C1 owning a limits value.",
+        "kind": "static ownership observation"
+      },
+      {
+        "pin": "src/validate.rs:363-403",
+        "observation": "Current C1 consumes the payload document for schema references, merges not_inspected, builds the public report from checked counters and charges returned element count. These are the concrete retained consumers.",
+        "kind": "static call/ownership observation"
+      },
+      {
+        "pin": "src/validate/payload.rs:1044-1053; docs/VALIDATION.md",
+        "observation": "Scene transforms/rendered bounds, metadata/feature meanings and decoded content containment remain explicitly uninspected. A fact-owner extraction must not promote them.",
+        "kind": "documented claim boundary"
+      }
+    ],
+    "ownership": {
+      "C1_facade": "Choose existing fixed ValidationLimits exactly once; map consumed payload/JSON fields once; retain held-file/URI/reference/hierarchy/report policy and public ValidationFailure mapping.",
+      "private_format_owner": "Own checked payload framing, actual buffer/view/accessor/value/index integrity, bounded NONE meshopt decoding and bounded unique-key JSON. Consume explicit narrow limits/remaining work, immutable bytes and a caller resolver. Own no path discovery, source stability, report defaults, RunControl, Attempt, publication or validator public types.",
+      "JSON_owner": "One explicit-limit parser shared by C1 package/document and payload/table paths; no copied parser or nested defaults.",
+      "resolver": "Caller binds relative URI authority and resource bytes. Use a typed causal resolver failure so real Io is preserved without text matching; do not broaden resource authority.",
+      "scope_stop": "No new scene/coherence evaluator, rational arithmetic, primitive-reference bounds, selected-scene facts, wrapper semantic claims, report inventory roles or A2 orchestration in this first slice."
+    },
+    "contract_before_coding": {
+      "invariants": [
+        "Every existing C1 payload profile stays represented: GLB/local glTF, modern b3dm framing, data buffers, zero-initialized accessors, quantized attributes, bounded NONE meshopt and the pinned restart profile. Do not narrow C1 to the future A2 geometry subset.",
+        "Every prior successful/unsupported/invalid/limited result retains its meaning unless independent evidence identifies a needed correction; source parity alone is supplemental.",
+        "Every consumed limit has a single C1 origin and reaches all nested consumers; check count/byte arithmetic and host conversion before allocation.",
+        "Keep per-document ceilings and archive-wide counters distinct. Caller remaining total accessor components continue governing aggregate work, with no reset from nested parser/decoder construction.",
+        "Returned document/counters/notInspected have actual existing C1 consumers. Do not return or compute an unused prepared-facts framework.",
+        "Actual resolver read/seek failures preserve causal Io; byte framing/range corruption is InvalidInput; valid excluded codec/format semantics are Unsupported; exceeded limits are ResourceLimit."
+      ],
+      "retain": [
+        "Existing checked byte layouts/scalar semantics and meaningful C1 control corpus only after extraction review and independent boundary probes.",
+        "Existing C1 URI confinement, archive member accounting, report labels and fixed public profile.",
+        "Existing b3dm framing checks and truthful feature/batch semantic exclusion."
+      ],
+      "rework": [
+        "Payload fact/error ownership beneath private format boundary.",
+        "Default-selecting payload gates and JSON parse API into explicit caller-owned limits.",
+        "Actual C1 ordinary/implicit/payload/table JSON callers and private error mapping.",
+        "Existing counters and aggregate charging integration without resetting allowances."
+      ],
+      "replace": [
+        "Default resolution inside low-level payload/JSON operations with one mapped C1 profile."
+      ],
+      "remove": [
+        "caps() and nested ValidationLimits::default construction.",
+        "Old validator-owned payload/JSON implementations once every actual C1 caller migrates; no two interpretations."
+      ],
+      "unresolved_before_code": [
+        "Settle the smallest private limit/error/JSON representation from actual consumed fields, not a generic option bag or generic metering framework.",
+        "Inventory and map every JSON/default call, including implicit presentation callback and metadata schema documents; preserve current per-document versus aggregate semantics.",
+        "Define truthful accounting of all current buffer/data-URI/meshopt work and temporary allocations; any newly discovered amplification concern must be proved and corrected at its owner rather than waived.",
+        "Separate format failure from caller-resolver failure without losing actual Io.",
+        "Record any deliberate changes to accepted limits/check/error behavior with independent rationale before implementing them."
+      ]
+    },
+    "independent_acceptance_plan": [
+      "Independently authored small GLB/local-glTF and modern b3dm positives plus real missing-BIN historical negative and byte/range/index/extension corruptions through actual C1 Rust/CLI/Python surfaces; retain full existing declared domain.",
+      "Direct private boundary probes use deliberately small caller limits and instrumented resolvers to prove byte/JSON-depth/JSON-items/decoded-byte/accessor-component admission before large reads, allocation or meshopt decode. Include exact/one-over and nested b3dm-table cases; assert every parser sees caller limits.",
+      "Aggregate remaining-components controls with two payloads and shared/repeated resources detect allowance reset or changed public counter meaning. Document counters versus physical work.",
+      "Independent raw component decoder/reference fixtures verify unchanged scalar/normalization/index semantics; production helper agreement cannot be the oracle.",
+      "Duplicate/trailing/malformed JSON controls and resource-limit-looking strings verify typed cause selection; injected resolver Io kinds survive unchanged.",
+      "Compare full report checks/notInspected/counters and failure classes to justified profile expectations; old suite parity supplements independent controls.",
+      "Coordinator alone runs meaningful final C1/archive/frontends, bounded resources, installed-wheel/applicable CI and separate final-source nonauthor review. Exact source/artifact pins required before accepted develop merge."
+    ],
+    "dependency_status": "Architecture authority and real C1 consumer are available now. Land only after current archive-reader final source/evidence acceptance or rebase onto its accepted exact head. No dependence on resolving A2 normative template hold. No automatic broader gate closure."
+  },
+  "priority_2": {
+    "name": "Referenced POSITION and wrapper facts only when a truthful live consumer is settled",
+    "status": "Consumer-gated later extension; not first-slice implementation authority",
+    "independent_missing_claim": "Checked primitive-reference extrema differ from whole-accessor extrema; wrapper framing differs from RTC/batch semantics. A future consumer must own selected-scene/transform/coherence rules and consume these facts before they are implemented.",
+    "evidence": "a2_payload_settlement/audit.md provides a bounded separate design/reference lane: 6 pinned actual source archives per mode, 23 primitive instances/54 own-ancestor checks, 23 scene controls and 6 numeric controls. These are model evidence only, not current C1 defects or production acceptance.",
+    "candidate_rules": "If a live C1 geometry profile is chosen, explicitly specify new check names and full input dispositions. If A2 eventually resumes, keep C1 existing claims independent from A2 narrower positive diagonal T/S, exact rational/local-ancestor policy. Do not silently change public C1 child-volume policy or claim geometry from prepared facts alone.",
+    "blockers": [
+      "Decide actual consumer and claim before code; do not retain new facts unused for held A2.",
+      "Exact work/fact allocation admission and primitive/scene/reference sensitivity controls.",
+      "Fresh independent geometry arithmetic and content-bounds acceptance.",
+      "Full A2 cannot implement this as a covert production rewrite or clear its normative hold."
+    ]
+  },
+  "other_candidates": [
+    {
+      "priority": 3,
+      "name": "Standalone in-place vector compression/replacement (#126)",
+      "evidence": "src/vector_encoding.rs:18-23 reads, compresses, then std::fs::write mutates source pathname; this is a static direct-write observation, not an executed failure. runtime.rs contains completed-file OutputPolicy::Replace ownership.",
+      "why_after_priority_1": "Independent operation and accepted file primitives are available, but supported document/view-layout semantics and semantic decoded equivalence remain unsettled; metadata/feature exactness and failure/source preservation need their own focused audit.",
+      "contract_seed": "Replace direct write with one typed completed candidate, independently decode accessor/metadata/feature values, then publish under settled source/destination conflict semantics; source must survive failed precommit work. Do not assume current compress_document layout inference is the specification."
+    },
+    {
+      "priority": 4,
+      "name": "Doctor/readiness and preview authority (#126)",
+      "evidence": "public-surface-inventory.md:41-42 retains explicit probe/capability/authority gates; doctor.rs:40-74 combines native probing with hard-coded ready converter groups.",
+      "why_after_priority_1": "Can proceed independently, but no executed current defect or completed option-specific capability matrix is established by this read-only audit. Requires selection of bounded actual operation capability and resource lifetime contract; no generic registry."
+    },
+    {
+      "priority": 5,
+      "name": "Public A2 snapshot/inventory report profile",
+      "status": "Wait for actual emitted profile/consumer; no arbitrary report-owned role bypass",
+      "evidence": "a2_metadata_settlement/audit.md explicitly says public C1 does not yet accept trusted-source inventory roles and must reconstruct intrinsic associations, shape, hashes/lengths and original payload integrity.",
+      "blocker": "No accepted A2 production representation or final report profile exists; report labels cannot supply source association truth."
+    }
+  ],
+  "A2_hold": {
+    "decision": "Full A2 HELD. No implicit product change or partial-implicit fallback selected by this audit.",
+    "blocker": "Pinned primary text prohibits implicit-root external tileset URI; unavailable root JSON template slot exemption remains unestablished.",
+    "evidence_limit": "Existing actual client materializes intended frames/slots but also tolerates forbidden root occupancy and ignores present TILE_TRANSFORM; validator has static TODO; schema/client/validator success cannot settle absent normative rationale.",
+    "source_pins": {
+      "3d_tiles": "4d781014b52294759834018a931223b98ac1ce47",
+      "cesium": "df52c781de3491a4b76839d420f7ca90a032efb6",
+      "validator": "7fa62c5f792069b077f174b477aab85dd7fecf22",
+      "tools": "4ca692eb16a9c7db21ec99e2aacc32645ce92f28"
+    },
+    "no_new_authoritative_clarification": "None established by this audit. Local evidence retains the gate. Future standards resolution must address unavailable level-0 JSON templates specifically."
+  },
+  "live_issues": {
+    "read_date": "2026-10-10",
+    "all_open": [
+      113,
+      121,
+      125,
+      126,
+      133,
+      120,
+      123,
+      124
+    ],
+    "125_latest": "Bounded archive-reader prerequisite distinguishes actual overlap defect and pending production/evidence; keeps C1 geometry/metadata separate.",
+    "126_latest": "Bounded A2 preparation accepted only; terminal format/capture/coherence/lifecycle/viewer obligations remain.",
+    "133_scope": "World-space bounds, general metadata/material/implicit/codec breadth remain later slices."
+  },
+  "authority_limits": [
+    "Continue evidence-backed exact develop merges only after final review/applicable checks.",
+    "Keep #113 and #121 open.",
+    "No main merge, tagging, publication or release.",
+    "All static observations remain distinct from executed defects.",
+    "Current implementation/tests are retention candidates; declared independent format/profile contracts govern.",
+    "Root owns serialized two-worker/lower-priority Cargo and sustained resource work."
+  ],
+  "file_sha256": {
+    "AGENTS.md": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0",
+    "docs/architecture/README.md": "1dd8ad8b87e3313caa2e6e92e243e208501dade45f3a774fd2bdc9e2af994d80",
+    "docs/architecture/next-foundation-scopes.md": "c0351ac0f2b46ec7243f61dc6782c0e68dd49ffbea4a585e0b706967c3abc62e",
+    "docs/architecture/public-surface-inventory.md": "7c3cc54125e13cff0e4f7ad9e7a0d644a110cf632cf0b469cd1e80d566640dde",
+    "docs/architecture/implicit-rewrite-contract.md": "e9aff36c1321ab9d18be3eaa001b01a16d42015431b09925f396141c12c47ca8",
+    "docs/architecture/archive-read-foundation-contract.md": "77eac818b0bc3090d4096b7ec71b8081276592fa708136ca30cb8f77e7166748",
+    "docs/VALIDATION.md": "3b5f542dd2db09b6954aa621c1433c346c11e1b4a5040ab3827a1c3016758c0e",
+    "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+    "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+    "src/validate.rs": "9772bfb1f0a14b96db1cfd49818c545635dbc8f83041e224b33e94745baf36ff",
+    "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+    "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a",
+    "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+    "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/audit.md": "ecb9f243df13294c9555eebc8e756f1cf4bbfaacabff56a5b103996ed565162c",
+    "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/portable-results.json": "ea416cb8df5b8d00338b316adfd20b6ce0ab9de187178e29b5c16c9db1b08770",
+    "bench/architecture_audit/implicit_rewrite/a2_payload_settlement/native-results.json": "53c05bee4b21af40f5b4d0c283a3c4887b49045a2ce7d10dafadf6f91ef4966a",
+    "bench/architecture_audit/implicit_rewrite/a2_metadata_settlement/audit.md": "5acf34dc9de93838cd548a129c620f88582dcfd44055121271d650b845970d23",
+    "bench/architecture_audit/implicit_rewrite/a2_format_settlement/audit.md": "5ae1b8f7b1711dae435d9025ae94f84035e415a90635e375f06e58a57a551b39",
+    "bench/architecture_audit/implicit_rewrite/a2_format_settlement/primary-sources.json": "1cf50fd05a7903cacd52d2b6ab3fc9b9cfc8264bf768239ee3748a4cf621b8e0"
+  }
+}

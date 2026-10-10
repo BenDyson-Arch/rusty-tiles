@@ -1,0 +1,103 @@
+{
+  "record": "Independent reference and sensitive source-exception plan; no new execution acceptance",
+  "date": "2026-10-10",
+  "acceptance_claim": false,
+  "primary_references": [
+    {
+      "name": "Published glTF 2.0.1",
+      "revision": "8e798b02d254cea97659a333cfcb20875b62bdd4",
+      "url": "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html",
+      "pinned_source_url": "https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc",
+      "rules": [
+        "little-endian scalars",
+        "raw accessor min/max independent of normalized flag",
+        "matrix column start alignment with omitted final padding",
+        "JSON integer-valued decimal/exponent syntax",
+        "viewless nonsparse min/max exemption",
+        "GLB envelope and BIN padding"
+      ],
+      "verification": "Separately verified by primary-controls owner: registry header identifies selected commit; fetched exact pinned source and accessor schema retained in lossless raw bundle. Contract author inspected receipts/hashes only.",
+      "source_sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+      "source_bytes": 148064
+    },
+    {
+      "name": "KHR_mesh_quantization",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf",
+      "url": "https://github.com/KhronosGroup/glTF/blob/70b5e4101725950fb8f3f94dd72c37e758ce5daf/extensions/2.0/Khronos/KHR_mesh_quantization/README.md",
+      "verification": "Prior independent C1 citation; fresh source revalidation pending"
+    },
+    {
+      "name": "EXT_meshopt_compression",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3",
+      "url": "https://github.com/KhronosGroup/glTF/blob/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "verification": "Prior independent C1 citation; fresh source revalidation pending"
+    },
+    {
+      "name": "Modern b3dm v1",
+      "revision": "4d781014b52294759834018a931223b98ac1ce47",
+      "url": "https://github.com/CesiumGS/3d-tiles/blob/4d781014b52294759834018a931223b98ac1ce47/specification/TileFormats/Batched3DModel/README.adoc",
+      "verification": "Prior independent C1 citation; fresh source revalidation pending"
+    },
+    {
+      "name": "Pinned draft KHR_mesh_primitive_restart",
+      "revision": "9811e8407d4533500cfc6b10e3bc408345035a6f",
+      "url": "https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md",
+      "verification": "Prior independent C1 citation; finite supported profile is separate from full draft semantics"
+    },
+    {
+      "name": "Upstream meshoptimizer golden bytes",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+      "url": "https://github.com/zeux/meshoptimizer/blob/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "known_fixture": {
+        "compressed_bytes": 85,
+        "decoded_bytes": 48,
+        "count": 4,
+        "stride": 12,
+        "mode": "ATTRIBUTES",
+        "filter": "NONE"
+      },
+      "verification": "Existing independently sourced C1 golden provenance; not a new executed codec proof"
+    }
+  ],
+  "local_primary_read": {
+    "path": "/home/bend/.cache/rusty-tiles-f1b3-gltf-spec.adoc",
+    "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+    "selected_revision_proven": true,
+    "read_sections": [
+      "JSON encoding (line 521)",
+      "Data Alignment (1121 onward)",
+      "Accessors Bounds (1205 onward)",
+      "normalized integer equations (2562 onward)"
+    ],
+    "limit": "Byte-identical exact selected source established independently in primary_controls receipts; no own network fetch or execution."
+  },
+  "source_exception_sensitive_fixture_plan": [
+    {
+      "id": "integer-decimal-exponent",
+      "positive": "Analytic glTF/GLB identical integer semantic properties written as 3, 3.0 and 3e0 (counts), and 5126, 5126.0 and 5.126e3 (component type), with byteLength/view/index references covered separately",
+      "negative": "One-property fractional count 3.5, negative count -3, nonnumeric string, host-range/overflow numeric forms",
+      "oracle": "Selected published JSON Encoding integer rule + separately checked numeric value; valid integral syntax must not be mislabeled InvalidInput",
+      "before_code": "Five valid integral-notation outcome defects demonstrated in independent fourteen-control receipt. Correct at owner; exact token integrality/range before f64 rounding is pending A14 representation adjudication."
+    },
+    {
+      "id": "viewless-minmax-exemption",
+      "positive": "No bufferView and no sparse, finite FLOAT VEC3 POSITION count 3 with both min/max finite but different from generated zero values; no resource resolver calls; matched zero-bounds control",
+      "negative": "Same arbitrary bounds on actual stored zero accessor must fail decoded-bound equality; malformed/nonfinite/wrong-sized bound arrays still invalid; missing referenced BIN is distinct",
+      "oracle": "Selected published Accessors Bounds exemption; viewless values remain zero for index/attribute integrity; bounds exemption cannot claim rendered geometry",
+      "before_code": "Valid arbitrary viewless bounds rejected and identical arbitrary stored-zero bound correctly rejected in independent receipt. Apply pinned bounds exemption while preserving decoded zero values and stored-bound checks; no profile exclusion selected."
+    },
+    {
+      "id": "padding-and-normalization",
+      "positive": "Independently packed MAT3 U8 11-byte occupied view; signed-min normalized endpoint -1; unnormalized raw min/max with normalized attribute",
+      "negative": "One-byte short occupied matrix range; one raw-bound mismatch; signed-min mistakenly divided without clamping",
+      "oracle": "Published matrix alignment and normalization equations, independent little-endian unpack; no production helper oracle"
+    }
+  ],
+  "open_proof_limits": [
+    "Six valid-input rejection outcome defects demonstrated independently; no final candidate correction acceptance",
+    "Contract author fetched/executed nothing; separate owner attribution and exact source/artifact pins retained",
+    "Official glTF validator cannot independently establish meshopt/restart/b3dm/3TZ semantics",
+    "Exact number representation, allocation admission and all other nonauthor contract gates remain open"
+  ],
+  "independent_evidence_binding": "primary-evidence-binding-20261010.json"
+}

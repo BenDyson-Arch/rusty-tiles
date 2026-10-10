@@ -1,0 +1,5 @@
+length=2 backing=4 old_copy=8 exact_copy=2 exact_peak=6
+length=4 backing=4 old_copy=4 exact_copy=4 exact_peak=8
+length=6 backing=8 old_copy=12 exact_copy=6 exact_peak=14
+length=8 backing=8 old_copy=8 exact_copy=8 exact_peak=16
+length=10 backing=12 old_copy=20 exact_copy=10 exact_peak=22

@@ -1,0 +1,22 @@
+{
+  "record": "Independent NONAUTHOR tiny frozen mechanism rerun, no Cargo or production codec",
+  "artifact": "/tmp/rusty-tiles-payload-serde-proof/artifacts/unicode-d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+  "artifact_sha256": "d5c53c7df6a41e61b056dc394e30cfc8377fcead377cd3e5349b94699941312d",
+  "artifact_bytes": 9068248,
+  "exit_code": 0,
+  "elapsed_seconds": 0.325436544000695,
+  "cpu_policy": {
+    "absolute_nice": 10,
+    "affinity": [
+      0,
+      1
+    ]
+  },
+  "stdout_path": "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-numeric-proof-rerun.json",
+  "stdout_sha256": "af6a57d2f1d7951cffcec805d51bc50936823ce30ca860ca417b4566d8e026f5",
+  "stderr": "",
+  "exact_json_match_to_original_receipt": true,
+  "finite_rows": 22,
+  "raw_rows": 31,
+  "production_acceptance": false
+}

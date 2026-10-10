@@ -1,0 +1,11 @@
+error: failed to select a version for `serde`.
+    ... required by package `serde_json v1.0.151`
+    ... which satisfies dependency `serde_json = "=1.0.151"` of package `c1-payload-serde-proof v0.0.0 (/tmp/rusty-tiles-payload-serde-proof)`
+versions that meet the requirements `^1.0.220` are: 1.0.229
+
+all possible versions conflict with previously selected packages
+
+  previously selected package `serde v1.0.228`
+    ... which satisfies dependency `serde = "=1.0.228"` of package `c1-payload-serde-proof v0.0.0 (/tmp/rusty-tiles-payload-serde-proof)`
+
+failed to select a version for `serde` which could resolve this conflict

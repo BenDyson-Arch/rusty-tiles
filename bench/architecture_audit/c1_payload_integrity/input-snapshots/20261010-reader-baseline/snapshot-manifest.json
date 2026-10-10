@@ -1,0 +1,39 @@
+{
+  "classification": "Immutable completed A13 foreign input snapshot; read-only identity verification, no new CI execution",
+  "date": "2026-10-10",
+  "actual_head": "0eebdeebf013591460e6ac77485ad91b7401aada",
+  "actual_tree": "58aadfdc1bb78c507d020ab91494dc83a3d646a3",
+  "production_pins_verified": 93,
+  "files": [
+    {
+      "original_path": "bench/architecture_audit/c1_payload_integrity/prerequisite/20261010-reader-baseline.json",
+      "snapshot_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-reader-baseline/20261010-reader-baseline.json",
+      "sha256": "913f3bd19d4b981f4b66ff36c78ad156a8762853edc1e3e4be0c37e2546e7ead",
+      "bytes": 10309
+    },
+    {
+      "original_path": "bench/architecture_audit/implicit_rewrite/archive_candidate_evidence/remote-7cbc088/index.json",
+      "snapshot_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-reader-baseline/index.json",
+      "sha256": "f6ba29667b4f08036f130479b43ebb3e02f5b7e2d914b1634e53b04938cb3aa0",
+      "bytes": 14371
+    },
+    {
+      "original_path": "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/2026-10-10-remote-head-review/review.md",
+      "snapshot_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-reader-baseline/review.md",
+      "sha256": "a648f00eede426416a6826d8aca3ddd55035b1b0e73bd9bcf48a56ebcb788bfe",
+      "bytes": 7064
+    },
+    {
+      "original_path": "bench/architecture_audit/implicit_rewrite/archive_source_acceptance/2026-10-10-remote-head-review/final-artifact-pins.json",
+      "snapshot_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-reader-baseline/final-artifact-pins.json",
+      "sha256": "da3d91aec0d68decd1b0269c9d3769658e79258db870ffe5f8ff35717e6cba18",
+      "bytes": 30417
+    },
+    {
+      "original_path": "bench/architecture_audit/c1_payload_integrity/prereq_review/2026-10-10-reader-prerequisite-verification.json",
+      "snapshot_path": "bench/architecture_audit/c1_payload_integrity/input-snapshots/20261010-reader-baseline/2026-10-10-reader-prerequisite-verification.json",
+      "sha256": "bfc8defb1dfd070bebbfee32c49d805a31b45c6f83552461bf5299c2094ea5c8",
+      "bytes": 2317
+    }
+  ]
+}
