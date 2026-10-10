@@ -117,7 +117,10 @@ class WheelAPI(unittest.TestCase):
                 with zipfile.ZipFile(result.output) as stream:
                     members = {name: stream.read(name) for name in stream.namelist()
                                if name != "@3dtilesIndex1@"}
-                checked = oracle.inspect_members(payload, members, 16, limit, 0.5)
+                # Hosted runners vary in speed; retain the exact work/depth
+                # ceilings and fail if this bounded proof remains unproven.
+                checked = oracle.inspect_members(payload, members, 16, limit, 0.5,
+                    max_checker_seconds=60)
                 self.assertEqual(result.report, json.loads(members["conversion.json"]))
                 certificate = result.report["approximation"]["certificate"]
                 self.assertLessEqual(certificate["error_metres"], 0.5)

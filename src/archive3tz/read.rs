@@ -868,7 +868,7 @@ pub(crate) mod tests {
         let inner = Record::stored(b"inner", b"payload");
         let nested = local(&inner);
         let outer = Record::stored(b"outer", &nested);
-        admit(&archive(&[outer.clone()], &[0], 0)).unwrap();
+        admit(&archive(std::slice::from_ref(&outer), &[0], 0)).unwrap();
         let mut bytes = local(&outer);
         let directory = bytes.len();
         bytes.extend(central(&outer, 0));
