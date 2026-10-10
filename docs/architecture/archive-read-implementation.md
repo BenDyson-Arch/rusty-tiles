@@ -1,11 +1,11 @@
 # Stored-archive reader implementation decisions
 
-Status: implementation in progress, not production acceptance. The
+Status: source implemented and local controls executed; separate final review and
+applicable PR CI/wheel acceptance precede a develop merge. The
 [reviewed contract](archive-read-foundation-contract.md) and its
 [preimplementation review](../../bench/architecture_audit/implicit_rewrite/archive_prereq_review/review.md)
 remain the baseline. That review pins the original source bytes before coding;
-it must not be rebound to later implementation bytes. Fresh final-source review
-and executed candidate receipts are still required.
+it must not be rebound to later implementation bytes. Final-source review and candidate receipts bind the new owner separately.
 
 The private format owner exposes caller-supplied ReadLimits and typed ReadError.
 One StoredArchive catalog supplies envelope admission, 3TZ index validation and
@@ -55,7 +55,7 @@ and current-source observations are recorded in the
 These are baseline executions and candidate source observations, not an accepted
 candidate result.
 
-The proposed correction is one private StoredArchive over the admitted raw
+The correction is one private StoredArchive over the admitted raw
 directory. The format scanner retains checked name, local/data offsets, length,
 CRC and central order. The same catalog supplies exact index cardinality and
 member lookup; C1 reads/hashes those admitted stored ranges directly with explicit
@@ -76,3 +76,45 @@ This representation revision requires independent owner adjudication before
 coding and a fresh final-source review after actual file/Cursor, selected-directory,
 raw I/O, CRC/index and resource controls execute. The earlier production-ready
 handoff covered the discarded pass-through candidate, not this revision.
+
+
+## Executed local acceptance checkpoint
+
+Source `5c68f7b52b72e2f6e72096e930f85d27f2897448` has 93 pinned production
+inputs. Portable and native-geospatial/native-jpeg release artifacts are frozen
+separately; the local evidence index retains exact commands, toolchain, source
+manifest, binary hashes and lossless receipts. Local heavy work is serialized,
+with two-CPU affinity, two build/test workers and reduced scheduling priority.
+
+The coordinator executed 323 library tests and the existing C1 Rust/CLI corpus,
+12 packaging tests and four package frontend tests. A final focused archive replay
+passed 32 tests after adding sensitive directory header/name/extra read and seek
+controls. Actual source-returned UnexpectedEof retains Io; observed Ok(0)
+exhaustion is malformed, and Interrupted retries. Guarded member reads/hashes
+verify the exact range, 64 KiB hash chunks, CRC and these causal distinctions.
+These native controls, together with reviewed reservation ordering, establish
+admission before count-sized catalog construction; Python limit models are
+supplemental format evidence only.
+
+All 45 separately authored tiny archive cases match their finite categories on
+both frozen portable and native artifacts. The original ten baseline controls
+now preserve disjoint positives, refuse coherent nested records as Unsupported,
+reject duplicate names, refuse alternate name/ZIP64 interpretations and reject
+outer one-entry archives without retrying embedded end records. The ordinary
+nested-ZIP payload remains a positive. The ordinary-checkout execution runner
+retains results for CI, including malformed-output failures; its negative runner
+control confirms a failed execution still writes the receipt.
+
+Five actual Linux catalog-scaling runs cover 2, 3, 1,024, 65,536 and 65,537
+entries. At 65,536, framing/index/CRC/hash checks complete before C1's expected
+unreferenced-entry rejection; 65,537 is ResourceLimit at admission. The cap run
+observed 93,704 KiB peak RSS and about 0.221 seconds. These whole-C1 observations
+include catalog, names, lookup/extent/index storage and later C1 name/hash copies;
+they establish neither isolated allocation constants nor a universal RSS bound.
+Twenty existing C1 resource runs also pass, including repeated document reads,
+shared indices, decoded work and implicit capacity controls.
+
+Fresh separate nonauthor acceptance and all applicable exact-head CI, installed
+wheel and official Blender checks remain the merge gates. Full A2 conformance,
+decoded content containment, metadata/scene meanings, legacy-operation migration
+and the release parents remain open.

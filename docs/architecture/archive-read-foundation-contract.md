@@ -1,6 +1,7 @@
 # Bounded stored-archive reader foundation
 
-Status: proposed next production prerequisite under #125/#126. A2's full
+Status: implemented bounded production prerequisite under #125/#126; final
+source/artifact review and applicable CI/wheel checks govern retention. A2's full
 rewrite is still held at its literal external-template conformance gate. This
 slice does not substitute the different partial-implicit product or remove the
 current converter. The existing C1 read-only inspector is the real consumer;
