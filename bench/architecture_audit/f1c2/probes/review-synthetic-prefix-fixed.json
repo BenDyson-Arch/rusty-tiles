@@ -1,0 +1,21 @@
+{
+  "binary_sha256": "92815505d581b8df3aa2a53bd388ca84b9cab394fb35cd6c925524d6e7fa6d79",
+  "probe_sha256": "dbb09d8083c28a5637c13c0c79b46c2ddf2956c0cc99dc887eec5d6cc1b99620",
+  "expect": "fixed",
+  "records": [
+    {
+      "kind": "gltf",
+      "source_sha256": "429aa026a01441dab3183b4510ea16bd0315fc4b925e5e06097d810f5488889c",
+      "error_kind": "unsupported",
+      "output_parent_exists": false,
+      "source_preserved": true
+    },
+    {
+      "kind": "glb",
+      "source_sha256": "e916a3b8fe1470636962746154b1c114c0eeb11c996a662577452a27c125c4ee",
+      "error_kind": "unsupported",
+      "output_parent_exists": false,
+      "source_preserved": true
+    }
+  ]
+}

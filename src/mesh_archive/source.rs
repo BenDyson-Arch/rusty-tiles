@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 use std::ops::Range;
 mod json;
 mod material;
+mod original_bounds;
 mod texture;
 pub(super) use material::Material;
 
@@ -14,7 +15,13 @@ pub(super) const MAX_LEAVES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
 type Result<T> = std::result::Result<T, JobError>;
 type Matrix = [[f64; 4]; 4];
-type Instance = (usize, Matrix, f64, [[f64; 3]; 3]);
+struct Instance {
+    node: usize,
+    mesh: usize,
+    world: Matrix,
+    determinant: f64,
+    normal_matrix: [[f64; 3]; 3],
+}
 const IDENTITY: Matrix = [
     [1., 0., 0., 0.],
     [0., 1., 0., 0.],
@@ -22,8 +29,22 @@ const IDENTITY: Matrix = [
     [0., 0., 0., 1.],
 ];
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct SourceIdentity {
+    pub node_index: u32,
+    pub mesh_index: u32,
+    pub primitive_index: u32,
+    pub triangle_index: u32,
+}
+impl SourceIdentity {
+    pub fn primitive(self) -> (u32, u32, u32) {
+        (self.node_index, self.mesh_index, self.primitive_index)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct Triangle {
+    pub source: SourceIdentity,
     pub positions: [[f32; 3]; 3],
     pub normals: Option<[[f32; 3]; 3]>,
     pub tangents: Option<[[f32; 4]; 3]>,
@@ -40,7 +61,22 @@ pub(super) struct Image {
     pub height: u32,
 }
 
+/// Tile-basis intervals enclosing unchanged authored source-node transforms.
+pub(super) struct OriginalBounds {
+    pub min: [f64; 3],
+    pub max: [f64; 3],
+}
+
+pub(super) fn original_bounds(
+    document: &Document,
+    supplied_buffers: &[&[u8]],
+    check: impl FnMut() -> Result<()>,
+) -> Result<OriginalBounds> {
+    original_bounds::evaluate(document, supplied_buffers, check)
+}
+
 pub(super) struct Geometry {
+    pub node_names: Vec<Option<String>>,
     pub triangles: Vec<Triangle>,
     pub materials: Vec<Material>,
     pub images: Vec<Image>,
@@ -1239,6 +1275,13 @@ fn scene_plan(
         check()?;
         locals.push(transform(node)?);
         if node
+            .get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name.len() > 4096)
+        {
+            return Err(unsupported("source node name exceeds 4096 UTF-8 bytes"));
+        }
+        if node
             .get("mesh")
             .map(uint)
             .transpose()?
@@ -1314,7 +1357,13 @@ fn scene_plan(
                     "expanded selected-scene triangle ceiling exceeded",
                 ));
             }
-            instances.push((mesh, world, det, normal_matrix));
+            instances.push(Instance {
+                node: i,
+                mesh,
+                world,
+                determinant: det,
+                normal_matrix,
+            });
         }
         for child in list(&nodes[i], "children")?.iter().rev() {
             stack.push((uint(child)?, world));
@@ -1357,14 +1406,21 @@ pub(super) fn decode(
         &mut check,
     )?;
     let mut triangles = Vec::with_capacity(document.triangle_count);
-    for &(mesh, world, det, normal_matrix) in &document.instances {
-        for p in &document.meshes[mesh] {
+    for instance in &document.instances {
+        let Instance {
+            node,
+            mesh,
+            world,
+            determinant: det,
+            normal_matrix,
+        } = instance;
+        for (primitive_index, p) in document.meshes[*mesh].iter().enumerate() {
             for start in (0..p.count).step_by(3) {
                 if start.is_multiple_of(3072) {
                     check()?;
                 }
                 let mut vertices = p.vertices(&data, start);
-                if det < 0. {
+                if *det < 0. {
                     vertices.swap(1, 2);
                 }
                 let mut positions = [[0.; 3]; 3];
@@ -1426,6 +1482,12 @@ pub(super) fn decode(
                     }
                 }
                 triangles.push(Triangle {
+                    source: SourceIdentity {
+                        node_index: *node as u32,
+                        mesh_index: *mesh as u32,
+                        primitive_index: primitive_index as u32,
+                        triangle_index: (start / 3) as u32,
+                    },
                     positions,
                     normals,
                     tangents,
@@ -1437,6 +1499,10 @@ pub(super) fn decode(
         }
     }
     Ok(Geometry {
+        node_names: list(&document.value, "nodes")?
+            .iter()
+            .map(|node| node.get("name").and_then(Value::as_str).map(str::to_owned))
+            .collect(),
         triangles,
         materials: document.materials.clone(),
         images,
@@ -1526,6 +1592,25 @@ mod metadata_tests {
                 .err()
                 .expect("FLOAT/u32 normalized flag must fail");
             assert_eq!(error.kind(), JobErrorKind::InvalidInput);
+        }
+    }
+
+    #[test]
+    fn source_node_name_cap_counts_utf8_bytes_without_changing_missing_or_empty() {
+        for (name, accepted) in [
+            ("a".repeat(4096), true),
+            ("🦉".repeat(1024), true),
+            ("🦉".repeat(1025), false),
+        ] {
+            let mut value: Value =
+                serde_json::from_slice(&declared_attribute(5126, "VEC3", false, false)).unwrap();
+            value["nodes"][0]["name"] = json!(name);
+            let result = Document::parse(&serde_json::to_vec(&value).unwrap(), || Ok(()));
+            if accepted {
+                assert!(result.is_ok());
+            } else {
+                assert_eq!(result.err().unwrap().kind(), JobErrorKind::Unsupported);
+            }
         }
     }
 }

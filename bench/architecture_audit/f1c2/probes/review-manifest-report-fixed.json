@@ -1,0 +1,10 @@
+{
+  "binary_sha256": "92815505d581b8df3aa2a53bd388ca84b9cab394fb35cd6c925524d6e7fa6d79",
+  "probe_sha256": "928aa4ae1bcc4576d4fd311d7df359036cc375c03d96b5a21ca9a99f090d572a",
+  "source_sha256": "e826dc3429f0618900b7d50091dfb8cbe512dc8884f82f73621f13cf10170874",
+  "expect": "fixed",
+  "conversionReport": null,
+  "sidecar_absent": true,
+  "inline_model_report_present": true,
+  "manifest_sha256": "9fab3f6398553970f46c69c9e4a756e91d1b4412381ca1f50836efcdf159893e"
+}

@@ -1042,7 +1042,7 @@ fn materials(scene: &Scene) -> Result<(Vec<Value>, Vec<usize>), Error> {
 }
 // Reject features the photogrammetry IR cannot retain, instead of silently
 // turning a rich glTF into a different-looking model. The wrapping command
-// remains available for general glTF assets.
+// accepts only its documented bounded static source profile.
 fn validate_source(path: &Path) -> Result<(), Error> {
     let doc = source_document(path)?;
     if doc
@@ -1055,7 +1055,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
             .is_some_and(|a| !a.is_empty())
     {
         return Err(Error::msg(
-            "mesh-to-3tz supports static meshes; use glb-to-3tz to retain animation or skins",
+            "mesh-to-3tz supports static meshes; animation and skins require a separately authored tileset",
         ));
     }
     if doc
@@ -1063,7 +1063,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
         .and_then(Value::as_array)
         .is_some_and(|a| !a.is_empty())
     {
-        return Err(Error::msg("mesh-to-3tz cannot yet preserve source glTF extensions; use glb-to-3tz for an unchanged wrap"));
+        return Err(Error::msg("mesh-to-3tz cannot preserve source glTF extensions; extension semantics require a separately authored tileset"));
     }
     for mesh in doc["meshes"].as_array().into_iter().flatten() {
         for p in mesh["primitives"].as_array().into_iter().flatten() {
@@ -1076,7 +1076,7 @@ fn validate_source(path: &Path) -> Result<(), Error> {
                 a.keys()
                     .any(|k| !matches!(k.as_str(), "POSITION" | "NORMAL" | "TEXCOORD_0"))
             }) {
-                return Err(Error::msg("mesh-to-3tz currently supports POSITION, NORMAL and TEXCOORD_0; additional attributes require glb-to-3tz to retain fidelity"));
+                return Err(Error::msg("mesh-to-3tz currently supports POSITION, NORMAL and TEXCOORD_0; attributes outside the bounded glb-to-3tz profile require a separately authored tileset"));
             }
         }
     }

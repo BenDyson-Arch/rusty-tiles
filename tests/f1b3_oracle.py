@@ -20,7 +20,7 @@ import f1b2_oracle as binding
 
 require = geometry.require
 OracleError = geometry.OracleError
-PROFILE = 'f1c1-placed-gltf-v1'
+PROFILE = 'f1c2-source-identity-gltf-v1'
 SLOTS = ('baseColorTexture', 'metallicRoughnessTexture', 'normalTexture', 'occlusionTexture', 'emissiveTexture')
 ATTRIBUTES = ('POSITION', 'NORMAL', 'TANGENT', 'TEXCOORD_0', 'TEXCOORD_1', 'COLOR_0')
 UV0 = ((0.125, 0.25), (0.875, 0.375), (0.25, 0.875))
@@ -82,7 +82,7 @@ def scene_triangles(data, resolver=None, output=False):
             for primitive in doc['meshes'][node['mesh']]['primitives']:
                 selected_primitives.append(primitive)
                 require(primitive.get('mode', 4) == 4, 'triangle mode')
-                attributes = primitive['attributes']
+                attributes = geometry.geometry_attributes(doc, binary, primitive['attributes'])
                 require(set(attributes) <= set(ATTRIBUTES), 'unadmitted corner attribute')
                 decoded = {name: texture.accessor(doc, binary, accessor) for name, accessor in attributes.items()}
                 count = len(decoded['POSITION'])
@@ -380,7 +380,7 @@ def synthetic_archive(root):
     box=[(a+b)/2 for a,b in zip(low,high)]+[(high[0]-low[0])/2,0,0,0,(high[1]-low[1])/2,0,0,0,(high[2]-low[2])/2]
     error=max(1.0,2*math.sqrt(sum(box[i]**2 for i in (3,7,11))))
     tileset={'asset':{'version':'1.1'},'geometricError':error,'root':{'transform':list(geometry.IDENTITY_TRANSFORM),'boundingVolume':{'box':box},'geometricError':error,'refine':'REPLACE','children':[{'boundingVolume':{'box':box},'geometricError':0,'content':{'uri':'t/0.glb'}}]}}
-    report={'schema_version':4,'profile':PROFILE,'source_coordinates':'local-gltf',**geometry.local_placement_expectation(),'source_bytes':source.stat().st_size,'external_files':0,'external_bytes':0,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':error,'images':5,'image_bytes':sum(len(raw[i]) for i in used),'image_pixels':30}
+    report={'schema_version':5,'profile':PROFILE,'source_coordinates':'local-gltf',**geometry.local_placement_expectation(),'source_bytes':source.stat().st_size,'external_files':0,'external_bytes':0,'triangles':2,'leaf_tiles':1,'leaf_triangles':2,'routing_geometric_error_metres':error,'images':5,'image_bytes':sum(len(raw[i]) for i in used),'image_pixels':30}
     members={'tileset.json':json.dumps(tileset).encode(),'conversion.json':json.dumps(report).encode(),'t/0.glb':texture.encode_glb(doc,binary)}
     members.update({'textures/'+str(i)+'.png':raw[i] for i in used})
     archive=root/'control.3tz';geometry.write_control_archive(archive,members);inspect(source,archive,2)

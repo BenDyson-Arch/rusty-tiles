@@ -37,11 +37,27 @@ pub(super) struct Snapshot {
     pub document: source::Document,
     root: Arc<Vec<u8>>,
     resources: Vec<Arc<Vec<u8>>>,
+    members: Vec<CapturedMember>,
     pub source_bytes: u64,
     pub external_files: u64,
     pub external_bytes: u64,
 }
+/// Every admitted URI spelling retains its resolved member association, even
+/// when multiple names share one immutable captured file.
+pub(super) struct CapturedMember {
+    pub relative: PathBuf,
+    pub bytes: Arc<Vec<u8>>,
+}
 impl Snapshot {
+    pub fn root_bytes(&self) -> &[u8] {
+        &self.root
+    }
+    pub fn root_owner(&self) -> Arc<Vec<u8>> {
+        self.root.clone()
+    }
+    pub fn captured_members(&self) -> &[CapturedMember] {
+        &self.members
+    }
     fn resource(&self, index: usize) -> &[u8] {
         &self.resources[index]
     }
@@ -149,6 +165,26 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
         return Err(invalid("resource URI does not name a file"));
     }
     Ok(parts.into_iter().collect())
+}
+
+/// Encode one source filename for a sibling manifest, using the same portable
+/// decoded path admission as captured resource references.
+pub(super) fn filename_uri(input: &Path) -> Result<String> {
+    let name = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| unsupported("manifest source filename must be UTF-8"))?;
+    let mut uri = String::new();
+    for byte in name.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            uri.push(char::from(byte));
+        } else {
+            use std::fmt::Write;
+            write!(&mut uri, "%{byte:02X}").expect("writing to String cannot fail");
+        }
+    }
+    relative_uri(&uri)?;
+    Ok(uri)
 }
 
 fn open_file(path: &Path) -> Result<File> {
@@ -561,6 +597,7 @@ pub(super) fn load(
     }
     let mut paths = vec![root_path];
     let mut resources = Vec::with_capacity(relatives.len());
+    let mut members = Vec::with_capacity(relatives.len());
     let mut unique_bytes = root.len() as u64;
     let mut external_files = 0;
     let mut external_bytes = 0;
@@ -624,6 +661,10 @@ pub(super) fn load(
             captures[index].bytes = bytes;
             index
         };
+        members.push(CapturedMember {
+            relative: relative.clone(),
+            bytes: captures[index].bytes.clone(),
+        });
         let bound = BoundPath {
             path: base.join(&relative),
             canonical: path,
@@ -648,6 +689,7 @@ pub(super) fn load(
         source_bytes: root.len() as u64,
         root,
         resources,
+        members,
         external_files,
         external_bytes,
     })

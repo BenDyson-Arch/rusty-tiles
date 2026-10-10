@@ -148,6 +148,7 @@ mod tests {
     #[test]
     fn mixed_magnitude_boxes_enclose_stored_positions_without_inward_rounding() {
         let triangle = Triangle {
+            source: Default::default(),
             positions: [[-1e-38, 0.0, 0.0], [1e6, 0.0, 0.0], [1.0, 0.0, 0.0]],
             normals: None,
             tangents: None,
@@ -166,6 +167,7 @@ mod tests {
     #[test]
     fn coincident_triangles_keep_multiplicity_and_obey_actual_leaf_cap() {
         let triangle = Triangle {
+            source: Default::default(),
             positions: [[0.0; 3]; 3],
             normals: None,
             tangents: None,

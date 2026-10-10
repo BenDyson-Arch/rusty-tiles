@@ -13,10 +13,10 @@ use rusty_tiles::georef::{
 };
 use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
-use rusty_tiles::tileset::{create_tileset_json, glb_to_3tz_reported, CreateTilesetOptions};
 use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshPlacement, MeshRequest, MeshResult, Observer, OutputPolicy, RasterDirectoryRequest,
+    MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest, ModelManifestResult,
+    ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy, RasterDirectoryRequest,
     RasterDirectoryResult, Reporter, RunControl, RunEvent,
 };
 
@@ -29,7 +29,7 @@ use rusty_tiles::{
 #[derive(Parser)]
 #[command(
     name = "rusty-tiles",
-    about = "Transform geospatial sources into 3D Tiles (.3tz). createTilesetJson and convert match 3d-tiles-tools@0.5.4 argv.",
+    about = "Transform admitted geospatial sources into 3D Tiles packages.",
     version,
     arg_required_else_help = true
 )]
@@ -60,16 +60,16 @@ enum Command {
         #[arg(short, long)]
         input: PathBuf,
     },
-    /// GLB/glTF file or directory → tileset.json (3d-tiles-tools createTilesetJson)
+    /// Admitted static GLB/glTF → sibling tileset.json without copying source resources
     #[command(name = "createTilesetJson", visible_alias = "create-tileset-json")]
-    CreateTilesetJson(TilesetArgs),
+    CreateTilesetJson(ModelManifestArgs),
     /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(IoArgs),
     /// Rewrite an eligible rusty-tiles explicit point/vector .3tz as implicit tiling
     ConvertToImplicit(IoArgs),
-    /// GLB/glTF → .3tz (createTilesetJson + convert)
+    /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
-    GlbTo3tz(TilesetArgs),
+    GlbTo3tz(ModelArchiveArgs),
     /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
@@ -165,11 +165,22 @@ struct PlacementArgs {
 }
 
 #[derive(Args)]
-struct TilesetArgs {
+struct ModelArchiveArgs {
     #[command(flatten)]
     io: IoArgs,
     #[command(flatten)]
-    placement: PlacementArgs,
+    placement: RigidPlacementArgs,
+}
+
+#[derive(Args)]
+struct ModelManifestArgs {
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Replace the sibling tileset.json through completed-file publication
+    #[arg(long)]
+    force: bool,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
 }
 
 fn doctor_commands() -> PossibleValuesParser {
@@ -523,6 +534,12 @@ struct LocalMeshArgs {
     /// Positive maximum triangle count per leaf; not a byte or memory budget
     #[arg(long = "leaf-triangles")]
     leaf_triangles: usize,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
+}
+
+#[derive(Args)]
+struct RigidPlacementArgs {
     /// WGS84 longitude/latitude degrees and ellipsoidal height metres
     #[arg(long, num_args = 3, allow_hyphen_values = true)]
     anchor: Vec<f64>,
@@ -532,6 +549,21 @@ struct LocalMeshArgs {
     /// Post-node source Y-up translation metres; requires --anchor
     #[arg(long, num_args = 3, allow_hyphen_values = true)]
     scene_offset: Vec<f64>,
+}
+impl RigidPlacementArgs {
+    fn resolve(self) -> Result<MeshPlacement, Error> {
+        Ok(MeshPlacement::from_parameters(
+            optional_components(self.anchor),
+            optional_components(self.orientation_xyzw),
+            optional_components(self.scene_offset),
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
 }
 
 fn optional_components<const N: usize>(values: Vec<f64>) -> Option<[f64; N]> {
@@ -552,12 +584,12 @@ enum Outcome {
     Pack(PackageResult),
     /// Published local mesh with its finalized report.
     Mesh(Box<MeshResult>),
+    ModelArchive(Box<ModelWrapResult>),
+    ModelManifest(Box<ModelManifestResult>),
     RasterDirectory(RasterDirectoryResult),
     Vector(vector::VectorResult),
     Terrain(Box<terrain::TerrainResult>),
     PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
-    /// A plain output file without a conversion report (createTilesetJson).
-    Wrote(PathBuf),
     Done,
 }
 
@@ -609,13 +641,30 @@ fn main() -> ExitCode {
                 )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
+                Outcome::ModelArchive(result) => Some((
+                    model_summary(
+                        &result.output,
+                        &result.report,
+                        &result.cleanup_diagnostics,
+                        true,
+                    ),
+                    result.output,
+                )),
+                Outcome::ModelManifest(result) => Some((
+                    model_summary(
+                        &result.output,
+                        &result.report,
+                        &result.cleanup_diagnostics,
+                        false,
+                    ),
+                    result.output,
+                )),
                 Outcome::Vector(result) => Some((vector_summary(&result), result.output)),
                 Outcome::Terrain(result) => Some((terrain_summary(&result), result.output)),
                 Outcome::PointCloud(result) => Some((point_cloud_summary(&result), result.output)),
                 Outcome::RasterDirectory(result) => {
                     Some((raster_directory_summary(&result), result.output))
                 }
-                Outcome::Wrote(output) => Some((output_summary(&output, None, false), output)),
                 Outcome::Done => None,
             };
             if let Some((summary, output)) = summary {
@@ -778,6 +827,23 @@ fn mesh_summary(result: &MeshResult) -> Value {
     let mut summary = output_summary(&result.output, Some(&report), true);
     summary["meshReport"] = report;
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn model_summary(
+    output: &Path,
+    report: &rusty_tiles::ModelReport,
+    diagnostics: &[rusty_tiles::CleanupDiagnostic],
+    archive: bool,
+) -> Value {
+    let report = json!(report);
+    let mut summary = output_summary(output, Some(&report), archive);
+    if !archive {
+        // A sibling manifest returns its report inline; it publishes no report file.
+        summary["conversionReport"] = Value::Null;
+    }
+    summary["modelReport"] = report;
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(diagnostics);
     summary
 }
 
@@ -996,9 +1062,18 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             Outcome::Done
         }
         Command::CreateTilesetJson(a) => {
-            let opts = tileset_opts(&a.io, &a.placement)?;
-            create_tileset_json(&a.io.input, &a.io.output, &opts)?;
-            Outcome::Wrote(a.io.output)
+            let request = ModelManifestRequest::local_gltf(a.input)
+                .with_policy(if a.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::ModelManifest(Box::new(rusty_tiles::model_to_manifest(
+                request,
+                &RunControl::new(observer),
+            )?))
         }
         Command::PointCloud(a) => {
             use rusty_tiles::point_cloud::{
@@ -1058,8 +1133,18 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             )?)
         }
         Command::GlbTo3tz(a) => {
-            let opts = tileset_opts(&a.io, &a.placement)?;
-            Outcome::Converted(glb_to_3tz_reported(&a.io.input, &a.io.output, &opts)?)
+            let request = ModelWrapRequest::local_gltf(a.io.input, a.io.output)
+                .with_policy(if a.io.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            Outcome::ModelArchive(Box::new(rusty_tiles::model_to_archive(
+                request,
+                &RunControl::new(observer),
+            )?))
         }
         Command::RasterTileToDirectory(a) => {
             let observer: Option<Arc<dyn Observer>> =
@@ -1083,17 +1168,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             } else {
                 OutputPolicy::CreateNew
             };
-            let placement = MeshPlacement::from_parameters(
-                optional_components(a.anchor),
-                optional_components(a.orientation_xyzw),
-                optional_components(a.scene_offset),
-            )
-            .map_err(|error| rusty_tiles::JobFailure {
-                error,
-                secondary: Vec::new(),
-                retained_paths: Vec::new(),
-                recovery: None,
-            })?;
+            let placement = a.placement.resolve()?;
             let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
                 .with_policy(policy)
                 .with_placement(placement);
@@ -1191,7 +1266,9 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     })
 }
 
-fn tileset_opts(io: &IoArgs, a: &PlacementArgs) -> Result<CreateTilesetOptions, Error> {
+fn legacy_mesh_placement(
+    a: &PlacementArgs,
+) -> Result<(Option<Cartographic>, Option<RotationDegrees>), Error> {
     let cartographic = if a.cartographic_position_degrees.is_empty() {
         None
     } else {
@@ -1216,15 +1293,11 @@ fn tileset_opts(io: &IoArgs, a: &PlacementArgs) -> Result<CreateTilesetOptions, 
             "--rotationDegrees requires --cartographicPositionDegrees",
         ));
     }
-    Ok(CreateTilesetOptions {
-        cartographic,
-        rotation,
-        force: io.force,
-    })
+    Ok((cartographic, rotation))
 }
 
 fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
-    let ts = tileset_opts(&a.io, &a.placement)?;
+    let (cartographic, rotation) = legacy_mesh_placement(&a.placement)?;
     if !a.source_offset.is_empty() && a.source_offset_file.is_some() {
         return Err(Error::msg(
             "pass only one of --sourceOffset and --sourceOffsetFile",
@@ -1247,8 +1320,8 @@ fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
         explicit: a.explicit,
         texture_format: a.texture_format,
         basisu: a.basisu.clone(),
-        cartographic: ts.cartographic,
-        rotation: ts.rotation,
+        cartographic,
+        rotation,
         force: a.io.force,
         max_triangles: a.max_triangles,
         max_bytes: a.max_bytes,

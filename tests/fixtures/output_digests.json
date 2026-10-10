@@ -9,13 +9,14 @@
       "tileset.json": "f9f8e39282b040f8775eb6d2be7ecc24784fb728e03721f50a03361256034e3e"
     },
     "createTilesetJson": {
-      "tileset.json": "b88cb28be933b13a789c0c7c3714d647bd92223d934e2f7f59f8144ea40e5f3c"
+      "tileset.json": "a5c414e95fe6bb274c3a05d3a8926d5613a20dbc04ef57c857e7a347058d8064"
     },
     "glb-to-3tz": {
-      "#order": "5513ed7130bd10c3154e8c7f8cdfa77b5b4500edc500ac35d448a4b6093bdb3e",
-      "@3dtilesIndex1@": "85c924486aed01d22268746dada923ae81b636747690967eda99fa9ad367b5dd",
-      "mesh.glb": "cd552ebb1c7b23065df6e3d90d4c17d87aa22389cdb70e2924e721e3bfbdd4a9",
-      "tileset.json": "92d9298b11152c09badeb7904506f0c228ee05e81fc8d4c9d188429bfa8ff676"
+      "#order": "e7659b61f000bfd5bbf9003e3a2e720416865e4b7fe87b772bb226dbc213677b",
+      "@3dtilesIndex1@": "08e478f2a74656beda498dfe4513a5bd39a9e3bde459b7dbe95ed51a93782b9e",
+      "conversion.json": "f4a06e9c51d40749790cb5abeed0ebd41db4d012272301b067f9a36d2387b083",
+      "model/source.glb": "cd552ebb1c7b23065df6e3d90d4c17d87aa22389cdb70e2924e721e3bfbdd4a9",
+      "tileset.json": "bb9145c930d161b767a9aab755b31aace2f7750c5234ad135d4b735b88c95ab1"
     },
     "mesh-lossless-nomeshopt": {
       "#order": "da94d108b8c70caf09619a1979ed9bdb2ad31ee1f86eccf33bee72276b9ee0af",

@@ -5,11 +5,11 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | Input and goal | Command | Build and limits |
 | --- | --- | --- |
 | Static textured GLB/glTF needing spatial tiles and coarser geometry | `mesh-to-3tz` | Standard for local/manual or grid-free placement; other eligible CRS operations need native-geospatial. Supported triangle geometry and base-colour materials only |
-| Local static GLB/glTF with PNG/JPEG core PBR textures and full-detail leaves | `mesh-local-to-3tz` | Local source metres/Y-up; optional explicit WGS84 anchor/quaternion/metre offset, standard build. Exact shared resources, UV0/UV1, authored tangents/colors; normal maps require authored companions and conformal accumulated transforms. No coarse LOD/picking. [Placement candidate](architecture/f1c1-contract.md), pending acceptance; [source profile](architecture/f1b3-contract.md) |
-| Existing GLB/glTF to preserve, without creating LOD | `glb-to-3tz` | Standard; bundles supported local resources and preserves source content |
+| Local static GLB/glTF with PNG/JPEG core PBR textures and full-detail leaves | `mesh-local-to-3tz` | Local source metres/Y-up; optional explicit WGS84 anchor/quaternion/metre offset, standard build. Exact shared resources, UV0/UV1, authored tangents/colors; normal maps require authored companions and conformal accumulated transforms. No coarse LOD. Source primitive/triangle picking follows the [F1c2 candidate contract](architecture/f1c2-contract.md); [placement](architecture/f1c1-contract.md); [source profile](architecture/f1b3-contract.md) |
+| Existing GLB/glTF to preserve, without creating LOD | `glb-to-3tz` | Standard; bounded static local metre/Y-up profile, exact source/resource bytes, typed publication; [limits](architecture/model-wrapping-contract.md) |
 | Existing tileset directory to package | `convert` | Standard; packages existing content without generating geometry or LOD |
 | Eligible rusty-tiles explicit point/vector archive to migrate | `convert-to-implicit` | Standard; requires a regular tree and valid existing content, retains payload bytes; see [eligibility](CLI.md#convert-to-implicit) |
-| GLB/glTF needing an explicit tileset manifest | `createTilesetJson` | Standard; writes `tileset.json` |
+| GLB/glTF needing an explicit tileset manifest | `createTilesetJson` | Standard; one admitted static model, writes sibling `tileset.json` with live source references |
 | LAS/LAZ with local metre XYZ or a verified grid-free CRS | `point-cloud` | Standard; native build required for other supported CRS operations |
 | GeoJSON or GeoPackage points, lines and polygons | `vector` | Standard; native build required for other supported CRS operations |
 | PostGIS, GeoParquet or other OGR vector inputs | `vector` | Native-geospatial |
@@ -30,7 +30,7 @@ General legacy mesh and point-cloud placement share the horizontal CRS resolver,
 
 ## Preserve or generate content
 
-Choose `glb-to-3tz` for a richer model whose animation, skins or material data must remain intact. It does not create coarser geometry, and not every glTF extension can currently be inspected or packaged. Gaussian splat packaging remains tracked in [#91](https://github.com/BenDyson-Arch/rusty-tiles/issues/91).
+Choose `glb-to-3tz` to preserve source bytes within the bounded static local metre/Y-up model profile. It shares the admitted core PBR resource profile with `mesh-local-to-3tz` and creates no coarser geometry. Animation, skins, morph targets, imported extensions/extras, embedded data URIs and larger models are explicitly outside this replacement. The former broader wrapping escape hatch is retired; `convert` can package caller-authored content as opaque bytes, without certifying those semantics. Gaussian splat packaging remains tracked in [#91](https://github.com/BenDyson-Arch/rusty-tiles/issues/91).
 
 Choose `mesh-to-3tz` when its [geometry and material contract](FORMATS.md#fidelity-and-input-limits) matches the source and you need LOD. Unsupported attributes or materials are rejected with guidance rather than silently dropped.
 

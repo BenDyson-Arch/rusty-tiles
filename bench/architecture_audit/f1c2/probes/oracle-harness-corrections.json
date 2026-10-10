@@ -1,0 +1,30 @@
+{
+  "scope": "Independent oracle corrections; no production defect inferred from these harness failures.",
+  "review_findings": [
+    {
+      "finding": "All-empty STRING table uses exact one-zero-byte values sentinel with all offsets zero.",
+      "correction": "Accept only exact sentinel; reject nonzero byte, zero view, and oversized zero storage."
+    },
+    {
+      "finding": "Oracle BIN chunk padded to eight but declared buffer excluded padding.",
+      "correction": "Declare padded embedded buffer; deliberate four-extra-byte control retains source/Khronos sensitivity."
+    },
+    {
+      "finding": "No-default positive retained two scenes.",
+      "correction": "Keep desired scene as sole scene/index0; ambiguous two-scene no-default is explicit Unsupported refusal."
+    }
+  ],
+  "executed_harness_failures": [
+    {
+      "finding": "Large-ID/name-budget fixture kept orphan UINT32 index accessor.",
+      "observed": "Frozen candidate InvalidInput: u32 accessor must be referenced by primitive indices.",
+      "correction": "Remove replaced accessor and independently remap source references."
+    },
+    {
+      "finding": "Source refusal command lacked required leaf ceiling.",
+      "observed": "CLI usage exit2; no typed error.kind.",
+      "correction": "Pass explicit --leaf-triangles100 and require typed refusal before accepting controls."
+    }
+  ],
+  "initial_failed_driver_sha256": "Not captured before correction; raw tool outputs retained in session, no exact stale-driver identity claimed."
+}

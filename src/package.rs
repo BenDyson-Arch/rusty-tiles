@@ -502,3 +502,49 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod reproducibility_tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn packing_is_independent_of_caller_entry_order() {
+        let work = tempfile::tempdir().unwrap();
+        let manifest = work.path().join("tileset.json");
+        let content = work.path().join("tile.glb");
+        fs::write(&manifest, b"{}").unwrap();
+        fs::write(&content, b"same payload").unwrap();
+        let mut members = vec![
+            PackageMember::new("tile.glb", content),
+            PackageMember::new("tileset.json", manifest),
+        ];
+        let a = work.path().join("a.3tz");
+        let b = work.path().join("b.3tz");
+        let first = package(
+            PackageRequest::members(members.clone(), &a),
+            &RunControl::default(),
+        )
+        .unwrap();
+        members.reverse();
+        let reversed =
+            package(PackageRequest::members(members, &b), &RunControl::default()).unwrap();
+        assert_eq!(fs::read(&a).unwrap(), fs::read(&b).unwrap());
+        assert_eq!(first.receipt, reversed.receipt);
+        assert_eq!(first.receipt.member_count, 2);
+        assert_eq!(first.receipt.source_bytes, 14);
+        archive3tz::validate_3tz(&a).unwrap();
+        // Independently read copied bytes instead of inferring preservation
+        // from equality between two outputs of the same encoder.
+        let mut zip = zip::ZipArchive::new(fs::File::open(&a).unwrap()).unwrap();
+        assert_eq!(zip.len(), 3);
+        for (name, expected) in [
+            ("tileset.json", b"{}".as_slice()),
+            ("tile.glb", b"same payload".as_slice()),
+        ] {
+            let mut bytes = Vec::new();
+            zip.by_name(name).unwrap().read_to_end(&mut bytes).unwrap();
+            assert_eq!(bytes, expected);
+        }
+    }
+}

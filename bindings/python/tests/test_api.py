@@ -69,6 +69,25 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_source_identity_metadata_independent_installed_api(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        try:
+            import f1c2_oracle as oracle
+        finally:
+            sys.path.pop(0)
+        payload = oracle.fixture("instances")
+        source = self.root / "identity.glb"
+        source.write_bytes(payload)
+        for limit in (1, 5, 100):
+            output = self.root / ("identity-" + str(limit) + ".3tz")
+            result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
+            with zipfile.ZipFile(result.output) as stream:
+                members = {name: stream.read(name) for name in stream.namelist()
+                           if name != "@3dtilesIndex1@"}
+            inspected = oracle.inspect_members(payload, members, limit)
+            self.assertEqual(result.report, json.loads(members["conversion.json"]))
+            self.assertEqual(inspected["triangles"], 32)
+
     def test_explicit_mesh_placement_independent_world_contract(self):
         sys.path.insert(0, str(ROOT / "tests"))
         try:
@@ -180,8 +199,8 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "external.3tz"
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1,
                                               callback=observe)
-        self.assertEqual(result.report["schema_version"], 4)
-        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 5)
+        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["external_files"], 1)
         self.assertEqual(result.report["external_bytes"], 108)
@@ -244,7 +263,7 @@ class WheelAPI(unittest.TestCase):
                         output = self.root / (name + "-" + str(limit) + ".3tz")
                         value = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=limit)
                         self.assertEqual(value.report, oracle.inspect(source, output, limit)["report"])
-                        self.assertEqual(value.report["profile"], "f1c1-placed-gltf-v1")
+                        self.assertEqual(value.report["profile"], "f1c2-source-identity-gltf-v1")
                 self.assertEqual(before, {p.relative_to(source.parent): p.read_bytes()
                                          for p in source.parent.rglob("*") if p.is_file()})
         for name, bundle, kind in oracle.refusal_bundles():
@@ -279,8 +298,8 @@ class WheelAPI(unittest.TestCase):
                 source.write_bytes(b"changed after preparation")
 
         result = rusty_tiles.mesh_local_to_3tz(source, output, leaf_triangles=1, callback=observe)
-        self.assertEqual(result.report["schema_version"], 4)
-        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
+        self.assertEqual(result.report["schema_version"], 5)
+        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
         self.assertEqual(result.report["source_bytes"], len(original))
         self.assertEqual(result.report["triangles"], 8)
         self.assertEqual(result.report["leaf_tiles"], 8)
@@ -353,7 +372,7 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(result.report["leaf_tiles"], 3)
         self.assertEqual(result.report["leaf_triangles"], 1)
         self.assertEqual(result.report["coordinates"], "local-gltf")
-        self.assertEqual(result.report["profile"], "f1c1-placed-gltf-v1")
+        self.assertEqual(result.report["profile"], "f1c2-source-identity-gltf-v1")
         self.assertEqual(result.cleanup_diagnostics, [])
         self.assertTrue(events)
         self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
@@ -614,11 +633,17 @@ class WheelAPI(unittest.TestCase):
             )
 
     def test_pack_and_convert(self):
+        source = self.root / "model.glb"
+        write_local_mesh(source)
         result = rusty_tiles.glb_to_3tz(
-            str(EXAMPLE), self.root / "wrapped.3tz", cartographic=(153.02, -27.47, 0),
-            rotation=(5, 0, 0),
+            str(source), self.root / "wrapped.3tz", anchor=(153.02, -27.47, 0),
+            orientation_xyzw=(0, 0, 0, 1),
         )
-        self.assertIsNone(result.report)
+        self.assertIsInstance(result, rusty_tiles.ModelWrapResult)
+        self.assertEqual(result.report["profile"], "w1-static-model-v1")
+        with zipfile.ZipFile(result.output) as archive:
+            self.assertEqual(archive.read("model/source.glb"), source.read_bytes())
+            self.assertEqual(json.loads(archive.read("conversion.json")), result.report)
         check = rusty_tiles.validate(result.output)
         self.assertEqual(check["contentReferences"], 1)
         extracted = self.root / "extracted"
@@ -631,6 +656,57 @@ class WheelAPI(unittest.TestCase):
         self.assertTrue(rusty_tiles.validate(repacked.output)["ok"])
         self.assertIsInstance(repacked, rusty_tiles.PackageResult)
         self.assertTrue(repacked.archive)
+
+    def test_model_products_capture_publication_and_reference_authority(self):
+        source = self.root / "model space.glb"
+        write_local_mesh(source)
+        original = source.read_bytes()
+        manifest = rusty_tiles.model_to_manifest(source)
+        self.assertIsInstance(manifest, rusty_tiles.ModelManifestResult)
+        self.assertEqual(manifest.output, self.root / "tileset.json")
+        document = json.loads(manifest.output.read_bytes())
+        self.assertEqual(document["root"]["content"]["uri"], "model%20space.glb")
+        self.assertEqual(document["root"]["geometricError"], 0)
+        self.assertGreaterEqual(document["geometricError"], 1)
+        self.assertEqual(document["root"]["refine"], "REPLACE")
+        self.assertEqual(manifest.report["root_geometric_error_metres"], 0)
+        self.assertEqual(manifest.report["tileset_geometric_error_metres"], document["geometricError"])
+        self.assertEqual(source.read_bytes(), original)
+        before = manifest.output.read_bytes()
+        error = RuntimeError("stop before model publication")
+
+        def fail(event):
+            if event.get("phase") == "ready_to_publish":
+                raise error
+
+        with self.assertRaises(RuntimeError) as caught:
+            rusty_tiles.model_to_manifest(source, force=True, callback=fail)
+        self.assertIs(caught.exception, error)
+        self.assertEqual(manifest.output.read_bytes(), before)
+        archive = self.root / "captured.3tz"
+
+        def remove_captured(event):
+            if event.get("phase") == "model_capture":
+                source.unlink()
+
+        result = rusty_tiles.glb_to_3tz(source, archive, callback=remove_captured)
+        with zipfile.ZipFile(result.output) as package:
+            self.assertEqual(package.read("model/source.glb"), original)
+        self.assertFalse(source.exists())
+        self.assertFalse(any(path.name.startswith((".model-work-", ".mesh-work-", ".rusty-tiles-"))
+                             for path in self.root.iterdir()))
+
+    def test_wrapper_domain_reductions_and_pure_placement_refusals(self):
+        output = self.root / "absent" / "out.3tz"
+        with self.assertRaises(rusty_tiles.UnsupportedError):
+            rusty_tiles.glb_to_3tz(EXAMPLE, output)
+        self.assertFalse(output.parent.exists())
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.glb_to_3tz(self.root / "missing.glb", output,
+                                  orientation_xyzw=(0, 0, 0, 1))
+        self.assertFalse(output.parent.exists())
+        with self.assertRaises(TypeError):
+            rusty_tiles.glb_to_3tz(EXAMPLE, output, cartographic=(0, 0, 0))
 
     def package_source(self, name="source"):
         source = self.root / name
@@ -1102,7 +1178,9 @@ class WheelAPI(unittest.TestCase):
                 tile_size=64, texture_format="jpeg", callback=callback,
             )
 
-        rusty_tiles.glb_to_3tz(EXAMPLE, self.root / "base.3tz")
+        source = self.root / "model.glb"
+        write_local_mesh(source)
+        rusty_tiles.glb_to_3tz(source, self.root / "base.3tz")
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(convert, range(2)))
         self.assertEqual(len(results), 2)

@@ -1,0 +1,35 @@
+{
+  "scope": "Executed candidate omission-error defect and browser-harness corrections; old failed/feasibility executions do not establish final acceptance.",
+  "old_candidate_failure": {
+    "receipt": "bench/architecture_audit/f1c2/probes/unchanged-model-browser-before-fix.json",
+    "receipt_sha256": "c6039fd3bed93b002101ba6045f8f8d46ece7dc032e375485bccdca796a41a8b",
+    "binary_sha256": "d461c38d88cdab3ae643a16bec8b261c982940b9392a362d93fee9986c7c9bbb",
+    "observed": "Ordinary pinned Cesium base traversal does not visit/load content when tileset geometricError is zero; both Local/Wgs84 good cases had zero triangles and no resource requests."
+  },
+  "contract_correction": "Top-level omission/visibility error independently checked as conservative max(1,bounding-box diameter); root full-detail error remains zero and refine is REPLACE.",
+  "harness_corrections": [
+    {
+      "finding": "Original assert.ok(run.loaded) lacked per-run state; intermediate diagnostic transform spread was not iterable.",
+      "resolution": "Record every run and observed HTTP responses before assertions; use Matrix4.toArray. No acceptance from intermediate failures is claimed."
+    },
+    {
+      "finding": "Omitted alias gives actual HTTP404 and prevents rendering, while this Cesium leaves content processing without tileFailed notification during unchanged deadline.",
+      "resolution": "Settle negative control on observed ResourceTiming responseStatus404; independently require host response404, zero rendered triangles/commands and no target picks. Keep tileFailed as diagnostic."
+    }
+  ],
+  "unchanged_limits": {
+    "poll_frames": 200,
+    "between_poll_ms": 15,
+    "node_timeout_seconds": 160
+  },
+  "separate_feasibility": {
+    "receipt_path": "/home/bend/.cache/rusty-tiles-f1c2-evidence/review-unchanged-model-browser-top-error-feasibility.json",
+    "receipt_sha256": "3638c6b845b4ff56a363de8babe88613d80a98d8ca88b47d68397a594710df96",
+    "scope": "Test-tree manifest-only shadow correction of old binary archive; not final candidate acceptance."
+  },
+  "final_actual_candidate": {
+    "receipt": "bench/architecture_audit/f1c2/probes/unchanged-model-browser-final.json",
+    "receipt_sha256": "79f507d1a7a7f408ff341a6a29bbf0bb1392cb77a0866f46f54c648ab3d7b363",
+    "scope": "Fresh final binary; exact original archive/member bytes and selected ordinary consumer controls."
+  }
+}

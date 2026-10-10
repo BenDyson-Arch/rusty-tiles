@@ -468,10 +468,10 @@ fn linked_subtrees_package_with_spatially_placed_multiple_contents() {
         )
         .is_empty());
         let archive = output.join(format!("{name}.3tz"));
-        rusty_tiles::convert_to_3tz(
-            &case,
-            &archive,
-            &rusty_tiles::pack::PackOptions { force: true },
+        rusty_tiles::package::package(
+            rusty_tiles::package::PackageRequest::directory(&case, &archive)
+                .with_policy(rusty_tiles::OutputPolicy::Replace),
+            &rusty_tiles::RunControl::default(),
         )
         .unwrap();
         rusty_tiles::validate_3tz(&archive).unwrap();

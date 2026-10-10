@@ -1,0 +1,125 @@
+{
+  "scope": "Independent metadata decoding and ModelFeature property-query feasibility, not browser/GPU picking or production acceptance",
+  "engine": "26.4.0",
+  "script_sha256": "7d54b879865724933d3037f16b777d0963da4925b0e9b356ae1c6d6f8bc68b6c",
+  "pins": [
+    {
+      "path": "package.json",
+      "sha256": "79740486bf756085f666bf92b49a425ffc3dd45d7593ff9a8daa956d1d86da8d"
+    },
+    {
+      "path": "Source/Scene/parseStructuralMetadata.js",
+      "sha256": "90bfa2edb1152461f216192a69ac7f428bfbf6db0ef1e257de1b0bf29b58f769"
+    },
+    {
+      "path": "Source/Scene/MetadataSchema.js",
+      "sha256": "480b2c8a6c5d7a851cb8c9dd7ed5f28f0e801b00e41193d2c514773628f851d6"
+    },
+    {
+      "path": "Source/Scene/Model/ModelFeature.js",
+      "sha256": "6cef6f2786d8fcb56b77c23b9ae93f351538f21d80f4113c20e31be4f79c2ecc"
+    },
+    {
+      "path": "Source/Scene/Model/ModelUtility.js",
+      "sha256": "6a72af0cc435fc348de74bd53c4f7d478c8ebbce33d92e08cab7530f0d11db83"
+    }
+  ],
+  "queries": [
+    {
+      "table": 0,
+      "row": 0,
+      "properties": {
+        "node_index": 3,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "node_name": "Building 🦉\u0000",
+        "node_name_present": 1
+      }
+    },
+    {
+      "table": 0,
+      "row": 1,
+      "properties": {
+        "node_index": 7,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "node_name": "Building 🦉\u0000",
+        "node_name_present": 1
+      }
+    },
+    {
+      "table": 0,
+      "row": 2,
+      "properties": {
+        "node_index": 8,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "node_name": "",
+        "node_name_present": 0
+      }
+    },
+    {
+      "table": 0,
+      "row": 3,
+      "properties": {
+        "node_index": 9,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "node_name": "",
+        "node_name_present": 1
+      }
+    },
+    {
+      "table": 1,
+      "row": 0,
+      "properties": {
+        "node_index": 3,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "triangle_index": 65536
+      }
+    },
+    {
+      "table": 1,
+      "row": 1,
+      "properties": {
+        "node_index": 7,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "triangle_index": 65537
+      }
+    },
+    {
+      "table": 1,
+      "row": 2,
+      "properties": {
+        "node_index": 8,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "triangle_index": 65538
+      }
+    },
+    {
+      "table": 1,
+      "row": 3,
+      "properties": {
+        "node_index": 9,
+        "mesh_index": 2,
+        "primitive_index": 4,
+        "triangle_index": 65539
+      }
+    }
+  ],
+  "feature_label_queries": [
+    "featureId_0",
+    "source_triangle"
+  ],
+  "exact_f32_ids": [
+    0,
+    65535,
+    65536,
+    99999
+  ],
+  "sensitive_controls_detected": 4,
+  "passed": true
+}

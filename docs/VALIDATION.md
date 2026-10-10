@@ -57,6 +57,12 @@ zero-initialized under glTF semantics; its values have no stored source bytes.
 This case is distinct from a referenced buffer or BIN payload that is missing. It checks decoded floating-point values,
 attribute agreement and applicable declared accessor bounds. Local resource
 references resolve within the admitted archive; no network lookup occurs.
+Archive-local URI segments decode percent escapes exactly once as UTF-8 before
+member lookup. Encoded separators, controls, malformed escapes and paths escaping
+the archive fail as InvalidInput. A decoded literal percent remains filename
+data; aliases resolve against the referring document directory. Independent
+controls include escaped spaces, a literal percent, and a wrong encoded member
+name that must not satisfy the decoded reference.
 Known optional metadata and material extensions do not grant a semantic
 validation claim: the report records what was not inspected. Reading their
 ordinary buffer views is not proof of feature identity, metadata meaning,

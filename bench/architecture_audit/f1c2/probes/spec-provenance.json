@@ -1,0 +1,15 @@
+{
+  "commit": "7182f40bd2bb5c090188efc4f66f2404cba266f0",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/3d-tiles-next/extensions/2.0/Vendor/EXT_mesh_features/README.md",
+      "sha256": "31e89e90f5c1edd953bf4919e22efcd8217b38e87c24229ca0a74bbaf493f3cf",
+      "bytes": 11434
+    },
+    {
+      "url": "https://raw.githubusercontent.com/CesiumGS/glTF/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata/README.md",
+      "sha256": "2f5579b8d6698a0bbc17b61d87a72352ce5446f17f194c8f23b6fe08f24db566",
+      "bytes": 30885
+    }
+  ]
+}

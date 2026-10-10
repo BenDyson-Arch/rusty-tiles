@@ -63,7 +63,7 @@ fn resolve(
             continue;
         }
         let name = local_name(uri)?;
-        if name == "tileset.json" || name == crate::pack::TZ_INDEX_NAME {
+        if name == "tileset.json" || name == crate::archive3tz::TZ_INDEX_NAME {
             return Err(Error::Data(format!("reserved glTF resource path: {uri}")));
         }
         let path = root

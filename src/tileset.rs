@@ -15,18 +15,18 @@ use crate::report::ConversionResult;
 mod resources;
 
 /// Leaf geometric error from 3d-tiles-tools TilesetJsonCreator.
-pub const LEAF_GEOMETRIC_ERROR: f64 = 512.0;
+const LEAF_GEOMETRIC_ERROR: f64 = 512.0;
 /// Tileset geometric error from 3d-tiles-tools TilesetJsonCreator.
-pub const TILESET_GEOMETRIC_ERROR: f64 = 4096.0;
+const TILESET_GEOMETRIC_ERROR: f64 = 4096.0;
 
 #[derive(Clone, Debug, Default)]
-pub struct CreateTilesetOptions {
+pub(crate) struct CreateTilesetOptions {
     pub cartographic: Option<Cartographic>,
     pub rotation: Option<RotationDegrees>,
     pub force: bool,
 }
 
-pub fn create_tileset_json(
+fn create_tileset_json(
     input: &Path,
     output: &Path,
     opts: &CreateTilesetOptions,
@@ -134,23 +134,6 @@ fn file_name(p: &Path) -> Result<String, Error> {
         .ok_or_else(|| Error::msg("path has no file name"))
 }
 
-/// Wrap a GLB or glTF and its local resources in a 3TZ without rewriting them.
-pub fn glb_to_3tz(input: &Path, output: &Path, opts: &CreateTilesetOptions) -> Result<(), Error> {
-    glb_to_3tz_reported(input, output, opts).map(drop)
-}
-
-/// [`glb_to_3tz`] returning the published result.
-pub fn glb_to_3tz_reported(
-    input: &Path,
-    output: &Path,
-    opts: &CreateTilesetOptions,
-) -> Result<ConversionResult, Error> {
-    if !input.is_file() || !is_gltf(input) {
-        return Err(Error::NoContent(input.to_path_buf()));
-    }
-    glb_job(input, Job::begin(output, opts.force)?, opts)
-}
-
 /// Wrap one model in an already-begun job. Only the generated manifest is
 /// staged; the model and its referenced resources are packed from source paths.
 pub(crate) fn glb_job(
@@ -199,7 +182,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn glb_to_3tz_stages_privately_and_never_clobbers() {
+    fn legacy_mesh_wrap_stages_privately_and_never_clobbers() {
         let tmp = tempfile::tempdir().unwrap();
         let input = tmp.path().join("model.glb");
         fs::write(&input, crate::fixtures::triangle_glb()).unwrap();
@@ -209,13 +192,13 @@ mod tests {
         fs::create_dir(&sibling).unwrap();
         fs::write(sibling.join("keep"), b"mine").unwrap();
         let opts = CreateTilesetOptions::default();
-        let result = glb_to_3tz_reported(&input, &output, &opts).unwrap();
+        let result = glb_job(&input, Job::begin(&output, false).unwrap(), &opts).unwrap();
         assert!(result.archive && result.report.is_none());
         crate::validate_3tz(&output).unwrap();
         assert_eq!(fs::read(sibling.join("keep")).unwrap(), b"mine");
         let before = fs::read(&output).unwrap();
         assert!(matches!(
-            glb_to_3tz(&input, &output, &opts),
+            Job::begin(&output, false),
             Err(Error::OutputExists(_))
         ));
         assert_eq!(fs::read(&output).unwrap(), before);

@@ -123,7 +123,14 @@ while IFS=$'\t' read -r -a fields; do
     out=$WORK/out-$side
     mkdir -p "$out"
     rm -rf "${out:?}/$output"
-    if env PATH="" "$WORK/bin-$side" "$command" "${side_args[@]}" -o "$out/$output" \
+    output_args=(-o "$out/$output")
+    if [[ $command == createTilesetJson ]]; then
+      # W1 publishes a fixed sibling manifest and has no arbitrary -o product.
+      cp "$INPUTS/mesh.glb" "$out/mesh.glb"
+      side_args[1]="$out/mesh.glb"
+      output_args=()
+    fi
+    if env PATH="" "$WORK/bin-$side" "$command" "${side_args[@]}" "${output_args[@]}" \
       >"$out/$name.log" 2>&1; then
       python3 -c "$DIGEST_PY" "$out/$output" "$vector" >"$out/$name.sha256"
     else

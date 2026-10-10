@@ -1,0 +1,12 @@
+{
+  "binary_sha256": "d461c38d88cdab3ae643a16bec8b261c982940b9392a362d93fee9986c7c9bbb",
+  "probe_sha256": "928aa4ae1bcc4576d4fd311d7df359036cc375c03d96b5a21ca9a99f090d572a",
+  "source_sha256": "e826dc3429f0618900b7d50091dfb8cbe512dc8884f82f73621f13cf10170874",
+  "expect": "defect",
+  "conversionReport": {
+    "path": "/tmp/w1-manifest-report-review-8bsix014/tileset.json/conversion.json"
+  },
+  "sidecar_absent": true,
+  "inline_model_report_present": true,
+  "manifest_sha256": "c32e2398b657888c1f03c5b61bfda23f1fd19fd763f7ca93806c01d216e0eb39"
+}

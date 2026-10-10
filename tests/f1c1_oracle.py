@@ -25,7 +25,7 @@ import f1b3_oracle as core
 
 require = geometry.require
 OracleError = geometry.OracleError
-PROFILE = 'f1c1-placed-gltf-v1'
+PROFILE = 'f1c2-source-identity-gltf-v1'
 A = D('6378137')
 INVF = D('298.257223563')
 PI = D('3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628')

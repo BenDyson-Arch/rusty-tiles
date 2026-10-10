@@ -17,9 +17,9 @@ use tiles_core::{
     report::ndjson,
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
-    Cartographic, CreateTilesetOptions, Error, Event, EventSink, JobError, JobErrorKind,
-    JobFailure, MeshPlacement, MeshRequest, MeshTo3tzOptions, Observer, OutputPolicy, Reporter,
-    RunControl, RunEvent, SourceAxes,
+    Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshPlacement,
+    MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer, OutputPolicy,
+    Reporter, RunControl, RunEvent, SourceAxes,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -293,22 +293,7 @@ fn mesh_local_to_3tz(
     } else {
         OutputPolicy::CreateNew
     };
-    let placement = MeshPlacement::from_parameters(
-        anchor.map(|(x, y, z)| [x, y, z]),
-        orientation_xyzw.map(|(x, y, z, w)| [x, y, z, w]),
-        scene_offset.map(|(x, y, z)| [x, y, z]),
-    )
-    .map_err(|error| {
-        job_failure_to_python(
-            py,
-            JobFailure {
-                error,
-                secondary: Vec::new(),
-                retained_paths: Vec::new(),
-                recovery: None,
-            },
-        )
-    })?;
+    let placement = rigid_placement(anchor, orientation_xyzw, scene_offset)?;
     let request = MeshRequest::local_gltf(input, output, leaf_triangles)
         .with_policy(policy)
         .with_placement(placement);
@@ -587,25 +572,128 @@ fn mesh_to_3tz(
     })
 }
 
-/// Pack a glTF/GLB model without making new levels of detail.
+/// Published admitted static model archive with a required report.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct ModelWrapResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+#[pymethods]
+impl ModelWrapResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
+/// Published sibling manifest; source resources remain caller owned.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct ModelManifestResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    report: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+#[pymethods]
+impl ModelManifestResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
+fn rigid_placement(
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+) -> PyResult<MeshPlacement> {
+    MeshPlacement::from_parameters(
+        anchor.map(|(x, y, z)| [x, y, z]),
+        orientation_xyzw.map(|(x, y, z, w)| [x, y, z, w]),
+        scene_offset.map(|(x, y, z)| [x, y, z]),
+    )
+    .map_err(|error| {
+        Python::attach(|py| {
+            job_failure_to_python(
+                py,
+                JobFailure {
+                    error,
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                },
+            )
+        })
+    })
+}
+
+/// Preserve admitted static metre/Y-up glTF source and resource bytes in a 3TZ.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, cartographic=None, rotation=None, force=false))]
+#[pyo3(signature = (input, output, *, anchor=None, orientation_xyzw=None, scene_offset=None, force=false, callback=None))]
+#[allow(clippy::too_many_arguments)]
 fn glb_to_3tz(
     py: Python<'_>,
     input: PathBuf,
     output: PathBuf,
-    cartographic: Option<[f64; 3]>,
-    rotation: Option<[f64; 3]>,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
     force: bool,
-) -> PyResult<ConversionResult> {
-    let (cartographic, rotation) = placement(cartographic, rotation)?;
-    let options = CreateTilesetOptions {
-        cartographic,
-        rotation,
-        force,
-    };
-    run_conversion(py, None, |_| {
-        tiles_core::tileset::glb_to_3tz_reported(&input, &output, &options)
+    callback: Option<Py<PyAny>>,
+) -> PyResult<ModelWrapResult> {
+    let request = ModelWrapRequest::local_gltf(input, output)
+        .with_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        })
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?);
+    let result = run_job(py, callback, |run| {
+        tiles_core::model_to_archive(request, run)
+    })?;
+    Ok(ModelWrapResult {
+        output: result.output,
+        report: serde_json::json!(result.report),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
+}
+
+/// Write tileset.json beside one admitted static source model using F0 publication.
+#[pyfunction]
+#[pyo3(signature = (input, *, anchor=None, orientation_xyzw=None, scene_offset=None, force=false, callback=None))]
+fn model_to_manifest(
+    py: Python<'_>,
+    input: PathBuf,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<ModelManifestResult> {
+    let request = ModelManifestRequest::local_gltf(input)
+        .with_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        })
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?);
+    let result = run_job(py, callback, |run| {
+        tiles_core::model_to_manifest(request, run)
+    })?;
+    Ok(ModelManifestResult {
+        output: result.output,
+        report: serde_json::json!(result.report),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
     })
 }
 
@@ -882,6 +970,8 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;
+    module.add_class::<ModelWrapResult>()?;
+    module.add_class::<ModelManifestResult>()?;
     module.add_class::<RasterDirectoryResult>()?;
     module.add_class::<CleanupDiagnostic>()?;
     module.add("TilesError", module.py().get_type::<TilesError>())?;
@@ -913,6 +1003,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(model_to_manifest, module)?)?;
     module.add_function(wrap_pyfunction!(point_cloud_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(vector_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(convert_to_3tz, module)?)?;
