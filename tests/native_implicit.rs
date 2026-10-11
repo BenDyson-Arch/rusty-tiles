@@ -97,7 +97,14 @@ fn forest(path: &Path, scheme: &str) -> Forest {
         documents: vec!["tileset.json".into()],
         ..Default::default()
     };
-    walk(path, scheme, "tileset.json", &manifest, &manifest["root"], &mut out);
+    walk(
+        path,
+        scheme,
+        "tileset.json",
+        &manifest,
+        &manifest["root"],
+        &mut out,
+    );
     assert_eq!(manifest.get("schema").is_some(), !out.roots.is_empty());
     let zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
     let subtrees = zip.file_names().filter(|n| n.ends_with(".subtree")).count();

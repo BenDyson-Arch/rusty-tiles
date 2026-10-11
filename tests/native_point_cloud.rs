@@ -326,10 +326,18 @@ fn forest(zip: &mut zip::ZipArchive<std::fs::File>) -> Forest {
         documents: vec!["tileset.json".into()],
         ..Default::default()
     };
-    walk(zip, &manifest["root"], manifest.get("schema").is_some(), &mut out);
+    walk(
+        zip,
+        &manifest["root"],
+        manifest.get("schema").is_some(),
+        &mut out,
+    );
     assert_eq!(manifest.get("schema").is_some(), out.implicit_roots > 0);
     let subtrees = zip.file_names().filter(|n| n.ends_with(".subtree")).count();
-    assert_eq!(subtrees, out.implicit_roots, "one subtree per implicit root");
+    assert_eq!(
+        subtrees, out.implicit_roots,
+        "one subtree per implicit root"
+    );
     // Each tileset document is reached by exactly one link.
     let mut documents: Vec<_> = zip
         .file_names()
