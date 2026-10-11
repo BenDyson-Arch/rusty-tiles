@@ -43,9 +43,12 @@ binding exposes neither tool (`bindings/python/README.md:20`).
    non-recursive and capped at 4096 entries per directory; a truncated listing
    is reported in `inventoryErrors`. Doctor launches no subprocess, enables no
    network and creates no files: no PROJ user cache, no HOME/XDG/cwd entries
-   and no grid downloads. The process-wide offline policy and GDAL driver
-   registration are the only state changes; both are shared with every native
-   operation.
+   and no grid downloads. The only state changes are the process-wide offline
+   policy, GDAL driver registration and the GDAL cache limit set by
+   `geospatial::native::init`. All three are shared with every native
+   operation. A process-wide mutex serializes native probes across concurrent
+   reports, because `raster::capabilities` re-runs `GDALAllRegister` outside
+   that `Once` (`raster/native.rs:1674`).
 5. A typed `doctor::Report` replaces `Result<Value, Error>` (`doctor.rs:40`).
    Selection is the typed `Command`, so `report` is infallible. Descriptive
    per-command details (CRS classes, limitations, drivers) remain JSON data;
@@ -108,13 +111,43 @@ port closed, and a symlinked root. Library unit tests cover the fence without
 a socket. Release steps 2 and 5 assert the status/exit contract and the fence
 against the release binary.
 
+## Findings and their tests
+
+Static observations above were confirmed by execution:
+
+- Baseline native `GDAL_SKIP=GTiff doctor --json --command terrain --command
+  raster-tile-to-directory` reported both ready, while conversion of real
+  GeoTIFF fixtures failed (`cannot open … GTiff`). Test:
+  `native_doctor::missing_gtiff_driver_makes_gtiff_commands_unavailable_like_their_execution`.
+  Removing the GTiff term makes it fail.
+- Baseline portable `doctor --command raster` exited 4 (`environment`), while
+  `raster` itself exited 2 (`unsupported`). Test:
+  `native_doctor::portable_native_commands_are_unsupported_like_their_execution`.
+- Concurrent `doctor::report` calls in one native process aborted in a GDAL
+  C++ assertion inside `raster::native::capabilities`. On four threads this
+  happened in 39 of 40 runs before serialization and 0 of 40 after. Test:
+  `doctor::tests::concurrent_reports_complete`.
+- The baseline preview answered `Host: evil.example` with 200 on loopback.
+  Test: `native_preview::loopback_listener_refuses_foreign_host_authorities`.
+  Removing the check makes it fail.
+- Baseline `preview --host localhost` resolved the name and bound `[::1]`.
+  Now it is a usage error, and no name is resolved.
+
+The baseline traversal, symlink and unselected-layer fence held against every
+added attack; that is retained evidence, not a defect.
+
 ## Proof limits
 
 There is no defence against a concurrent local writer racing canonicalization
 and open, against hard links, or against case-folding filesystems. The served
 roots are trusted local selections. Terrain and D1 export no capability
 resolver of their own, so doctor composes their native readiness from
-`raster::capabilities`. A producer-owned resolver remains a follow-up. A ready
+`raster::capabilities`. A producer-owned resolver remains a follow-up. So does
+guarding `raster::native::capabilities` with the shared registration `Once`.
+Doctor's mutex does not protect a library caller that runs doctor alongside
+native conversions on other threads. Under a missing GTiff driver, terrain
+and D1 conversion report `invalid_input`; their categories belong to their
+producers. A ready
 status does not prove that a source-specific CRS or height operation succeeds;
 conversion still validates it. Platforms without directory publication
 (`directory_platform.rs:351`) are not release targets and are not modelled.

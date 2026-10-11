@@ -293,7 +293,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | Option | Default | Serves |
 | --- | --- | --- |
 | `--cesium` | required | A Cesium 1.146.0 `Build/Cesium` directory containing `Cesium.js` |
-| `--host` | `127.0.0.1` | Listen address |
+| `--host` | `127.0.0.1` | Listen IP address. Host names are refused, not resolved. |
 | `--port` | `9227` | Listen port. 0 picks a free port. |
 | `--mesh` | none | Extracted mesh directory with `tileset.json` |
 | `--point-cloud` | none | Extracted point-cloud directory with `tileset.json` |
@@ -302,6 +302,12 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | `--terrain` | none | Terrain mesh directory with `tileset.json` |
 
 Select at least one layer.
+
+Preview is read-only. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file inside that directory; otherwise the command exits 3 with `data`. The server answers only `GET` and `HEAD` for `/`, `/config.json` and regular files under a selected layer's route. Paths with `..`, encoded separators, backslashes, colons or absolute components return 404. So do symlinks that resolve outside the selected directory, directories and unselected layers. Symlinks that stay inside the selected directory are served.
+
+On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A non-loopback `--host`, such as `0.0.0.0`, is an explicit opt-in to serve every host that can reach it: it accepts any `Host` and prints a warning on stderr.
+
+`--json` prints one startup object, `{"ok":true,"url":…,"layers":{…},"loopback":true}`, after the listener is bound. The server runs until it is signalled (for example, SIGTERM or Ctrl-C). It writes nothing, so stopping it needs no cleanup. See the [T1 tooling contract](architecture/t1-tooling-contract.md).
 
 ### doctor
 
@@ -312,7 +318,17 @@ rusty-tiles doctor --command vector --command terrain
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
-| `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium` | Where to look for a Cesium runtime. This check is informational only. |
+| `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium`, relative to the working directory | Where to look for a Cesium runtime. This check is informational only. |
+
+Each selected command has a `status`:
+
+- `ready`: the command can run in this build.
+- `unavailable`: the build includes the capability, but a runtime dependency failed. Examples are the GDAL or PROJ version, the PROJ database, a GDAL driver and GEOS. The `reason` names the failure.
+- `unsupported`: this build does not include the capability. For example, the standard CLI does not include `raster`, `terrain` or `raster-tile-to-directory`; rebuild with `--features native-geospatial`.
+
+`ready` is `true` exactly when `status` is `ready`. If any selected command is `unavailable`, `doctor` exits 4 with `environment`. Otherwise, if any is `unsupported`, it exits 2 with `unsupported`, the same category that the command itself returns in that build. The JSON result keeps the full inventory alongside `error` and `exitCode`. Terrain and `raster-tile-to-directory` require the GDAL GTiff driver, and `raster` requires GTiff and COG.
+
+`probes` names every check that ran. The native version, PROJ database and PROJ directory checks always run. GDAL driver, GEOS and Cesium checks run only for the commands that need them. PROJ directory listings are top-level only and capped at 4096 entries per directory. `doctor` starts no processes, keeps PROJ networking off and writes no files.
 
 `doctor` reports linked GDAL, PROJ and GEOS versions when enabled. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Default-build vector readiness lists GeoJSON/GeoPackage readers, Rust geometry support and grid-free CRS limits independently of native dependencies. Native vector readiness retains GDAL/GEOS/PROJ checks. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
 
