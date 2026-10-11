@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 from c2o import meshopt  # noqa: E402
 from c2o import spans as S  # noqa: E402
-from c2o.numbers import JsonNumberError, f32_exact, f32_bits, load_json, lowbit_highbit  # noqa: E402
+from c2o.numbers import JsonNumberError, Overflow, contains_overflow, f32_exact, f32_bits, load_json, lowbit_highbit  # noqa: E402
 from c2o.scene import QUAT_WINDOW, Walk, mat_mul, node_matrix, quaternion_excess  # noqa: E402
 from c2o.tileset import Level, LevelVolume  # noqa: E402
 from c2o.volumes import LevelTest, parse_volume  # noqa: E402
@@ -226,11 +226,17 @@ def test_identities():
     check("pair of 1000.25 is (-2, 9)", S.pair_of(Fraction(1000.25)) == (-2, 9))
     check("k pairs", [S.k_pair(k) for k in (1, 127, 255, 32767, 65535)]
           == [(0, 0), (0, 6), (0, 7), (0, 14), (0, 15)])
+    check("JSON overflow literal becomes a non-number marker",
+          isinstance(load_json(b'{"a": 1e999}')["a"], Overflow) and contains_overflow(load_json(b'[[1e400]]')))
     try:
-        load_json(b'{"a": 1e999}')
-        check("JSON overflow literal rejected", False)
+        load_json(b'[NaN]')
+        check("JSON NaN token rejected", False)
     except JsonNumberError:
-        check("JSON overflow literal rejected", True)
+        check("JSON NaN token rejected", True)
+    reps = load_json(b'[1.0, 1e0, 10e-1, 1000.000e-3, -0.0, 0e999999999999999999999999999999, 1.5, 1e-999]')
+    check("exact integer representations read as integers",
+          reps[:6] == [1, 1, 1, 1, 0, 0] and all(type(v) is int for v in reps[:6])
+          and reps[6] == 1.5 and type(reps[7]) is float, reps)
     check("JSON number is nearest binary64", load_json(b"[0.1]")[0] == 0.1)
     rng = random.Random(7)
     for _ in range(20):

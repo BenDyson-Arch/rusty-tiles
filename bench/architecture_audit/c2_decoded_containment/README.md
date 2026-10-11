@@ -454,17 +454,29 @@ fixtures follow those rulings. Each ruled item says which decision applies.
     scene root violates glTF `uniqueItems`. The contract says only "no node
     has two parents". Adopted by v3.3 (8). Controls: `duplicate-child` and
     `duplicate-scene-root`.
-14. **Index-typed node fields written as floats** (for example `"mesh": 0.0`)
-    are InvalidInput(node).
+14. **Exact integer representations are integers.** This reading changed on
+    2026-10-11, to align with C1's admitted profile.
+    - A JSON number whose exact decimal value is an integer reads as that
+      integer, in index fields too. Examples: `1.0`, `1e0`, `10e-1`,
+      `1000.000e-3`, `-0.0`, `0e999…`.
+    - C1 admits such fixtures (`primary-local-gltf-integer-representations`,
+      `exact-count-*`, `reference-zero-*` in the C1 payload controls).
+    - A non-integral value in an index field is InvalidInput(node).
+    - The oracle used to reject every float-typed index.
 15. **A tile `transform` whose last row is not `0,0,0,1`, or that is not 16
     finite numbers,** is InvalidInput by v3.3 (8). The oracle used to report
     `Undecided` here; it now reports `InvalidInput`. A tileset number literal
     that overflows binary64 is also `InvalidInput` now. Controls:
     `tile-transform-non-affine` and `tileset-number-overflow`.
-16. **An overflowing number literal** gives `InvalidNode` with a number
-    reason in glTF JSON, and `InvalidInput` in tileset JSON. The contract
-    "Numbers" paragraph calls it InvalidInput "as in the existing tileset number
-    handling".
+16. **An overflowing number literal** (for example `1e400`) fails only where
+    it is consumed.
+    - In a consumed glTF node field it is InvalidInput(node).
+    - Opaque glTF JSON, such as `extras` or extension-owned data, may hold it.
+      C1 admits `opaque-huge-number`.
+    - Anywhere in a tileset JSON it is `InvalidInput`, because the tileset
+      document is owned whole.
+    - The contract "Numbers" paragraph calls it InvalidInput "as in the
+      existing tileset number handling".
     - Production's C1 JSON layer instead refuses a tileset literal of `1e999`
       as **Unsupported** ("JSON exceeds finite owned-document
       representation").
@@ -521,6 +533,23 @@ fixtures follow those rulings. Each ruled item says which decision applies.
 
   A stream production accepts but the oracle rejects shows up as `Undecided`,
   never as a verdict.
+
+## C1 payload-control amendment (2026-10-11)
+
+C2 changed the report of every admitted C1 payload control. The amended
+expectations were derived from this oracle. They are in
+`bench/architecture_audit/c1_payload_integrity/production_controls/c2_amendment/2026-10-11/`,
+whose `README.md` gives the rules, pins and end-to-end results.
+
+Running the oracle over those C1-admitted fixtures exposed three gaps in its
+coverage of the C1 profile. None of them changes any witness, control or corpus
+verdict.
+
+- integer representations, now question 14;
+- consumed-only overflow, now question 16;
+- b3dm embedded GLBs followed by the b3dm's 8-byte padding.
+
+Unreadable ZIP members now make the oracle `Undecided` instead of crashing.
 
 ## What remains
 

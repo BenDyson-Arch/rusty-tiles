@@ -1,14 +1,16 @@
 """Exact number handling shared by every oracle module.
 
 Every JSON number is read as the nearest binary64 value of its text (contract,
-"Numbers"). A literal that overflows binary64, or a NaN/Infinity token, is an
-error. Exact values are `fractions.Fraction`; binary64 and f32 values convert
+"Numbers"). An exact integer representation (1.0, 1e0, -0.0, ...) is read as
+that integer. A literal that overflows binary64 becomes an Overflow marker that
+fails any consuming field; a NaN/Infinity token is an error. Exact values are `fractions.Fraction`; binary64 and f32 values convert
 to them without rounding.
 """
 
 import json
 import math
 import struct
+import re
 from fractions import Fraction
 
 
@@ -25,11 +27,52 @@ class OracleUndecided(Exception):
         self.facts = facts
 
 
+class Overflow:
+    """A JSON number literal with no finite binary64 value (e.g. 1e400).
+
+    It is not a number for any consumer: a consumed field holding it fails that
+    field's type check, while opaque JSON (extras, extension-owned data) may hold
+    it, as in C1's admitted profile."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def __repr__(self):
+        return "Overflow(%s)" % self.text[:40]
+
+
+_NUMBER = re.compile(r"(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?")
+
+
+def _exact_integer(text):
+    """The integer whose exact decimal value the literal denotes, or None.
+
+    C1 admits exact integer representations such as 1.0, 1e0, 10e-1, -0.0 and
+    0e999...; they stand for the same integer as the plain literal."""
+    match = _NUMBER.fullmatch(text)
+    if match is None:
+        return None
+    sign, whole, frac, exp = match.group(1), match.group(2), match.group(3) or "", match.group(4)
+    digits = (whole + frac).lstrip("0")
+    if not digits:
+        return 0  # mathematical zero, whatever the exponent
+    exponent = int(exp or "0") - len(frac)
+    if exponent >= 0:
+        value = int(digits) * 10 ** exponent  # finite binary64, so the size is bounded
+    else:
+        k = -exponent
+        if k >= len(digits) or digits[-k:].strip("0"):
+            return None
+        value = int(digits[:-k])
+    return -value if sign else value
+
+
 def _parse_float(text):
     value = float(text)
     if not math.isfinite(value):
-        raise JsonNumberError("number literal overflows binary64: %s" % text[:40])
-    return value
+        return Overflow(text)
+    integer = _exact_integer(text)
+    return value if integer is None else integer
 
 
 def _parse_int(text):
@@ -37,12 +80,22 @@ def _parse_int(text):
     try:
         float(value)
     except OverflowError:
-        raise JsonNumberError("integer literal overflows binary64: %s..." % text[:40])
+        return Overflow(text)
     return value
 
 
 def _reject_constant(name):
     raise JsonNumberError("non-JSON constant %s" % name)
+
+
+def contains_overflow(obj):
+    if isinstance(obj, Overflow):
+        return True
+    if isinstance(obj, dict):
+        return any(contains_overflow(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(contains_overflow(v) for v in obj)
+    return False
 
 
 def load_json(data):

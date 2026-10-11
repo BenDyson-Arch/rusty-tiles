@@ -1,6 +1,6 @@
 --- a/oracle/c2o/tileset.py
 +++ b/oracle/c2o/tileset.py
-@@ -240,7 +240,7 @@
+@@ -246,7 +246,7 @@
                      vol, cwhere = frame.external_content
                      level.volumes.append(LevelVolume("externalContent", distance, vol, cwhere))
                  level.volumes.append(LevelVolume("ancestor", distance, frame.volume, frame.where))

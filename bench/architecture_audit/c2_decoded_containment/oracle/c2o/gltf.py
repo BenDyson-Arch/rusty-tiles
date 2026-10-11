@@ -14,7 +14,7 @@ from fractions import Fraction
 from urllib.parse import unquote
 
 from . import meshopt
-from .numbers import F32_SCALE, JsonNumberError, OracleUndecided, f32_scaled, is_index, load_json
+from .numbers import F32_SCALE, OracleUndecided, f32_scaled, is_index, load_json
 
 COMPONENTS = {
     5120: ("b", 1, "i8"),
@@ -122,6 +122,11 @@ class Payload:
             if head == b"b3dm":
                 self.kind = "b3dm"
                 table, glb = split_b3dm(data, member)
+                if len(glb) >= 12:
+                    # The embedded GLB may be followed by the b3dm's 8-byte padding.
+                    declared = struct.unpack_from("<I", glb, 8)[0]
+                    if 12 <= declared <= len(glb) and len(glb) - declared < 8:
+                        glb = glb[:declared]
                 self.rtc_center = "RTC_CENTER" in table
                 json_chunk, self.binary = split_glb(glb, member)
                 self.doc = load_json(bytes(json_chunk))
@@ -134,9 +139,6 @@ class Payload:
             else:
                 self.kind = "gltf"
                 self.doc = load_json(bytes(data))
-        except JsonNumberError as err:
-            # Contract "Numbers": an overflowing literal is InvalidInput.
-            raise
         except (ValueError, UnicodeDecodeError) as err:
             raise PayloadError("payload JSON unreadable in %s: %s" % (member, err))
         if not isinstance(self.doc, dict):
