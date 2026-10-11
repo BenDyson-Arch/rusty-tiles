@@ -457,7 +457,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | --- | --- |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; domain events finish before installation |
 | `vector` | `ingestion`, `encoding` |
-| `raster` | `source_cog`, `aligned_warp`, `tiling` use native normalized progress out of 1,000,000; tiling resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
+| `raster` | `source_cog` and `aligned_warp` use native normalized progress out of 1,000,000; `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
 | `mesh-local-to-3tz` | `mesh_approximation` when requested, `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |

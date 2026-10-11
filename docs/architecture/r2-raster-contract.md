@@ -45,7 +45,11 @@ Finest coverage is calculated once and coarse addresses are integer ancestors.
 An exact supplied target geotransform is created before Warp into the existing
 destination, avoiding extent/size resolution recomputation. Each requested zoom
 is sampled directly from the closed finest raster with nearest, east/south ties
-selecting the greater fine index. Padding is zero RGBA; recursive nearest
+selecting the greater fine index: with k = 2^(zmax-z), global pixel X on each
+axis reads finest global pixel kX + k/2. A sequential Rust tiler evaluates
+these indices with checked integer arithmetic, reads finest row segments
+through RasterIO and encodes deterministic PNG; no metre-coordinate tile
+algorithm chooses the phase. Padding is zero RGBA; recursive nearest
 overviews do not define the coarse sample phase.
 
 One `RasterLimits` owns six positive caps: aggregate source 512 MiB, source
@@ -59,7 +63,8 @@ checked after close; they are not filesystem quotas.
 
 The concrete ledger uses actual type sizes, admitted counts and observed Rust
 capacities. It charges source and target logical pyramids, requested RGBA tiles,
-finite source facts/paths, sequential coherence or display scratch, exactly
+finite source facts/paths, sequential coherence, display or tile scratch (one
+finest row, one RGBA tile, one fixed PNG buffer refusing growth and one path), exactly
 N+3 member tuples, native argument/config payload and fixed operation owners.
 Logical work, physical staged file inventory and native opaque allocations are
 distinct; this is not an RSS bound. The ledger charges output path lengths,
@@ -77,8 +82,8 @@ identify the actual temporary compression tag. Temporary creation, read-only
 reopening and unlink were observed; payload reads were not traced.
 
 One attempt owns original failure/cancellation/observer causes. ABI callbacks
-catch panic. Algorithm Run attempts always finish with Finalize and exactly one
-Release; utility options and returned datasets have explicit close owners.
+catch panic, as does tiling progress emission. Utility options and returned
+datasets have explicit close owners.
 Workers, native handles, intermediates, required members, bounded reports and
 events finish before D2 seal and publication. The accepted inventory is exactly
 `source.cog.tif`, `tiles/{z}/{x}/{y}.png`, `tilejson.json` and `report.json`.

@@ -200,8 +200,9 @@ with an explicit alpha override. Invalid samples become transparent black;
 valid black retains its opacity.
 
 The finest display uses an exact admitted grid and explicit nearest-neighbour
-warp. Every requested coarser zoom samples that closed finest image directly,
-with east/south tie selection and transparent padding. Reports expose the
+warp. Every requested coarser zoom samples that closed finest image directly
+by exact integer pixel index, with east/south tie selection and transparent
+padding. Tiles are sampled and PNG-encoded sequentially in Rust. Reports expose the
 exact target transform, dimensions and tile rectangle. Output may vary across
 native dependency versions; reproducibility claims require the same build.
 
