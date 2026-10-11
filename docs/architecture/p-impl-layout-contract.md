@@ -44,7 +44,7 @@ tileset documents.** Let S = 4 for both schemes.
   No client ever creates a placeholder whose volume is derived from the grid. That derived volume
   is the root cause, now proved causally by PN's ablation.
 - **Documents (new in v2).** Explicit tiles are packed breadth-first into documents of at most
-  16,384 value nodes, 2 MiB and 12 skeleton levels.
+  16,384 value nodes, 2 MiB and 10 skeleton levels (`DOC_LEVELS`; 12 before the delta review's D-3).
   - A skeleton tile that does not fit becomes a **link tile**: an explicit tile whose `content.uri`
     names an explicit external tileset document, with that tile as the document's root.
   - This is the ordinary core external-tileset feature on an *explicit* tile. It is not the banned
@@ -135,7 +135,7 @@ because no client ever needs a derived cell, but not the dispute itself.
   - a child slot (`extras.implicitChildIndex`, else the array index);
   - children with pure-translation transforms.
 - `h(n)` = 0 for leaves, otherwise 1 + max over the children. `L = h(root) + 1`.
-- `S = 4`. Document budgets are `DOC_NODES = 16,384`, `DOC_BYTES = 2 MiB` and `DOC_LEVELS = 12`.
+- `S = 4`. Document budgets are `DOC_NODES = 16,384`, `DOC_BYTES = 2 MiB` and `DOC_LEVELS = 10` (12 before the delta review's D-3; the §5.1 figures, such as JSON depth 31 on mf2-lod16, were measured with the 12-level model).
   These are profile constants: there is no option, and no data-dependent alternative layout.
 
 **Classification** (decided once, in the writer):

@@ -4,7 +4,7 @@ This page explains how the `vector` command turns GIS features into 3D Tiles. **
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
-Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. Add `--explicit` for the earlier explicit manifest and output bytes.
+Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. Add `--explicit` for an explicit manifest with the earlier explicit layout and payloads; `vector-build.json` and the `tileset.json` state hash still change with the encoder revision.
 
 ## Acceptance and library API
 
@@ -277,10 +277,10 @@ Archives written before the bounded implicit forest layout are not reuse baselin
 
 ### How reuse works
 
-- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb` or `.b3dm`). Implicit tiles publish a copy under `implicit-content/` whose glTF scene root carries the tile's translation. The archive holds each payload once.
+- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb` or `.b3dm`). Implicit tiles publish one member per content under `implicit-content/`: a copy whose glTF scene root carries the tile's translation, or a byte copy when that translation is zero. A raw payload used only by implicit tiles is not also kept under `t/`. A raw payload shared by several tiles can therefore appear more than once: in place for explicit tiles and as one copy per implicit tile.
 - Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
 - `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
-- `vector-build.json` records, for each payload published only under `implicit-content/`, its member, translation, and exact raw root-node text and JSON length. Reuse restores the raw bytes exactly from these, then lays out the new archive.
+- `vector-build.json` holds one `payloads` entry per distinct raw payload that any implicit tile publishes, keyed by its SHA-256: the first such `implicit-content/` member in tile preorder, its translation, and the exact raw root-node text and JSON length (empty text and length 0 for a byte copy). Raw payloads that an explicit tile also publishes in place have an entry too. Reuse restores each raw payload exactly from its entry, otherwise from `t/<sha256>`, then lays out the new archive.
 - Every recovered payload must match its SHA-256 name. An altered member or record fails with `previous content checksum failed` or `invalid previous payload record`, and nothing is published.
 - `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
 
