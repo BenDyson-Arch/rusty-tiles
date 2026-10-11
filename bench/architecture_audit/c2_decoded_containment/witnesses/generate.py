@@ -539,7 +539,7 @@ def build_cases(inputs):
 
     # ---- new slice-1 controls
     controls = (build_new_controls(W, contained, ni, single) + v33_cases(W, contained, ni, single)
-                + role_order_case(contained))
+                + role_order_case(contained) + review_b1_cases())
     return cases + controls
 
 
@@ -1004,6 +1004,45 @@ def role_order_case(contained):
     return [case]
 
 
+def review_b1_cases():
+    """PR #157 nonauthor review B1 (probe/empty_mesh_span.py, sha256 db8b8886...),
+    regenerated here: three nested nodes rotated by [2^-1000, 0, 0, 1] end in an
+    empty mesh (no primitives). Alone, the URI has no drawn instance and skips the
+    span check (v3.2 (4)): Contained. With a real triangle instance added at the
+    scene root, sInst(u) covers the empty mesh's instance path too: numericSpan."""
+    x = 2.0 ** -1000
+    rot = [x, 0.0, 0.0, 1.0]
+    out = []
+    for cid, real, expect in (("review-B1-empty-mesh-only", False, {"outcome": "Contained"}),
+                              ("review-B1-empty-mesh-plus-real",
+                               True, {"outcome": "NotInspected", "reasons": ["numericSpan"]})):
+        nodes = [{"rotation": rot, "children": [1]}, {"rotation": rot, "children": [2]},
+                 {"rotation": rot, "mesh": 0}]
+        doc = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+               "meshes": [{"primitives": []}], "nodes": nodes}
+        binary = b""
+        if real:
+            binary = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+            doc["buffers"] = [{"byteLength": 36}]
+            doc["bufferViews"] = [{"buffer": 0, "byteLength": 36}]
+            doc["accessors"] = [{"bufferView": 0, "componentType": 5126, "type": "VEC3", "count": 3,
+                                 "min": [0, 0, 0], "max": [1, 1, 0]}]
+            doc["meshes"].append({"primitives": [{"attributes": {"POSITION": 0}}]})
+            doc["nodes"].append({"mesh": 1})
+            doc["scenes"][0]["nodes"].append(3)
+        case = Case(cid, "review", expect, "PR #157 nonauthor review B1")
+        case.payloads.append(("a.glb", B.glb_bytes(doc, binary)))
+        case.tilesets["tileset.json"] = B.tileset(B.tile({"box": [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]},
+                                                         content="a.glb"))
+        case.mutants = False
+        if real:
+            case.expect_sinst = 6008
+        else:
+            case.notes.append("No drawn vertex, so no one-ulp mutant exists.")
+        out.append(case)
+    return out
+
+
 # ---------------------------------------------------------------- C1 precondition (v3.3 (9))
 
 
@@ -1302,6 +1341,11 @@ def run_case(case, directory, report_rows, large_ok):
         got = {"sInst": refs[0].get("sInst"), "levelSpans": refs[0].get("levelSpans")} if refs else None
         row["spans"] = {"expected": case.expect_spans, "got": got}
         row["agree"] = row["agree"] and got == case.expect_spans
+    if getattr(case, "expect_sinst", None) is not None:
+        refs = (report.get("precheck") or {}).get("references") or []
+        got = refs[0].get("sInst") if refs else None
+        row["sInst"] = {"expected": case.expect_sinst, "got": got}
+        row["agree"] = row["agree"] and got == case.expect_sinst
     if getattr(case, "expect_observation", None):
         obs = report.get("observations") or []
         got = {k: obs[0][k] for k in case.expect_observation} if obs else None

@@ -20062,6 +20062,96 @@
    "agree": true,
    "c1Caveats": [],
    "expected": {
+    "outcome": "Contained"
+   },
+   "file": "witnesses/fixtures/review-B1-empty-mesh-only.3tz",
+   "group": "review",
+   "id": "review-B1-empty-mesh-only",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "No drawn vertex, so no one-ulp mutant exists."
+   ],
+   "oracle": {
+    "facts": null,
+    "outcome": "Contained",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 312,
+      "decoded": 0,
+      "levels": 1,
+      "maxNodeDepth": 3,
+      "member": "a.glb",
+      "reference": 0,
+      "units": 1770112,
+      "vertexUnits": 0
+     }
+    ],
+    "totals": {
+     "bytes": 312,
+     "decoded": 0,
+     "maxNodeDepth": 3,
+     "units": 1770112
+    }
+   },
+   "sha256": "bcf5bd3f464394d103cafd0fa4ab94ffecf183d866a04792d2e4ddb7b8e91690",
+   "source": "PR #157 nonauthor review B1"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "numericSpan"
+    ]
+   },
+   "file": "witnesses/fixtures/review-B1-empty-mesh-plus-real.3tz",
+   "group": "review",
+   "id": "review-B1-empty-mesh-plus-real",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": null,
+    "outcome": "NotInspected",
+    "reasons": [
+     "numericSpan"
+    ],
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "levelSpans": [
+       277
+      ],
+      "levels": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 6008
+     }
+    ],
+    "totals": {
+     "bytes": 0,
+     "decoded": 0,
+     "units": 0
+    }
+   },
+   "sInst": {
+    "expected": 6008,
+    "got": 6008
+   },
+   "sha256": "7fa45d5c1d25e23ae02352abee4ec971e3bcf1e2aa6a3d0aadd8fc969dbc9aff",
+   "source": "PR #157 nonauthor review B1"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
     "facts": {
      "depth": 0,
      "level": 0,
@@ -20698,7 +20788,7 @@
   }
  ],
  "summary": {
-  "agree": 259,
+  "agree": 261,
   "c1PreconditionLikely": [
    "child-volume-escapes-but-content-inside",
    "selected-skin",
@@ -20708,7 +20798,7 @@
    "tileset-number-overflow"
   ],
   "c1PreconditionPossible": 154,
-  "cases": 259,
+  "cases": 261,
   "controlPairs": 16,
   "controlPairsAgree": 16,
   "disagree": [],
