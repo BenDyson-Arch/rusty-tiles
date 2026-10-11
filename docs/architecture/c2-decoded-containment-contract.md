@@ -1,7 +1,8 @@
 # C2 decoded-content containment contract (slice 1)
 
-Status: implemented on `feat/c2-decoded-containment`. Acceptance is the oracle parity and
-nonauthor review recorded in [the C2 evidence](../../bench/architecture_audit/c2_decoded_containment/README.md).
+Status: implemented on `feat/c2-decoded-containment` (PR #157). Acceptance evidence is indexed in
+[the C2 acceptance record](../../bench/architecture_audit/c2_decoded_containment/acceptance/README.md);
+the separate nonauthor review and its resolution are recorded on PR #157.
 This document is the frozen v3.3 contract text, plus the coordinator amendments listed at
 the end. Its preparation, reviews and decision log are retained
 [losslessly](../../bench/architecture_audit/c2_decoded_containment/preparation/). It claims
@@ -612,7 +613,8 @@ The order is deterministic:
 | New **ResourceLimit** | Host allocation refusal only, for the fallible reservations of the per-URI facts, tile arena, reference list, dyadic arena or bitmap (B3). No new counter produces ResourceLimit: every cap gives `numericSpan` / `workLimit` |
 | Other behaviour | No change to Unsupported, Io, `totalBytesRead`, `total_payload_elements` or `hierarchyBounds` |
 | Report schema | `checks` / `notInspected` entries and the payload-label split |
-| **Public Rust API** | Five new `pub` fields on `ValidationLimits`. This breaks external struct literals (O-b) |
+| **Public Rust API** | Five new `pub` fields on `ValidationLimits`. This breaks external struct literals (O-b). Default `containmentWorkUnits` is 2^28, set from measured per-unit cost (coordinator, after review) |
+| New **InvalidState** | `ValidationFailure::InvalidState` (`invalid_state`, exit 1) for an internal capacity-invariant breach only; never a verdict about the archive |
 
 ## Ownership of representation
 

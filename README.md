@@ -232,7 +232,7 @@ Run `validate` on every `.3tz` before you publish it:
 rusty-tiles validate output/example.3tz
 ```
 
-It is read-only. The [validation profile](docs/VALIDATION.md) checks archive integrity, actual payload ranges and values, primitive indices, declared hierarchy bounds, references and recorded budgets under fixed limits. The report names completed checks and uninspected semantics; success does not certify decoded world-space bounds or source fidelity. Run external validators separately. Details are in the [command reference](docs/CLI.md#validate).
+It is read-only. The [validation profile](docs/VALIDATION.md) checks archive integrity, actual payload ranges and values, primitive indices, declared hierarchy bounds, references and recorded budgets under fixed limits. The report names completed checks and uninspected semantics; decoded world-space containment is certified only when the report lists `decodedContentContainment`, and source fidelity is not certified. Run external validators separately. Details are in the [command reference](docs/CLI.md#validate).
 
 `validate` checks `.3tz` archives only. Raster and terrain directories are not validated yet.
 

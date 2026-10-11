@@ -81,8 +81,12 @@ example `implicitTiling`, `regionVolume`, `rtcCenter`, `numericSpan` or `workLim
 escape fails as InvalidInput, and the message names the member, tile depth, volume, node,
 mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
 (`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
-`containmentDecodedBytes`, `containmentNodeDepth`) yield `notInspected`, never
-ResourceLimit. Neither report success nor a matching
+`containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^28 units, 2 GiB,
+2 GiB and 64) yield `notInspected`, never ResourceLimit. The default work cap bounds the exact
+pass to roughly 3 s on current hardware; larger archives are reported as `workLimit`. The
+frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
+`regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
+`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own
@@ -129,8 +133,8 @@ No job/publication failure wrapper is used for this read-only operation.
 
 Acceptance requires independent valid payload fixtures and sensitive corruption
 controls, resource admission and Rust/CLI/installed-wheel parity. This finite
-slice does not certify every glTF extension, decoded world-space bounds,
-metadata semantics, source fidelity, or the #125/#113 release gates.
+slice does not certify every glTF extension, decoded world-space bounds outside the
+C2 domain (when `decodedContentContainment` is absent), metadata semantics, source fidelity, or the #125/#113 release gates.
 
 Primary byte-layout authority is the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html), identified there as source commit `8e798b02d254cea97659a333cfcb20875b62bdd4`. Its matrix-alignment rule permits omitted final column padding. Unpublished GitHub main revisions can differ; they are not silently substituted for this contract.
 
