@@ -261,7 +261,7 @@ primitive and vertex counts, archive counts, and fixed admission `limits`.
 Passing inspection means the listed checks completed within that profile.
 `hierarchyBounds` checks declared child volumes. `decodedContentContainment`
 appears only when every drawn vertex of an explicit, in-domain archive is exactly inside
-its tile, content and ancestor volumes; otherwise `notInspected` names the
+its tile, content, external-content and ancestor volumes; otherwise `notInspected` names the
 `decodedContentBounds.<reason>`, and a proven escape is `invalid_input`. See the
 [C2 contract](architecture/c2-decoded-containment-contract.md). Source fidelity,
 geometric-error accuracy, rendered extent and metadata/material semantics are not implied. Optional extensions retain explicit inspection gaps;

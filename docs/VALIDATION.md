@@ -82,8 +82,10 @@ escape fails as InvalidInput, and the message names the member, tile depth, volu
 mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
 (`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
 `containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^28 units, 2 GiB,
-2 GiB and 64) yield `notInspected`, never ResourceLimit. The default work cap bounds the exact
-pass to roughly 3 s on current hardware; larger archives are reported as `workLimit`. The
+2 GiB and 64) yield `notInspected`, never ResourceLimit. At the measured release-build unit costs the default work cap bounds
+unit-charged C2 work to about 3 s; debug builds are slower, and the separately capped re-reads
+and re-decoding (2 GiB each) and per-primitive vertex marking are not included in that
+figure. Archives over the cap are reported as `workLimit`. The
 frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching
