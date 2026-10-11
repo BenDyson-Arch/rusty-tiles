@@ -12,6 +12,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -29,7 +30,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.053
   },
   {
    "agree": true,
@@ -41,6 +42,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -58,7 +60,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.054
   },
   {
    "agree": true,
@@ -70,6 +72,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1696,
@@ -87,7 +90,7 @@
    "reason": "available tile with an unavailable parent",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.5",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -99,6 +102,7 @@
     "emittedContents": 22,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 25,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -121,7 +125,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "ac4eba2715a390095a87e25a09144669209f1ab9d1df4037a1f5d915e14ad02a",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.055
   },
   {
    "agree": true,
@@ -133,6 +137,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -150,7 +155,7 @@
    "reason": "subtree root tile bit is 0",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.5",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -162,6 +167,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -179,7 +185,7 @@
    "reason": "availableCount differs from the popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.4",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -191,6 +197,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -208,7 +215,7 @@
    "reason": "availableCount differs from the popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.4",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -220,6 +227,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -237,7 +245,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -249,6 +257,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -266,7 +275,7 @@
    "reason": "content available where the tile is not",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.7",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -278,6 +287,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -295,7 +305,7 @@
    "reason": "child subtree available under an unavailable tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.8",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -307,6 +317,7 @@
     "emittedContents": 7,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 7,
     "maxDepth": 4,
     "maxLivePathBytes": 2872,
@@ -324,7 +335,7 @@
    "reason": "child subtree bit at or beyond availableLevels",
    "stage": "subtree subtrees/3/2/0.subtree \u00a72a.6",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -336,6 +347,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -358,7 +370,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.052
   },
   {
    "agree": true,
@@ -370,6 +382,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -387,7 +400,7 @@
    "reason": "availableLevels > 32",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.052
   },
   {
    "agree": true,
@@ -399,6 +412,7 @@
     "emittedContents": 17,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 19,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -416,7 +430,7 @@
    "reason": "missing member subtrees/3/6/6.subtree",
    "stage": "subtree subtrees/3/6/6.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -428,6 +442,7 @@
     "emittedContents": 42,
     "explicitNodes": 3,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 48,
     "maxDepth": 6,
     "maxLivePathBytes": 2872,
@@ -445,7 +460,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2471f20779842a7d0c75dc492447a17126a4ad9f515b997659e81fa7f1b3d30d",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.055
   },
   {
    "agree": true,
@@ -457,6 +472,7 @@
     "emittedContents": 21,
     "explicitNodes": 3,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 6,
     "maxLivePathBytes": 2872,
@@ -474,7 +490,7 @@
    "reason": "repeated subtree member",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -486,6 +502,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -503,7 +520,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -515,6 +532,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -532,7 +550,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -544,6 +562,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 84848,
@@ -561,7 +580,7 @@
    "reason": "availability scan exceeds total_bytes_read work limit",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.2",
    "tilesSha256": null,
-   "wallSeconds": 0.05
+   "wallSeconds": 0.077
   },
   {
    "agree": true,
@@ -573,6 +592,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 84848,
@@ -590,7 +610,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "75207088a7452a5885fc609b3a848b61487bd37a0014e3045003a1b06300139b",
-   "wallSeconds": 0.054
+   "wallSeconds": 0.085
   },
   {
    "agree": true,
@@ -602,6 +622,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 84848,
@@ -619,7 +640,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.049
+   "wallSeconds": 0.079
   },
   {
    "agree": true,
@@ -631,6 +652,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -648,7 +670,7 @@
    "reason": "content index reservation exceeds references",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.10",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -660,6 +682,7 @@
     "emittedContents": 63,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 3144,
@@ -677,7 +700,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "4f891fd595cee6497ecf11ec030fdb2387e6dfcb360c6c7ffbe271e2dc663fad",
-   "wallSeconds": 0.037
+   "wallSeconds": 0.053
   },
   {
    "agree": true,
@@ -689,6 +712,7 @@
     "emittedContents": 63,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2936,
@@ -711,7 +735,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "4f891fd595cee6497ecf11ec030fdb2387e6dfcb360c6c7ffbe271e2dc663fad",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -723,6 +747,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1752,
@@ -740,7 +765,7 @@
    "reason": "child subtree available under an unavailable tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.8",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -752,6 +777,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -774,7 +800,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "16a195127a38431792047b0563144407cd9a227507d75c688b8d82565777aebb",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -786,6 +812,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -808,7 +835,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6a22fad50c247a0eac0c39233b255f1df775eddbc0a3bad5787af83093b71fe3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -820,6 +847,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2880,
@@ -842,7 +870,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -854,6 +882,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -876,7 +905,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6abdbf38b5f4dd803773cf263f385dcb6d8c680725ea749badc7e81250138361",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -888,6 +917,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -910,7 +940,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "9763539e7915b8ea95828462513e90f7ca3c4d2656f70a51b6054b90ab9f9daf",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.052
   },
   {
    "agree": true,
@@ -922,6 +952,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -939,7 +970,7 @@
    "reason": "duplicated semantic TILE_BOUNDING_BOX in class tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -951,6 +982,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2096,
@@ -973,7 +1005,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -985,6 +1017,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -1002,7 +1035,7 @@
    "reason": "offset, scale, noData or default on TILE_BOUNDING_BOX",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -1014,6 +1047,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1864,
@@ -1031,7 +1065,7 @@
    "reason": "offset or scale on TILE_BOUNDING_BOX",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1043,6 +1077,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -1060,7 +1095,7 @@
    "reason": "tileMetadata count differs from the tile popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1072,6 +1107,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -1089,7 +1125,7 @@
    "reason": "tileMetadata count differs from the tile popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1101,6 +1137,7 @@
     "emittedContents": 3,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 2,
     "maxLivePathBytes": 2768,
@@ -1118,7 +1155,7 @@
    "reason": "negative TILE_GEOMETRIC_ERROR row",
    "stage": "subtree subtrees/3/1/1.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -1130,6 +1167,7 @@
     "emittedContents": 3,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 2,
     "maxLivePathBytes": 2768,
@@ -1147,7 +1185,7 @@
    "reason": "non-finite TILE_GEOMETRIC_ERROR row",
    "stage": "subtree subtrees/3/1/1.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -1159,6 +1197,7 @@
     "emittedContents": 9,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 10,
     "maxDepth": 5,
     "maxLivePathBytes": 2616,
@@ -1176,7 +1215,7 @@
    "reason": "derived geometric error would be a nonzero subnormal",
    "stage": "tile 5/9/1/0",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -1188,6 +1227,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2616,
@@ -1205,7 +1245,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "1ef27f79424cfec72cb27934f908dd832bfc20efa7f2089b00b2d2558d7c9aec",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.052
   },
   {
    "agree": true,
@@ -1217,6 +1257,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 512,
@@ -1234,7 +1275,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "0c437c2ba8d71dcde1c034741b4e4ae12749470f1faeafe0ff11ef92d9068aaf",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1246,6 +1287,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 616,
@@ -1263,7 +1305,7 @@
    "reason": "derived geometric error would be a nonzero subnormal",
    "stage": "tile 1/1/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -1275,6 +1317,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2616,
@@ -1297,7 +1340,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "9763539e7915b8ea95828462513e90f7ca3c4d2656f70a51b6054b90ab9f9daf",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.052
   },
   {
    "agree": true,
@@ -1309,6 +1352,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1648,
@@ -1326,7 +1370,7 @@
    "reason": "required TILE_GEOMETRIC_ERROR property omitted from the table",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1338,6 +1382,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 1288,
@@ -1360,7 +1405,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6abdbf38b5f4dd803773cf263f385dcb6d8c680725ea749badc7e81250138361",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -1372,6 +1417,7 @@
     "emittedContents": 6,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 7,
     "maxDepth": 4,
     "maxLivePathBytes": 2768,
@@ -1389,7 +1435,7 @@
    "reason": "missing member content/2/1/0.glb",
    "stage": "tile 2/1/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1401,6 +1447,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1418,7 +1465,7 @@
    "reason": "template misses a required variable",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1430,6 +1477,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1447,7 +1495,7 @@
    "reason": "{z} in a QUADTREE template",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1459,6 +1507,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2048,
@@ -1476,7 +1525,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.037
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1488,6 +1537,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1505,7 +1555,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1517,6 +1567,7 @@
     "emittedContents": 11,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2048,
@@ -1534,7 +1585,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "d92705067453b1d7b413dcf13d63ce0c136c4dbf3ceaa82a1b3732b23e1e82ab",
-   "wallSeconds": 0.037
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -1546,6 +1597,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1563,7 +1615,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.036
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1575,6 +1627,7 @@
     "emittedContents": 17,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2048,
@@ -1592,7 +1645,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "d7999eb33c902593acbfb82e4bb5d60b8d34eb7502264579fdf1942a6ddce881",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1604,6 +1657,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1621,7 +1675,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.036
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1633,6 +1687,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1650,7 +1705,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1662,6 +1717,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1679,7 +1735,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1691,6 +1747,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1708,7 +1765,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1720,6 +1777,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1737,7 +1795,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1749,6 +1807,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1766,7 +1825,7 @@
    "reason": "escape adjacent to template variable",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1778,6 +1837,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1795,7 +1855,7 @@
    "reason": "escape adjacent to template variable",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -1807,6 +1867,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1824,7 +1885,7 @@
    "reason": "template uri scheme, query, fragment or absolute path",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1836,6 +1897,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1853,7 +1915,7 @@
    "reason": "template uri scheme, query, fragment or absolute path",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1865,6 +1927,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1882,7 +1945,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1894,6 +1957,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1911,7 +1975,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -1923,6 +1987,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1940,7 +2005,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -1952,6 +2017,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1969,7 +2035,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -1981,6 +2047,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -1998,7 +2065,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -2010,6 +2077,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2027,7 +2095,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -2039,6 +2107,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2056,7 +2125,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.042
   },
   {
    "agree": true,
@@ -2068,6 +2137,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2085,7 +2155,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -2097,6 +2167,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2114,7 +2185,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "b472a08bf8936850c5e22e302a7f3da39945dc28398ab7a3276b776a4e20adbe",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -2126,6 +2197,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2143,7 +2215,7 @@
    "reason": "escape adjacent to template variable",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2155,6 +2227,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2172,7 +2245,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "675e455061385919091cbc992578fab744b97dac7293b4c907cec624c1e900a2",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2184,6 +2257,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2201,7 +2275,7 @@
    "reason": "template variables eliminated by dot-segments",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -2213,6 +2287,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2230,7 +2305,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "bb2ea9d59a2719679cd103b213195565a8b88a91f793d2f8069e27fe465e8c4e",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2242,6 +2317,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2264,7 +2340,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "bb2ea9d59a2719679cd103b213195565a8b88a91f793d2f8069e27fe465e8c4e",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2276,6 +2352,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2293,7 +2370,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "503e7a61632271939f13bf545966b7b2cda193f818648e432d16944db088fc51",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2305,6 +2382,7 @@
     "emittedContents": 21,
     "explicitNodes": 3,
     "explicitPayloadContents": 1,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 6,
     "maxLivePathBytes": 2872,
@@ -2322,7 +2400,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "479f8a39e5daf32248db1f49f8523cfacf75ec4f15e13cafe51d03bc707ee7a3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -2334,6 +2412,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2351,7 +2430,7 @@
    "reason": "region implicit root volume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2363,6 +2442,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2380,7 +2460,7 @@
    "reason": "sphere implicit root volume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2392,6 +2472,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2409,7 +2490,7 @@
    "reason": "subdivision scheme HEXTREE",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2421,6 +2502,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -2438,18 +2520,19 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
    "counts": {
     "bytesReadModelled": 5253,
     "classScans": 2,
-    "contentReferences": 10,
+    "contentReferences": 11,
     "cumulativeSubtreeBytes": 4192,
     "emittedContents": 10,
     "explicitNodes": 2,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 1,
     "implicitTiles": 8,
     "maxDepth": 3,
     "maxLivePathBytes": 2432,
@@ -2467,7 +2550,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2a88dbf1723858bb7db4bdd1cd05f0712737458563978161de9d4b3af76942fc",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -2479,6 +2562,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 3056,
@@ -2496,7 +2580,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2508,6 +2592,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1752,
@@ -2525,7 +2610,7 @@
    "reason": "semantic CONTENT_URI in content class cmeta",
    "stage": "subtree st/0.0.0.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -2537,6 +2622,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2744,
@@ -2554,7 +2640,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -2566,6 +2652,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1584,
@@ -2583,7 +2670,7 @@
    "reason": "semantic CONTENT_GROUP_ID in content class cmeta",
    "stage": "subtree st/0.0.0.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -2595,6 +2682,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2612,7 +2700,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -2624,6 +2712,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2641,7 +2730,7 @@
    "reason": "semantic CONTENT_URI in content class hmeta",
    "stage": "root admission in tileset.json/header[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2653,6 +2742,7 @@
     "emittedContents": 10,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 8,
     "maxDepth": 2,
     "maxLivePathBytes": 2432,
@@ -2670,7 +2760,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -2682,6 +2772,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2699,7 +2790,7 @@
    "reason": "semantic CONTENT_GROUP_ID in content class hmeta",
    "stage": "root admission in tileset.json/header[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2711,6 +2802,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2768,
@@ -2728,7 +2820,7 @@
    "reason": "content templates present but no tile has content",
    "stage": "post-walk (:299)",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -2740,6 +2832,7 @@
     "emittedContents": 21,
     "explicitNodes": 2,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 6,
     "maxLivePathBytes": 2872,
@@ -2757,7 +2850,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "0c683cb2e28ddd785ecc6be2ba302281d900f96af80aae8fceeb0dfd257cbdec",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -2769,6 +2862,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2786,7 +2880,7 @@
    "reason": "S2 implicit root volume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2798,6 +2892,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2815,7 +2910,7 @@
    "reason": "3DTILES_implicit_tiling (1.0)",
    "stage": "node in tileset.json depth 0",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2827,6 +2922,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2844,7 +2940,7 @@
    "reason": "implicit root has children",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2856,6 +2952,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2873,7 +2970,7 @@
    "reason": "implicit root has metadata",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2885,6 +2982,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2902,7 +3000,7 @@
    "reason": "implicit content template has boundingVolume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -2914,6 +3012,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2931,7 +3030,7 @@
    "reason": "subtreeLevels > 32",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -2943,6 +3042,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2960,7 +3060,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -2972,6 +3072,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -2989,7 +3090,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -3001,6 +3102,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -3018,7 +3120,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3030,6 +3132,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3047,18 +3150,19 @@
    "reason": "duplicated semantic NAME in class tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
    "counts": {
     "bytesReadModelled": 6332,
     "classScans": 2,
-    "contentReferences": 10,
+    "contentReferences": 12,
     "cumulativeSubtreeBytes": 4192,
     "emittedContents": 10,
     "explicitNodes": 5,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 2,
     "implicitTiles": 8,
     "maxDepth": 4,
     "maxLivePathBytes": 2432,
@@ -3076,7 +3180,7 @@
    "reason": "repeated subtree member",
    "stage": "subtree ext/st/0.0.0.0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -3088,6 +3192,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -3105,7 +3210,7 @@
    "reason": "malformed percent escape",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3117,6 +3222,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3134,7 +3240,7 @@
    "reason": "offset, scale, noData or default on TILE_GEOMETRIC_ERROR",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -3146,6 +3252,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1792,
@@ -3163,7 +3270,7 @@
    "reason": "subtree header lengths do not match member length",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3175,6 +3282,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3192,7 +3300,7 @@
    "reason": "bufferView byteOffset alignment",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3204,6 +3312,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1784,
@@ -3221,7 +3330,7 @@
    "reason": "bufferView byteOffset is required",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3233,6 +3342,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3250,7 +3360,7 @@
    "reason": "non-zero BIN padding",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3262,6 +3372,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3279,7 +3390,7 @@
    "reason": "subtree version is not 1",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3291,6 +3402,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1800,
@@ -3308,7 +3420,7 @@
    "reason": "subtree magic is not subt",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3320,6 +3432,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2882,
@@ -3342,7 +3455,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -3354,6 +3467,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 680,
@@ -3371,7 +3485,7 @@
    "reason": "data URI buffer",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -3383,6 +3497,7 @@
     "emittedContents": 17,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 19,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3400,7 +3515,7 @@
    "reason": "JSON-format subtree",
    "stage": "subtree subtrees/3/6/6.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.036
+   "wallSeconds": 0.044
   },
   {
    "agree": true,
@@ -3412,6 +3527,7 @@
     "emittedContents": 17,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 19,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3429,7 +3545,7 @@
    "reason": "JSON-format subtree",
    "stage": "subtree subtrees/3/6/6.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.036
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -3441,6 +3557,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3463,7 +3580,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.056
   },
   {
    "agree": true,
@@ -3475,6 +3592,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1816,
@@ -3492,7 +3610,7 @@
    "reason": "extensions in subtree JSON",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.072
   },
   {
    "agree": true,
@@ -3504,6 +3622,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2928,
@@ -3526,7 +3645,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.071
   },
   {
    "agree": true,
@@ -3538,6 +3657,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 1808,
@@ -3555,7 +3675,7 @@
    "reason": "bufferView byteOffset is not a JSON u64 integer",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.073
   },
   {
    "agree": true,
@@ -3567,6 +3687,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 120,
@@ -3584,7 +3705,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "38c9e436ee9c30238b05f66a1ccc63e651b33205e0bb01e843cf86513e3ec655",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.073
   },
   {
    "agree": true,
@@ -3596,6 +3717,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 144,
@@ -3613,7 +3735,7 @@
    "reason": "bufferViews is empty or not an array",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.077
   },
   {
    "agree": true,
@@ -3625,6 +3747,7 @@
     "emittedContents": 3,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 2432,
@@ -3642,7 +3765,7 @@
    "reason": "property table count",
    "stage": "subtree st/2.0.1.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.079
   },
   {
    "agree": true,
@@ -3654,6 +3777,7 @@
     "emittedContents": 3,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 2432,
@@ -3671,7 +3795,7 @@
    "reason": "contentMetadata count differs from the slot popcount",
    "stage": "subtree st/2.0.1.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.058
   },
   {
    "agree": true,
@@ -3683,6 +3807,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 480,
@@ -3700,7 +3825,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "abe7e0b0628d945b4d0b594095ed2eb4fe444a925b8278ec06aafc64c9957b81",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -3712,6 +3837,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 480,
@@ -3729,7 +3855,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "c18a9f1e25ab5593aaaa7478c7e768d2fdbd4bbd3914f67a1c079f0f4b5eb6e9",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.054
   },
   {
    "agree": true,
@@ -3741,6 +3867,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 480,
@@ -3758,7 +3885,7 @@
    "reason": "hierarchyBounds: tile volume outside its parent",
    "stage": "tile 0/0/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.073
   },
   {
    "agree": true,
@@ -3770,6 +3897,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 480,
@@ -3787,7 +3915,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "23040ae4502a8513b612ee233bd322008d01931251b2546c8d3217eb8721d0e8",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.083
   },
   {
    "agree": true,
@@ -3799,6 +3927,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 480,
@@ -3816,18 +3945,19 @@
    "reason": "geometricErrorOrder: tile error exceeds its parent",
    "stage": "tile 0/0/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.093
   },
   {
    "agree": true,
    "counts": {
     "bytesReadModelled": 1297,
     "classScans": 1,
-    "contentReferences": 0,
+    "contentReferences": 1,
     "cumulativeSubtreeBytes": 480,
     "emittedContents": 0,
     "explicitNodes": 2,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 1,
     "implicitTiles": 1,
     "maxDepth": 1,
     "maxLivePathBytes": 480,
@@ -3845,18 +3975,19 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f9b725e95dbec0e5a19be14a93563f36a898216a1d9502b6e4f85d3b2c2eddf9",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.056
   },
   {
    "agree": true,
    "counts": {
     "bytesReadModelled": 817,
     "classScans": 0,
-    "contentReferences": 0,
+    "contentReferences": 1,
     "cumulativeSubtreeBytes": 0,
     "emittedContents": 0,
     "explicitNodes": 2,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 1,
     "implicitTiles": 0,
     "maxDepth": 1,
     "maxLivePathBytes": 0,
@@ -3874,7 +4005,7 @@
    "reason": "hierarchyBounds: tile volume outside its parent",
    "stage": "node in ext/tileset.json depth 1",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -3886,6 +4017,7 @@
     "emittedContents": 18,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 20,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3903,7 +4035,7 @@
    "reason": "hierarchy visits exceed limit",
    "stage": "subtree subtrees/3/7/7.subtree \u00a72a.9",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -3915,6 +4047,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3932,7 +4065,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -3944,6 +4077,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -3961,7 +4095,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -3973,6 +4107,7 @@
     "emittedContents": 9,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 9,
     "maxDepth": 4,
     "maxLivePathBytes": 2872,
@@ -3990,7 +4125,7 @@
    "reason": "hierarchy depth exceeds limit",
    "stage": "tile 5/9/1/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4002,6 +4137,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 104,
@@ -4019,7 +4155,7 @@
    "reason": "hierarchy visits exceed limit",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.9",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4031,6 +4167,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 104,
@@ -4048,7 +4185,7 @@
    "reason": "hierarchy visits exceed limit",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.9",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.093
   },
   {
    "agree": true,
@@ -4060,6 +4197,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 37656,
@@ -4077,7 +4215,7 @@
    "reason": "hierarchy visits exceed limit",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.9",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.104
   },
   {
    "agree": true,
@@ -4089,6 +4227,7 @@
     "emittedContents": 21,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 24,
     "maxDepth": 5,
     "maxLivePathBytes": 2872,
@@ -4106,7 +4245,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.105
   },
   {
    "agree": true,
@@ -4118,6 +4257,7 @@
     "emittedContents": 7500,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 2,
     "maxLivePathBytes": 75264,
@@ -4135,7 +4275,7 @@
    "reason": "content index reservation exceeds references",
    "stage": "subtree st/3-0-0-0.subtree \u00a72a.10",
    "tilesSha256": null,
-   "wallSeconds": 0.08
+   "wallSeconds": 0.274
   },
   {
    "agree": true,
@@ -4147,6 +4287,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 256,
@@ -4164,7 +4305,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "31e106c1ed74c8951be68e019a6e859bdf2ce41b590d1926fa9ad51154ba29b0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.103
   },
   {
    "agree": true,
@@ -4176,6 +4317,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4193,7 +4335,7 @@
    "reason": "normalized template exceeds 1 KiB",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.065
   },
   {
    "agree": true,
@@ -4205,6 +4347,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4222,7 +4365,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.035
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -4234,6 +4377,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4251,7 +4395,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.047
   },
   {
    "agree": true,
@@ -4263,6 +4407,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 1,
     "maxLivePathBytes": 1000,
@@ -4280,7 +4425,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "cfb30dca24c2c33a882ff290a5d04e0732ed7c6d49e005f0385f8e7f73800702",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4292,6 +4437,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 1,
     "maxLivePathBytes": 848,
@@ -4314,7 +4460,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "cfb30dca24c2c33a882ff290a5d04e0732ed7c6d49e005f0385f8e7f73800702",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -4326,6 +4472,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 808,
@@ -4343,7 +4490,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "df3ca41f8a9a337a347bdd9c00cfb3cbdaeda61dacd20292595e1dfa73ad4395",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -4355,6 +4502,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 704,
@@ -4377,7 +4525,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "df3ca41f8a9a337a347bdd9c00cfb3cbdaeda61dacd20292595e1dfa73ad4395",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4389,6 +4537,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 736,
@@ -4406,7 +4555,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "caa2088c0a94265d9820dd514db9bd795ce6a8ac162150d5d94636a9c63cd4d7",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4418,6 +4567,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 688,
@@ -4440,7 +4590,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "caa2088c0a94265d9820dd514db9bd795ce6a8ac162150d5d94636a9c63cd4d7",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -4452,6 +4602,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 696,
@@ -4469,7 +4620,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4481,6 +4632,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 592,
@@ -4503,7 +4655,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4515,6 +4667,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 648,
@@ -4532,7 +4685,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "e565d133bc8ae19a1a4b6c34c01c9f7834acaad3c569b60d38efcd12b001b602",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4544,6 +4697,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 600,
@@ -4566,7 +4720,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "e565d133bc8ae19a1a4b6c34c01c9f7834acaad3c569b60d38efcd12b001b602",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4578,6 +4732,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4595,7 +4750,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4607,6 +4762,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4624,7 +4780,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.051
   },
   {
    "agree": true,
@@ -4636,6 +4792,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 1,
     "maxLivePathBytes": 1000,
@@ -4653,7 +4810,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2786b24c3af7040346abd4015870c3f3c7bdcc356bd43b8908700713b2887ce9",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.088
   },
   {
    "agree": true,
@@ -4665,6 +4822,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 3,
     "maxDepth": 1,
     "maxLivePathBytes": 848,
@@ -4687,7 +4845,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2786b24c3af7040346abd4015870c3f3c7bdcc356bd43b8908700713b2887ce9",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.077
   },
   {
    "agree": true,
@@ -4699,6 +4857,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 808,
@@ -4716,7 +4875,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "04d2a6904da774e38dcd32bdd091667338a89bd530059d9893083867055b307c",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4728,6 +4887,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 704,
@@ -4750,7 +4910,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "04d2a6904da774e38dcd32bdd091667338a89bd530059d9893083867055b307c",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4762,6 +4922,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 736,
@@ -4779,7 +4940,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "d0708625d7d57389848d280ffcf389a2d0f00ce03f31b2554f568245d8063500",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4791,6 +4952,7 @@
     "emittedContents": 2,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 688,
@@ -4813,7 +4975,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "d0708625d7d57389848d280ffcf389a2d0f00ce03f31b2554f568245d8063500",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4825,6 +4987,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 696,
@@ -4842,7 +5005,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4854,6 +5017,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 2,
     "maxDepth": 1,
     "maxLivePathBytes": 592,
@@ -4876,7 +5040,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.048
   },
   {
    "agree": true,
@@ -4888,6 +5052,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 648,
@@ -4905,7 +5070,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "1ec982aafd53ba82b402da00ab314f0f11c95d361500a957e3542bd984b2ed9a",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.049
   },
   {
    "agree": true,
@@ -4917,6 +5082,7 @@
     "emittedContents": 1,
     "explicitNodes": 1,
     "explicitPayloadContents": 0,
+    "externalTilesetLinks": 0,
     "implicitTiles": 1,
     "maxDepth": 0,
     "maxLivePathBytes": 600,
@@ -4939,7 +5105,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "1ec982aafd53ba82b402da00ab314f0f11c95d361500a957e3542bd984b2ed9a",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.085
   },
   {
    "agree": true,
@@ -4951,6 +5117,7 @@
     "emittedContents": 0,
     "explicitNodes": 1,
     "explicitPayloadContents": 1,
+    "externalTilesetLinks": 0,
     "implicitTiles": 0,
     "maxDepth": 0,
     "maxLivePathBytes": 0,
@@ -4968,7 +5135,7 @@
    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
    "stage": "archive",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.101
   }
  ]
 }
