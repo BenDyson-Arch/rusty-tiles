@@ -58,12 +58,12 @@ fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() 
         // ordinal into a short tree, which is one implicit root at the top.
         let forest = forest(&mut zip);
         if identical {
-            assert_eq!(forest.roots.len(), 1);
+            assert_eq!(forest.implicit_roots, 1);
             assert_eq!(forest.explicit, 0);
             assert!(manifest["root"].get("implicitTiling").is_some());
         } else {
             assert!(manifest["root"].get("implicitTiling").is_none());
-            assert!(forest.explicit >= 1 && forest.roots.len() > 1);
+            assert!(forest.explicit >= 1 && forest.implicit_roots > 1);
         }
         let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
             let mut bytes = Vec::new();

@@ -609,10 +609,9 @@ fn convert(
         )?
         .members;
     }
-    tree.operations.member(
-        &output.join("tileset.json"),
-        &serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    // Compact, as the writer measures document budgets on compact JSON.
+    tree.operations
+        .member(&output.join("tileset.json"), &serde_json::to_vec(&manifest)?)?;
     checkpoint(attempt)?;
     let (source_crs, height_offset) = match &request.coordinates {
         PointCloudCoordinates::LocalMetres => ("local".to_owned(), None),
