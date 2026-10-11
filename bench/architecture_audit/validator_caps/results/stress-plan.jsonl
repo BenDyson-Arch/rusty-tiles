@@ -1,0 +1,28 @@
+st-16 {"entries": 65536, "visits": 65536, "references": 65557, "tiles": 65490, "contentReferences": 65534, "externalTilesets": 22, "twoContentTiles": 44, "emptyTiles": 0, "centralDirectoryBytes": 3724371, "maxChildrenPerDocument": 2975}
+st-16-e1 {"entries": 65537, "visits": 65536, "references": 65558, "tiles": 65490, "contentReferences": 65535, "externalTilesets": 22, "twoContentTiles": 45, "emptyTiles": 0, "centralDirectoryBytes": 3724428, "maxChildrenPerDocument": 2975}
+st-16-v1 {"entries": 65536, "visits": 65537, "references": 65557, "tiles": 65491, "contentReferences": 65534, "externalTilesets": 22, "twoContentTiles": 43, "emptyTiles": 0, "centralDirectoryBytes": 3724371, "maxChildrenPerDocument": 2975}
+st-17 {"entries": 131072, "visits": 131072, "references": 131115, "tiles": 130982, "contentReferences": 131070, "externalTilesets": 44, "twoContentTiles": 88, "emptyTiles": 0, "centralDirectoryBytes": 7490883, "maxChildrenPerDocument": 2975}
+st-18 {"entries": 262144, "visits": 262144, "references": 262231, "tiles": 261966, "contentReferences": 262142, "externalTilesets": 88, "twoContentTiles": 176, "emptyTiles": 0, "centralDirectoryBytes": 15092883, "maxChildrenPerDocument": 2975}
+st-18-e1 {"entries": 262145, "visits": 262144, "references": 262232, "tiles": 261966, "contentReferences": 262143, "externalTilesets": 88, "twoContentTiles": 177, "emptyTiles": 0, "centralDirectoryBytes": 15092941, "maxChildrenPerDocument": 2975}
+st-18-v1 {"entries": 262144, "visits": 262145, "references": 262231, "tiles": 261967, "contentReferences": 262142, "externalTilesets": 88, "twoContentTiles": 175, "emptyTiles": 0, "centralDirectoryBytes": 15092883, "maxChildrenPerDocument": 2975}
+st-19 {"entries": 524288, "visits": 524288, "references": 524462, "tiles": 523936, "contentReferences": 524286, "externalTilesets": 175, "twoContentTiles": 350, "emptyTiles": 0, "centralDirectoryBytes": 30296962, "maxChildrenPerDocument": 2992}
+cd-16m {"entries": 65536, "visits": 65536, "references": 65557, "tiles": 65490, "contentReferences": 65534, "externalTilesets": 22, "twoContentTiles": 44, "emptyTiles": 0, "centralDirectoryBytes": 16777216, "maxChildrenPerDocument": 2975}
+cd-16m-p1 {"entries": 65536, "visits": 65536, "references": 65557, "tiles": 65490, "contentReferences": 65534, "externalTilesets": 22, "twoContentTiles": 44, "emptyTiles": 0, "centralDirectoryBytes": 16777217, "maxChildrenPerDocument": 2975}
+cd-32m {"entries": 262144, "visits": 262144, "references": 262231, "tiles": 261966, "contentReferences": 262142, "externalTilesets": 88, "twoContentTiles": 176, "emptyTiles": 0, "centralDirectoryBytes": 33554432, "maxChildrenPerDocument": 2975}
+cd-32m-p1 {"entries": 262144, "visits": 262144, "references": 262231, "tiles": 261966, "contentReferences": 262142, "externalTilesets": 88, "twoContentTiles": 176, "emptyTiles": 0, "centralDirectoryBytes": 33554433, "maxChildrenPerDocument": 2975}
+items-16-array {"valueNodes": 65536, "shape": "array", "tilesetJsonBytes": 131199, "entries": 3}
+items-16-array-p1 {"valueNodes": 65537, "shape": "array", "tilesetJsonBytes": 131201, "entries": 3}
+items-16-object {"valueNodes": 65536, "shape": "object", "tilesetJsonBytes": 2882703, "entries": 3}
+items-17-array {"valueNodes": 131072, "shape": "array", "tilesetJsonBytes": 262271, "entries": 3}
+items-17-array-p1 {"valueNodes": 131073, "shape": "array", "tilesetJsonBytes": 262273, "entries": 3}
+items-17-object {"valueNodes": 131072, "shape": "object", "tilesetJsonBytes": 5766287, "entries": 3}
+member-64m {"memberBytes": 67108864, "entries": 3, "box": [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
+member-64m-p4 {"memberBytes": 67108868, "entries": 3, "box": [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
+member-128m {"memberBytes": 134217728, "entries": 3, "box": [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
+member-128m-p4 {"memberBytes": 134217732, "entries": 3, "box": [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 10]}
+decoded-64m {"decodedViewBytes": 67108864, "memberBytes": 263716, "entries": 3}
+decoded-64m-p4 {"decodedViewBytes": 67108868, "memberBytes": 263720, "entries": 3}
+decoded-128m {"decodedViewBytes": 134217728, "memberBytes": 526116, "entries": 3}
+decoded-128m-p4 {"decodedViewBytes": 134217732, "memberBytes": 526120, "entries": 3}
+se-19 {"entries": 524288, "visits": 262144, "references": 524375, "tiles": 261966, "contentReferences": 524286, "externalTilesets": 88, "extraContents": 262320, "emptyTiles": 0, "centralDirectoryBytes": 30297235, "maxChildrenPerDocument": 2975}
+se-19-e1 {"entries": 524289, "visits": 262144, "references": 524376, "tiles": 261966, "contentReferences": 524287, "externalTilesets": 88, "extraContents": 262321, "emptyTiles": 0, "centralDirectoryBytes": 30297293, "maxChildrenPerDocument": 2975}

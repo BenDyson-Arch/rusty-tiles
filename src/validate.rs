@@ -876,7 +876,12 @@ impl ArchiveResources<'_> {
             .reference_visits
             .checked_add(1)
             .filter(|&n| n <= self.limits.references)
-            .ok_or_else(|| Error::limit("archive exceeds 262,144 reference visits"))?;
+            .ok_or_else(|| {
+                Error::limit(format!(
+                    "archive exceeds {} reference visits",
+                    self.limits.references
+                ))
+            })?;
         if !self.names.contains(&name) {
             return Err(invalid(format!("missing archive entry: {name}")));
         }
@@ -1107,7 +1112,12 @@ impl Check<'_> {
                 .task_visits
                 .checked_add(1)
                 .filter(|&n| n <= self.resources.limits.hierarchy_visits)
-                .ok_or_else(|| Error::limit("hierarchy exceeds 65,536 traversal tasks"))?;
+                .ok_or_else(|| {
+                    Error::limit(format!(
+                        "hierarchy exceeds {} traversal tasks",
+                        self.resources.limits.hierarchy_visits
+                    ))
+                })?;
             match task {
                 ValidationTask::Tileset {
                     name,

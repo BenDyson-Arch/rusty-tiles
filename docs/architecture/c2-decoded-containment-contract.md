@@ -450,14 +450,17 @@ most 129 levels × 344 B, so **≤ 44 KiB**. Dyadics are created from the facts 
 **Phase-1 and precheck facts** (D4):
 
 - Per URI, **120 B**: 4 hull pairs, `sInst`, `sPos`, and `T`, `Nodes`, `Idx`, `E`, `Dec`, `B` and
-  `maxNodeDepth` as u64. The maximum is 65,536 URIs (C1 `archive_entries`), **≤ 7.5 MiB**.
-- Tile arena: at most 65,536 tiles (C1 `hierarchy_visits`) × **≤ 336 B** (transform, own and
-  content volume, parent index, role), so **≤ 21 MiB**.
-- Reference list: at most 262,144 × 16 B, so **≤ 4 MiB**.
+  `maxNodeDepth` as u64. The maximum is 524,288 URIs (C1 `archive_entries`), **≤ 60 MiB**.
+- Tile arena: at most 262,144 tiles (C1 `hierarchy_visits`) × **≤ 336 B** (transform, own and
+  content volume, parent index, role), so **≤ 84 MiB**.
+- Reference list: at most 1,048,576 (C1 `references`) × 16 B, so **≤ 16 MiB**.
 
-**Peak C2-added memory:** at most **about 33.5 MiB** of facts plus **about 0.8 MiB** of phase-2
-working storage at the proposed caps. This excludes C1's own live decode owners and process
-baseline; it is not an RSS claim.
+**Peak C2-added memory:** at most **about 160 MiB** of facts plus **about 0.8 MiB** of phase-2
+working storage at the current caps. This excludes C1's own live decode owners and process
+baseline; it is not an RSS claim. (The C1 entry, visit and reference caps were raised on
+2026-10-11 from 65,536, 65,536 and 262,144, when these figures were 7.5, 21 and 4 MiB, about
+33.5 MiB in total; measured whole-process costs are in
+`bench/architecture_audit/validator_caps`.)
 
 **Allocation failure.** Every one of these reservations is fallible. A refusal is
 **ResourceLimit**, which is outcome 4 in the precedence order. All reservations happen before the

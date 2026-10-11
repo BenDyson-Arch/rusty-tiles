@@ -27,14 +27,16 @@ def main():
     correction = controls / 'polygon_correction/2026-10-10'
     # C2 amendment (2026-10-11): the same fixtures with C2 report expectations derived
     # from the independent C2 oracle; the 2026-10-10 bundles stay as historical evidence.
-    amendment = controls / 'c2_amendment/2026-10-11'
+    # Validator-caps amendment (2026-10-11): the C2-amended bundles with the raised
+    # ValidationLimits defaults in admitted reports; the C2 bundles stay as history.
+    amendment = controls / 'validator_caps_amendment/2026-10-11'
     bundles = [
-        ('corrected205', 'corrected-205-c2-fixtures.tar.gz',
-         'ebf8437f1fc0711688fdef74f7b076939dd55f177bc663159a3527049e5b8481',
-         'fd6004a4cd4074553d5ff08542fdd9b355d2db86c6035c695dc4513be5e3408c', 205),
-        ('polygon5', 'polygon-sensitive-5-c2-fixtures.tar.gz',
-         '94ae2cefc6214ac4ecf1ef972187ecbcd2275f2d44526152be13c46719e50189',
-         '61237a250af51352098dbabeb282859aa38a0528aa9048c19f8aee82aaccca00', 5),
+        ('corrected205', 'corrected-205-caps-fixtures.tar.gz',
+         'b8b0499e456dbc48af4d071d95b12a9765c88add3231c6a73b3fbd07a03035c3',
+         '55057d9df744d977044d909875f1cbed6c981867ff2d30e7e22085796a4c039e', 205),
+        ('polygon5', 'polygon-sensitive-5-caps-fixtures.tar.gz',
+         '7f5488810f3bc69dbdcc49df8e2c420315af7b24b6b0c8f44d4ee5d6c5e95ef4',
+         '3f956fb18f8a7e3e9a42070706a8a105ad197242c5d82f6d13fef5826bcbe9bc', 5),
     ]
     phases = {}
     status = 1
