@@ -16,8 +16,6 @@
 //!   one per resolver read (mirroring the caller's `reference()` charge);
 //! - `scan_remaining` by each subtree's `Scan` (step 2), and by the length of
 //!   every resolver read (mirroring the caller's `read_member` charge).
-// Dead until the validator integration (author B) consumes it in the combined PR.
-#![cfg_attr(not(test), allow(dead_code))]
 
 use super::{FormatError, JsonLimits};
 use serde_json::{Map, Value};
@@ -211,9 +209,6 @@ impl<'s> ImplicitRoot<'s> {
     pub(crate) fn slots(&self) -> u16 {
         // Bounded at admission.
         self.contents.len() as u16
-    }
-    pub(crate) fn scheme(&self) -> Scheme {
-        self.scheme
     }
 }
 
@@ -455,8 +450,6 @@ enum Piece {
 #[derive(Debug)]
 pub(crate) struct Template {
     pieces: Vec<Piece>,
-    /// Normalized UTF-8 length with variables counted as their token text.
-    len: usize,
 }
 
 /// Normalized templates longer than this are Unsupported (DC-1).
@@ -529,11 +522,10 @@ impl Template {
             return Err(unsupported("template variables eliminated by dot-segments"));
         }
         // 6. Length cap.
-        let len = normalized.len();
-        if len > TEMPLATE_CAP {
+        if normalized.len() > TEMPLATE_CAP {
             return Err(unsupported("normalized template exceeds 1 KiB"));
         }
-        normalized.into_template(len)
+        normalized.into_template()
     }
 
     /// The member name of a tile or subtree root: digits substituted into the
@@ -683,7 +675,7 @@ impl Normalized {
         tail.len() >= 5 && tail[tail.len() - 5..].eq_ignore_ascii_case(b".json")
     }
 
-    fn into_template(self, len: usize) -> Result<Template, FormatError> {
+    fn into_template(self) -> Result<Template, FormatError> {
         let mut pieces = Vec::new();
         let mut text = Vec::new();
         let flush = |text: &mut Vec<u8>, pieces: &mut Vec<Piece>| -> Result<(), FormatError> {
@@ -713,7 +705,7 @@ impl Normalized {
             text.extend_from_slice(&self.text[at..end]);
         }
         flush(&mut text, &mut pieces)?;
-        Ok(Template { pieces, len })
+        Ok(Template { pieces })
     }
 }
 
@@ -1222,15 +1214,15 @@ mod tests {
         let padded = format!("{}c/{{level}}-{{x}}-{{y}}-{{z}}.glb", "./".repeat(4000));
         let t = octree(&padded).unwrap();
         assert_eq!(t.text(), "tiles/c/{level}-{x}-{y}-{z}.glb");
-        assert_eq!(t.len, 31);
+        assert_eq!(t.text().len(), 31);
         // R8b: 1,024 normalized bytes (base directory and tokens included).
         let fill = |n: usize| format!("{}/{{level}}/{{x}}/{{y}}.glb", "a".repeat(n));
         let fixed = "tiles/".len() + "/{level}/{x}/{y}.glb".len();
-        assert_eq!(quadtree(&fill(1024 - fixed)).unwrap().len, 1024);
+        assert_eq!(quadtree(&fill(1024 - fixed)).unwrap().text().len(), 1024);
         assert_unsupported(quadtree(&fill(1025 - fixed)), "exceeds 1 KiB");
         // Padding that normalizes away does not count.
         let padded = format!("{}{}", "x/../".repeat(1000), fill(1024 - fixed));
-        assert_eq!(quadtree(&padded).unwrap().len, 1024);
+        assert_eq!(quadtree(&padded).unwrap().text().len(), 1024);
     }
 
     #[test]
@@ -1268,7 +1260,7 @@ mod tests {
         let base = tile(json!({"uri": "c/{level}/{x}/{y}.glb"}));
         let root = admit(&base).unwrap();
         assert_eq!(root.slots(), 1);
-        assert_eq!(root.scheme(), Scheme::Quadtree);
+        assert_eq!(root.scheme, Scheme::Quadtree);
         let set = |path: &[&str], value: Value| {
             let mut t = base.clone();
             let mut at = &mut t;
