@@ -1,0 +1,1786 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "baseline": null,
+    "rasterInset": "1/1024px",
+    "stepTimeoutSeconds": 60.0,
+    "scriptSha256": {
+      "cesium.py": "a4ff2697d80acb5a32a84176d57310d057ff982332870d920f146248087f2b8e",
+      "cesium.cjs": "b2b67479181ccb72832d31951a0ac99de0b12767d3356258465125ffe51c71ce"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        8.381903171539307e-08,
+        51.179343063108306,
+        0.7031249161809684,
+        51.61801646495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.02620000000298,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.3557000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.5051000000089407,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.763300000011921,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.574300000011921,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 3.02620000000298,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 38496360,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-exact",
+        "files": 1,
+        "bytes": 179,
+        "treeSha256": "fe2a85d0b7f1a4070ce588998580816e266c261fa73d961eedd007d8b2171b8f",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-exact/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439453125,
+              51.59755227191364,
+              0.0439453125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439453125,
+              51.158681494684636,
+              0.0439453125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 179
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183846,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-exact.png": "4f26b85ccadbf6c8742ee5e123107b943e90d916505701f830492a9748adef27",
+        "r2-exact-overview.png": "7006f1574a398147481495a46e7f8a8377f876701c70f1ba96b4db20eabb815b",
+        "r2-exact-corner-nw.png": "8dc9c88c98e48e60104617f182df59536b8c745429b62f9261019b329decf162",
+        "r2-exact-corner-ne.png": "162fb4050e04e150c22cdaba14081d201d751159d1d7145ff0e76f27aa287ecd",
+        "r2-exact-corner-sw.png": "996fa991bbb2d90a23b3589cf1a56fe8be64b24e7cdc5d57f12eab15c783e68c",
+        "r2-exact-corner-se.png": "d501ab91e115f206e27fb3574bf1d94cae15ec7aeae71cd6ab10da0f4ef0392a"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        8.381903171539307e-08,
+        51.17934316310831,
+        0.7031248161809684,
+        51.61801636495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.0675999999940395,
+          "changedPixelFraction": 0.8998730977376302,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.483,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.6032999999970197,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.8969000000059604,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.6862000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 3.0675999999940395,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 57942764,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-west-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-west-exact",
+        "files": 1,
+        "bytes": 179,
+        "treeSha256": "02ddec92624e83dcbdd2f2cb225cc739a8d2d3f52f51a59b8f94ab1fabdd0611",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-west-exact/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439453125,
+              51.59755217186855,
+              0.0439453125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755217186855,
+              0.7470702125000002,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439453125,
+              51.15868159472945,
+              0.0439453125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.15868159472945,
+              0.7470702125000002,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-only-west-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 179
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183846,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-only-west-exact.png": "78b1e697671e7d22956c1a33b2200d575f358ac7ed2924722f45ed9aca9ffdbf",
+        "r2-only-west-exact-overview.png": "4cabadc64c59e1bb7abdd4b5eae4b7a8c880ea8a99dfdf64707fb6ae567763ce",
+        "r2-only-west-exact-corner-nw.png": "d94c8192de6ba03eb350edaf1991bcddbb4c8e6c80eef89e4c987c77159dd4a0",
+        "r2-only-west-exact-corner-ne.png": "44486cc06ceb2e6d1e4f61c1622e1d4a9b89141503c7ac8db39ca386e0cb953f",
+        "r2-only-west-exact-corner-sw.png": "1862414fbf1b654db7b441d38e76685d88c2b7449431555766b8e8ff7b5010fc",
+        "r2-only-west-exact-corner-se.png": "709d9569aa307c4d1deeb0ef402239e21a98362b92f9141a0bb3f59e0edfb8d6"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        1.8381903171539306e-07,
+        51.179343063108306,
+        0.7031248161809684,
+        51.61801636495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 5.963100000008941,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.7415,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.0321000000089406,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.1659000000059603,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.6519000000059605,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 5.963100000008941,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 46225922,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-south-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-south-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "78f4cf411cd001c4c99028690f36e4b39fb48a98343d8118c236ef2d690e6e88",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-south-exact/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755217186855,
+              0.0439454125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755217186855,
+              0.7470702125000002,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.158681494684636,
+              0.0439454125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.158681494684636,
+              0.7470702125000002,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-only-south-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183848,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-only-south-exact.png": "17378220aab58056c28d815b45fe8e1b5a081157e456176c98ae17108996b266",
+        "r2-only-south-exact-overview.png": "611a9ce5135dc12b75d71b2c69fe89ec193238b0d4dfec5839995f552c64855c",
+        "r2-only-south-exact-corner-nw.png": "6533831951c5d01d12080a4a5194601078a9fa0f0c859bd7556f656f3a1a2a31",
+        "r2-only-south-exact-corner-ne.png": "44486cc06ceb2e6d1e4f61c1622e1d4a9b89141503c7ac8db39ca386e0cb953f",
+        "r2-only-south-exact-corner-sw.png": "a5d4e2c06a1a2806a0c7e3639c5ecd4319cc129687e7c8308e3585d478eb0c35",
+        "r2-only-south-exact-corner-se.png": "3d4b94a199cfa60abbc109820d70b4e1779e3131e52bfb70043c3322a655247c"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        1.8381903171539306e-07,
+        51.17934316310831,
+        0.7031249161809684,
+        51.61801636495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.362,
+          "changedPixelFraction": 0.8998730977376302,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.3755,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4803000000119209,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.9177000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.5467000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 3.362,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 38401488,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-east-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-east-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "065d667a1cfbacb3707aa02358711b466e915c765afd94545f0ccec655934998",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-east-exact/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755217186855,
+              0.0439454125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755217186855,
+              0.7470703125000001,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.15868159472945,
+              0.0439454125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.15868159472945,
+              0.7470703125000001,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-only-east-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183848,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-only-east-exact.png": "b2ee405ae82245cd6eeba9c15fc9c09f4431f08e2a18912240c97826d9685b62",
+        "r2-only-east-exact-overview.png": "4a172c959d262c634f95851a28687bcb49b6396a8d179781599c303929e65fad",
+        "r2-only-east-exact-corner-nw.png": "6533831951c5d01d12080a4a5194601078a9fa0f0c859bd7556f656f3a1a2a31",
+        "r2-only-east-exact-corner-ne.png": "9be419bc0004a8dd77d73b9475bf4c03e8b92fb50ddc3408792748999fdf5401",
+        "r2-only-east-exact-corner-sw.png": "6599bd19dbb2ffa0ac06fe817e53cc93929018466b7a69a87dbabbe6706abf62",
+        "r2-only-east-exact-corner-se.png": "d240051cf443858f3e9a797c1c7acca08c04db03eccbc5754ea2d6f19bfbbed9"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        1.8381903171539306e-07,
+        51.17934316310831,
+        0.7031248161809684,
+        51.61801646495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.9047000000029803,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4755,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.594,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.9903000000119209,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.6752999999970197,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.9047000000029803,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 38438434,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-north-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-north-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "acd9b5764767d827fdeebfea416cabd2112e172183b9dd49fb7ee003995e5bc1",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-north-exact/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755227191364,
+              0.0439454125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755227191364,
+              0.7470702125000002,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.15868159472945,
+              0.0439454125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.15868159472945,
+              0.7470702125000002,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-only-north-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183848,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-only-north-exact.png": "78b1e697671e7d22956c1a33b2200d575f358ac7ed2924722f45ed9aca9ffdbf",
+        "r2-only-north-exact-overview.png": "cff6e180e1b47b9a93a9ab8e2cbc49e139c41e58a60fbecd91a2a8b70fa7e96b",
+        "r2-only-north-exact-corner-nw.png": "13401d796f80b44bdd731f6466a7ee95b91cfd1eef634efc4ef888f5c840590b",
+        "r2-only-north-exact-corner-ne.png": "30c296eacb3ee8a7f2873e59005905a48c2ede38bf2bf196b96b7060bc915306",
+        "r2-only-north-exact-corner-sw.png": "6599bd19dbb2ffa0ac06fe817e53cc93929018466b7a69a87dbabbe6706abf62",
+        "r2-only-north-exact-corner-se.png": "709d9569aa307c4d1deeb0ef402239e21a98362b92f9141a0bb3f59e0edfb8d6"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        1.8381903171539306e-07,
+        51.179343063108306,
+        0.7031249161809684,
+        51.61801646495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.871399999991059,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.8339000000059604,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.594,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.7527000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.699,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.871399999991059,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 38431992,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-west-nudged",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-west-nudged",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "7f1df4ffa73927217c059b5e91848a6c26e55191a834d27551e8d7c9dc969ad8",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-west-nudged/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755227191364,
+              0.0439454125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.158681494684636,
+              0.0439454125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-west-nudged.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183848,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-west-nudged.png": "4f26b85ccadbf6c8742ee5e123107b943e90d916505701f830492a9748adef27",
+        "r2-west-nudged-overview.png": "266da2b439bb1547d6f03277a714e65f545984f96c61ebf1856723cd95320d42",
+        "r2-west-nudged-corner-nw.png": "13401d796f80b44bdd731f6466a7ee95b91cfd1eef634efc4ef888f5c840590b",
+        "r2-west-nudged-corner-ne.png": "162fb4050e04e150c22cdaba14081d201d751159d1d7145ff0e76f27aa287ecd",
+        "r2-west-nudged-corner-sw.png": "a5d4e2c06a1a2806a0c7e3639c5ecd4319cc129687e7c8308e3585d478eb0c35",
+        "r2-west-nudged-corner-se.png": "d501ab91e115f206e27fb3574bf1d94cae15ec7aeae71cd6ab10da0f4ef0392a"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "imagery: Request has failed. Status Code: 404"
+      ],
+      "providerRectangleDegrees": [
+        0.7031250838190318,
+        51.179343063108306,
+        1.4062499161809685,
+        51.61801646495468
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 1,
+      "probes": [],
+      "usedJSHeapSize": 32398535,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:36475/data/r2-shifted-east/tiles/9/257/170.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:36475/data/r2-shifted-east/tiles/8/128/85.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:36475/data/r2-shifted-east/tiles/9/257/170.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:36475/data/r2-shifted-east/tiles/8/128/85.png",
+          "status": 404
+        }
+      ],
+      "externalRequests": [],
+      "name": "r2-shifted-east",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-shifted-east",
+        "files": 1,
+        "bytes": 194,
+        "treeSha256": "807c445f7da8511b8a0e8c1353d1de47a893fa06e487be94ca0a239f261008f4",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-shifted-east/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              1.3623046875000002,
+              51.59755227191364,
+              1.4501953125000002,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              1.3623046875000002,
+              51.158681494684636,
+              1.4501953125000002,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/r2-shifted-east.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 194
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 5,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 6,
+        "requestBytes": 194,
+        "duplicateRequests": 2,
+        "serverErrors": [
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/170.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/128/85.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/170.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/128/85.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/7/64/42.png",
+            "status": 404,
+            "bytes": 0
+          }
+        ],
+        "imageryColorTypes": {}
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "r2-shifted-east.png": "11cbe32ae945ac8452645899d208ca03aa3151013f3622dfb981ec8637f3a4d6"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 1",
+        "failedRequests: 4",
+        "console errors: 4",
+        "server errors"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        12.656250083819023,
+        41.90227712478273,
+        12.832031166180958,
+        42.03297424862237
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.04679999999702,
+          "changedPixelFraction": 0.953369140625,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.7624000000059605,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.3094000000059607,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.2564000000059603,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.3616000000089405,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 3.04679999999702,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 37218153,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-aligned-z9",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-aligned-z9",
+        "files": 168,
+        "bytes": 18750084,
+        "treeSha256": "d64bbe7f7d656fa5ba0e8572bf41d6a6509b61712c6f3da12e48f2ffb87fdc31",
+        "pngColorTypes": {
+          "RGBA": 113,
+          "RGB": 52
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-aligned-z9/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.612304687499991,
+              42.0084937300404,
+              12.700195312499991,
+              42.0574549348424
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.78808593749999,
+              42.0084937300404,
+              12.87597656249999,
+              42.0574549348424
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.612304687499991,
+              41.87774616312212,
+              12.700195312499991,
+              41.926807918805274
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.78808593749999,
+              41.87774616312212,
+              12.87597656249999,
+              41.926807918805274
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/rome-aligned-z9.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 235
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 113,
+          "bytes": 8250186
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 114,
+        "requestBytes": 8250421,
+        "duplicateRequests": 55,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 58,
+          "RGB": 55
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "rome-aligned-z9.png": "f7532a029528a91df2fd395a771ccea2a7fc195dcda55ce9cafa5c1372b4b7cc",
+        "rome-aligned-z9-overview.png": "226b28da1d248d66cc95bba6928b0c69ab17b755e704f572e08710bf786a88ba",
+        "rome-aligned-z9-corner-nw.png": "ea54c68707250aa1818215d119da246d88c3bf55ec7818ed08dd5b8f4767e268",
+        "rome-aligned-z9-corner-ne.png": "efd0c1bd0e786c55e9e80f6aad7c623db385a52cbf03bc2e204d53059f6fcaec",
+        "rome-aligned-z9-corner-sw.png": "f0a56d644541615fb85bad8e2b25d40cb01d8ac0311b2fa0c0f3b901a57a8afd",
+        "rome-aligned-z9-corner-se.png": "1f1fb3c929bad2428f2e11f6e1a466d3bd2edc26320ac71452ca7111b4cf7c78"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        12.722168052569037,
+        41.85319652158577,
+        12.897949134930974,
+        41.98399418711659
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 5.199,
+          "changedPixelFraction": 0.7069791158040365,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.9325999999940395,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4687000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.5807999999970197,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.3677999999970198,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 5.199,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 37527822,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-aligned-z14-only",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-aligned-z14-only",
+        "files": 142,
+        "bytes": 18750217,
+        "treeSha256": "e14884ce3281a8e4d961101dec39193571d54d572a79dcf65c575fb440bd5e93",
+        "pngColorTypes": {
+          "RGBA": 90,
+          "RGB": 49
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-aligned-z14-only/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.678222656250005,
+              41.95949481239398,
+              12.766113281250005,
+              42.00849372947727
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.854003906250005,
+              41.95949481239398,
+              12.941894531250005,
+              42.00849372947727
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.678222656250005,
+              41.82864671300021,
+              12.766113281250005,
+              41.87774616253327
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.854003906250005,
+              41.82864671300021,
+              12.941894531250005,
+              41.87774616253327
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/rome-aligned-z14-only.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 237
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 123,
+          "bytes": 6392846
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 124,
+        "requestBytes": 6393083,
+        "duplicateRequests": 54,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 89,
+          "RGB": 34
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "rome-aligned-z14-only.png": "8e7d19b36eabb818a2373667c9b40805da56f6be880509e7b880cfcc48c5be52",
+        "rome-aligned-z14-only-overview.png": "8d4c023fbf64e08873293bd00dbae234676834b80a9016b43e5a6fd9193cafd7",
+        "rome-aligned-z14-only-corner-nw.png": "dea1c180dee92890f7b4aa4785af6cb10c4f4a3800b7eaa88f676d344206e0d6",
+        "rome-aligned-z14-only-corner-ne.png": "b1046595a87139e82e752b8c8b28260d19b1099bfa466f14341a400bdcd8fc3a",
+        "rome-aligned-z14-only-corner-sw.png": "59660c3382f21dd15509b7f8d0d2370145f0c1d49c7df9e91ecbc5f889687d3f",
+        "rome-aligned-z14-only-corner-se.png": "fc2063db1aba8fbaa332f02296c86ee19facabcd4dcd6da6c4eef2feb33b166b"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        12.723066367853155,
+        41.852527401807095,
+        12.898847450215092,
+        41.98332643736986
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 4.05729999999702,
+          "changedPixelFraction": 0.7094383239746094,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.8115999999940395,
+          "changedPixelFraction": 0.2511405944824219,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.3725,
+          "changedPixelFraction": 0.2506510416666667,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.8788999999910594,
+          "changedPixelFraction": 0.25048828125,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.6427999999970198,
+          "changedPixelFraction": 0.25,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 4.05729999999702,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 37589568,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-unaligned",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-unaligned",
+        "files": 123,
+        "bytes": 18937949,
+        "treeSha256": "7e628826f032420866e6caf9ff1ac0535c2d49ed3d76904a3e363ed58a76613c",
+        "pngColorTypes": {
+          "RGBA": 85,
+          "RGB": 35
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-unaligned/",
+        "stepMs": 60000,
+        "insetDegrees": [
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08,
+          8.381903171539307e-08
+        ],
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.679120971534124,
+              41.958826805703396,
+              12.767011596534124,
+              42.00782623667439
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.854902221534124,
+              41.958826805703396,
+              12.942792846534124,
+              42.00782623667439
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.679120971534124,
+              41.82797733640434,
+              12.767011596534124,
+              41.87707729957179
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.854902221534124,
+              41.82797733640434,
+              12.942792846534124,
+              41.87707729957179
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-inset/screenshots/rome-unaligned.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 236
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 132,
+          "bytes": 6140644
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 133,
+        "requestBytes": 6140880,
+        "duplicateRequests": 57,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 112,
+          "RGB": 20
+        }
+      },
+      "warnings": [
+        "raster rectangle inset [8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08, 8.381903171539307e-08] degrees: not the exact bounds"
+      ],
+      "captureSha256": {
+        "rome-unaligned.png": "0dc677ffcd53b10b5692e4b5f266e69f1183c88fa1a3a788b4c77829b7db8cee",
+        "rome-unaligned-overview.png": "9d4a3d2cf7cfbfe0efccdf49fe8292c7cdf9613ae3a6c37a1b71b253315ba8a7",
+        "rome-unaligned-corner-nw.png": "7a0e3f8556d40abd043729c603c827837556464f6274a68db253ba0ee745136c",
+        "rome-unaligned-corner-ne.png": "e5347c2104d4806739de830c39f0ed8d85451d7297c8f5379faf314d5d0a2ec0",
+        "rome-unaligned-corner-sw.png": "8f7bbeabe524d01eec6b4ad4504ac59f7c9829226be354d8561a20ea9ac454a0",
+        "rome-unaligned-corner-se.png": "eb84eca99b48b906212a0fd33c5cf635797a6ee4d37a901c3b91c5172043e0eb"
+      },
+      "problems": []
+    }
+  ]
+}

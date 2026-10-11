@@ -123,3 +123,5 @@ reading.
   `checks`/`notInspected`, so they needed no amendment.
 - The C2 oracle finds no Outside among their archives either.
 - `stride_parent_control` has no admitted case, so it needed no amendment.
+
+The amended stride lane copies only the fixtures and runner inputs. The original lane's compiled `.rs` controls, binding JSON and README remain authoritative at their original path, which `src/lib.rs` compiles.

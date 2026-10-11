@@ -1,0 +1,48 @@
+{
+  "description": "R2 current-develop raster output used by r2-cesium-*.json (r2-develop-f2238cd case)",
+  "binary": {
+    "path": "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd",
+    "sha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+    "build": "develop f2238cd native release"
+  },
+  "source": {
+    "path": "/tmp/r2-bench-20261011/src.tif",
+    "sha256": "b1caf09161fc1465c5016c45046b2212884b7bf5b17c78207ab59b367152e96e"
+  },
+  "command": [
+    "rusty-tiles",
+    "raster",
+    "-i",
+    "src.tif",
+    "-o",
+    "out2",
+    "--minZoom",
+    "9",
+    "--maxZoom",
+    "14",
+    "--jobs",
+    "2"
+  ],
+  "environment": {
+    "PATH": "",
+    "RAYON_NUM_THREADS": "2",
+    "PROJ_NETWORK": "OFF",
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "niceness": 10
+  },
+  "measurement": {
+    "exitCode": 0,
+    "wallSeconds": 27.63738838399877,
+    "cpuSeconds": 21.497581,
+    "peakRssMiB": 276.14453125,
+    "foreignCpuSeconds": 33.612419,
+    "outputBytes": 404853900,
+    "members": 1494,
+    "digest": "cdda39ab899b97a40fe63e7e1aac6319724b86194fa10981b109d465c779d43c",
+    "tiles": 1491
+  },
+  "note": "Single run under heavy contention on CPUs 0,1 (foreignCpuSeconds); wall time is not a clean benchmark. Earlier recorded runs in /tmp/r2-bench-20261011/result.json: out0 13.12 s/726 MiB, out1 12.14 s/264 MiB (different conditions)."
+}

@@ -1,0 +1,1635 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "baseline": null,
+    "rasterInset": null,
+    "stepTimeoutSeconds": 60.0,
+    "scriptSha256": {
+      "cesium.py": "a4ff2697d80acb5a32a84176d57310d057ff982332870d920f146248087f2b8e",
+      "cesium.cjs": "b2b67479181ccb72832d31951a0ac99de0b12767d3356258465125ffe51c71ce"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        0,
+        51.179342979289274,
+        0.7031250000000001,
+        51.61801654877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 27071215,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-exact",
+        "files": 1,
+        "bytes": 179,
+        "treeSha256": "fe2a85d0b7f1a4070ce588998580816e266c261fa73d961eedd007d8b2171b8f",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-exact/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439453125,
+              51.59755227191364,
+              0.0439453125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439453125,
+              51.158681494684636,
+              0.0439453125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 179
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 2,
+          "bytes": 151674
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 3,
+        "requestBytes": 151853,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 2
+        }
+      },
+      "captureSha256": {
+        "r2-exact.png": "077326ba3b21ea26980693ae0054b1dc498b826d9c90f56577e3c4a4adc3b9ef"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        0,
+        51.179343079289275,
+        0.7031249000000002,
+        51.61801644877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.7115,
+          "changedPixelFraction": 0.8998730977376302,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4652999999970198,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4622000000029802,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.8787999999970197,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.5334000000059604,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.7115,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 38557810,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-west-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-west-exact",
+        "files": 1,
+        "bytes": 179,
+        "treeSha256": "02ddec92624e83dcbdd2f2cb225cc739a8d2d3f52f51a59b8f94ab1fabdd0611",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-west-exact/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439453125,
+              51.59755217186855,
+              0.0439453125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755217186855,
+              0.7470702125000002,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439453125,
+              51.15868159472945,
+              0.0439453125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.15868159472945,
+              0.7470702125000002,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-only-west-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 179
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 44,
+          "bytes": 5183667
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 45,
+        "requestBytes": 5183846,
+        "duplicateRequests": 17,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 15,
+          "RGB": 29
+        }
+      },
+      "captureSha256": {
+        "r2-only-west-exact.png": "78b1e697671e7d22956c1a33b2200d575f358ac7ed2924722f45ed9aca9ffdbf",
+        "r2-only-west-exact-overview.png": "4cabadc64c59e1bb7abdd4b5eae4b7a8c880ea8a99dfdf64707fb6ae567763ce",
+        "r2-only-west-exact-corner-nw.png": "d94c8192de6ba03eb350edaf1991bcddbb4c8e6c80eef89e4c987c77159dd4a0",
+        "r2-only-west-exact-corner-ne.png": "44486cc06ceb2e6d1e4f61c1622e1d4a9b89141503c7ac8db39ca386e0cb953f",
+        "r2-only-west-exact-corner-sw.png": "1862414fbf1b654db7b441d38e76685d88c2b7449431555766b8e8ff7b5010fc",
+        "r2-only-west-exact-corner-se.png": "709d9569aa307c4d1deeb0ef402239e21a98362b92f9141a0bb3f59e0edfb8d6"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        1e-07,
+        51.179342979289274,
+        0.7031249000000002,
+        51.61801644877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 26956578,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-south-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-south-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "78f4cf411cd001c4c99028690f36e4b39fb48a98343d8118c236ef2d690e6e88",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-south-exact/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755217186855,
+              0.0439454125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755217186855,
+              0.7470702125000002,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.158681494684636,
+              0.0439454125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.158681494684636,
+              0.7470702125000002,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-only-south-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 1,
+          "bytes": 149328
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 2,
+        "requestBytes": 149509,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 1
+        }
+      },
+      "captureSha256": {
+        "r2-only-south-exact.png": "23d2cafca349a21c99bccb9d3e814454f4ffcae7c261e3d2eb7f54c383dcbee4"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        1e-07,
+        51.179343079289275,
+        0.7031250000000001,
+        51.61801644877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 27546181,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-east-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-east-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "065d667a1cfbacb3707aa02358711b466e915c765afd94545f0ccec655934998",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-east-exact/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755217186855,
+              0.0439454125,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755217186855,
+              0.7470703125000001,
+              51.63848072567887
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.15868159472945,
+              0.0439454125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.15868159472945,
+              0.7470703125000001,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-only-east-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 1,
+          "bytes": 149328
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 2,
+        "requestBytes": 149509,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 1
+        }
+      },
+      "captureSha256": {
+        "r2-only-east-exact.png": "e9a72c4736bc826b5ee30a4eafaa21405429d179eaa29a82f2c154b78c13143a"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        1e-07,
+        51.179343079289275,
+        0.7031249000000002,
+        51.61801654877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 4.10659999999404,
+          "changedPixelFraction": 0.8995641072591146,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.0245999999940394,
+          "changedPixelFraction": 0.5,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.7682999999970197,
+          "changedPixelFraction": 0.5,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.9002999999970198,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.527199999988079,
+          "changedPixelFraction": 1,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 4.10659999999404,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 51725562,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-only-north-exact",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-only-north-exact",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "acd9b5764767d827fdeebfea416cabd2112e172183b9dd49fb7ee003995e5bc1",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-only-north-exact/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755227191364,
+              0.0439454125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591795875000002,
+              51.59755227191364,
+              0.7470702125000002,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.15868159472945,
+              0.0439454125,
+              51.2000045638491
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591795875000002,
+              51.15868159472945,
+              0.7470702125000002,
+              51.2000045638491
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-only-north-exact.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 62,
+          "bytes": 5225895
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 63,
+        "requestBytes": 5226076,
+        "duplicateRequests": 24,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 33,
+          "RGB": 29
+        }
+      },
+      "captureSha256": {
+        "r2-only-north-exact.png": "78b1e697671e7d22956c1a33b2200d575f358ac7ed2924722f45ed9aca9ffdbf",
+        "r2-only-north-exact-overview.png": "4262e14105837a33f34778592ac7e2227ac8c97a9e0b0b41f693496643fbd082",
+        "r2-only-north-exact-corner-nw.png": "9eb84f59540bf0d361a2bf3658232f02d563652c8887685c87941c4bb84e3ba7",
+        "r2-only-north-exact-corner-ne.png": "15a3ed3ed7e9980781dfc0a285539eec07e43ec1177cfd1d3e2042eecdba8a07",
+        "r2-only-north-exact-corner-sw.png": "6599bd19dbb2ffa0ac06fe817e53cc93929018466b7a69a87dbabbe6706abf62",
+        "r2-only-north-exact-corner-se.png": "709d9569aa307c4d1deeb0ef402239e21a98362b92f9141a0bb3f59e0edfb8d6"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        1e-07,
+        51.179342979289274,
+        0.7031250000000001,
+        51.61801654877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 27065237,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-west-nudged",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-west-nudged",
+        "files": 1,
+        "bytes": 181,
+        "treeSha256": "7f1df4ffa73927217c059b5e91848a6c26e55191a834d27551e8d7c9dc969ad8",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-west-nudged/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              -0.0439452125,
+              51.59755227191364,
+              0.0439454125,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              -0.0439452125,
+              51.158681494684636,
+              0.0439454125,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-west-nudged.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 181
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 2,
+          "bytes": 151674
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 3,
+        "requestBytes": 151855,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 2
+        }
+      },
+      "captureSha256": {
+        "r2-west-nudged.png": "077326ba3b21ea26980693ae0054b1dc498b826d9c90f56577e3c4a4adc3b9ef"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "imagery: Request has failed. Status Code: 404",
+        "imagery: Request has failed. Status Code: 404",
+        "imagery: Request has failed. Status Code: 404",
+        "imagery: Request has failed. Status Code: 404"
+      ],
+      "providerRectangleDegrees": [
+        0.7031250000000001,
+        51.179342979289274,
+        1.4062500000000002,
+        51.61801654877371
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "imageryErrors": 4,
+      "probes": [],
+      "usedJSHeapSize": 32788683,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)",
+          "Failed to load resource: the server responded with a status of 404 (File not found)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/257/169.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/257/170.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/258/169.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/258/170.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/8/128/84.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/8/128/85.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/8/129/84.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/8/129/85.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/257/169.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/258/169.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/258/170.png",
+          "status": 404
+        },
+        {
+          "url": "http://127.0.0.1:37193/data/r2-shifted-east/tiles/9/257/170.png",
+          "status": 404
+        }
+      ],
+      "externalRequests": [],
+      "name": "r2-shifted-east",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/r2-shifted-east",
+        "files": 1,
+        "bytes": 194,
+        "treeSha256": "807c445f7da8511b8a0e8c1353d1de47a893fa06e487be94ca0a239f261008f4",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/r2-shifted-east/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              0.6591796875000001,
+              51.59755227191364,
+              0.7470703125000001,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              1.3623046875000002,
+              51.59755227191364,
+              1.4501953125000002,
+              51.63848082563378
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              0.6591796875000001,
+              51.158681494684636,
+              0.7470703125000001,
+              51.20000446389391
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              1.3623046875000002,
+              51.158681494684636,
+              1.4501953125000002,
+              51.20000446389391
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/r2-shifted-east.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 194
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 12,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 13,
+        "requestBytes": 194,
+        "duplicateRequests": 4,
+        "serverErrors": [
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/169.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/170.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/258/169.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/258/170.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/128/84.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/128/85.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/129/84.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/8/129/85.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/169.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/258/169.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/258/170.png",
+            "status": 404,
+            "bytes": 0
+          },
+          {
+            "path": "/data/r2-shifted-east/tiles/9/257/170.png",
+            "status": 404,
+            "bytes": 0
+          }
+        ],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "r2-shifted-east.png": "01accc386cab0dd5261f4b7c176e2bc08cfbf2597a944d2efdb1d2a5147e23ac"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view overview bare-globe reference did not settle",
+        "failures: 4",
+        "failedRequests: 12",
+        "console errors: 13",
+        "server errors"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        12.656249999999991,
+        41.902277040963696,
+        12.83203124999999,
+        42.0329743324414
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.3020999999940397,
+          "changedPixelFraction": 0.8295249938964844,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.7446000000089408,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.074,
+          "changedPixelFraction": 0.5,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "secondsToLoaded": 3.3020999999940397,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 35034480,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86585)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-aligned-z9",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-aligned-z9",
+        "files": 168,
+        "bytes": 18750084,
+        "treeSha256": "d64bbe7f7d656fa5ba0e8572bf41d6a6509b61712c6f3da12e48f2ffb87fdc31",
+        "pngColorTypes": {
+          "RGBA": 113,
+          "RGB": 52
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-aligned-z9/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.612304687499991,
+              42.0084937300404,
+              12.700195312499991,
+              42.0574549348424
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.78808593749999,
+              42.0084937300404,
+              12.87597656249999,
+              42.0574549348424
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.612304687499991,
+              41.87774616312212,
+              12.700195312499991,
+              41.926807918805274
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.78808593749999,
+              41.87774616312212,
+              12.87597656249999,
+              41.926807918805274
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/rome-aligned-z9.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 235
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 75,
+          "bytes": 4324851
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 76,
+        "requestBytes": 4325086,
+        "duplicateRequests": 22,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 59,
+          "RGB": 16
+        }
+      },
+      "captureSha256": {
+        "rome-aligned-z9.png": "01accc386cab0dd5261f4b7c176e2bc08cfbf2597a944d2efdb1d2a5147e23ac",
+        "rome-aligned-z9-overview.png": "a30af4d5b6c689b77e5f11ab772da66794da9071a4f3718e8c26abfa358d9d73",
+        "rome-aligned-z9-corner-nw.png": "ea54c68707250aa1818215d119da246d88c3bf55ec7818ed08dd5b8f4767e268",
+        "rome-aligned-z9-corner-ne.png": "eb57c08e242dd2c9bc19f148c216187685a36301d28b10c72ded04fe449613ad"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view corner-sw bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [
+        "renderError: TypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86605)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+      ],
+      "providerRectangleDegrees": [
+        12.722167968750005,
+        41.85319643776674,
+        12.897949218750005,
+        41.983994270935625
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 4.837,
+          "changedPixelFraction": 0.7069791158040365,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.3249000000059605,
+          "changedPixelFraction": 1,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.7310999999940395,
+          "changedPixelFraction": 0.5,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": false,
+          "backgroundSettled": false
+        }
+      ],
+      "loaded": false,
+      "secondsToLoaded": 4.837,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 34952228,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [
+          "An error occurred while rendering.  Rendering has stopped.\nTypeError: Cannot read properties of undefined (reading 'west')\nTypeError: Cannot read properties of undefined (reading 'west')\n    at e.southwest (http://127.0.0.1:37193/cesium/Cesium.js:80:29702)\n    at _6.rectangleToNativeRectangle (http://127.0.0.1:37193/cesium/Cesium.js:4075:33058)\n    at Qi._createTileImagerySkeletons (http://127.0.0.1:37193/cesium/Cesium.js:9254:7129)\n    at JWt (http://127.0.0.1:37193/cesium/Cesium.js:14822:7232)\n    at e.initialize (http://127.0.0.1:37193/cesium/Cesium.js:14822:3450)\n    at e.processStateMachine (http://127.0.0.1:37193/cesium/Cesium.js:14822:3529)\n    at e.loadTile (http://127.0.0.1:37193/cesium/Cesium.js:14822:33728)\n    at Gse (http://127.0.0.1:37193/cesium/Cesium.js:14822:86873)\n    at l2t (http://127.0.0.1:37193/cesium/Cesium.js:14822:86605)\n    at Wh.endFrame (http://127.0.0.1:37193/cesium/Cesium.js:14822:78504)"
+        ],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-aligned-z14-only",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-aligned-z14-only",
+        "files": 142,
+        "bytes": 18750217,
+        "treeSha256": "e14884ce3281a8e4d961101dec39193571d54d572a79dcf65c575fb440bd5e93",
+        "pngColorTypes": {
+          "RGBA": 90,
+          "RGB": 49
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-aligned-z14-only/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.678222656250005,
+              41.95949481239398,
+              12.766113281250005,
+              42.00849372947727
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.854003906250005,
+              41.95949481239398,
+              12.941894531250005,
+              42.00849372947727
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.678222656250005,
+              41.82864671300021,
+              12.766113281250005,
+              41.87774616253327
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.854003906250005,
+              41.82864671300021,
+              12.941894531250005,
+              41.87774616253327
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/rome-aligned-z14-only.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 237
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 93,
+          "bytes": 4658800
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 94,
+        "requestBytes": 4659037,
+        "duplicateRequests": 30,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 76,
+          "RGB": 17
+        }
+      },
+      "captureSha256": {
+        "rome-aligned-z14-only.png": "01accc386cab0dd5261f4b7c176e2bc08cfbf2597a944d2efdb1d2a5147e23ac",
+        "rome-aligned-z14-only-overview.png": "8d4c023fbf64e08873293bd00dbae234676834b80a9016b43e5a6fd9193cafd7",
+        "rome-aligned-z14-only-corner-nw.png": "dea1c180dee92890f7b4aa4785af6cb10c4f4a3800b7eaa88f676d344206e0d6",
+        "rome-aligned-z14-only-corner-ne.png": "d57342829d822a61fca6854fbeac19db0c5089ede8f30fd1d912ba06bf95f6cb"
+      },
+      "problems": [
+        "load failed or timed out",
+        "view corner-sw bare-globe reference did not settle",
+        "failures: 1",
+        "console errors: 1"
+      ]
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        12.723066284034124,
+        41.85252731798806,
+        12.898847534034124,
+        41.98332652118889
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.6112999999970197,
+          "changedPixelFraction": 0.7094383239746094,
+          "probes": []
+        },
+        {
+          "name": "corner-nw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.5528999999910593,
+          "changedPixelFraction": 0.2511405944824219,
+          "probes": []
+        },
+        {
+          "name": "corner-ne",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.1626999999880792,
+          "changedPixelFraction": 0.2506510416666667,
+          "probes": []
+        },
+        {
+          "name": "corner-sw",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.4872999999970198,
+          "changedPixelFraction": 0.25048828125,
+          "probes": []
+        },
+        {
+          "name": "corner-se",
+          "loaded": true,
+          "backgroundSettled": true,
+          "secondsToLoaded": 1.3485,
+          "changedPixelFraction": 0.25,
+          "probes": []
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 3.6112999999970197,
+      "imageryErrors": 0,
+      "probes": [],
+      "usedJSHeapSize": 50509212,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "rome-unaligned",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/isolation/variants/rome-unaligned",
+        "files": 123,
+        "bytes": 18937949,
+        "treeSha256": "7e628826f032420866e6caf9ff1ac0535c2d49ed3d76904a3e363ed58a76613c",
+        "pngColorTypes": {
+          "RGBA": 85,
+          "RGB": 35
+        }
+      },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/rome-unaligned/",
+        "stepMs": 60000,
+        "views": [
+          {
+            "name": "corner-nw",
+            "rect": [
+              12.679120971534124,
+              41.958826805703396,
+              12.767011596534124,
+              42.00782623667439
+            ]
+          },
+          {
+            "name": "corner-ne",
+            "rect": [
+              12.854902221534124,
+              41.958826805703396,
+              12.942792846534124,
+              42.00782623667439
+            ]
+          },
+          {
+            "name": "corner-sw",
+            "rect": [
+              12.679120971534124,
+              41.82797733640434,
+              12.767011596534124,
+              41.87707729957179
+            ]
+          },
+          {
+            "name": "corner-se",
+            "rect": [
+              12.854902221534124,
+              41.82797733640434,
+              12.942792846534124,
+              41.87707729957179
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 960.0,
+      "screenshot": "/home/bend/.cache/perf-lane/work/isolation/cesium-exact/screenshots/rome-unaligned.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 236
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 132,
+          "bytes": 6140644
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 133,
+        "requestBytes": 6140880,
+        "duplicateRequests": 57,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 112,
+          "RGB": 20
+        }
+      },
+      "captureSha256": {
+        "rome-unaligned.png": "0dc677ffcd53b10b5692e4b5f266e69f1183c88fa1a3a788b4c77829b7db8cee",
+        "rome-unaligned-overview.png": "9d4a3d2cf7cfbfe0efccdf49fe8292c7cdf9613ae3a6c37a1b71b253315ba8a7",
+        "rome-unaligned-corner-nw.png": "7a0e3f8556d40abd043729c603c827837556464f6274a68db253ba0ee745136c",
+        "rome-unaligned-corner-ne.png": "e5347c2104d4806739de830c39f0ed8d85451d7297c8f5379faf314d5d0a2ec0",
+        "rome-unaligned-corner-sw.png": "8f7bbeabe524d01eec6b4ad4504ac59f7c9829226be354d8561a20ea9ac454a0",
+        "rome-unaligned-corner-se.png": "eb84eca99b48b906212a0fd33c5cf635797a6ee4d37a901c3b91c5172043e0eb"
+      },
+      "problems": []
+    }
+  ]
+}
