@@ -34,14 +34,16 @@ macro_rules! record {
         }
     }
 }
-record!(Root {asset=>"asset", used=>"extensionsUsed", required=>"extensionsRequired", buffers=>"buffers", views=>"bufferViews", accessors=>"accessors", meshes=>"meshes", images=>"images", textures=>"textures", samplers=>"samplers", materials=>"materials", extensions=>"extensions"});
+record!(Root {asset=>"asset", used=>"extensionsUsed", required=>"extensionsRequired", buffers=>"buffers", views=>"bufferViews", accessors=>"accessors", meshes=>"meshes", images=>"images", textures=>"textures", samplers=>"samplers", materials=>"materials", extensions=>"extensions", scene=>"scene", scenes=>"scenes", nodes=>"nodes", skins=>"skins", animations=>"animations"});
 record!(Asset {version=>"version", minimum=>"minVersion"});
 record!(Buffer {length=>"byteLength", uri=>"uri", extensions=>"extensions"});
 record!(View {buffer=>"buffer", length=>"byteLength", offset=>"byteOffset", stride=>"byteStride", target=>"target", extensions=>"extensions"});
 record!(Meshopt {buffer=>"buffer", offset=>"byteOffset", length=>"byteLength", count=>"count", stride=>"byteStride", mode=>"mode", filter=>"filter"});
 record!(Accessor {count=>"count", component=>"componentType", shape=>"type", view=>"bufferView", offset=>"byteOffset", normalized=>"normalized", min=>"min", max=>"max", sparse=>"sparse"});
-record!(Mesh {primitives=>"primitives"});
-record!(Primitive {mode=>"mode", indices=>"indices", material=>"material", attributes=>"attributes", extensions=>"extensions"});
+record!(Mesh {primitives=>"primitives", weights=>"weights"});
+record!(Primitive {mode=>"mode", indices=>"indices", material=>"material", attributes=>"attributes", extensions=>"extensions", targets=>"targets"});
+record!(Scene {nodes=>"nodes"});
+record!(Node {children=>"children", mesh=>"mesh", skin=>"skin", matrix=>"matrix", translation=>"translation", rotation=>"rotation", scale=>"scale", weights=>"weights"});
 record!(Polygon {count=>"count", offsets=>"indicesOffsets", loops=>"loopIndices", loop_offsets=>"loopIndicesOffsets"});
 record!(Image {uri=>"uri", view=>"bufferView"});
 record!(Texture {source=>"source", sampler=>"sampler"});
@@ -51,7 +53,8 @@ record!(TextureInfo {index=>"index"});
 record!(Extensions {meshopt=>"EXT_meshopt_compression", polygon=>"EXT_mesh_polygon", draco=>"KHR_draco_mesh_compression", metadata=>"EXT_structural_metadata"});
 record!(Fallback {fallback=>"fallback"});
 record!(Metadata {uri=>"schemaUri"});
-record!(FeatureTable {batch_length=>"BATCH_LENGTH"});
+// RTC_CENTER is consumed for key presence only, in either JSON or binary-reference form.
+record!(FeatureTable {batch_length=>"BATCH_LENGTH", rtc_center=>"RTC_CENTER"});
 
 pub(super) fn record<'a, T: Deserialize<'a>>(raw: Raw<'a>) -> FormatResult<T> {
     let raw = raw.ok_or_else(|| invalid("missing object record"))?;
