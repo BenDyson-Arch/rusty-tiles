@@ -1,0 +1,471 @@
+{
+ "disagreements": 0,
+ "results": [
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "W2.f2238cd",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "R1.431",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 430
+   },
+   "expected": "ResourceLimit:hierarchy_visits",
+   "id": "R1.430",
+   "oracle": "ResourceLimit:hierarchy_visits",
+   "reason": "hierarchy visits exceed limit",
+   "stage": "exit tileset tileset.json",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "R2b.W2.190944",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "R2b.W2.246583",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "R2b.W2.190943",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 283214,
+    "classScans": 1,
+    "contentReferences": 428,
+    "cumulativeSubtreeBytes": 246584,
+    "emittedContents": 428,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 428,
+    "maxDepth": 4,
+    "maxLivePathBytes": 23864,
+    "referencesCharged": 662,
+    "roots": 1,
+    "scanBytes": 35144,
+    "subtrees": 234,
+    "tiles": 428,
+    "tilesets": 1,
+    "visits": 431
+   },
+   "expected": "Accepted",
+   "id": "R2.W2.live",
+   "oracle": "Accepted",
+   "reason": null,
+   "stage": null,
+   "tilesSha256": "c4a92ccee8ebdcfdcfdc10f2ca98f2e5f5d5fd2c593a34407117cfd9f8c506ec",
+   "unreferencedMembers": [
+    "conversion.json"
+   ]
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 25050,
+    "classScans": 1,
+    "contentReferences": 6,
+    "cumulativeSubtreeBytes": 22904,
+    "emittedContents": 6,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 6,
+    "maxDepth": 3,
+    "maxLivePathBytes": 22904,
+    "referencesCharged": 197,
+    "roots": 1,
+    "scanBytes": 660,
+    "subtrees": 1,
+    "tiles": 6,
+    "tilesets": 1,
+    "visits": 197
+   },
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "id": "R2.W2.live-1",
+   "oracle": "ResourceLimit:document_decoded_bytes",
+   "reason": "live-path subtree bytes exceed document_decoded_bytes",
+   "stage": "subtree subtrees/4-3-2-6.subtree",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 1588,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W3u.f2238cd",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[1]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 41102,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W5u.f2238cd",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[1]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 732,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-none",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[2]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 735,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-rename-class",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[2]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 718,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-none",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[2]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "agree": true,
+   "counts": {
+    "bytesReadModelled": 721,
+    "classScans": 0,
+    "contentReferences": 0,
+    "cumulativeSubtreeBytes": 0,
+    "emittedContents": 0,
+    "explicitNodes": 1,
+    "explicitPayloadContents": 0,
+    "implicitTiles": 0,
+    "maxDepth": 0,
+    "maxLivePathBytes": 0,
+    "referencesCharged": 0,
+    "roots": 0,
+    "scanBytes": 0,
+    "subtrees": 0,
+    "tiles": 1,
+    "tilesets": 1,
+    "visits": 2
+   },
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-rename-class",
+   "oracle": "Unsupported",
+   "reason": "external tileset content template",
+   "stage": "root admission in tileset.json/template[2]",
+   "tilesSha256": null,
+   "unreferencedMembers": null
+  },
+  {
+   "id": "W1",
+   "status": "pending"
+  },
+  {
+   "id": "W2",
+   "status": "pending"
+  },
+  {
+   "id": "W3",
+   "status": "pending"
+  },
+  {
+   "id": "W4",
+   "status": "pending"
+  },
+  {
+   "id": "W5",
+   "status": "pending"
+  },
+  {
+   "id": "W6",
+   "status": "pending"
+  },
+  {
+   "id": "W6d",
+   "status": "pending"
+  },
+  {
+   "id": "W7",
+   "status": "pending"
+  },
+  {
+   "id": "W8s",
+   "status": "pending"
+  },
+  {
+   "id": "W8m",
+   "status": "pending"
+  },
+  {
+   "id": "W10",
+   "status": "pending"
+  },
+  {
+   "id": "W11",
+   "status": "pending"
+  }
+ ]
+}

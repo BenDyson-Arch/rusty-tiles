@@ -1,0 +1,225 @@
+{
+ "artifacts": [
+  {
+   "expected": "Accepted",
+   "id": "W2.f2238cd",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "W2 (428 tiles, 234 subtrees; visits 431)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R1.431",
+   "limits": {
+    "hierarchy_visits": 431
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "R1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "ResourceLimit:hierarchy_visits",
+   "id": "R1.430",
+   "limits": {
+    "hierarchy_visits": 430
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "R1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.190944",
+   "limits": {
+    "document_decoded_bytes": 190944
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "R2b lower bound (DC-8; R confirms C1's threshold by execution)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.246583",
+   "limits": {
+    "document_decoded_bytes": 246583
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "R2b upper bound (cumulative 246,584 - 1)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2b.W2.190943",
+   "limits": {
+    "document_decoded_bytes": 190943
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "production": "ResourceLimit (C1 payload view budget; outside the oracle)",
+   "ref": "R2b below C1's view budget",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "R2.W2.live",
+   "limits": {
+    "document_decoded_bytes": 23864
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "production": "ResourceLimit (C1)",
+   "ref": "live-path cap = W2 maximum live sum 23,864 (C1 alone refuses first in production)",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "id": "R2.W2.live-1",
+   "limits": {
+    "document_decoded_bytes": 23863
+   },
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "ref": "live-path cap - 1",
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W3u.f2238cd",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-deep.3tz",
+   "ref": "W3u (chunked point default, JSON template)",
+   "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W5u.f2238cd",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf.3tz",
+   "ref": "W5u (vector default on perf input, JSON template)",
+   "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-none",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/octree-none.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "ec03367bd6f60c238119e09d6dab9559efc3294d45f3d306d7234ac1409cb186",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.octree-rename-class",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/octree-rename-class.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "8207c53993c7d2c12441f1b3eca5b7e1600b5332291cb538f452d5f514cfae61",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-none",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/quadtree-none.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "95555c703170dc0b3a0c478800d029098e35f1f5a91434b5585f0f92132ab8fe",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W9u.coordinator.quadtree-rename-class",
+   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/quadtree-rename-class.3tz",
+   "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
+   "sha256": "2fbaffdc639f495b35896238782cba45d7414c26c474e41cf3711fb275500415",
+   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W1",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "point-cloud default cloud.las --maxPoints 1000 (73 tiles)",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W2",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "point-cloud default perf points.las --maxPoints 2000, on the combined head",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W3",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "point-cloud cloud.las --maxPoints 40, on P",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W4",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "vector default x6",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W5",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "vector default perf, on P",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W6",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "legacy mesh-to-3tz split.gltf",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W6d",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "legacy deep mesh, on P",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W7",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "legacy small mesh (ADD)",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W8s",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "single-node convert archive 460c2505...",
+   "status": "pending"
+  },
+  {
+   "expected": "Unsupported",
+   "id": "W8m",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "multi-node convert archive (A2-retained)",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W10",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "native and portable builds of W4/W5 (as W4/W5)",
+   "status": "pending"
+  },
+  {
+   "expected": "Accepted",
+   "id": "W11",
+   "note": "R supplies the file and sha256 on the combined head",
+   "ref": "P's new-layout outputs; production facts equal to O (merge gate)",
+   "status": "pending"
+  }
+ ],
+ "contract": "9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496",
+ "rulings": "52b01d2b71436bcae5ecfb005693122559a794020c9d4522af40803a0c6898a3"
+}
