@@ -1,0 +1,3233 @@
+{
+ "cases": [
+  {
+   "bytes": 19094,
+   "expected": "Accepted",
+   "file": "fixtures/BQ.3tz",
+   "id": "BQ",
+   "limits": {},
+   "members": 28,
+   "ref": "base (QUADTREE L=3 A=6, rows, one slot, bitstreams)",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+  },
+  {
+   "bytes": 11023,
+   "expected": "Accepted",
+   "file": "fixtures/BO.3tz",
+   "id": "BO",
+   "limits": {},
+   "members": 15,
+   "ref": "base (OCTREE L=2 A=3, transform, two slots, contentMetadata)",
+   "sha256": "42808d67093ba6655c185c5ee9d7431ccba92b5cac49c4ed4b25b845f38b33a4"
+  },
+  {
+   "bytes": 18472,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1696"
+    },
+    "removed": [
+     "content/1/1/0.glb"
+    ]
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-1.3tz",
+   "id": "A-1",
+   "limits": {},
+   "members": 27,
+   "note": "co-adjusted: availableCount, row removed, content bit cleared, payload deleted",
+   "pair": "BQ",
+   "ref": "A-1",
+   "sha256": "7ff767698ee12157f34c96c8beb4cbd54c5689bd7726acd5d8db9c7049a89bc0"
+  },
+  {
+   "bytes": 19716,
+   "diff": {
+    "added": [
+     "content/4/2/2.glb"
+    ],
+    "changed": {
+     "subtrees/3/1/1.subtree": "length 968 -> 1072"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/A-2.3tz",
+   "id": "A-2",
+   "limits": {},
+   "members": 29,
+   "note": "+1 tile; row copied from the parent; no content",
+   "pair": "BQ",
+   "ref": "A-2",
+   "sha256": "4b69da45c98b23ea45551b9e34e72255665bd00ee7194ebe391dcdd6783d0c42"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 18,
+     "subtrees/3/1/1.subtree": 12,
+     "subtrees/3/2/0.subtree": 16,
+     "subtrees/3/3/1.subtree": 4,
+     "subtrees/3/6/6.subtree": 4,
+     "subtrees/3/7/7.subtree": 10
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-3.3tz",
+   "id": "A-3",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "A-3 (InvalidInput or facts; the oracle decides InvalidInput)",
+   "sha256": "905c6358efab678034ece550a5e94b0abf9121aa67912cd81546f029fe3b08ab"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 2
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-4+1.3tz",
+   "id": "A-4+1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "A-4",
+   "sha256": "26a39542df5207b930f5153b9865caf5e6046892509f2fcc206120491f7005cb"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-4-1.3tz",
+   "id": "A-4-1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "A-4",
+   "sha256": "5a535ffcdbe0bbcae3fd75e0a2c59fd1b4b1fe584db3880ea134973a49b1252e"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-5.3tz",
+   "id": "A-5",
+   "limits": {},
+   "members": 28,
+   "note": "one bit",
+   "pair": "BQ",
+   "ref": "A-5",
+   "sha256": "5e7f7e5f89f2751c17a08779442e9551a8d9156c7219d56f2fc1670d7cd842fe"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-6.3tz",
+   "id": "A-6",
+   "limits": {},
+   "members": 28,
+   "note": "one bit",
+   "pair": "BQ",
+   "ref": "A-6",
+   "sha256": "6b224c720a47e2e82c5b5a4426a6d92128f65eff754a9585d2eb938d793c23de"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-7.3tz",
+   "id": "A-7",
+   "limits": {},
+   "members": 28,
+   "note": "one bit",
+   "pair": "BQ",
+   "ref": "A-7",
+   "sha256": "bde0670f36d157b370e271c8b5dbdf207637c9c6adfc549b4f5983a00cf39240"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/2/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-8.3tz",
+   "id": "A-8",
+   "limits": {},
+   "members": 28,
+   "note": "one bit; the parent tile is available",
+   "pair": "BQ",
+   "ref": "A-8",
+   "sha256": "db1dc32d6504ee9f7b2f40083bda1e99b5343b6b41efe91e86d27e40ced6151b"
+  },
+  {
+   "bytes": 19095,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 649"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/A-9.32.3tz",
+   "id": "A-9.32",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "A-9 (looser A, OD-8)",
+   "sha256": "bc5c9922f1339602bd4a5e8c194edd9cd4b523b34c21d193cb2ee0bb85afe58a"
+  },
+  {
+   "bytes": 19095,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": 1
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/A-9.33.3tz",
+   "id": "A-9.33",
+   "limits": {},
+   "members": 28,
+   "pair": "A-9.32",
+   "ref": "A-9",
+   "sha256": "12f31be6aa5ea690e58f06f81b9e0a5395e45f03e2b8ea6724c5b4638b0721c9"
+  },
+  {
+   "bytes": 18198,
+   "diff": {
+    "added": [],
+    "changed": {},
+    "removed": [
+     "subtrees/3/6/6.subtree"
+    ]
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-10.3tz",
+   "id": "A-10",
+   "limits": {},
+   "members": 27,
+   "pair": "BQ",
+   "ref": "A-10",
+   "sha256": "66f3a9b643ddecf23405038ac67a0a5b4681bc8218f27781444e03ce45c9f041"
+  },
+  {
+   "bytes": 37318,
+   "expected": "Accepted",
+   "file": "fixtures/A-11.base.3tz",
+   "id": "A-11.base",
+   "limits": {},
+   "members": 55,
+   "ref": "A-11 base (distinct subtree members)",
+   "sha256": "80dd2314e2af04a4ca73a8fbbf9ef30098ab0740bcde776f8408e4d393e7c7a6"
+  },
+  {
+   "bytes": 30025,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 1086 -> 1085"
+    },
+    "removed": [
+     "subtrees2/0/0/0.subtree",
+     "subtrees2/3/1/1.subtree",
+     "subtrees2/3/2/0.subtree",
+     "subtrees2/3/3/1.subtree",
+     "subtrees2/3/6/6.subtree",
+     "subtrees2/3/7/7.subtree"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/A-11.3tz",
+   "id": "A-11",
+   "limits": {},
+   "members": 49,
+   "pair": "A-11.base",
+   "ref": "A-11 (OD-7)",
+   "sha256": "5ed3135bb66220b74a6cb492fe43caf3eefcb7ea931b246064d537e5bf3407ac"
+  },
+  {
+   "bytes": 19137,
+   "diff": {
+    "added": [
+     "content/0/0/0.json",
+     "content/1/0/0.json",
+     "content/1/1/0.json",
+     "content/1/1/1.json",
+     "content/2/0/0.json",
+     "content/2/1/0.json",
+     "content/2/2/3.json",
+     "content/2/3/0.json",
+     "content/2/3/3.json",
+     "content/3/1/1.json",
+     "content/3/2/0.json",
+     "content/3/3/1.json",
+     "content/3/6/6.json",
+     "content/3/7/7.json",
+     "content/4/15/15.json",
+     "content/4/2/3.json",
+     "content/4/3/2.json",
+     "content/4/4/0.json",
+     "content/4/5/1.json",
+     "content/5/29/30.json",
+     "content/5/9/1.json"
+    ],
+    "changed": {
+     "subtrees/0/0/0.subtree": 2,
+     "tileset.json": "length 648 -> 649"
+    },
+    "removed": [
+     "content/0/0/0.glb",
+     "content/1/0/0.glb",
+     "content/1/1/0.glb",
+     "content/1/1/1.glb",
+     "content/2/0/0.glb",
+     "content/2/1/0.glb",
+     "content/2/2/3.glb",
+     "content/2/3/0.glb",
+     "content/2/3/3.glb",
+     "content/3/1/1.glb",
+     "content/3/2/0.glb",
+     "content/3/3/1.glb",
+     "content/3/6/6.glb",
+     "content/3/7/7.glb",
+     "content/4/15/15.glb",
+     "content/4/2/3.glb",
+     "content/4/3/2.glb",
+     "content/4/4/0.glb",
+     "content/4/5/1.glb",
+     "content/5/29/30.glb",
+     "content/5/9/1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/A-12a.3tz",
+   "id": "A-12a",
+   "limits": {},
+   "members": 28,
+   "note": "defects: JSON template (Unsupported) and subtree version 2 (InvalidInput)",
+   "pair": "BQ",
+   "ref": "A-12 root admission before \u00a71",
+   "sha256": "f74ea59dd4f155af23c427aa478510bd0d6accd79fdc2d998bf7a3b76e42195e"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {},
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-12b.3tz",
+   "id": "A-12b",
+   "limits": {
+    "hierarchy_visits": 12
+   },
+   "members": 28,
+   "note": "Tileset + Node = 2 visits, root P_t = 11 > 10 remaining",
+   "pair": "A-5",
+   "ref": "A-12 \u00a72a.3 before \u00a72a.9",
+   "sha256": "5e7f7e5f89f2751c17a08779442e9551a8d9156c7219d56f2fc1670d7cd842fe"
+  },
+  {
+   "bytes": 125002,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0-0-0-0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "ResourceLimit:total_bytes_read",
+   "file": "fixtures/A-12c.3tz",
+   "id": "A-12c",
+   "limits": {
+    "total_bytes_read": 1000000
+   },
+   "members": 3,
+   "note": "Scan = 1,001 distinct overlapping views x 4,682 B ~ 4.69 MB; all member bytes < 0.4 MB",
+   "pair": "A-12c.base",
+   "ref": "A-12 \u00a72a.2 before \u00a72a.3",
+   "sha256": "5204d0c823a7e156b7e877b6ee65079348b02f5e85effbaf23eeeec6b484c5c6"
+  },
+  {
+   "bytes": 125002,
+   "expected": "Accepted",
+   "file": "fixtures/A-12c.base.3tz",
+   "id": "A-12c.base",
+   "limits": {},
+   "members": 3,
+   "ref": "A-12c without its two defects",
+   "sha256": "0c6eb49cacc5a77398fd72b2b1ba91c6710a3316c36a157f55216e8434f19cd2"
+  },
+  {
+   "bytes": 125002,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0-0-0-0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-12c.trailing.3tz",
+   "id": "A-12c.trailing",
+   "limits": {},
+   "members": 3,
+   "pair": "A-12c.base",
+   "ref": "A-12c with default limits: the trailing bit alone",
+   "sha256": "5204d0c823a7e156b7e877b6ee65079348b02f5e85effbaf23eeeec6b484c5c6"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {},
+    "removed": []
+   },
+   "expected": "ResourceLimit:references",
+   "file": "fixtures/A-12d.3tz",
+   "id": "A-12d",
+   "limits": {
+    "references": 9
+   },
+   "members": 28,
+   "note": "root subtree member = 1 reference; E = 9 > 8 remaining",
+   "pair": "B-8+1",
+   "ref": "A-12 \u00a72a.10 before \u00a75",
+   "sha256": "e2d9d3091f5be6a9fbaef5bbcec7104ef5121dfa9c9989efbab70f2bdff0cb48"
+  },
+  {
+   "bytes": 41172,
+   "expected": "Accepted",
+   "file": "fixtures/A-13.base.3tz",
+   "id": "A-13.base",
+   "limits": {},
+   "members": 70,
+   "ref": "A-13 unaliased form",
+   "sha256": "1117008fe69cae5d64549e246e710f7272b77b36adcd9acc8ab0d4f3b19c8f90"
+  },
+  {
+   "bytes": 40548,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1936 -> 1832",
+     "subtrees/3/1/1.subtree": "length 1104 -> 1000",
+     "subtrees/3/2/0.subtree": "length 1208 -> 1104",
+     "subtrees/3/3/1.subtree": "length 888 -> 784",
+     "subtrees/3/6/6.subtree": "length 888 -> 784",
+     "subtrees/3/7/7.subtree": "length 1208 -> 1104"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "A-13.base"
+   ],
+   "file": "fixtures/A-13.3tz",
+   "id": "A-13",
+   "limits": {},
+   "members": 70,
+   "pair": "A-13.base",
+   "ref": "A-13 (K = 3 aliases)",
+   "sha256": "9b3ba61aa32e4c4a6bf1f5ba6e5de459d7843c1a33065d4b1fae0e522dec6771"
+  },
+  {
+   "bytes": 19046,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1752"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-14.3tz",
+   "id": "A-14",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "A-14 (closed form)",
+   "sha256": "eb6b5d9bf6ab704a725e39b3f608e5b5358451b887e8fda4096aa8e255f249e0"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/1/1.subtree": 6
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-1.3tz",
+   "id": "B-1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-1 (leaf siblings swapped)",
+   "sha256": "1634ebca91397b1641810ec7e0a8ba101d51985893902a85181840fc3b67cfdc"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/1/1.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-2.3tz",
+   "id": "B-2",
+   "limits": {},
+   "members": 28,
+   "note": "one ulp on a centre component",
+   "pair": "BQ",
+   "ref": "B-2 (+1 ulp)",
+   "sha256": "e19400bed395bc3ede80b639a07b59223e5547cc3375d06ddc5ec2794c81d100"
+  },
+  {
+   "bytes": 19123,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1808",
+     "subtrees/3/1/1.subtree": 739,
+     "subtrees/3/2/0.subtree": 741,
+     "subtrees/3/3/1.subtree": "length 752 -> 760",
+     "subtrees/3/6/6.subtree": "length 752 -> 760",
+     "subtrees/3/7/7.subtree": 741,
+     "tileset.json": "length 648 -> 653"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/B-3.3tz",
+   "id": "B-3",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-3 (property and class renamed)",
+   "sha256": "973de3651e277997717b427b855843a891a33c171b00aee64a663701fb2bee68"
+  },
+  {
+   "bytes": 19063,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 617"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-4.3tz",
+   "id": "B-4",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-4 (box semantic removed: derived, derived-root at level 0)",
+   "sha256": "a5144276c9b0225347de1f0df85495962d946af214453820962aa07ed971c613"
+  },
+  {
+   "bytes": 19060,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 614"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-4e.3tz",
+   "id": "B-4e",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-4 (error semantic removed: e_R 2^-l)",
+   "sha256": "b271412831daede1350b8a8f3fcbb938d7f10d5bb4ae759d3b8f72c719923621"
+  },
+  {
+   "bytes": 19203,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 757"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-5.3tz",
+   "id": "B-5",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-5",
+   "sha256": "840e858cb5f249e9f9cb43cf61612b33feb86398b1b4a862e3c70268a74464fb"
+  },
+  {
+   "bytes": 17862,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1232",
+     "subtrees/3/1/1.subtree": "length 968 -> 816",
+     "subtrees/3/2/0.subtree": "length 1072 -> 864",
+     "subtrees/3/3/1.subtree": "length 752 -> 704",
+     "subtrees/3/6/6.subtree": "length 752 -> 704",
+     "subtrees/3/7/7.subtree": "length 1072 -> 864",
+     "tileset.json": 8
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/B-6.3tz",
+   "id": "B-6",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-6 (FLOAT32 rows widen exactly)",
+   "sha256": "42a63e788700b07b5bbb0f8e56d45b3a48c291f1966ed31abed77ce6b94a5133"
+  },
+  {
+   "bytes": 19152,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 706"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/B-7.3tz",
+   "id": "B-7",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-7 (class scale)",
+   "sha256": "6a95ea0eb1529ca4340cf8b07a5c127b03a663b526759e6c7efb20fd0a7c2f74"
+  },
+  {
+   "bytes": 19158,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1864"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/B-7t.3tz",
+   "id": "B-7t",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-7 (table-level scale; O-extra)",
+   "sha256": "e5eb1c7649572df17e93301feb5210b5590360be9f2d8e1ab6061fc1d346f035"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 2
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-8+1.3tz",
+   "id": "B-8+1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-8",
+   "sha256": "e2d9d3091f5be6a9fbaef5bbcec7104ef5121dfa9c9989efbab70f2bdff0cb48"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-8-1.3tz",
+   "id": "B-8-1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-8",
+   "sha256": "bbca9bc4b6d04bf5140c759b86fc31bc9dc1d17da383f4f6de8dae2726484615"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/1/1.subtree": 17
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-9.neg.3tz",
+   "id": "B-9.neg",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-9",
+   "sha256": "28e8c7ad6af440648144b1d668155b4f66ab6b38b5342b1a8d18be0ed6cf643e"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/1/1.subtree": 14
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-9.nan.3tz",
+   "id": "B-9.nan",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-9",
+   "sha256": "83ab2e56dc2febd3cc1601569744b267a286097414c6de1ebd77cf611364e3e2"
+  },
+  {
+   "bytes": 18440,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": 2
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/B-10.subnormal.3tz",
+   "id": "B-10.subnormal",
+   "limits": {},
+   "members": 28,
+   "note": "TILE_GEOMETRIC_ERROR absent; derived e_R 2^-l reaches level 5; one ulp apart",
+   "pair": "B-10.normal",
+   "ref": "B-10",
+   "sha256": "413a75ee0607481afbe793f21bb3affabe9258b0fbd3eb1900d7b87b84dbb1c9"
+  },
+  {
+   "bytes": 18440,
+   "expected": "Accepted",
+   "file": "fixtures/B-10.normal.3tz",
+   "id": "B-10.normal",
+   "limits": {},
+   "members": 28,
+   "note": "TILE_GEOMETRIC_ERROR absent; derived e_R 2^-l reaches level 5; one ulp apart",
+   "ref": "B-10",
+   "sha256": "88638aca1f46055b450e5db4f03649dc180a1baec576e7f59afc7e3a537498b5"
+  },
+  {
+   "bytes": 1422,
+   "expected": "Accepted",
+   "file": "fixtures/B-10.root.3tz",
+   "id": "B-10.root",
+   "limits": {},
+   "members": 2,
+   "ref": "B-10 (v3.2: subnormal e_R at level 0 is e_R; level 1 derives a subnormal)",
+   "sha256": "3eb0915b0b2b5173534252413b8786423f1dcf2c8cf2ca5718e15fec409c7304"
+  },
+  {
+   "bytes": 1526,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 512 -> 616"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/B-10.l1.3tz",
+   "id": "B-10.l1",
+   "limits": {},
+   "members": 2,
+   "pair": "B-10.root",
+   "ref": "B-10 (v3.2: subnormal e_R at level 0 is e_R; level 1 derives a subnormal)",
+   "sha256": "712587539d073a12dfe0ca1a49eea96520e87fb85b7bd3459030b691b4c89c82"
+  },
+  {
+   "bytes": 18494,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1648",
+     "subtrees/3/1/1.subtree": "length 968 -> 872",
+     "subtrees/3/2/0.subtree": "length 1072 -> 968",
+     "subtrees/3/3/1.subtree": "length 752 -> 680",
+     "subtrees/3/6/6.subtree": "length 752 -> 680",
+     "subtrees/3/7/7.subtree": "length 1072 -> 968"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-12.3tz",
+   "id": "B-12",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-12 (optional omitted: e_R 2^-l)",
+   "sha256": "dc49e0fa991053129c6452bc96e598f14545c7420b4e051f8477d4531a7c9844"
+  },
+  {
+   "bytes": 18510,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 664"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-11.3tz",
+   "id": "B-11",
+   "limits": {},
+   "members": 28,
+   "pair": "B-12",
+   "ref": "B-11 (required omitted)",
+   "sha256": "d50f3e0241b5804b7a733733b1e6f0ada03455ffc83080089d8e29ad18ceddf7"
+  },
+  {
+   "bytes": 16374,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 672",
+     "subtrees/3/1/1.subtree": "length 968 -> 608",
+     "subtrees/3/2/0.subtree": "length 1072 -> 616",
+     "subtrees/3/3/1.subtree": "length 752 -> 592",
+     "subtrees/3/6/6.subtree": "length 752 -> 592",
+     "subtrees/3/7/7.subtree": "length 1072 -> 616"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "differ",
+    "BQ"
+   ],
+   "file": "fixtures/B-12b.3tz",
+   "id": "B-12b",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "B-12 (optional box omitted: derived)",
+   "sha256": "2b3f8c6150bda0e2c6768442691cd6046596f909175ebed891b4bffce36d4c3e"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [
+     "content/1/0/1.glb",
+     "content/2/0/1.glb",
+     "content/2/0/3.glb",
+     "content/2/3/2.glb",
+     "content/3/0/2.glb",
+     "content/3/1/3.glb",
+     "content/4/0/4.glb",
+     "content/4/1/5.glb",
+     "content/5/1/9.glb",
+     "content/5/30/29.glb",
+     "subtrees/3/0/2.subtree",
+     "subtrees/3/1/3.subtree"
+    ],
+    "changed": {
+     "content/4/2/3.glb": 6,
+     "content/4/3/2.glb": 6
+    },
+    "removed": [
+     "content/1/1/0.glb",
+     "content/2/1/0.glb",
+     "content/2/2/3.glb",
+     "content/2/3/0.glb",
+     "content/3/2/0.glb",
+     "content/3/3/1.glb",
+     "content/4/4/0.glb",
+     "content/4/5/1.glb",
+     "content/5/29/30.glb",
+     "content/5/9/1.glb",
+     "subtrees/3/2/0.subtree",
+     "subtrees/3/3/1.subtree"
+    ]
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-1.3tz",
+   "id": "C-1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-1 (InvalidInput or facts; asymmetric set gives InvalidInput)",
+   "sha256": "7c826ae2578dc9e48f1be75ecaaad846b691074d4832695f5f2bac6b2212c9c5"
+  },
+  {
+   "bytes": 19090,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 644"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-2.3tz",
+   "id": "C-2",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-2",
+   "sha256": "e81904a566a9d20e5f999a698d56ebae365bc0e16e87b1d3934f11d0d85a0d4b"
+  },
+  {
+   "bytes": 19098,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 652"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-3.3tz",
+   "id": "C-3",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-3",
+   "sha256": "716f846d22cb44d3d7e5509a5e6cd7f1766adc3b8ca723824c50a8ec5d541dec"
+  },
+  {
+   "bytes": 10549,
+   "expected": "Accepted",
+   "file": "fixtures/C-4.base.3tz",
+   "id": "C-4.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-4 base (third slot never available)",
+   "sha256": "38f9a9424c2bdf47d5132e48d5f1f0b0f1539cb1839a52050d6f7447e062a929"
+  },
+  {
+   "bytes": 10550,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 825 -> 826"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-4.3tz",
+   "id": "C-4",
+   "limits": {},
+   "members": 15,
+   "pair": "C-4.base",
+   "ref": "C-4",
+   "sha256": "e1b18b782be708894038709f79c8ccd13039a4591a7f826ff5fb8450f34ebcf2"
+  },
+  {
+   "bytes": 11075,
+   "expected": "Accepted",
+   "file": "fixtures/C-5.base.3tz",
+   "id": "C-5.base",
+   "limits": {},
+   "members": 16,
+   "ref": "C-5 base",
+   "sha256": "7ec1c1e4ddfb1bdbd91fc35336e85202ff679b80c41022ec2c5df9da2e4cf989"
+  },
+  {
+   "bytes": 10856,
+   "diff": {
+    "added": [
+     "o/c/0-0-0-0.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 826"
+    },
+    "removed": [
+     "o/c/0-0-0-0.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-5.3tz",
+   "id": "C-5",
+   "limits": {},
+   "members": 16,
+   "pair": "C-5.base",
+   "ref": "C-5 (RC-3)",
+   "sha256": "196b56f321258e9ff1bcf1385d855a408e2707e58ad5926f7226d414bab7491b"
+  },
+  {
+   "bytes": 14219,
+   "expected": "Accepted",
+   "file": "fixtures/C-6.base.3tz",
+   "id": "C-6.base",
+   "limits": {},
+   "members": 22,
+   "ref": "C-6 base",
+   "sha256": "8acd1ece12e8edcd343c02b65be9e8c5c72ff64e94409fc3322658141a21fcd9"
+  },
+  {
+   "bytes": 12692,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.json",
+     "o/c/1-0-1-1.json",
+     "o/c/1-1-0-1.json",
+     "o/c/1-1-1-0.json",
+     "o/c/2-0-1-0.json",
+     "o/c/2-3-2-0.json",
+     "o/c/2-3-3-1.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 826"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-6.3tz",
+   "id": "C-6",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-6 (producer pattern)",
+   "sha256": "e281824323a234c426761e12efe563802fa1e34355a05c53e40a64be749609e8"
+  },
+  {
+   "bytes": 12692,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.JSON",
+     "o/c/1-0-1-1.JSON",
+     "o/c/1-1-0-1.JSON",
+     "o/c/1-1-1-0.JSON",
+     "o/c/2-0-1-0.JSON",
+     "o/c/2-3-2-0.JSON",
+     "o/c/2-3-3-1.JSON"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 826"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.upper.avail.3tz",
+   "id": "C-7.upper.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "abadc1a8e47a6e79fb8ad218f8be395f9ce2c7bc09a218482277de932d46b7e4"
+  },
+  {
+   "bytes": 10550,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 826"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.upper.never.3tz",
+   "id": "C-7.upper.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "a906fe4dadf253593970451325c3717f3fa80d3a8f95c78db245e22d4e557842"
+  },
+  {
+   "bytes": 12694,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.json",
+     "o/c/1-0-1-1.json",
+     "o/c/1-1-0-1.json",
+     "o/c/1-1-1-0.json",
+     "o/c/2-0-1-0.json",
+     "o/c/2-3-2-0.json",
+     "o/c/2-3-3-1.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 828"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.escaped.avail.3tz",
+   "id": "C-7.escaped.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "89f2c098e5ef08adf47126dbe9d7a6db1f38cf91c4a23d9635e0aa821ad4fbf4"
+  },
+  {
+   "bytes": 10552,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 828"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.escaped.never.3tz",
+   "id": "C-7.escaped.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "9358d2e46b0a27f4b78cf9c7b2524d750fe01972cb0690a4e2e19b15954a0a69"
+  },
+  {
+   "bytes": 12724,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.j%70on",
+     "o/c/1-0-1-1.j%70on",
+     "o/c/1-1-0-1.j%71on",
+     "o/c/1-1-1-0.j%71on",
+     "o/c/2-0-1-0.j%70on",
+     "o/c/2-3-2-0.j%73on",
+     "o/c/2-3-3-1.j%73on"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.guard.avail.3tz",
+   "id": "C-7.guard.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "917846c184dabb7c86c9a2d80302b6a74233b586d8bcae765ce1e02f64d2053d"
+  },
+  {
+   "bytes": 10554,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.guard.never.3tz",
+   "id": "C-7.guard.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "d1e000d14a36756214ad67245df5888caf90f9cc3e5d61926466f24b881ffd91"
+  },
+  {
+   "bytes": 12696,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.json",
+     "o/c/1-0-1-1.json",
+     "o/c/1-1-0-1.json",
+     "o/c/1-1-1-0.json",
+     "o/c/2-0-1-0.json",
+     "o/c/2-3-2-0.json",
+     "o/c/2-3-3-1.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.query.avail.3tz",
+   "id": "C-7.query.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "674ee1a9673cdf110318e06060adb7166bcc2898959e03f2a1ca14b79d6a34d7"
+  },
+  {
+   "bytes": 10554,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.query.never.3tz",
+   "id": "C-7.query.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "51a9533bde5b2cac5ba1649afe2072a829cfe236e8025606c26962d5ab79a04e"
+  },
+  {
+   "bytes": 12694,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.json",
+     "o/c/1-0-1-1.json",
+     "o/c/1-1-0-1.json",
+     "o/c/1-1-1-0.json",
+     "o/c/2-0-1-0.json",
+     "o/c/2-3-2-0.json",
+     "o/c/2-3-3-1.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 828"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.dot.avail.3tz",
+   "id": "C-7.dot.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "20eb75edd665a3c4d7c60c7cc17c01480ca2a9473c5e8a458b68efb49e22cb95"
+  },
+  {
+   "bytes": 10552,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 828"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.dot.never.3tz",
+   "id": "C-7.dot.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "43eb0b0f769d748a85bce71af9eafbaa3f50a0b6bd1621e76a7a6b7c6a64c772"
+  },
+  {
+   "bytes": 12693,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.json",
+     "o/c/1-0-1-1.json",
+     "o/c/1-1-0-1.json",
+     "o/c/1-1-1-0.json",
+     "o/c/2-0-1-0.json",
+     "o/c/2-3-2-0.json",
+     "o/c/2-3-3-1.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 827"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.slash.avail.3tz",
+   "id": "C-7.slash.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "b5e166f8df31c076abd9dc25c06d0c6c65b8cecf4d104c7531d8d268e84f717e"
+  },
+  {
+   "bytes": 10551,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 827"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.slash.never.3tz",
+   "id": "C-7.slash.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "2664c335666931cbc9d013731c8050678e5af1462280ba3dd17e21bb760b0b3e"
+  },
+  {
+   "bytes": 10849,
+   "diff": {
+    "added": [
+     "o/c/x.json"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 831"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.popped.avail.3tz",
+   "id": "C-7.popped.avail",
+   "limits": {},
+   "members": 16,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "2f276686b017709ccf9b086f8521eb6c59adf9772071816bbf06059e7ad35b60"
+  },
+  {
+   "bytes": 10555,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 831"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.popped.never.3tz",
+   "id": "C-7.popped.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "891676dfc75596d77e5284e14395791bd95b2289048db970452427be8642de29"
+  },
+  {
+   "bytes": 12696,
+   "diff": {
+    "added": [
+     "o/c/1-0-0-0.JSON",
+     "o/c/1-0-1-1.JSON",
+     "o/c/1-1-0-1.JSON",
+     "o/c/1-1-1-0.JSON",
+     "o/c/2-0-1-0.JSON",
+     "o/c/2-3-2-0.JSON",
+     "o/c/2-3-3-1.JSON"
+    ],
+    "changed": {
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.upperdot.avail.3tz",
+   "id": "C-7.upperdot.avail",
+   "limits": {},
+   "members": 22,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "ab037676af3ca00ce361b5c42e283745cadd5e23a35191a9fb5e59fd047b16dc"
+  },
+  {
+   "bytes": 10554,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/0.0.0.0.subtree": 4,
+     "st/2.0.1.0.subtree": 1,
+     "st/2.3.2.0.subtree": 1,
+     "st/2.3.3.1.subtree": 1,
+     "tileset.json": "length 825 -> 830"
+    },
+    "removed": [
+     "o/c/1-0-0-0.glb",
+     "o/c/1-0-1-1.glb",
+     "o/c/1-1-0-1.glb",
+     "o/c/1-1-1-0.glb",
+     "o/c/2-0-1-0.glb",
+     "o/c/2-3-2-0.glb",
+     "o/c/2-3-3-1.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7.upperdot.never.3tz",
+   "id": "C-7.upperdot.never",
+   "limits": {},
+   "members": 15,
+   "pair": "C-6.base",
+   "ref": "C-7 (DC-2 forms; also never available)",
+   "sha256": "c25bc20a77039c600c14d65f3ec64745e9ad5cfa051ede8f2510d368b20422ef"
+  },
+  {
+   "bytes": 10993,
+   "expected": "Accepted",
+   "file": "fixtures/C-7b.base.3tz",
+   "id": "C-7b.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-7b base",
+   "sha256": "f34fde3cf26c8bd7a8d42bd460950aa988537fa965bccfc3cce564fc4ceb42fb"
+  },
+  {
+   "bytes": 10994,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 785 -> 786"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7b.3tz",
+   "id": "C-7b",
+   "limits": {},
+   "members": 15,
+   "pair": "C-7b.base",
+   "ref": "C-7b (escape guard, non-last segment)",
+   "sha256": "51b2ee92175294f724c969c943675f2716f845da62656a9e7f4d06c14ba3e43c"
+  },
+  {
+   "bytes": 11023,
+   "expected": "Accepted",
+   "file": "fixtures/C-7c.base.3tz",
+   "id": "C-7c.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-7c base",
+   "sha256": "65bc1c1ad2c2b1b9d7c4cd6d3e4d001b41b94002da0c68f8522f21b5b160c1ff"
+  },
+  {
+   "bytes": 7875,
+   "diff": {
+    "added": [
+     "c/a.glb"
+    ],
+    "changed": {
+     "tileset.json": "length 787 -> 799"
+    },
+    "removed": [
+     "c/0/0/0/0/a.glb",
+     "c/1/0/0/0/a.glb",
+     "c/1/0/1/1/a.glb",
+     "c/1/1/1/0/a.glb",
+     "c/2/0/1/0/a.glb",
+     "c/2/3/2/0/a.glb",
+     "c/2/3/3/1/a.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-7c.3tz",
+   "id": "C-7c",
+   "limits": {},
+   "members": 9,
+   "pair": "C-7c.base",
+   "ref": "C-7c (variables eliminated)",
+   "sha256": "3ca8411b89d65b7f741ddc3a2e17570ed6e279ccb139e51d50658b6cdd862054"
+  },
+  {
+   "bytes": 10993,
+   "expected": "Accepted",
+   "file": "fixtures/C-7d.base.3tz",
+   "id": "C-7d.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-7d base",
+   "sha256": "31328a261e32218acd71cd8b12d4a912acd0bc7fe12dde96dfef0d2a0465574b"
+  },
+  {
+   "bytes": 10998,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 785 -> 790"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "C-7d.base"
+   ],
+   "file": "fixtures/C-7d.3tz",
+   "id": "C-7d",
+   "limits": {},
+   "members": 15,
+   "pair": "C-7d.base",
+   "ref": "C-7d (normalization exactness: same members and volumes)",
+   "sha256": "d536a604dcc2c11d8937a84afb0ced1f3c4f75628b36c1b9ae039e28ed08d2bc"
+  },
+  {
+   "bytes": 11057,
+   "expected": "Accepted",
+   "file": "fixtures/C-7e.3tz",
+   "id": "C-7e",
+   "limits": {},
+   "members": 15,
+   "ref": "O-extra: %7Bx%7D decodes to the literal '{x}' (normalization is structural)",
+   "sha256": "09d38ab3dfe28d13e5d7f3279c26e050a861c2cdb5b2b0fbd9fa6149cfa3d2b9"
+  },
+  {
+   "bytes": 19829,
+   "expected": "Accepted",
+   "file": "fixtures/C-8.3tz",
+   "id": "C-8",
+   "limits": {},
+   "members": 29,
+   "note": "R (refine REPLACE) is the first child of an ADD root",
+   "ref": "C-8 (X-8)",
+   "sha256": "6aa78383dc15b7decba09eb4059e18389ea3fa215398bc4be27ac4be0c9e4376"
+  },
+  {
+   "bytes": 19076,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 630"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-9.region.3tz",
+   "id": "C-9.region",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-9",
+   "sha256": "8c7a6f46f48bce67d9ace4cbc577ed9f1134cadd5b93db3e7a43c1f5d83204f0"
+  },
+  {
+   "bytes": 19065,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 619"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-9.sphere.3tz",
+   "id": "C-9.sphere",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-9",
+   "sha256": "eb3da12af324b5d87bd602c0d66cb5dec3a76a389888b7843249cf570ffec838"
+  },
+  {
+   "bytes": 19093,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 647"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-9.hextree.3tz",
+   "id": "C-9.hextree",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "C-9",
+   "sha256": "8a778d2b010180f15c6598fd66615a2f938a6c8bbcbaafebc6388f7e0c45d8c9"
+  },
+  {
+   "bytes": 18884,
+   "diff": {
+    "added": [],
+    "changed": {
+     "content/0/0/0.glb": "length 384 -> 174"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "file": "fixtures/C-10.3tz",
+   "id": "C-10",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "production": "InvalidInput",
+   "ref": "C-10 (C1 magic; the oracle treats payloads as opaque)",
+   "sha256": "00a1ac9d89266edce2ea172f7d2472ba28180955347bf64465ce20248c6a38a4"
+  },
+  {
+   "bytes": 11485,
+   "expected": "Accepted",
+   "file": "fixtures/C-11.3tz",
+   "id": "C-11",
+   "limits": {},
+   "members": 16,
+   "ref": "C-11",
+   "sha256": "8639db78eeda547ca870349b70958e85883094420b78c2f534f4ad1ee15b2006"
+  },
+  {
+   "bytes": 11969,
+   "expected": "Accepted",
+   "file": "fixtures/C-12.base.3tz",
+   "id": "C-12.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-12 base (same column, no semantic)",
+   "sha256": "3d787d6cef979e8298b7bd56bc5e812b01d51f72a7b3fc2ddbcdee4df70eda32"
+  },
+  {
+   "bytes": 11994,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 813 -> 838"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-12.3tz",
+   "id": "C-12",
+   "limits": {},
+   "members": 15,
+   "note": "the CONTENT_URI value names x.json",
+   "pair": "C-12.base",
+   "ref": "C-12 (RC-1)",
+   "sha256": "d5ca466830b788657aa30b184a1aba09d9f8be35a8df743a6b0f462f36f78819"
+  },
+  {
+   "bytes": 11538,
+   "expected": "Accepted",
+   "file": "fixtures/C-13.base.3tz",
+   "id": "C-13.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-13 base (same column, no semantic)",
+   "sha256": "e474f474eb7db06ee14c072d40c98e8fd1bce8776f4e8086344066a8432276ac"
+  },
+  {
+   "bytes": 11568,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 838 -> 868"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-13.3tz",
+   "id": "C-13",
+   "limits": {},
+   "members": 15,
+   "pair": "C-13.base",
+   "ref": "C-13 (RC-1)",
+   "sha256": "36384fcdf3b71c5363e91185555d2f217608b30da6d313dd47e199b0effa77e2"
+  },
+  {
+   "bytes": 11127,
+   "expected": "Accepted",
+   "file": "fixtures/C-12b.uri.base.3tz",
+   "id": "C-12b.uri.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-12b (DC-5, at root admission)",
+   "sha256": "a0126dd392ee56c009f50f5d02b3ee44ca0e34bec32fe2b0cec9f763c9ee7970"
+  },
+  {
+   "bytes": 11152,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 891 -> 916"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-12b.uri.3tz",
+   "id": "C-12b.uri",
+   "limits": {},
+   "members": 15,
+   "pair": "C-12b.uri.base",
+   "ref": "C-12b (DC-5, at root admission)",
+   "sha256": "4efbecce49add1e13a956b5df66eedb5cb801c3c72ec4de60b9db6475cc3e703"
+  },
+  {
+   "bytes": 11145,
+   "expected": "Accepted",
+   "file": "fixtures/C-12b.group.base.3tz",
+   "id": "C-12b.group.base",
+   "limits": {},
+   "members": 15,
+   "ref": "C-12b (DC-5, at root admission)",
+   "sha256": "adfa0b7c7bdb35b559c2e49b9ed12c89c4159a681c73ba3a0af5cfa40ff83965"
+  },
+  {
+   "bytes": 11175,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 909 -> 939"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-12b.group.3tz",
+   "id": "C-12b.group",
+   "limits": {},
+   "members": 15,
+   "pair": "C-12b.group.base",
+   "ref": "C-12b (DC-5, at root admission)",
+   "sha256": "acb52fbd0c0a1b53f1160ae09e3761fdeeb6127acafb8ecc776976b17d6d4fae"
+  },
+  {
+   "bytes": 7868,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1752",
+     "subtrees/3/1/1.subtree": "length 968 -> 912",
+     "subtrees/3/2/0.subtree": "length 1072 -> 1016",
+     "subtrees/3/3/1.subtree": "length 752 -> 704",
+     "subtrees/3/6/6.subtree": "length 752 -> 704",
+     "subtrees/3/7/7.subtree": "length 1072 -> 1016"
+    },
+    "removed": [
+     "content/0/0/0.glb",
+     "content/1/0/0.glb",
+     "content/1/1/0.glb",
+     "content/1/1/1.glb",
+     "content/2/0/0.glb",
+     "content/2/1/0.glb",
+     "content/2/2/3.glb",
+     "content/2/3/0.glb",
+     "content/2/3/3.glb",
+     "content/3/1/1.glb",
+     "content/3/2/0.glb",
+     "content/3/3/1.glb",
+     "content/3/6/6.glb",
+     "content/3/7/7.glb",
+     "content/4/15/15.glb",
+     "content/4/2/3.glb",
+     "content/4/3/2.glb",
+     "content/4/4/0.glb",
+     "content/4/5/1.glb",
+     "content/5/29/30.glb",
+     "content/5/9/1.glb"
+    ]
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-14.3tz",
+   "id": "C-14",
+   "limits": {},
+   "members": 7,
+   "note": "every content layer Const0; no payload members",
+   "pair": "BQ",
+   "ref": "C-14 (post-walk :299)",
+   "sha256": "3f5ae65a56d2b7347d3df386dda367b1d6519b52ad809293ae44c97b18e78a5b"
+  },
+  {
+   "bytes": 19206,
+   "expected": "Accepted",
+   "file": "fixtures/C-15.3tz",
+   "id": "C-15",
+   "limits": {},
+   "members": 28,
+   "ref": "O-extra: inherited refine ADD (paired with 'refine forced to REPLACE')",
+   "sha256": "85a3887ff7b331f6a903012885c45acf792a3b0c7227d14847858ded5655d994"
+  },
+  {
+   "bytes": 19193,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 747"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-9.s2.3tz",
+   "id": "C-9.s2",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: S2 root (X-3)",
+   "sha256": "4244632f052bb3979508a47e75523bf59042b8aea8570deef86cff92d5212c9a"
+  },
+  {
+   "bytes": 19163,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 717"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-16.3tz",
+   "id": "C-16",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: 3DTILES_implicit_tiling 1.0 (X-13)",
+   "sha256": "2f2bed188842b5696fa270c5695b8e61c4712a93b0d3e3254b1cf0cd52cde9bb"
+  },
+  {
+   "bytes": 19207,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 761"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-17.children.3tz",
+   "id": "C-17.children",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: implicit root with children (:92-97)",
+   "sha256": "3df189cee17904f5dc37c701ee86f0e5c77ef636e2dfd463012870006f694cd8"
+  },
+  {
+   "bytes": 19122,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 676"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-17.metadata.3tz",
+   "id": "C-17.metadata",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: implicit root with metadata (:92-97)",
+   "sha256": "51b246535e7c66c8c9cb663589510cee7dd0927a117b9d45b24062aef92e3265"
+  },
+  {
+   "bytes": 19171,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 725"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-17.contentbv.3tz",
+   "id": "C-17.contentbv",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: content template with boundingVolume (:92-97)",
+   "sha256": "c2c89917bd96a183585d40d5547a6d5d31c4d7aadf57c240c64bcb3850793de7"
+  },
+  {
+   "bytes": 19095,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 649"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/A-9b.3tz",
+   "id": "A-9b",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: subtreeLevels 33 (X-4)",
+   "sha256": "410026eb1ae181c5d9aeda50935322973ed84ee5043cfd526be223a51bb77342"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": 2
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-9c.3tz",
+   "id": "A-9c",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: availableLevels 0",
+   "sha256": "993934ddb9d6c9e34457b08ac74acc6d59f2fb505162857adbce0993dc9b7b8d"
+  },
+  {
+   "bytes": 19096,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 650"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-9d.float.3tz",
+   "id": "A-9d.float",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "v3.2: implicit integer fields are JSON integers",
+   "sha256": "bb1fd63a75d97c37b768cf6ade0eee293579fba04a627770815ce88227e379f4"
+  },
+  {
+   "bytes": 19096,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 650"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/A-9d.exp.3tz",
+   "id": "A-9d.exp",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "v3.2: implicit integer fields are JSON integers",
+   "sha256": "0ad56f53454e1708bad50facd49aeb158fa6967036ac2fa1762c8fa49c72c269"
+  },
+  {
+   "bytes": 19157,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 711"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/B-5b.3tz",
+   "id": "B-5b",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "v3.2: a duplicated semantic of any kind in one class",
+   "sha256": "acf31e8443accf2efa956190ec027cbe9305bed683a70e45a70b666386c0dbc5"
+  },
+  {
+   "bytes": 11771,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 212 -> 498"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/C-11b.3tz",
+   "id": "C-11b",
+   "limits": {},
+   "members": 16,
+   "pair": "C-11",
+   "ref": "v3.2: OD-7 validation-wide (one implicit-root external tileset referenced twice)",
+   "sha256": "9fcbbc96fb95e885b1ec361de28c7662a15c6771f12bfe4aebc0dacc03201e14"
+  },
+  {
+   "bytes": 10994,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 785 -> 786"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/C-7f.3tz",
+   "id": "C-7f",
+   "limits": {},
+   "members": 15,
+   "pair": "C-7d.base",
+   "ref": "v3.2: escape guard per segment; 'c%' is a malformed escape",
+   "sha256": "d55d37ff8c5ba18c60964cb354227ddca59b33b5214f592898bedf31733df43d"
+  },
+  {
+   "bytes": 19107,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 648 -> 661"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/B-7o.3tz",
+   "id": "B-7o",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: offset on TILE_GEOMETRIC_ERROR",
+   "sha256": "e0ac1859490d5a0a79e3a7360343191bf39e55ddbbbd2d9c7d2c29ce8e31190d"
+  },
+  {
+   "bytes": 19086,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1792"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-1.3tz",
+   "id": "D-1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-1 (truncated BIN)",
+   "sha256": "1563bc73501448b28cf7dbf93f190fd7b0177098b42783eba8a228a768f1deea"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-2+1.3tz",
+   "id": "D-2+1",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-2 (byteOffset +1)",
+   "sha256": "15c9b8d8280fe4ef7af9b1bc6a467a49fd8f29300901bcc75121c00f435c783d"
+  },
+  {
+   "bytes": 19078,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1784"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-2.absent.3tz",
+   "id": "D-2.absent",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-2 (byteOffset absent)",
+   "sha256": "37011a967f22f330e2d05cd22e4dfa98056851c597053eadc68a52d78a506cd1"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-3.3tz",
+   "id": "D-3",
+   "limits": {},
+   "members": 28,
+   "note": "one bit in the BIN padding",
+   "pair": "BQ",
+   "ref": "D-3",
+   "sha256": "ac37cbc4ffa0fec13c7522c6015e795861d3cd64b26e1651701e0ef7d81d3c12"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 2
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-4.version.3tz",
+   "id": "D-4.version",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-4",
+   "sha256": "e6a84fb62002193e5002dcf42682efa366f010467ebb83b691ded06b3c781fd6"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 1
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-4.magic.3tz",
+   "id": "D-4.magic",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-4 (bad magic; v3.2 ruling 1)",
+   "sha256": "8cff73529926903e9c91d75178754d76d8100974c6e620eecdeca64a66a5b0a9"
+  },
+  {
+   "bytes": 19240,
+   "diff": {
+    "added": [
+     "subtrees/0/0/0.bin"
+    ],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 640"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/D-6.3tz",
+   "id": "D-6",
+   "limits": {},
+   "members": 29,
+   "pair": "BQ",
+   "ref": "D-6 (valid external buffer, OD-6)",
+   "sha256": "5d113137dfc573fdfaa84df9ab073fbc9ff5992425bbd47b36425e312cbe6db4"
+  },
+  {
+   "bytes": 17974,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 640 -> 680"
+    },
+    "removed": [
+     "subtrees/0/0/0.bin"
+    ]
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-5.3tz",
+   "id": "D-5",
+   "limits": {},
+   "members": 28,
+   "pair": "D-6",
+   "ref": "D-5 (data URI)",
+   "sha256": "6aec0d22d35598f0385c2e938740d5953762d5bb4cbd8a296a67f4d7d56008e6"
+  },
+  {
+   "bytes": 18419,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/6/6.subtree": "length 752 -> 77"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/D-7.3tz",
+   "id": "D-7",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-7 (JSON-format subtree)",
+   "sha256": "9ddf6533c44a1ac2a64a819088f4b76e6ab62551ecd98e3b6375b95801a6cadc"
+  },
+  {
+   "bytes": 18425,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/3/6/6.subtree": "length 77 -> 83"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/D-7b.3tz",
+   "id": "D-7b",
+   "limits": {},
+   "members": 28,
+   "pair": "D-7",
+   "ref": "D-7 with a UTF-8 BOM and leading whitespace (v3.2 ruling 1)",
+   "sha256": "70bd378c0cfc9b3c6e50ec8b7e1ca1bf7fd90936afe9f6a72c996f2b1daf2cda"
+  },
+  {
+   "bytes": 19094,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 3
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/D-8.3tz",
+   "id": "D-8",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "D-8 (RC-5: JSON ends in \\n, no padding)",
+   "sha256": "41bb063b648ea2a60141fb3d8de5ae2aac0bc18161b8ec15fb1c29d9e273f04a"
+  },
+  {
+   "bytes": 19110,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1816"
+    },
+    "removed": []
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/D-11.3tz",
+   "id": "D-11",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "O-extra: extensions in subtree JSON (X-6)",
+   "sha256": "018418e7202b13c91a1f8c552047b9f6d8c1d91dc7fb0fa3e3194d14406ff6bc"
+  },
+  {
+   "bytes": 19150,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1816 -> 1856"
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "BQ"
+   ],
+   "file": "fixtures/D-11b.3tz",
+   "id": "D-11b",
+   "limits": {},
+   "members": 28,
+   "pair": "D-11",
+   "ref": "v3.2: 'extensions' inside extras is not an extension",
+   "sha256": "3f4d1e55cf9f0589dd92adba17fcc214a1e9cc0d3739c893da171494abbb3181"
+  },
+  {
+   "bytes": 19102,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 1800 -> 1808"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-2.float.3tz",
+   "id": "D-2.float",
+   "limits": {},
+   "members": 28,
+   "pair": "BQ",
+   "ref": "v3.2: integer fields are JSON integers (byteOffset 0.0)",
+   "sha256": "151f4d1b5888e43f4ec1995b8656f22dc114661ab9835d7c0097cefd45c7479e"
+  },
+  {
+   "bytes": 832,
+   "expected": "Accepted",
+   "file": "fixtures/D-9.base.3tz",
+   "id": "D-9.base",
+   "limits": {},
+   "members": 2,
+   "ref": "D-9 (RC-15)",
+   "sha256": "4c6bfe5ef1dad3bfddd37c0014ae0d59ec4a83d9fa232304b16738330bbfda08"
+  },
+  {
+   "bytes": 856,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": "length 120 -> 144"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-9.3tz",
+   "id": "D-9",
+   "limits": {},
+   "members": 2,
+   "pair": "D-9.base",
+   "ref": "D-9 (RC-15)",
+   "sha256": "c6afbc4ca12b1b02a7254e6b07f505c1e78aef80de325d8e7092ff73a717a107"
+  },
+  {
+   "bytes": 11279,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/2.0.1.0.subtree": "length 752 -> 1008"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-10a.3tz",
+   "id": "D-10a",
+   "limits": {},
+   "members": 15,
+   "pair": "BO",
+   "ref": "D-10a (count 0)",
+   "sha256": "f9c9a524e119dbd189b650ce07728a19dee76d8f574b5692143b0425631d2671"
+  },
+  {
+   "bytes": 11279,
+   "diff": {
+    "added": [],
+    "changed": {
+     "st/2.0.1.0.subtree": "length 752 -> 1008"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/D-10b.3tz",
+   "id": "D-10b",
+   "limits": {},
+   "members": 15,
+   "pair": "BO",
+   "ref": "D-10b (count 1)",
+   "sha256": "6183ca878501d9e0caaa7aa925940f0e7725f7d29e03289d53afd214ba70e513"
+  },
+  {
+   "bytes": 1449,
+   "expected": "Accepted",
+   "file": "fixtures/T-0.3tz",
+   "id": "T-0",
+   "limits": {},
+   "members": 2,
+   "ref": "T base (V_0 = V_R, e_0 = e_R)",
+   "sha256": "a776aaa8ae7336766c46e474d99c1590bf19667db070f3003308787f11714ab8"
+  },
+  {
+   "bytes": 1449,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 16
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "file": "fixtures/T-1a.3tz",
+   "id": "T-1a",
+   "limits": {},
+   "members": 2,
+   "pair": "T-0",
+   "ref": "T-1 (outside by 2e-6, ||h|| = 17.3 >= 10)",
+   "sha256": "a6f28d3cb06f20c1802945e685c74097a525559d20ba75f5b831bebbbb4a6fc1"
+  },
+  {
+   "bytes": 1449,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 14
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/T-1b.3tz",
+   "id": "T-1b",
+   "limits": {},
+   "members": 2,
+   "pair": "T-1a",
+   "ref": "T-1 (outside by 2 x 1e-6(1 + ||h||))",
+   "sha256": "ac8bd6f60175f67d3e3bebdbab96dcc0151ae52b5cc2a53ffa994595ca58825a"
+  },
+  {
+   "bytes": 1449,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 16
+    },
+    "removed": []
+   },
+   "expected": "Accepted",
+   "file": "fixtures/T-2a.3tz",
+   "id": "T-2a",
+   "limits": {},
+   "members": 2,
+   "pair": "T-0",
+   "ref": "T-2",
+   "sha256": "425881ee2d174504fed9667ac1aa2665a871d5859e3786eade446e0384313698"
+  },
+  {
+   "bytes": 1449,
+   "diff": {
+    "added": [],
+    "changed": {
+     "subtrees/0/0/0.subtree": 11
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/T-2b.3tz",
+   "id": "T-2b",
+   "limits": {},
+   "members": 2,
+   "pair": "T-2a",
+   "ref": "T-2",
+   "sha256": "348dc178c34c76dbeb16ddfd692bd16ebad085f11c0bc998f10facb37acef25c"
+  },
+  {
+   "bytes": 1833,
+   "expected": "Accepted",
+   "file": "fixtures/T-3.base.3tz",
+   "id": "T-3.base",
+   "limits": {},
+   "members": 3,
+   "ref": "T-3 base (V_R = referencing tile)",
+   "sha256": "85067a8e0c2cd94371e2dbd28a222af47b21bb386cc05feefdb486c726276670"
+  },
+  {
+   "bytes": 1833,
+   "diff": {
+    "added": [],
+    "changed": {
+     "ext/tileset.json": 3
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/T-3.3tz",
+   "id": "T-3",
+   "limits": {},
+   "members": 3,
+   "pair": "T-3.base",
+   "ref": "T-3 (V_R escapes P; V_0 does not; X-11)",
+   "sha256": "f777ef98a7bb8ceefd92f79ef2477c00d6316be1c4817b1f94170e1463a17384"
+  },
+  {
+   "bytes": 19094,
+   "expected": "ResourceLimit:hierarchy_visits",
+   "file": "fixtures/R1b.3tz",
+   "id": "R1b",
+   "limits": {
+    "hierarchy_visits": 25
+   },
+   "members": 28,
+   "note": "limit = visits needed through the last reservation minus one (26 - 1); per-visit charging would reach the corrupt payload first (InvalidInput)",
+   "question": "Q2",
+   "ref": "R1b (reservation at the last subtree's admission)",
+   "sha256": "0eca73402a7b0b2ec980bd5f7e56da645422a0c7b769c2ab927595d3faee8419"
+  },
+  {
+   "bytes": 19094,
+   "expected": "Accepted",
+   "file": "fixtures/R1b.3tz",
+   "id": "R1b.full",
+   "limits": {
+    "hierarchy_visits": 27
+   },
+   "members": 28,
+   "production": "InvalidInput",
+   "ref": "R1b with the full count: C1 refuses the corrupt payload",
+   "sha256": "0eca73402a7b0b2ec980bd5f7e56da645422a0c7b769c2ab927595d3faee8419"
+  },
+  {
+   "bytes": 19094,
+   "expected": "Accepted",
+   "file": "fixtures/BQ.3tz",
+   "id": "R4",
+   "limits": {
+    "hierarchy_depth": 5
+   },
+   "members": 28,
+   "question": "Q3",
+   "ref": "R4 exact",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+  },
+  {
+   "bytes": 19094,
+   "expected": "ResourceLimit:hierarchy_depth",
+   "file": "fixtures/BQ.3tz",
+   "id": "R4-1",
+   "limits": {
+    "hierarchy_depth": 4
+   },
+   "members": 28,
+   "question": "Q3",
+   "ref": "R4 one less",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+  },
+  {
+   "bytes": 791,
+   "expected": "ResourceLimit:hierarchy_visits",
+   "file": "fixtures/R3.L8.3tz",
+   "id": "R3.L8",
+   "limits": {},
+   "members": 2,
+   "ref": "R3 (L = A = 8, 2,396,745 tiles, step 9)",
+   "sha256": "e362cc674060862e2f61f7ea5c0ec3638d95cb2151a2d1a9fe80487ed204834f"
+  },
+  {
+   "bytes": 793,
+   "expected": "ResourceLimit:hierarchy_visits",
+   "file": "fixtures/R3.L32.3tz",
+   "id": "R3.L32",
+   "limits": {},
+   "members": 2,
+   "ref": "R3 (L = A = 32)",
+   "sha256": "e5424429df09f6580b0ef9fed6099104bd4054c896f691ee9a2b66869ceeb166"
+  },
+  {
+   "bytes": 38343,
+   "expected": "ResourceLimit:hierarchy_visits",
+   "file": "fixtures/R5b.3tz",
+   "id": "R5b",
+   "limits": {},
+   "members": 2,
+   "ref": "R5b (bitstream P_t = 299,593)",
+   "sha256": "366f0cec8d6df6f922a71542cade5c958ef93f30fdbc773eeec9334ece911b6f"
+  },
+  {
+   "bytes": 19094,
+   "expected": "Accepted",
+   "file": "fixtures/BQ.3tz",
+   "id": "R5",
+   "limits": {},
+   "members": 28,
+   "production": "ResourceLimit (injected)",
+   "ref": "R5 (fixture for the injected rank-table refusal; production expects ResourceLimit under injection only)",
+   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+  },
+  {
+   "bytes": 203906,
+   "expected": "ResourceLimit:references",
+   "file": "fixtures/R9.3tz",
+   "id": "R9",
+   "limits": {},
+   "members": 76,
+   "ref": "R9 (DC-3: 182,500 reserved + 182,500 > 262,144)",
+   "sha256": "95cb4498da1a27b466d0afcdab7ff50ce4950358069d8d2a2de707ffaa0a3f4d"
+  },
+  {
+   "bytes": 4525,
+   "expected": "Accepted",
+   "file": "fixtures/R8b.1024.3tz",
+   "id": "R8b.1024",
+   "limits": {},
+   "members": 3,
+   "ref": "R8b (normalized length 1,024 B)",
+   "sha256": "49ef5cf029b75f129984723fa19dc20376e2dc1965a0a4e617c278ab39c0e713"
+  },
+  {
+   "bytes": 4528,
+   "diff": {
+    "added": [
+     "c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/0-0-0.glb"
+    ],
+    "changed": {
+     "tileset.json": "length 1361 -> 1362"
+    },
+    "removed": [
+     "c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/0-0-0.glb"
+    ]
+   },
+   "expected": "Unsupported",
+   "file": "fixtures/R8b.1025.3tz",
+   "id": "R8b.1025",
+   "limits": {},
+   "members": 3,
+   "pair": "R8b.1024",
+   "ref": "R8b (1,025 B)",
+   "sha256": "378750ed9c8b1fcc8fec96fea88d5144f4e829682da7ed3e306e4a2b9cd1cb2a"
+  },
+  {
+   "bytes": 4157674,
+   "expected": "Accepted",
+   "file": "large/R2.3tz",
+   "id": "R2",
+   "limits": {
+    "document_decoded_bytes": 395040
+   },
+   "members": 64,
+   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "ref": "R2 (cap = maximum live sum)",
+   "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
+  },
+  {
+   "bytes": 4157674,
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "file": "large/R2.3tz",
+   "id": "R2-1",
+   "limits": {
+    "document_decoded_bytes": 395039
+   },
+   "members": 64,
+   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "ref": "R2 (one less: refused before the sixth read)",
+   "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
+  },
+  {
+   "bytes": 4157674,
+   "expected": "Accepted",
+   "file": "large/R2.3tz",
+   "id": "R2b.mid",
+   "limits": {
+    "document_decoded_bytes": 2271480
+   },
+   "members": 64,
+   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "ref": "R2b (between live and cumulative)",
+   "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
+  },
+  {
+   "bytes": 4157674,
+   "expected": "Accepted",
+   "file": "large/R2.3tz",
+   "id": "R2b.cum-1",
+   "limits": {
+    "document_decoded_bytes": 4147919
+   },
+   "members": 64,
+   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "ref": "R2b (cumulative - 1; flips the cumulative mutant)",
+   "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
+  },
+  {
+   "bytes": 2397695,
+   "expected": "Accepted",
+   "file": "large/R6.3tz",
+   "id": "R6",
+   "limits": {
+    "member_bytes": 2397008
+   },
+   "members": 2,
+   "ref": "R6 (member_bytes = 2397008)",
+   "sha256": "63880078de7fba7dc9cd3558e3736f697683387252511c6cf9ad1f25c101d8dc"
+  },
+  {
+   "bytes": 2397695,
+   "expected": "ResourceLimit:member_bytes",
+   "file": "large/R6.3tz",
+   "id": "R6-1",
+   "limits": {
+    "member_bytes": 2397007
+   },
+   "members": 2,
+   "ref": "R6 (member_bytes - 1)",
+   "sha256": "63880078de7fba7dc9cd3558e3736f697683387252511c6cf9ad1f25c101d8dc"
+  },
+  {
+   "bytes": 39768941,
+   "expected": "InvalidInput",
+   "file": "large/R7.3tz",
+   "id": "R7",
+   "limits": {},
+   "members": 2,
+   "note": "Scan = 2 x 19,173,962 B (tile view + one shared zero view)",
+   "ref": "R7 (post-walk content rule)",
+   "sha256": "c14be0552ef7d1a7a07359f348bc8a040ee249095282b9b2fe0a3d69b0e55d22"
+  },
+  {
+   "bytes": 39769527,
+   "expected": "Accepted",
+   "file": "large/R7a.3tz",
+   "id": "R7a",
+   "limits": {},
+   "members": 3,
+   "note": "Scan = 2 x 19,173,962 B (tile view + one shared zero view)",
+   "ref": "R7a (one extra layer aliasing the tile view)",
+   "sha256": "772efbb07ab473f9cb998d3e913bf138896573d8659c8a8cc5d37b4f9b8cf061"
+  },
+  {
+   "bytes": 20342405,
+   "expected": "ResourceLimit:total_bytes_read",
+   "file": "large/R7b.3tz",
+   "id": "R7b",
+   "limits": {},
+   "members": 2,
+   "note": "one 19,253,962 B buffer; the tile view at 0 and 10,000 content views at 8, 16, ... (all zero)",
+   "ref": "R7b (DC-6: Scan ~ 10,001 x 19.17 MB at step 2)",
+   "sha256": "71dd96b90b991addcbcc6e38ec09ed9adb1790ef1d3a6e484fe7211a37e07550"
+  },
+  {
+   "bytes": 17226552,
+   "expected": "Accepted",
+   "file": "large/R7c.3tz",
+   "id": "R7c",
+   "limits": {},
+   "members": 37450,
+   "ref": "R7c (DC-4: once-per-class classification)",
+   "sha256": "e077908d1b4f1f9133d838140bd480fe7084c87225d2906ff4d87e98b3839889"
+  },
+  {
+   "bytes": 8001389,
+   "expected": "Unsupported",
+   "file": "large/R8.3tz",
+   "id": "R8",
+   "limits": {},
+   "members": 3,
+   "ref": "R8 (DC-1: variables eliminated, at root admission)",
+   "sha256": "4e8e634bcc6b86691edd797613ead23d3016ba4e1b86a6a7e04d51c4644eff92"
+  },
+  {
+   "bytes": 27515419,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "R8a.nopad"
+   ],
+   "file": "large/R8a.3tz",
+   "id": "R8a",
+   "limits": {},
+   "members": 37451,
+   "question": "Q4",
+   "ref": "R8a (variables survive; normalized length 25 B)",
+   "sha256": "074756fc7b0d0b30e40e135994a67a32db96c7c7ec411ec0c1c51f50a083ad2a"
+  },
+  {
+   "bytes": 19515419,
+   "expected": "Accepted",
+   "file": "large/R8a.nopad.3tz",
+   "id": "R8a.nopad",
+   "limits": {},
+   "members": 37451,
+   "question": "Q4",
+   "ref": "R8a timing companion without padding",
+   "sha256": "2ba128adc3c4f35205d8d9261d29115df1e11a47416202a46aae04324333938c"
+  },
+  {
+   "bytes": 18144,
+   "expected": "Unsupported",
+   "file": "fixtures/W9u.octree-none.3tz",
+   "id": "W9u.octree-none",
+   "limits": {},
+   "members": 26,
+   "ref": "W9u (#151 fixture, schema.id corrected)",
+   "sha256": "ec03367bd6f60c238119e09d6dab9559efc3294d45f3d306d7234ac1409cb186"
+  },
+  {
+   "bytes": 18186,
+   "expected": "Unsupported",
+   "file": "fixtures/W9u.octree-rename-class.3tz",
+   "id": "W9u.octree-rename-class",
+   "limits": {},
+   "members": 26,
+   "ref": "W9u (#151, class renamed)",
+   "sha256": "8207c53993c7d2c12441f1b3eca5b7e1600b5332291cb538f452d5f514cfae61"
+  },
+  {
+   "bytes": 3081,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.octree-n0.3tz",
+   "id": "W9'.octree-n0",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "8312deba1595d5258f2833e1dcfe845189c98c1ed6e3b7e24881380e63c2441d"
+  },
+  {
+   "bytes": 2929,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.octree-n0"
+   ],
+   "file": "fixtures/W9'.octree-n0.f32.3tz",
+   "id": "W9'.octree-n0.f32",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "d9ca2ee6bfdd0231090636f6b2431e645c171c81109a49f5e8557c8847832f2f"
+  },
+  {
+   "bytes": 2348,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.octree-n1.3tz",
+   "id": "W9'.octree-n1",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "b54e5ae22f47cb31a59b9a0577335cd6c08a6822752ca05d0b230381771b80e4"
+  },
+  {
+   "bytes": 2244,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.octree-n1"
+   ],
+   "file": "fixtures/W9'.octree-n1.f32.3tz",
+   "id": "W9'.octree-n1.f32",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "c7154d8e57bd8a5bc6124f5d423145d2da6ac1bb821117094ab82aa8d33983b3"
+  },
+  {
+   "bytes": 2867,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.octree-n2.3tz",
+   "id": "W9'.octree-n2",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "3c59b0d2e6580f9bcb479d66cd561a57d27f8bf905d68850bb840509e24cfa7d"
+  },
+  {
+   "bytes": 2819,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.octree-n2"
+   ],
+   "file": "fixtures/W9'.octree-n2.f32.3tz",
+   "id": "W9'.octree-n2.f32",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "06ad43183a908ec3af463b97aafb6dcdbeb1dbbb3efd977ec25ec2d79e75c0bb"
+  },
+  {
+   "bytes": 1681,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.octree-n3.3tz",
+   "id": "W9'.octree-n3",
+   "limits": {},
+   "members": 2,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "24a786c3f8b5c250764af612fe58bffdd448e7dd6125483bd4816a023db3b422"
+  },
+  {
+   "bytes": 1577,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.octree-n3"
+   ],
+   "file": "fixtures/W9'.octree-n3.f32.3tz",
+   "id": "W9'.octree-n3.f32",
+   "limits": {},
+   "members": 2,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "fc46825081414194b269fb381ea88dc6bc0f140af500a0f0529f5f08a6542af1"
+  },
+  {
+   "bytes": 2211,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.octree-n4.3tz",
+   "id": "W9'.octree-n4",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "348292ce94623d691abb5cd3c07064fae2a5a533f3c2bac4d137a5a63deafe78"
+  },
+  {
+   "bytes": 2163,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.octree-n4"
+   ],
+   "file": "fixtures/W9'.octree-n4.f32.3tz",
+   "id": "W9'.octree-n4.f32",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "c355ec47c0e6a4b315b3599837a95555f7a4a95dce5e8bb7170329f4dd731cfc"
+  },
+  {
+   "bytes": 18006,
+   "expected": "Unsupported",
+   "file": "fixtures/W9u.quadtree-none.3tz",
+   "id": "W9u.quadtree-none",
+   "limits": {},
+   "members": 26,
+   "ref": "W9u (#151 fixture, schema.id corrected)",
+   "sha256": "95555c703170dc0b3a0c478800d029098e35f1f5a91434b5585f0f92132ab8fe"
+  },
+  {
+   "bytes": 18048,
+   "expected": "Unsupported",
+   "file": "fixtures/W9u.quadtree-rename-class.3tz",
+   "id": "W9u.quadtree-rename-class",
+   "limits": {},
+   "members": 26,
+   "ref": "W9u (#151, class renamed)",
+   "sha256": "2fbaffdc639f495b35896238782cba45d7414c26c474e41cf3711fb275500415"
+  },
+  {
+   "bytes": 3059,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.quadtree-n0.3tz",
+   "id": "W9'.quadtree-n0",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "065862e9f1f14f85b0d9e64c57e51eef6438c24b89c43689296cde34efba9d18"
+  },
+  {
+   "bytes": 2907,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.quadtree-n0"
+   ],
+   "file": "fixtures/W9'.quadtree-n0.f32.3tz",
+   "id": "W9'.quadtree-n0.f32",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "160f871bec72a8a4d94619cbe78a77c13943bc8c8aa6c13bbb780d80967acc38"
+  },
+  {
+   "bytes": 2334,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.quadtree-n1.3tz",
+   "id": "W9'.quadtree-n1",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "7599f24206b96c7602ec83f54cb633a8e6695928416a15166a2d98ba38439af4"
+  },
+  {
+   "bytes": 2230,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.quadtree-n1"
+   ],
+   "file": "fixtures/W9'.quadtree-n1.f32.3tz",
+   "id": "W9'.quadtree-n1.f32",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "ca247946a0956aacb0600de78b66098431934ce50376ece118e04061d44d4ccf"
+  },
+  {
+   "bytes": 2845,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.quadtree-n2.3tz",
+   "id": "W9'.quadtree-n2",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "03ad0071884bba914e5a79c52408ee1a562914582589928b6a03ad79f0fc4bbe"
+  },
+  {
+   "bytes": 2797,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.quadtree-n2"
+   ],
+   "file": "fixtures/W9'.quadtree-n2.f32.3tz",
+   "id": "W9'.quadtree-n2.f32",
+   "limits": {},
+   "members": 4,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "0932c6a1ccf50f00dae1abd488657f58d69a6e82740cebd7d4abbd4e7e061432"
+  },
+  {
+   "bytes": 1675,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.quadtree-n3.3tz",
+   "id": "W9'.quadtree-n3",
+   "limits": {},
+   "members": 2,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "01b3d0735a4ec7a50ad9ca57673851e4ab2a96ab0fc69bd66d8f3fd6d4290166"
+  },
+  {
+   "bytes": 1571,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.quadtree-n3"
+   ],
+   "file": "fixtures/W9'.quadtree-n3.f32.3tz",
+   "id": "W9'.quadtree-n3.f32",
+   "limits": {},
+   "members": 2,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "edea22815ec7870db41e2caa9fc3275f090c34bd1c79d363732b32d1ffbda7e0"
+  },
+  {
+   "bytes": 2197,
+   "expected": "Accepted",
+   "file": "fixtures/W9'.quadtree-n4.3tz",
+   "id": "W9'.quadtree-n4",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant)",
+   "sha256": "3bf6ab7206855b4a2a1809924eae881e9952e86f21b9c6d2023a895436aaf32c"
+  },
+  {
+   "bytes": 2149,
+   "expected": "Accepted",
+   "facts": [
+    "equal",
+    "W9'.quadtree-n4"
+   ],
+   "file": "fixtures/W9'.quadtree-n4.f32.3tz",
+   "id": "W9'.quadtree-n4.f32",
+   "limits": {},
+   "members": 3,
+   "ref": "W9' (O-authored link-free a2Tile variant, FLOAT32)",
+   "sha256": "558f4915ed3f6c7c4afc0e6faeb1da428122dbbb9647e3e97eef79951f226fe0"
+  },
+  {
+   "bytes": 942,
+   "expected": "Undecided",
+   "file": "fixtures/Z-payload.3tz",
+   "id": "Z-payload",
+   "limits": {},
+   "members": 2,
+   "production": "Accepted",
+   "ref": "O-extra: explicit-only archive carrying the oracle's minimal GLB (production must accept it before any control relies on payload validity)",
+   "sha256": "f71f268f7291c2eedff5ba2623f7f594a48173016b633078a71fdbd883f3a3f1"
+  }
+ ],
+ "contract": "9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496",
+ "generator": "witnesses/generate.py",
+ "inputs": {
+  "bench/architecture_audit/implicit_rewrite/a2_semantics/octree.json": "ec78244b10efb9ca564e037f51473b334ed4dbf4e4ece36feb918798e7fcee8b",
+  "bench/architecture_audit/implicit_rewrite/a2_semantics/quadtree.json": "23d26bc05934a203da1505b07cf31a1fd896136bcacc482dd7eaa0dbd9665637"
+ },
+ "large": true
+}
