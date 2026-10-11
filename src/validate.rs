@@ -705,6 +705,8 @@ struct FactConsumer<'a> {
     idx: u64,
     max_depth: u64,
     quaternion_window: bool,
+    /// Maximum path `s_step` over every instance, with or without POSITION.
+    s_inst_all: u32,
 }
 impl SceneConsumer for FactConsumer<'_> {
     type Error = Error;
@@ -754,6 +756,8 @@ impl SceneConsumer for FactConsumer<'_> {
             Some((g, path)) => (*g, *path),
             None => (containment::composite_identity(), 0),
         };
+        // sInst ranges over all instances (contract "Per-URI facts").
+        self.s_inst_all = self.s_inst_all.max(s_inst);
         for &accessor in instance.positions() {
             let (pair0, s_pos) =
                 containment::position_bound(&g, normalization(instance.format(accessor)));
@@ -953,6 +957,7 @@ impl Check<'_> {
             idx: 0,
             max_depth: 0,
             quaternion_window: false,
+            s_inst_all: 0,
         };
         let resources = &mut self.resources;
         let facts = payload::inspect_scene(
@@ -979,7 +984,12 @@ impl Check<'_> {
             exclusions |= Reason::QuaternionWindow.bit();
         }
         let uri_facts = UriFacts {
-            bounds: consumer.bounds,
+            // A URI with no POSITION-bearing instance has no Pair0 and streams
+            // nothing; otherwise sInst covers every instance's node path.
+            bounds: consumer.bounds.map(|mut bounds| {
+                bounds.s_inst = bounds.s_inst.max(consumer.s_inst_all);
+                bounds
+            }),
             t: consumer.t,
             nodes: consumer.nodes,
             idx: consumer.idx,
@@ -2712,6 +2722,57 @@ mod containment_controls {
                 "{node}"
             );
         }
+    }
+
+    #[test]
+    fn instances_without_position_bound_spans_and_are_never_streamed() {
+        // Review B1: three nested in-window rotations [2^-1000, 0, 0, 1] end in
+        // an empty mesh (static sInst 6008 > 4096). Alone it draws nothing and
+        // has no Pair0: Contained, with no composite pushed (a push would breach
+        // the arena). Beside a real triangle, its sInst joins the URI's
+        // span: numericSpan. Expected verdicts are the oracle's.
+        let rot = json!([2f64.powi(-1000), 0, 0, 1]);
+        let nodes = json!([
+            {"rotation":rot,"children":[1]},
+            {"rotation":rot,"children":[2]},
+            {"rotation":rot,"mesh":0}
+        ]);
+        let empty = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "meshes":[{"primitives":[]}],"nodes":nodes});
+        let files = single(boxed([0.; 3], [10.; 3]), glb(&empty, &[]));
+        assert!(contained(&run(&files).unwrap()));
+        let (_work, path) = package(&files);
+        let facts =
+            containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap();
+        // 128·(⌈2002/64⌉² + ⌈4005/64⌉² + ⌈6006/64⌉²), the oracle's precheck units.
+        assert_eq!(facts[0].nodes, Some(1_770_112), "{facts:?}");
+        let mut real = empty.clone();
+        let mut bin = Vec::new();
+        for v in [0f32, 0., 0., 1., 0., 0., 0., 1., 0.] {
+            bin.extend(v.to_le_bytes());
+        }
+        real["buffers"] = json!([{"byteLength":36}]);
+        real["bufferViews"] = json!([{"buffer":0,"byteLength":36}]);
+        real["accessors"] = json!([{"bufferView":0,"componentType":5126,"type":"VEC3",
+            "count":3,"min":[0,0,0],"max":[1,1,0]}]);
+        real["meshes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"primitives":[{"attributes":{"POSITION":0}}]}));
+        real["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"mesh":1}));
+        real["scenes"][0]["nodes"] = json!([0, 3]);
+        let files = single(boxed([0.; 3], [10.; 3]), glb(&real, &bin));
+        assert_eq!(not_inspected(run(&files)), ["numericSpan"]);
+        // The span is the only obstacle: above 6008 bits the triangle streams.
+        let limits = ValidationLimits {
+            containment_span_bits: 8192,
+            ..ValidationLimits::default()
+        };
+        assert!(contained(&run_with(&files, limits).unwrap()));
     }
 
     #[test]

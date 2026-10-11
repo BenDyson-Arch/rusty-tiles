@@ -100,7 +100,10 @@ pub(super) struct Graph {
     children: Vec<usize>,
     /// Selected scene roots, or None for `sceneSelection`.
     roots: Option<Vec<usize>>,
-    meshes_below: Vec<bool>,
+    /// The node's subtree holds an instance whose mesh has a POSITION
+    /// accessor. Streaming walks only these paths: every composite it pushes
+    /// lies on a path whose static span the precheck bounded.
+    draws_below: Vec<bool>,
 }
 
 /// The phase-1 and phase-2 consumer of the selected-scene walk.
@@ -298,18 +301,21 @@ pub(super) fn admit(
     if order.len() != nodes.len() {
         return Err(invalid("glTF node graph contains a cycle"));
     }
-    let mut meshes_below = allocation(nodes.len(), false)?;
+    let mut draws_below = allocation(nodes.len(), false)?;
     for &n in order.iter().rev() {
         let (a, b) = nodes[n].children;
-        meshes_below[n] =
-            nodes[n].mesh.is_some() || children[a..b].iter().any(|c| meshes_below[*c]);
+        let draws = nodes[n].mesh.is_some_and(|m| {
+            let (start, end) = meshes.meshes[m].positions;
+            start < end
+        });
+        draws_below[n] = draws || children[a..b].iter().any(|c| draws_below[*c]);
     }
     let roots = selected.map(|s| std::mem::take(&mut scene_roots[s]));
     Ok(Graph {
         nodes,
         children,
         roots,
-        meshes_below,
+        draws_below,
     })
 }
 
@@ -366,7 +372,7 @@ impl Graph {
         let prune = consumer.instances_only();
         let mut stack: Vec<(usize, usize)> = Vec::new();
         for &root in roots {
-            if prune && !self.meshes_below[root] {
+            if prune && !self.draws_below[root] {
                 continue;
             }
             if let Err(e) = self.visit(root, 1, meshes, draws, consumer) {
@@ -378,7 +384,7 @@ impl Graph {
                 if cursor < self.nodes[n].children.1 {
                     top.1 += 1;
                     let child = self.children[cursor];
-                    if prune && !self.meshes_below[child] {
+                    if prune && !self.draws_below[child] {
                         continue;
                     }
                     let depth = stack.len() as u64 + 1;
