@@ -102,3 +102,7 @@ mod payload_stride_acceptance;
 #[cfg(test)]
 #[path = "../bench/architecture_audit/c2_decoded_containment/acceptance/oracle_parity.rs"]
 mod c2_oracle_parity;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/implicit_read/acceptance/oracle_parity.rs"]
+mod i1_oracle_parity;

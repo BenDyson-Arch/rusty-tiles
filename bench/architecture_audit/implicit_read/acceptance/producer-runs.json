@@ -1,0 +1,2718 @@
+{
+ "head-native": {
+  "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+  "binarySha256": "a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0",
+  "runs": [
+   {
+    "id": "W1",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "-o",
+     "head-native/W1.3tz"
+    ],
+    "exit": 0,
+    "sha256": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+    "bytes": 3070290,
+    "wallSeconds": 0.044
+   },
+   {
+    "id": "W1-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "--explicit",
+     "-o",
+     "head-native/W1-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "828e1010b881074ab3916577fef0c35d93d24b54da7764896ac0986388ee4b38",
+    "bytes": 4688978,
+    "wallSeconds": 0.051
+   },
+   {
+    "id": "W2",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "-o",
+     "head-native/W2.3tz"
+    ],
+    "exit": 0,
+    "sha256": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+    "bytes": 23684959,
+    "wallSeconds": 0.263
+   },
+   {
+    "id": "W2-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "--explicit",
+     "-o",
+     "head-native/W2-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "20f20d5f1aaa9fe402320fc8a9edcb4e9d259f8767ecbbac9eeefe1508f7b5e5",
+    "bytes": 25272679,
+    "wallSeconds": 0.293
+   },
+   {
+    "id": "W3-pc-deep",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "-o",
+     "head-native/W3-pc-deep.3tz"
+    ],
+    "exit": 0,
+    "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+    "bytes": 12925562,
+    "wallSeconds": 0.339
+   },
+   {
+    "id": "W3-pc-deep-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "--explicit",
+     "-o",
+     "head-native/W3-pc-deep-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c985e3b5b9eef063fea4b2f9012ab4b06e8adef8bc099826ac44614db84d59a1",
+    "bytes": 10510084,
+    "wallSeconds": 0.195
+   },
+   {
+    "id": "W4-points-lines",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native/W4-points-lines.3tz"
+    ],
+    "exit": 0,
+    "sha256": "e709c2dbc10ea60597621683d3f67990abf5c2e8cefae0c1792ae772f1e8330d",
+    "bytes": 13416,
+    "wallSeconds": 0.024
+   },
+   {
+    "id": "W4-points-lines-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native/W4-points-lines-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "883411a5d5acdbaf4b713aab894592485efc716758cf94ab48a1f3523dac63f6",
+    "bytes": 11243,
+    "wallSeconds": 0.026
+   },
+   {
+    "id": "W4-points-lines-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native/W4-points-lines-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "95a5c535da7012ceb6ca859adbbef3d3d40a3a20a3ebdfdf71583a3c0b5dfab8",
+    "bytes": 13479,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native/W4-points-lines-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2f260ceb9890b48da3dd432b083853f3361d11a2cf2badbc6475bb64163ea0e",
+    "bytes": 11272,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native/W4-points-lines-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "0c5c9cbb94e200a0d6c1e6fd0811b840ad734c73731e5d4ced221fc5d34122ca",
+    "bytes": 15614,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native/W4-points-lines-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "d2442f90c5d2809933e52a499e5f9fd37add57a04b64aa43d19d0f6e4d0b21c3",
+    "bytes": 13441,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-polygons",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native/W4-polygons.3tz"
+    ],
+    "exit": 0,
+    "sha256": "fac1b346e03223abbb71170438d3107b8861722f63a5106294374d7ba93af156",
+    "bytes": 38840,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native/W4-polygons-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "655047303ec7f97f777497aaefe09200cf44b305c410d0d9a53e4cf8df3b53e2",
+    "bytes": 36671,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native/W4-polygons-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "5e12a311d0814db2b60d83014f112562249f6a5ce6064b3db2b73126c84b0309",
+    "bytes": 36132,
+    "wallSeconds": 0.038
+   },
+   {
+    "id": "W4-polygons-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native/W4-polygons-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "df0981bae4d38562694c35d82be8ca7f5fbac67595335012cc233eb720a0dfda",
+    "bytes": 33931,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native/W4-polygons-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "560e0903acec87ebb8109fc41920cb7a6440d0e44b3ac8b362dae7b1586f41df",
+    "bytes": 25070,
+    "wallSeconds": 0.038
+   },
+   {
+    "id": "W4-polygons-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native/W4-polygons-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9be2485ba76161954a0d69b73d8b8026888ba7dd18e0594ebaf8caf002f76274",
+    "bytes": 22901,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W5-vec-perf",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native/W5-vec-perf.3tz"
+    ],
+    "exit": 0,
+    "sha256": "ecf728ee458b04a25b0b96796bd48b3267980f8bf58c729adbd587ea9a6e3c04",
+    "bytes": 19819944,
+    "wallSeconds": 3.533
+   },
+   {
+    "id": "W5-vec-perf-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native/W5-vec-perf-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a9e7f1a44b07b47bcf9105bd542bce282e43da7b9cd060eab0beed389370b3f5",
+    "bytes": 19447030,
+    "wallSeconds": 3.517
+   },
+   {
+    "id": "W5-vec-perf-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native/W5-vec-perf-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "605c7c32b20f76feb3f69b6f8d3f74ccf737f9e4a7ba693b810621849a027e60",
+    "bytes": 18177516,
+    "wallSeconds": 3.798
+   },
+   {
+    "id": "W5-vec-perf-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native/W5-vec-perf-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "539c1b1d0eed723114aea2f6823106f49b5e6c457cfc9b04d3e8340200df87c7",
+    "bytes": 17766880,
+    "wallSeconds": 3.604
+   },
+   {
+    "id": "W5-vec-perf-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native/W5-vec-perf-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "b8a217d750c728c31f4df16818a72d7633d682e7c51a29da075dd9c6d66e1313",
+    "bytes": 15409616,
+    "wallSeconds": 4.092
+   },
+   {
+    "id": "W5-vec-perf-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native/W5-vec-perf-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "bcb9b51c72807f245deefa4d5fe446faacf1f6e93c166e45d941ac205b63ad8f",
+    "bytes": 15036707,
+    "wallSeconds": 4.044
+   },
+   {
+    "id": "mf2-lod3",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "-o",
+     "head-native/mf2-lod3.3tz"
+    ],
+    "exit": 0,
+    "sha256": "f795a4f1ece91c34e124c193789add7cf94c51463fc8ef155d03ad25e3448356",
+    "bytes": 83616738,
+    "wallSeconds": 13.411
+   },
+   {
+    "id": "mf2-lod3-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "--explicit",
+     "-o",
+     "head-native/mf2-lod3-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "90eb647e59c976603cec7038610c61fd5161e908567858cd6730cc0bef6ce4ec",
+    "bytes": 74597727,
+    "wallSeconds": 12.697
+   },
+   {
+    "id": "W6",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "-o",
+     "head-native/W6.3tz"
+    ],
+    "exit": 0,
+    "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+    "bytes": 227685,
+    "wallSeconds": 0.044
+   },
+   {
+    "id": "W6-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "--explicit",
+     "-o",
+     "head-native/W6-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+    "bytes": 106383,
+    "wallSeconds": 0.032
+   },
+   {
+    "id": "W6d",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "-o",
+     "head-native/W6d.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0",
+    "bytes": 1231463,
+    "wallSeconds": 0.102
+   },
+   {
+    "id": "W6d-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "--explicit",
+     "-o",
+     "head-native/W6d-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+    "bytes": 931191,
+    "wallSeconds": 0.074
+   },
+   {
+    "id": "W7",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "-o",
+     "head-native/W7.3tz"
+    ],
+    "exit": 0,
+    "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+    "bytes": 3666,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "W7-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "--explicit",
+     "-o",
+     "head-native/W7-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+    "bytes": 2252,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "glb-plain",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/plain.gltf",
+     "-o",
+     "head-native/glb-plain.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7efd6da4bdb7b1beb769684dcfb6fa6acc091cde80ee7973d6b289cd3498825e",
+    "bytes": 4094,
+    "wallSeconds": 0.018
+   },
+   {
+    "id": "glb-deep20",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep20.gltf",
+     "-o",
+     "head-native/glb-deep20.3tz"
+    ],
+    "exit": 0,
+    "sha256": "420810c98832e6505b9ee55941a00d0fcae27e4f16f1f62136faf7af71a1219d",
+    "bytes": 7161,
+    "wallSeconds": 0.018
+   }
+  ]
+ },
+ "head-native-2": {
+  "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+  "binarySha256": "a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0",
+  "runs": [
+   {
+    "id": "W1",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "-o",
+     "head-native-2/W1.3tz"
+    ],
+    "exit": 0,
+    "sha256": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+    "bytes": 3070290,
+    "wallSeconds": 0.044
+   },
+   {
+    "id": "W1-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "--explicit",
+     "-o",
+     "head-native-2/W1-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "828e1010b881074ab3916577fef0c35d93d24b54da7764896ac0986388ee4b38",
+    "bytes": 4688978,
+    "wallSeconds": 0.052
+   },
+   {
+    "id": "W2",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "-o",
+     "head-native-2/W2.3tz"
+    ],
+    "exit": 0,
+    "sha256": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+    "bytes": 23684959,
+    "wallSeconds": 0.266
+   },
+   {
+    "id": "W2-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "--explicit",
+     "-o",
+     "head-native-2/W2-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "20f20d5f1aaa9fe402320fc8a9edcb4e9d259f8767ecbbac9eeefe1508f7b5e5",
+    "bytes": 25272679,
+    "wallSeconds": 0.311
+   },
+   {
+    "id": "W3-pc-deep",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "-o",
+     "head-native-2/W3-pc-deep.3tz"
+    ],
+    "exit": 0,
+    "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+    "bytes": 12925562,
+    "wallSeconds": 0.349
+   },
+   {
+    "id": "W3-pc-deep-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "--explicit",
+     "-o",
+     "head-native-2/W3-pc-deep-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c985e3b5b9eef063fea4b2f9012ab4b06e8adef8bc099826ac44614db84d59a1",
+    "bytes": 10510084,
+    "wallSeconds": 0.201
+   },
+   {
+    "id": "W4-points-lines",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native-2/W4-points-lines.3tz"
+    ],
+    "exit": 0,
+    "sha256": "e709c2dbc10ea60597621683d3f67990abf5c2e8cefae0c1792ae772f1e8330d",
+    "bytes": 13416,
+    "wallSeconds": 0.024
+   },
+   {
+    "id": "W4-points-lines-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-points-lines-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "883411a5d5acdbaf4b713aab894592485efc716758cf94ab48a1f3523dac63f6",
+    "bytes": 11243,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native-2/W4-points-lines-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "95a5c535da7012ceb6ca859adbbef3d3d40a3a20a3ebdfdf71583a3c0b5dfab8",
+    "bytes": 13479,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-points-lines-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2f260ceb9890b48da3dd432b083853f3361d11a2cf2badbc6475bb64163ea0e",
+    "bytes": 11272,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native-2/W4-points-lines-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "0c5c9cbb94e200a0d6c1e6fd0811b840ad734c73731e5d4ced221fc5d34122ca",
+    "bytes": 15614,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-points-lines-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "d2442f90c5d2809933e52a499e5f9fd37add57a04b64aa43d19d0f6e4d0b21c3",
+    "bytes": 13441,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-polygons",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native-2/W4-polygons.3tz"
+    ],
+    "exit": 0,
+    "sha256": "fac1b346e03223abbb71170438d3107b8861722f63a5106294374d7ba93af156",
+    "bytes": 38840,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-polygons-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "655047303ec7f97f777497aaefe09200cf44b305c410d0d9a53e4cf8df3b53e2",
+    "bytes": 36671,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native-2/W4-polygons-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "5e12a311d0814db2b60d83014f112562249f6a5ce6064b3db2b73126c84b0309",
+    "bytes": 36132,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-polygons-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "df0981bae4d38562694c35d82be8ca7f5fbac67595335012cc233eb720a0dfda",
+    "bytes": 33931,
+    "wallSeconds": 0.038
+   },
+   {
+    "id": "W4-polygons-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native-2/W4-polygons-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "560e0903acec87ebb8109fc41920cb7a6440d0e44b3ac8b362dae7b1586f41df",
+    "bytes": 25070,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native-2/W4-polygons-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9be2485ba76161954a0d69b73d8b8026888ba7dd18e0594ebaf8caf002f76274",
+    "bytes": 22901,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W5-vec-perf",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-native-2/W5-vec-perf.3tz"
+    ],
+    "exit": 0,
+    "sha256": "ecf728ee458b04a25b0b96796bd48b3267980f8bf58c729adbd587ea9a6e3c04",
+    "bytes": 19819944,
+    "wallSeconds": 3.529
+   },
+   {
+    "id": "W5-vec-perf-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-native-2/W5-vec-perf-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a9e7f1a44b07b47bcf9105bd542bce282e43da7b9cd060eab0beed389370b3f5",
+    "bytes": 19447030,
+    "wallSeconds": 3.463
+   },
+   {
+    "id": "W5-vec-perf-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-native-2/W5-vec-perf-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "605c7c32b20f76feb3f69b6f8d3f74ccf737f9e4a7ba693b810621849a027e60",
+    "bytes": 18177516,
+    "wallSeconds": 3.578
+   },
+   {
+    "id": "W5-vec-perf-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-native-2/W5-vec-perf-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "539c1b1d0eed723114aea2f6823106f49b5e6c457cfc9b04d3e8340200df87c7",
+    "bytes": 17766880,
+    "wallSeconds": 3.546
+   },
+   {
+    "id": "W5-vec-perf-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-native-2/W5-vec-perf-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "b8a217d750c728c31f4df16818a72d7633d682e7c51a29da075dd9c6d66e1313",
+    "bytes": 15409616,
+    "wallSeconds": 4.087
+   },
+   {
+    "id": "W5-vec-perf-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-native-2/W5-vec-perf-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "bcb9b51c72807f245deefa4d5fe446faacf1f6e93c166e45d941ac205b63ad8f",
+    "bytes": 15036707,
+    "wallSeconds": 4.021
+   },
+   {
+    "id": "mf2-lod3",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "-o",
+     "head-native-2/mf2-lod3.3tz"
+    ],
+    "exit": 0,
+    "sha256": "f795a4f1ece91c34e124c193789add7cf94c51463fc8ef155d03ad25e3448356",
+    "bytes": 83616738,
+    "wallSeconds": 13.229
+   },
+   {
+    "id": "mf2-lod3-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "--explicit",
+     "-o",
+     "head-native-2/mf2-lod3-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "90eb647e59c976603cec7038610c61fd5161e908567858cd6730cc0bef6ce4ec",
+    "bytes": 74597727,
+    "wallSeconds": 12.681
+   },
+   {
+    "id": "W6",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "-o",
+     "head-native-2/W6.3tz"
+    ],
+    "exit": 0,
+    "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+    "bytes": 227685,
+    "wallSeconds": 0.044
+   },
+   {
+    "id": "W6-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "--explicit",
+     "-o",
+     "head-native-2/W6-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+    "bytes": 106383,
+    "wallSeconds": 0.031
+   },
+   {
+    "id": "W6d",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "-o",
+     "head-native-2/W6d.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0",
+    "bytes": 1231463,
+    "wallSeconds": 0.101
+   },
+   {
+    "id": "W6d-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "--explicit",
+     "-o",
+     "head-native-2/W6d-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+    "bytes": 931191,
+    "wallSeconds": 0.074
+   },
+   {
+    "id": "W7",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "-o",
+     "head-native-2/W7.3tz"
+    ],
+    "exit": 0,
+    "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+    "bytes": 3666,
+    "wallSeconds": 0.018
+   },
+   {
+    "id": "W7-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "--explicit",
+     "-o",
+     "head-native-2/W7-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+    "bytes": 2252,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "glb-plain",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/plain.gltf",
+     "-o",
+     "head-native-2/glb-plain.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7efd6da4bdb7b1beb769684dcfb6fa6acc091cde80ee7973d6b289cd3498825e",
+    "bytes": 4094,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "glb-deep20",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep20.gltf",
+     "-o",
+     "head-native-2/glb-deep20.3tz"
+    ],
+    "exit": 0,
+    "sha256": "420810c98832e6505b9ee55941a00d0fcae27e4f16f1f62136faf7af71a1219d",
+    "bytes": 7161,
+    "wallSeconds": 0.017
+   }
+  ]
+ },
+ "head-portable": {
+  "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+  "binarySha256": "1ace7782ad6fb6ec0ad3d96fb5971e7ae43da7ccf3f7ca3e3863ef523cff71be",
+  "runs": [
+   {
+    "id": "W1",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "-o",
+     "head-portable/W1.3tz"
+    ],
+    "exit": 0,
+    "sha256": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+    "bytes": 3070290,
+    "wallSeconds": 0.032
+   },
+   {
+    "id": "W1-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "--explicit",
+     "-o",
+     "head-portable/W1-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "828e1010b881074ab3916577fef0c35d93d24b54da7764896ac0986388ee4b38",
+    "bytes": 4688978,
+    "wallSeconds": 0.04
+   },
+   {
+    "id": "W2",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "-o",
+     "head-portable/W2.3tz"
+    ],
+    "exit": 0,
+    "sha256": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+    "bytes": 23684959,
+    "wallSeconds": 0.24
+   },
+   {
+    "id": "W2-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "--explicit",
+     "-o",
+     "head-portable/W2-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "20f20d5f1aaa9fe402320fc8a9edcb4e9d259f8767ecbbac9eeefe1508f7b5e5",
+    "bytes": 25272679,
+    "wallSeconds": 0.282
+   },
+   {
+    "id": "W3-pc-deep",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "-o",
+     "head-portable/W3-pc-deep.3tz"
+    ],
+    "exit": 0,
+    "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+    "bytes": 12925562,
+    "wallSeconds": 0.329
+   },
+   {
+    "id": "W3-pc-deep-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "--explicit",
+     "-o",
+     "head-portable/W3-pc-deep-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c985e3b5b9eef063fea4b2f9012ab4b06e8adef8bc099826ac44614db84d59a1",
+    "bytes": 10510084,
+    "wallSeconds": 0.183
+   },
+   {
+    "id": "W4-points-lines",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-portable/W4-points-lines.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7d715d846c2b3a9dfbfa6fa68843bdd805ddc2875034fbb3f2a2a7e9b53eed13",
+    "bytes": 13413,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-points-lines-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-portable/W4-points-lines-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "630639836e0faa5d8e7b10ce19fd7b69e8ae9ee79b269b6d6d3c558a1f99cb62",
+    "bytes": 11240,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-points-lines-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-portable/W4-points-lines-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c0a7343803aca07b42353cd4cf559a7918f51c69f43370c01f083c267b136830",
+    "bytes": 13476,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-points-lines-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-portable/W4-points-lines-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "2cbb392d4b456187509a585bada87346079e8480fa2d659c6f2572c83f11cd10",
+    "bytes": 11269,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-points-lines-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-portable/W4-points-lines-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "309e390cbd60b0d17c06dfb1bed8da0cc7c4860a0f632c790e69be981cfdb0c9",
+    "bytes": 15611,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-points-lines-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-portable/W4-points-lines-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "258bc457586a03b32d138e0f1a265388f16116b6c0438899d7e0c85650d60f01",
+    "bytes": 13438,
+    "wallSeconds": 0.01
+   },
+   {
+    "id": "W4-polygons",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-portable/W4-polygons.3tz"
+    ],
+    "exit": 0,
+    "sha256": "0cbebf8f742d450aa989d0d113c24d3daacc2052daed139ab02f3c9828de6639",
+    "bytes": 38837,
+    "wallSeconds": 0.022
+   },
+   {
+    "id": "W4-polygons-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-portable/W4-polygons-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "720a3fa649146f996745626ef37edb5752d282264e955d3ee55762a8a905490f",
+    "bytes": 36668,
+    "wallSeconds": 0.02
+   },
+   {
+    "id": "W4-polygons-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-portable/W4-polygons-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "d4123c683c133364a9a51bda8602e0f4e89806755b70215116510449f2b8bdba",
+    "bytes": 36129,
+    "wallSeconds": 0.02
+   },
+   {
+    "id": "W4-polygons-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-portable/W4-polygons-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7b71e910b479372b33fbce788d7471bfa016d45b88c1665e7d88c17026d2107e",
+    "bytes": 33928,
+    "wallSeconds": 0.02
+   },
+   {
+    "id": "W4-polygons-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-portable/W4-polygons-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "ef5d7600838a91a318df06a262d89f1f619068693c547f6ff51a2f1f7644f5f9",
+    "bytes": 25027,
+    "wallSeconds": 0.021
+   },
+   {
+    "id": "W4-polygons-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-portable/W4-polygons-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a292e325a843c244c115b8d138df6dc29308c4d004b67690048b8398a3f40e05",
+    "bytes": 22858,
+    "wallSeconds": 0.02
+   },
+   {
+    "id": "W5-vec-perf",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "head-portable/W5-vec-perf.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a533edb9573e2d0a3554ae71532927e2e001a6306153c997e3bb68d461014747",
+    "bytes": 19819941,
+    "wallSeconds": 3.124
+   },
+   {
+    "id": "W5-vec-perf-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "head-portable/W5-vec-perf-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "00f5ba335237572c4ddcc7de7abed37e35955b73a941cdf9396a67806691c16b",
+    "bytes": 19447027,
+    "wallSeconds": 3.111
+   },
+   {
+    "id": "W5-vec-perf-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "head-portable/W5-vec-perf-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c31f56e1355c2eb3d07e609009e049345cf831d77fbc4abe2b6ca864bd82846d",
+    "bytes": 18177513,
+    "wallSeconds": 3.215
+   },
+   {
+    "id": "W5-vec-perf-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "head-portable/W5-vec-perf-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "900654a106f0afd70da9c8339382ad8d87d20ae4cdce378fead4b994919975dc",
+    "bytes": 17766877,
+    "wallSeconds": 3.142
+   },
+   {
+    "id": "W5-vec-perf-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "head-portable/W5-vec-perf-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a0ee4497dfd1521a03627414c6424f4c40c1197ca26b5617322e2ae536470321",
+    "bytes": 15412694,
+    "wallSeconds": 3.624
+   },
+   {
+    "id": "W5-vec-perf-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "head-portable/W5-vec-perf-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "4ae310a2c75f017f9808f80c2937a766ce6f5098631f42268cbed0b098b4f5ec",
+    "bytes": 15039785,
+    "wallSeconds": 3.629
+   },
+   {
+    "id": "W6",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "-o",
+     "head-portable/W6.3tz"
+    ],
+    "exit": 0,
+    "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+    "bytes": 227685,
+    "wallSeconds": 0.033
+   },
+   {
+    "id": "W6-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "--explicit",
+     "-o",
+     "head-portable/W6-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+    "bytes": 106383,
+    "wallSeconds": 0.021
+   },
+   {
+    "id": "W6d",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "-o",
+     "head-portable/W6d.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0",
+    "bytes": 1231463,
+    "wallSeconds": 0.093
+   },
+   {
+    "id": "W6d-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "--explicit",
+     "-o",
+     "head-portable/W6d-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+    "bytes": 931191,
+    "wallSeconds": 0.065
+   },
+   {
+    "id": "W7",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "-o",
+     "head-portable/W7.3tz"
+    ],
+    "exit": 0,
+    "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+    "bytes": 3666,
+    "wallSeconds": 0.007
+   },
+   {
+    "id": "W7-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-portable",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "--explicit",
+     "-o",
+     "head-portable/W7-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+    "bytes": 2252,
+    "wallSeconds": 0.007
+   }
+  ]
+ },
+ "develop-native": {
+  "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+  "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+  "runs": [
+   {
+    "id": "W1",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "-o",
+     "develop-native/W1.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a4d9578b3d3a344cd75e60104ef3354a984bc1d49a36e1c6c2bb7dc117db54a7",
+    "bytes": 3070622,
+    "wallSeconds": 0.092
+   },
+   {
+    "id": "W1-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "1000",
+     "--explicit",
+     "-o",
+     "develop-native/W1-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "36cd6ec617a33f384658c3699b2264621e33505e31e05485feb202984bf8bad5",
+    "bytes": 4750956,
+    "wallSeconds": 0.05
+   },
+   {
+    "id": "W2",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "-o",
+     "develop-native/W2.3tz"
+    ],
+    "exit": 0,
+    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+    "bytes": 23904928,
+    "wallSeconds": 0.26
+   },
+   {
+    "id": "W2-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/points.las",
+     "--sourceCrs",
+     "EPSG:32756",
+     "--heightOffset",
+     "0",
+     "--maxPoints",
+     "2000",
+     "--explicit",
+     "-o",
+     "develop-native/W2-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a7c6ff5f0692e41554e6b754fa1de9135264f30d54069b4255f4eefec6a4a1f6",
+    "bytes": 25708070,
+    "wallSeconds": 0.283
+   },
+   {
+    "id": "W3-pc-deep",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "-o",
+     "develop-native/W3-pc-deep.3tz"
+    ],
+    "exit": 0,
+    "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
+    "bytes": 13357687,
+    "wallSeconds": 0.396
+   },
+   {
+    "id": "W3-pc-deep-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "point-cloud",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/cloud.las",
+     "--sourceCrs",
+     "local",
+     "--maxPoints",
+     "40",
+     "--explicit",
+     "-o",
+     "develop-native/W3-pc-deep-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "e1091cd942f8e20d2c8d76fd9dbeccb64c206fc3a05b78b716fea49fe583adfc",
+    "bytes": 13018700,
+    "wallSeconds": 0.192
+   },
+   {
+    "id": "W4-points-lines",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "develop-native/W4-points-lines.3tz"
+    ],
+    "exit": 0,
+    "sha256": "bc9425c702cf3699cfba93abdbbd25d8f547abbf446c21d4f03558fc2f930b7b",
+    "bytes": 18398,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "develop-native/W4-points-lines-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "2dd76f9f64cee443e040588facd27addbcf062b9a5d6a6bc90237e0b0da18c0d",
+    "bytes": 11229,
+    "wallSeconds": 0.022
+   },
+   {
+    "id": "W4-points-lines-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "develop-native/W4-points-lines-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "5adc1ed48564cfd99d280a25b4414ea289cc1d360ce5e5cb5e77f4972ce7386d",
+    "bytes": 18455,
+    "wallSeconds": 0.022
+   },
+   {
+    "id": "W4-points-lines-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "develop-native/W4-points-lines-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "45f5be4eab91342be51c72681968bed6b6ec8e333d62352c927ab042cbc78744",
+    "bytes": 11258,
+    "wallSeconds": 0.022
+   },
+   {
+    "id": "W4-points-lines-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "develop-native/W4-points-lines-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "67e147f8acb3affd336a36d414b37078398bac954da7f441297742c538f5d00a",
+    "bytes": 22796,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-points-lines-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "develop-native/W4-points-lines-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7e91d2fddb8e3faef5e3b43e7438f80498e70da6d28cd5162531c51ae6953eb7",
+    "bytes": 13427,
+    "wallSeconds": 0.023
+   },
+   {
+    "id": "W4-polygons",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "develop-native/W4-polygons.3tz"
+    ],
+    "exit": 0,
+    "sha256": "00a6c35e40bc78d9542fc4675b0ab1920fa70366c8e7feee174eefb2223d2b24",
+    "bytes": 64991,
+    "wallSeconds": 0.036
+   },
+   {
+    "id": "W4-polygons-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "develop-native/W4-polygons-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c5c3ae8216f3d6ed7bd4da2c2e5830a9e159b898aed25dc1516e6ca99f62fd13",
+    "bytes": 36657,
+    "wallSeconds": 0.036
+   },
+   {
+    "id": "W4-polygons-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "develop-native/W4-polygons-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "5f045a9c41a91aeb74ff911d62c22c9d1b4c309f2d10aa69aa1607ffea75d668",
+    "bytes": 59514,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "develop-native/W4-polygons-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "cbbc109a5487218a086ffed6b58dcda906b57b0e5fad5c4dd8697809ac889eb0",
+    "bytes": 33917,
+    "wallSeconds": 0.036
+   },
+   {
+    "id": "W4-polygons-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "develop-native/W4-polygons-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "25334e417c1651b98e69b0302d5a644979283ca17dd5d09ee65a6754b9a25167",
+    "bytes": 37453,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W4-polygons-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/countries-source.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "develop-native/W4-polygons-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "de59efdf493215794bcfddfd60059b62b6786b260c43a8160123cb81bd0ae9e7",
+    "bytes": 22887,
+    "wallSeconds": 0.037
+   },
+   {
+    "id": "W5-vec-perf",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "-o",
+     "develop-native/W5-vec-perf.3tz"
+    ],
+    "exit": 0,
+    "sha256": "f1a54259d43ddee12413535e1d845b3308e7e6076bfc2e85013c5d343c9518f7",
+    "bytes": 37826826,
+    "wallSeconds": 3.426
+   },
+   {
+    "id": "W5-vec-perf-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--explicit",
+     "-o",
+     "develop-native/W5-vec-perf-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "b286667f943ca6fb6a336b9108d4627e20504ec09f97ac7ec1ca7497c9efaf9e",
+    "bytes": 19447016,
+    "wallSeconds": 3.355
+   },
+   {
+    "id": "W5-vec-perf-quantize",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "-o",
+     "develop-native/W5-vec-perf-quantize.3tz"
+    ],
+    "exit": 0,
+    "sha256": "23d7d64351c1946b0b125547f1713e87200be0e5a6bc1bae3a0e51387b7e92b9",
+    "bytes": 34426691,
+    "wallSeconds": 3.531
+   },
+   {
+    "id": "W5-vec-perf-quantize-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--quantize",
+     "--explicit",
+     "-o",
+     "develop-native/W5-vec-perf-quantize-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "9ed42416742b3266ad0902c17c721a5da44df2437bacc4fd43fd300012fc4d95",
+    "bytes": 17766866,
+    "wallSeconds": 3.464
+   },
+   {
+    "id": "W5-vec-perf-meshopt",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "-o",
+     "develop-native/W5-vec-perf-meshopt.3tz"
+    ],
+    "exit": 0,
+    "sha256": "e852e2757c624d0d5f295d30bf6e126ba049d170474e39465932a0d3a48b61ab",
+    "bytes": 29006208,
+    "wallSeconds": 3.951
+   },
+   {
+    "id": "W5-vec-perf-meshopt-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--meshopt",
+     "--explicit",
+     "-o",
+     "develop-native/W5-vec-perf-meshopt-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "b4467d4efebf7fc869670454532cf654954939a992115747487c816940f51caa",
+    "bytes": 15036693,
+    "wallSeconds": 3.895
+   },
+   {
+    "id": "mf2-lod3",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "-o",
+     "develop-native/mf2-lod3.3tz"
+    ],
+    "exit": 0,
+    "sha256": "efa3e7984ea683ea2083bd1a888d1319c08b4b20fb7d44b29816bd7ad828262f",
+    "bytes": 149291542,
+    "wallSeconds": 13.574
+   },
+   {
+    "id": "mf2-lod3-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "vector",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/perf-vector.geojson",
+     "--reproducible",
+     "--jobs",
+     "2",
+     "--maxFeatures",
+     "2",
+     "--lodLevels",
+     "3",
+     "--explicit",
+     "-o",
+     "develop-native/mf2-lod3-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "5357c4041ec42a68b572cfe41c860feb0f2369c22c1777ab608d6d31bbe45de9",
+    "bytes": 74597713,
+    "wallSeconds": 12.573
+   },
+   {
+    "id": "W6",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "-o",
+     "develop-native/W6.3tz"
+    ],
+    "exit": 0,
+    "sha256": "f8865ce628aef3511ff0bd0781835990c817c5549edc8c86b0116466ff971e3e",
+    "bytes": 227531,
+    "wallSeconds": 0.043
+   },
+   {
+    "id": "W6-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/split.gltf",
+     "--maxBytes",
+     "0",
+     "--maxTriangles",
+     "512",
+     "--explicit",
+     "-o",
+     "develop-native/W6-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+    "bytes": 106383,
+    "wallSeconds": 0.03
+   },
+   {
+    "id": "W6d",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "-o",
+     "develop-native/W6d.3tz"
+    ],
+    "exit": 0,
+    "sha256": "50979b6ef8b609f096002c8d4340cfb9827c22501bd453518575c4c5f4d89882",
+    "bytes": 1313846,
+    "wallSeconds": 0.098
+   },
+   {
+    "id": "W6d-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep-mesh.glb",
+     "--maxTriangles",
+     "2",
+     "--maxBytes",
+     "0",
+     "--tileSize",
+     "64",
+     "--explicit",
+     "-o",
+     "develop-native/W6d-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+    "bytes": 931191,
+    "wallSeconds": 0.071
+   },
+   {
+    "id": "W7",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "-o",
+     "develop-native/W7.3tz"
+    ],
+    "exit": 0,
+    "sha256": "a7be1bcd9de3315cd43d31aafb1f36cc855938416386ad5ebe198a766a89946b",
+    "bytes": 3936,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "W7-explicit",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "mesh-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/example.gltf",
+     "--explicit",
+     "-o",
+     "develop-native/W7-explicit.3tz"
+    ],
+    "exit": 0,
+    "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+    "bytes": 2252,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "glb-plain",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/plain.gltf",
+     "-o",
+     "develop-native/glb-plain.3tz"
+    ],
+    "exit": 0,
+    "sha256": "7efd6da4bdb7b1beb769684dcfb6fa6acc091cde80ee7973d6b289cd3498825e",
+    "bytes": 4094,
+    "wallSeconds": 0.017
+   },
+   {
+    "id": "glb-deep20",
+    "argv": [
+     "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+     "--json",
+     "glb-to-3tz",
+     "-i",
+     "/home/bend/.cache/forest-acc/work/inputs/deep20.gltf",
+     "-o",
+     "develop-native/glb-deep20.3tz"
+    ],
+    "exit": 0,
+    "sha256": "420810c98832e6505b9ee55941a00d0fcae27e4f16f1f62136faf7af71a1219d",
+    "bytes": 7161,
+    "wallSeconds": 0.017
+   }
+  ]
+ },
+ "inputs": [
+  "353b913082fec2a2062664b6e44c3b8d2258687592bf62ecffd4b017f9f2eec9  cloud.las",
+  "d8b25927d26a5777c6a71e3f2036e3e87c2b88a6768f756754d680d069cb532a  countries-source.geojson",
+  "6f228cb67015db0d7135090f38b2cdc614547e08572053972c9e1c8b8ab58590  deep20.bin",
+  "cc4e38c8304493b1c036ec9f86ff43aae286acd537615012a1a96ebeb811f3d3  deep20.gltf",
+  "5442ba6c1ee5c6fe59e94a20d1113b101eb66dc19452e0cd9a8803879d47df43  deep-mesh.glb",
+  "2abcf158502a684d404b9646aabd17127ed83df73c2063e61ad842b03a635564  example.gltf",
+  "6f228cb67015db0d7135090f38b2cdc614547e08572053972c9e1c8b8ab58590  near-window.bin",
+  "e5ad0983fdaed59d319bdd8847748ec3221830750a5aeaeefe2b7c6ac80f3cc4  near-window.gltf",
+  "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4  perf-vector.geojson",
+  "6f228cb67015db0d7135090f38b2cdc614547e08572053972c9e1c8b8ab58590  plain.bin",
+  "1dddb81c984d9d92739c542bff99414c29545ff620f40443010212061fc977f0  plain.gltf",
+  "67eb91b0839cb8f244d52fc1c4ca7210aa4fd5d1e2bf4fbd5252ac57f50516e3  points.las",
+  "b1e945533faaf146374f069667aed48345ae5831faf3b60df04fe0ff80afab53  split.bin",
+  "572ad97ea5266c070e3a94490531e16e928aa97715c901d6ac1d0df6778dcd89  split.gltf",
+  "72d56a2aa0be44b69fcd842f567dfaffa738bf2afd86f95fbe8f28cbdd1b41fc  vector.geojson",
+  "d1d19138a199cfcc567ea9ea36da572284a7bc59a714164563558b0d6751ea76  W8m-vector-flat-rounded-implicit.3tz",
+  "460c2505ce75acff67586f0b331f739daddfc77ca38605b353ee0812c7496650  W8s-convert-implicit.3tz"
+ ]
+}
