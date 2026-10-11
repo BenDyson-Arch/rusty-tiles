@@ -174,7 +174,18 @@ struct BandFacts {
     interp: u32,
     palette: Vec<[i16; 4]>,
     mask_flags: i32,
-    samples: Vec<u8>,
+    samples: Samples,
+}
+/// Exact typed sample bytes; failures print a length and FNV-1a digest.
+#[derive(PartialEq)]
+struct Samples(Vec<u8>);
+impl std::fmt::Debug for Samples {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let digest = self.0.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+            (h ^ u64::from(*b)).wrapping_mul(0x100_0000_01b3)
+        });
+        write!(f, "{} bytes fnv1a {digest:016x}", self.0.len())
+    }
 }
 #[derive(Debug, PartialEq)]
 struct Facts {
@@ -257,7 +268,7 @@ fn read_facts(path: &Path) -> Facts {
                 interp: gdal_sys::GDALGetRasterColorInterpretation(band),
                 palette,
                 mask_flags: gdal_sys::GDALGetMaskFlags(band),
-                samples,
+                samples: Samples(samples),
             });
         }
         let facts = Facts {
