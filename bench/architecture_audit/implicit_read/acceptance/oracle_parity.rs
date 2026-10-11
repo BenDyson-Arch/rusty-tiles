@@ -140,6 +140,22 @@ fn limit_name(m: &str) -> &'static str {
 }
 
 /// Production result in the oracle's vocabulary.
+/// Production's outcome, with a panic recorded as its own outcome so that one case cannot abort
+/// the run (production mutants may panic).
+fn guarded(file: &Path, limits: ValidationLimits, dump: Option<(&Path, &str)>) -> Value {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        production(file, limits, dump)
+    }))
+    .unwrap_or_else(|panic| {
+        let message = panic
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| panic.downcast_ref::<&str>().map(|m| (*m).to_owned()))
+            .unwrap_or_default();
+        json!({"kind": "Panic", "message": message})
+    })
+}
+
 /// `I1_ONLY=ID[,ID…]` restricts both tests to those cases (single-case timing runs of the
 /// production mutants); filtered cases are neither run nor reported as skipped.
 fn selected(id: &str) -> bool {
@@ -228,7 +244,7 @@ fn production_matches_every_i1_oracle_witness_and_control() {
             Some(p) if id != "R5" => p.split(' ').next().unwrap().to_owned(),
             _ => case["expected"].as_str().unwrap().to_owned(),
         };
-        let got = production(&file, limits(case), dump.as_deref().map(|d| (d, id)));
+        let got = guarded(&file, limits(case), dump.as_deref().map(|d| (d, id)));
         let kind = got["kind"].as_str().unwrap();
         let mut problems = Vec::new();
         let kind_ok = match (want.split_once(':'), kind.split_once(':')) {
@@ -334,7 +350,7 @@ fn production_matches_the_oracle_on_the_w_corpus() {
             Some(p) => p.split(' ').next().unwrap().to_owned(),
             None => a["expected"].as_str().unwrap().to_owned(),
         };
-        let got = production(path, limits(a), None);
+        let got = guarded(path, limits(a), None);
         let kind = got["kind"].as_str().unwrap();
         let mut problems = Vec::new();
         let kind_ok = match kind.split_once(':') {
