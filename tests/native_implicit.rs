@@ -361,7 +361,12 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
         headers(&doc["root"]);
     }
     assert!(fills > 1, "exercise fragmented b3dm content");
-    assert!(!forest.roots.is_empty(), "exercise implicit-root templates");
+    // Headers are checked on implicit roots below the skeleton, where the
+    // chunked layout used to put its external implicit roots.
+    assert!(
+        forest.explicit >= 1 && forest.roots.len() > 1,
+        "exercise implicit-root templates below explicit tiles"
+    );
 }
 
 #[test]
