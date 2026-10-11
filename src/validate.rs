@@ -619,12 +619,12 @@ impl Containment {
     fn reference(
         &mut self,
         tile: usize,
-        content: Option<&Volume>,
+        content: Option<VolumeFacts>,
         uri: usize,
     ) -> Result<(), Error> {
         let content = match content {
             Some(volume) => {
-                try_push(&mut self.content_volumes, volume_facts(volume))?;
+                try_push(&mut self.content_volumes, volume)?;
                 Some(self.content_volumes.len() - 1)
             }
             None => None,
@@ -911,6 +911,14 @@ enum ValidationTask {
     },
     Node(NodeTask),
     ExitTileset(String),
+    /// A C2 payload reference that follows an external-tileset content of the
+    /// same tile: registered after that tileset, in pre-order (v3.3 item 4).
+    /// Not a hierarchy traversal step, so not charged to `hierarchy_visits`.
+    Reference {
+        tile: usize,
+        content: Option<VolumeFacts>,
+        uri: usize,
+    },
 }
 struct NodeTask {
     node: Value,
@@ -1081,6 +1089,10 @@ impl Check<'_> {
             },
         }];
         while let Some(task) = pending.pop() {
+            if let ValidationTask::Reference { tile, content, uri } = task {
+                self.c2.reference(tile, content, uri)?;
+                continue;
+            }
             self.task_visits = self
                 .task_visits
                 .checked_add(1)
@@ -1117,6 +1129,7 @@ impl Check<'_> {
                 ValidationTask::ExitTileset(name) => {
                     self.active.remove(&name);
                 }
+                ValidationTask::Reference { .. } => unreachable!("handled before charging"),
             }
         }
         Ok(())
@@ -1163,13 +1176,16 @@ impl Check<'_> {
         }
         self.extension_object(doc);
     }
-    /// An `extensions` object naming anything outside the tileset allowlist.
+    /// An `extensions` object naming anything outside the tileset allowlist. A
+    /// `3DTILES_content_gltf_vector` object with `clip: true` permits clipped
+    /// content outside the volume, so it is a non-allowlisted use (v3.3 item 3).
     fn extension_object(&mut self, owner: &Value) {
         if let Some(extensions) = owner.get("extensions") {
-            if extensions
-                .as_object()
-                .is_none_or(|e| e.keys().any(|k| !TILESET_ALLOWLIST.contains(&k.as_str())))
-            {
+            if extensions.as_object().is_none_or(|e| {
+                e.iter().any(|(name, body)| {
+                    !TILESET_ALLOWLIST.contains(&name.as_str()) || body["clip"] == Value::Bool(true)
+                })
+            }) {
                 self.c2.exclude(Reason::TilesetExtension);
             }
         }
@@ -1295,6 +1311,7 @@ impl Check<'_> {
         if node.get("content").is_some() && node.get("contents").is_some() {
             return Err(invalid("tile has both content and contents"));
         }
+        let mut external_seen = false;
         let contents = if let Some(c) = node.get("contents") {
             c.as_array()
                 .ok_or_else(|| invalid("contents must be an array"))?
@@ -1335,6 +1352,7 @@ impl Check<'_> {
                 )
                 .ok_or_else(|| invalid("tile byte count overflow"))?;
             if name.ends_with(".json") {
+                external_seen = true;
                 descendants.push(ValidationTask::Tileset {
                     name,
                     parent: Some(bounds.clone()),
@@ -1349,7 +1367,14 @@ impl Check<'_> {
             }
             let inspected = self.payload(&name)?;
             let uri = self.c2.uri_index[&name];
-            self.c2.reference(tile, content_volume.as_ref(), uri)?;
+            let content = content_volume.as_ref().map(volume_facts);
+            // C1 inspects inline; the C2 reference keeps contents in array order
+            // with each external tileset expanded in place.
+            if external_seen {
+                descendants.push(ValidationTask::Reference { tile, content, uri });
+            } else {
+                self.c2.reference(tile, content, uri)?;
+            }
             vertices = vertices
                 .checked_add(inspected.vertices)
                 .ok_or_else(|| invalid("tile vertex count overflow"))?;
@@ -1458,6 +1483,48 @@ pub(crate) fn inspect_selected(
     request: ValidationRequest,
     limits: ValidationLimits,
 ) -> Result<ValidationReport, Error> {
+    inspect_facts(request, limits).map(|(report, _)| report)
+}
+
+/// Per-URI C2 work facts of one successful inspection (v3.3 item 7). Test-only:
+/// acceptance reconciles them with the oracle's model; no public report change.
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UriWork {
+    pub uri: String,
+    pub t: u64,
+    pub nodes: Option<u64>,
+    pub idx: u64,
+    pub e: u64,
+    pub dec: u64,
+    pub b: u64,
+    pub max_node_depth: u64,
+}
+#[cfg(test)]
+pub(crate) fn containment_work_facts(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<Vec<UriWork>, Error> {
+    let (_, uris) = inspect_facts(request, limits)?;
+    Ok(uris
+        .into_iter()
+        .map(|(uri, f)| UriWork {
+            uri,
+            t: f.t,
+            nodes: f.nodes,
+            idx: f.idx,
+            e: f.e,
+            dec: f.dec,
+            b: f.b,
+            max_node_depth: f.max_depth,
+        })
+        .collect())
+}
+
+fn inspect_facts(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<(ValidationReport, Vec<(String, UriFacts)>), Error> {
     let path = request.input();
     let source = open_archive(path)?;
     let before = source.metadata()?;
@@ -1627,7 +1694,8 @@ pub(crate) fn inspect_selected(
     }
     let mut payloads: Vec<_> = check.payloads.into_values().collect();
     payloads.sort_by(|a, b| a.uri.cmp(&b.uri));
-    Ok(ValidationReport {
+    let uris = std::mem::take(&mut check.c2.uris);
+    let report = ValidationReport {
         ok: true,
         archive: path.into(),
         tiles: check.tiles as u64,
@@ -1655,7 +1723,8 @@ pub(crate) fn inspect_selected(
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
-    })
+    };
+    Ok((report, uris))
 }
 
 #[cfg(test)]
@@ -2712,6 +2781,21 @@ mod containment_controls {
                 "{field} one below"
             );
         }
+        let (_work, path) = package(&files);
+        assert_eq!(
+            containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap(),
+            [UriWork {
+                uri: "a.gltf".into(),
+                t: 1,
+                nodes: Some(2),
+                idx: 1,
+                e: 3,
+                dec: bin.len() as u64,
+                b: read,
+                max_node_depth: 2,
+            }]
+        );
     }
 
     #[test]
@@ -2749,5 +2833,86 @@ mod containment_controls {
             "decoded content outside bounding volume: content=a.glb depth=1 volume=own node=0 mesh=0 primitive=0 vertex=0"
         );
         assert_eq!(not_inspected(run_with(&files, limits(28))), ["numericSpan"]);
+        // v3.3 item 1: O's adjusted geometry (own-box row-1 centre 3) keeps the
+        // spans [23, 29] and is Contained at the cap.
+        let mut root: Value = serde_json::from_slice(&files[0].1).unwrap();
+        root["root"]["children"][0]["boundingVolume"]["box"][1] = json!(3);
+        let files = vec![
+            ("tileset.json", serde_json::to_vec(&root).unwrap()),
+            files[1].clone(),
+        ];
+        assert!(contained(&run_with(&files, limits(29)).unwrap()));
+        assert_eq!(not_inspected(run_with(&files, limits(28))), ["numericSpan"]);
+    }
+
+    #[test]
+    fn vector_clip_extension_object_is_not_allowlisted() {
+        for (owner, clip, excluded) in [
+            ("tile", true, true),
+            ("content", true, true),
+            ("tileset", true, true),
+            ("tile", false, false),
+        ] {
+            let mut doc = json!({"asset":{"version":"1.1"},"geometricError":0,
+                "extensionsUsed":["3DTILES_content_gltf_vector"],
+                "root":content_tile(wide(), "a.glb")});
+            let extension = json!({"3DTILES_content_gltf_vector":{"clip":clip}});
+            match owner {
+                "tile" => doc["root"]["extensions"] = extension,
+                "content" => doc["root"]["content"]["extensions"] = extension,
+                _ => doc["extensions"] = extension,
+            }
+            let result = run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", points(&[[0., 0., 0.]])),
+            ]);
+            if excluded {
+                assert_eq!(not_inspected(result), ["tilesetExtension"], "{owner}");
+            } else {
+                assert!(contained(&result.unwrap()), "{owner}");
+            }
+        }
+    }
+
+    #[test]
+    fn references_follow_preorder_with_external_tilesets_expanded_in_place() {
+        // contents [ext.json -> b.glb, a.glb]: b.glb is the first reference.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json"}, {"uri":"a.glb"}]);
+        let far = points(&[[20., 0., 0.]]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("ext.json", tileset(content_tile(wide(), "b.glb"))),
+            ("a.glb", far.clone()),
+            ("b.glb", far),
+        ];
+        let message = outside(run(&files));
+        assert!(message.contains("content=b.glb depth=1 "), "{message}");
+        root["contents"] = json!([{"uri":"a.glb"}, {"uri":"ext.json"}]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            files[1].clone(),
+            files[2].clone(),
+            files[3].clone(),
+        ]));
+        assert!(message.contains("content=a.glb depth=0 "), "{message}");
+    }
+
+    #[test]
+    fn each_contents_entry_is_a_reference_with_its_own_volume() {
+        let mut root = tile(wide());
+        root["contents"] = json!([
+            {"uri":"a.glb","boundingVolume":boxed([0.; 3], [2.; 3])},
+            {"uri":"a.glb","boundingVolume":boxed([0.; 3], [0.5; 3])}
+        ]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", points(&[[1., 0., 0.]])),
+        ];
+        assert!(outside(run(&files)).contains("depth=0 volume=content "));
+        root["contents"][1]["boundingVolume"] = boxed([0.; 3], [1.; 3]);
+        assert!(contained(
+            &run(&[("tileset.json", tileset(root)), files[1].clone()]).unwrap()
+        ));
     }
 }
