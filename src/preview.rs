@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 use std::convert::Infallible;
 use std::io::{self, Write};
 use std::net::SocketAddr;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::net::TcpListener;
@@ -62,23 +62,11 @@ impl Preview {
     }
 
     fn file(&self, path: &str) -> Option<PathBuf> {
-        for (prefix, root) in &self.routes {
-            if let Some(relative) = path.strip_prefix(prefix) {
-                // Reject traversal on all platforms, including encoded separators,
-                // drive prefixes and backslashes. Canonicalization also fences symlinks.
-                if relative.contains('\\')
-                    || relative.contains(':')
-                    || Path::new(relative)
-                        .components()
-                        .any(|part| !matches!(part, Component::Normal(_)))
-                {
-                    return None;
-                }
-                let target = root.join(relative).canonicalize().ok()?;
-                return (target.starts_with(root) && target.is_file()).then_some(target);
-            }
-        }
-        None
+        let (prefix, root) = self
+            .routes
+            .iter()
+            .find(|(prefix, _)| path.starts_with(prefix.as_str()))?;
+        exact_file(root, &segments(&path[prefix.len()..])?)
     }
 
     async fn respond(&self, request: Request<Incoming>, local: SocketAddr) -> Response<Body> {
@@ -135,7 +123,7 @@ impl Preview {
                 .await
                 .map_err(|error| Error::Environment(format!("cannot bind preview: {error}")))?;
             let local = listener.local_addr()?;
-            let loopback = local.ip().is_loopback();
+            let loopback = is_loopback(local);
             let url = format!("http://{local}/");
             if !loopback {
                 eprintln!(
@@ -184,12 +172,17 @@ impl Preview {
     }
 }
 
+/// IPv4-mapped IPv6 loopback (`::ffff:127.0.0.1`) is loopback too.
+fn is_loopback(address: SocketAddr) -> bool {
+    address.ip().to_canonical().is_loopback()
+}
+
 /// A non-loopback listener accepts any authority. A loopback listener accepts
 /// only `localhost`, `127.0.0.1`, `[::1]` or its own IP, with its own port
 /// (which may be omitted only for port 80). An absolute-form request target's
 /// authority takes precedence over `Host`, as in HTTP/1.1.
 fn host_allowed<B>(request: &Request<B>, local: SocketAddr) -> bool {
-    if !local.ip().is_loopback() {
+    if !is_loopback(local) {
         return true;
     }
     let authority = match request.uri().authority() {
@@ -223,13 +216,50 @@ fn selected_root(name: &str, path: &Path, manifest: &str) -> Result<PathBuf, Err
             path.display()
         ))
     })?;
-    let file = root.join(manifest).canonicalize().ok();
-    if !root.is_dir() || !file.is_some_and(|file| file.starts_with(&root) && file.is_file()) {
+    if !root.is_dir() || exact_file(&root, &[manifest]).is_none() {
         return Err(Error::Data(format!(
             "--{name} must contain {manifest} within its selected directory"
         )));
     }
     Ok(root)
+}
+
+/// Lexical request-path admission, decided before any filesystem access so
+/// every platform agrees: one or more `/`-separated segments, each non-empty
+/// (no trailing slash or `//`), not `.` or `..`, and free of backslashes, `:` (Windows
+/// drives and streams) and control characters including NUL.
+fn segments(relative: &str) -> Option<Vec<&str>> {
+    let parts: Vec<&str> = relative.split('/').collect();
+    parts
+        .iter()
+        .all(|part| {
+            !part.is_empty()
+                && *part != "."
+                && *part != ".."
+                && !part
+                    .chars()
+                    .any(|c| c == '\\' || c == ':' || c.is_control())
+        })
+        .then_some(parts)
+}
+
+/// The regular file named exactly by `segments` below the canonical `root`.
+/// The canonical target must sit below `root` under the requested names,
+/// compared component by component as bytes. A platform may resolve an alias
+/// to an existing file: a case or Unicode-normalization variant on macOS or
+/// Windows, a Windows short name or trailing dot/space, or any symlink. Its
+/// canonical names then differ from the request, so it is refused everywhere.
+fn exact_file(root: &Path, segments: &[&str]) -> Option<PathBuf> {
+    let mut path = root.to_path_buf();
+    path.extend(segments);
+    let target = path.canonicalize().ok()?;
+    let exact = target
+        .strip_prefix(root)
+        .ok()?
+        .components()
+        .map(|component| component.as_os_str())
+        .eq(segments.iter().map(std::ffi::OsStr::new));
+    (exact && target.is_file()).then_some(target)
 }
 
 fn full(status: u16, content_type: &'static str, bytes: impl Into<Bytes>) -> Response<Body> {
@@ -325,7 +355,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn fence_follows_symlinks_only_within_the_root() {
+    fn fence_refuses_every_symlink_below_the_root() {
         let (root, preview) = fixture();
         let mesh = root.path().join("mesh");
         std::os::unix::fs::symlink(root.path().join("private.txt"), mesh.join("out.txt")).unwrap();
@@ -335,10 +365,71 @@ mod tests {
         assert_eq!(preview.file("/mesh/out.txt"), None);
         assert_eq!(preview.file("/mesh/sibling/tileset.json"), None);
         assert_eq!(preview.file("/mesh/device"), None);
-        assert_eq!(
-            preview.file("/mesh/alias.glb"),
-            Some(mesh.canonicalize().unwrap().join("nested/tile.glb"))
+        // Even an alias of an inner file names a different canonical path.
+        assert_eq!(preview.file("/mesh/alias.glb"), None);
+        std::os::unix::fs::symlink(mesh.join("nested"), mesh.join("linked")).unwrap();
+        assert_eq!(preview.file("/mesh/linked/tile.glb"), None);
+        assert!(preview.file("/mesh/nested/tile.glb").is_some());
+    }
+
+    #[test]
+    fn lexical_admission_rules_need_no_filesystem() {
+        assert_eq!(segments("a/b.glb"), Some(vec!["a", "b.glb"]));
+        assert_eq!(segments("%2e%2e"), Some(vec!["%2e%2e"])); // a literal name after one decode
+        for (rule, relative) in [
+            ("empty path", ""),
+            ("trailing slash", "tileset.json/"),
+            ("trailing slash on a directory", "nested/"),
+            ("empty segment", "nested//tile.glb"),
+            ("leading slash (absolute)", "/etc/passwd"),
+            ("dot segment", "./tileset.json"),
+            ("inner dot segment", "nested/./tile.glb"),
+            ("parent segment", "../private.txt"),
+            ("inner parent segment", "nested/../tileset.json"),
+            ("trailing parent segment", "tileset.json/.."),
+            ("backslash separator", "..\\private.txt"),
+            ("backslash in a name", "nested\\tile.glb"),
+            ("Windows drive", "C:/private.txt"),
+            ("Windows drive-relative", "C:private.txt"),
+            ("alternate data stream", "tileset.json:stream"),
+            ("UNC-like prefix", "\\\\server\\share"),
+            ("NUL", "tileset.json\0.png"),
+            ("control character", "tile\u{1}.glb"),
+            ("DEL", "tile\u{7f}.glb"),
+        ] {
+            assert_eq!(segments(relative), None, "{rule}: {relative:?}");
+        }
+    }
+
+    #[test]
+    fn names_must_match_the_canonical_names_exactly() {
+        let (root, preview) = fixture();
+        let mesh = root.path().join("mesh");
+        std::fs::write(mesh.join("Tile.glb"), "glTF").unwrap();
+        // NFC "café" stored; NFD spelling requested.
+        std::fs::write(mesh.join("caf\u{e9}.bin"), "nfc").unwrap();
+        assert!(preview.file("/mesh/Tile.glb").is_some());
+        assert!(
+            preview.file("/mesh/caf%C3%A9.bin").is_none(),
+            "undecoded request text"
         );
+        assert!(preview.file("/mesh/caf\u{e9}.bin").is_some());
+        for (rule, path) in [
+            // A case-insensitive filesystem (APFS, NTFS) resolves these to the
+            // stored file; its canonical name differs, so all platforms refuse.
+            ("case variant of a file", "/mesh/tile.glb"),
+            ("case variant of a directory", "/mesh/NESTED/tile.glb"),
+            ("case variant of the manifest", "/mesh/TILESET.JSON"),
+            // macOS file systems match normalization variants.
+            ("NFD variant of an NFC name", "/mesh/cafe\u{301}.bin"),
+            // Windows strips trailing dots and spaces from names.
+            ("trailing dot", "/mesh/tileset.json."),
+            ("trailing space", "/mesh/tileset.json "),
+            // Windows 8.3 short-name form.
+            ("short name", "/mesh/TILESE~1.JSO"),
+        ] {
+            assert_eq!(preview.file(path), None, "{rule}: {path:?}");
+        }
     }
 
     #[test]
@@ -399,6 +490,17 @@ mod tests {
         ));
         let port_80: SocketAddr = "127.0.0.1:80".parse().unwrap();
         assert!(host_allowed(&request("/", Some("localhost")), port_80));
+        let mapped: SocketAddr = "[::ffff:127.0.0.1]:9227".parse().unwrap();
+        assert!(is_loopback(mapped));
+        assert!(!host_allowed(
+            &request("/", Some("evil.example:9227")),
+            mapped
+        ));
+        assert!(host_allowed(&request("/", Some("localhost:9227")), mapped));
+        assert!(host_allowed(
+            &request("/", Some("[::ffff:127.0.0.1]:9227")),
+            mapped
+        ));
         let open: SocketAddr = "0.0.0.0:9227".parse().unwrap();
         assert!(host_allowed(&request("/", Some("evil.example")), open));
         assert!(host_allowed(&request("/", None), open));

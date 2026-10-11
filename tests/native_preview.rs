@@ -491,6 +491,18 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
         "/mesh/%252e%252e/private.txt",
         "/mesh/./../private.txt",
         "/mesh/tileset.json/",
+        "/mesh/tileset.json//",
+        "/mesh//tileset.json",
+        "/mesh/Tileset.json",
+        "/mesh/TILESET.JSON",
+        "/mesh/tileset.json.",
+        "/mesh/tileset.json%20",
+        "/mesh/tileset.json::$DATA",
+        "/mesh/tileset.json%3a%3a$DATA",
+        "/mesh/TILESE~1.JSO",
+        "/mesh/c:%5cprivate.txt",
+        "/mesh/%5c%5c127.0.0.1%5cc$%5cprivate.txt",
+        "/mesh/tile%01.glb",
         "/mesh/tileset.json/..",
         "/mesh",
         "/MESH/tileset.json",
@@ -517,6 +529,8 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
         assert!(!String::from_utf8_lossy(&response.body).contains("not selected"));
     }
     assert_eq!(get(address, "/mesh/valid%20file.bin?x=1").body, b"selected");
+    // Overlong UTF-8 for "..": not valid text after one decode.
+    assert_eq!(get(address, "/mesh/%c0%ae%c0%ae/private.txt").status, 400);
     // An absolute-form target is fenced like an origin-form path.
     for target in [
         "/mesh/../private.txt",
@@ -551,7 +565,9 @@ fn symlinked_roots_inner_links_and_invalid_manifests() {
     std::fs::write(root.path().join("private.txt"), "not selected").unwrap();
     let server = serve(&cesium, &[("mesh", &link)], root.path());
     let address = server.address.as_str();
-    assert_eq!(get(address, "/mesh/alias.glb").body, b"inner");
+    // Below the root, symlinks are refused even when they stay inside it.
+    assert_eq!(get(address, "/mesh/alias.glb").status, 404);
+    assert_eq!(get(address, "/mesh/nested/tile.glb").body, b"inner");
     assert_eq!(get(address, "/mesh/tileset.json").status, 200);
     assert_eq!(get(address, "/mesh/../private.txt").status, 404);
     drop(server);
@@ -678,6 +694,33 @@ fn non_loopback_bind_is_an_announced_opt_in_and_names_are_not_resolved() {
     assert_eq!(output.status.code(), Some(2));
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["error"]["code"], "usage");
+}
+
+// Linux binds IPv4-mapped addresses on a dual-stack socket by default.
+#[cfg(target_os = "linux")]
+#[test]
+fn ipv4_mapped_loopback_bind_keeps_the_host_fence() {
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let server = serve_on(
+        Some("::ffff:127.0.0.1"),
+        &cesium,
+        &[("mesh", layer(&layers, "mesh"))],
+        root.path(),
+    );
+    assert_eq!(server.ready["loopback"], true, "{}", server.ready);
+    let address = server.address.as_str();
+    let port = address.rsplit_once(':').unwrap().1;
+    for (host, status) in [
+        (format!("evil.example:{port}"), 421),
+        (format!("localhost:{port}"), 200),
+    ] {
+        let response = raw(
+            address,
+            &format!("GET /config.json HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"),
+        );
+        assert_eq!(response.status, status, "{host}");
+    }
 }
 
 #[cfg(unix)]
