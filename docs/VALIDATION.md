@@ -114,12 +114,13 @@ Nonregular inputs are Unsupported; POSIX FIFO admission does not wait for a
 writer. Underlying archive read/seek errors retain their I/O causes, while actual
 premature byte exhaustion is InvalidInput.
 
-Fixed ceilings are 8 MiB JSON with depth 64, 64 MiB per member, 1 GiB source archive and total
-stored member bytes, 16 MiB central directory, 65,536 archive entries/document
-items/hierarchy visits, 262,144 references, 4 million accessor elements per
-payload, 16 million total payload elements, 64 MiB decoded views per document,
-128 levels of hierarchy depth, and 2 GiB explicit member-hash and
-payload/document read work including repeated reads and constructor index reads.
+Fixed ceilings are 8 MiB JSON with depth 64, 131,072 JSON value nodes per
+document, 128 MiB per member, 1 GiB source archive and total stored member bytes,
+32 MiB central directory, 524,288 archive entries, 262,144 hierarchy visits,
+1,048,576 references, 4 million accessor elements per payload, 16 million total
+payload elements, 128 MiB decoded views per document, 128 levels of hierarchy
+depth, and 2 GiB explicit member-hash and payload/document read work including
+repeated reads and constructor index reads.
 Implicit availability scans count toward the same 2 GiB `total_bytes_read` work
 counter; an archive whose reads and scans together exceed it is refused with
 "availability scan exceeds total_bytes_read work limit".
@@ -127,6 +128,23 @@ Separately bounded ZIP envelope/tail/header reads are outside that member-work
 counter. These admission limits
 are engineering bounds, not a total-process RSS promise. No request option
 bypasses them. The serialized `limits` describe the actual profile constants.
+
+The entry, visit, reference, central-directory, value-node, member and decoded
+ceilings are sized for default (implicit) vector output at its 100,000-tile
+`--maxTiles` default: measured pre-forest archives use about 2.4-2.5 entries, 1.2-1.3
+presentation nodes (hierarchy visits under I1), one `tileset.json` value node and 920 `vector-build.json`
+bytes per tile. Content volume is bounded separately. An archive over 1 GiB,
+2 GiB of reads or 16 million payload elements is refused at any tile count, so
+dense vector content can reach those ceilings well below 100,000 tiles.
+`--explicit` vector output keeps its whole hierarchy in one `tileset.json` of
+about 50.5 value nodes per tile. It reaches the 131,072 value-node ceiling at
+about 2,595 tiles. Measured costs at these ceilings are recorded in
+[bench/architecture_audit/validator_caps](../bench/architecture_audit/validator_caps/README.md).
+The pinned C1 contract record
+([c1-payload-integrity-contract.md](architecture/c1-payload-integrity-contract.md),
+JSON value nodes, payload bytes and view bytes) still states the earlier
+65,536 value nodes and 64 MiB member and decoded-view bytes. The values above
+supersede it; the meanings are unchanged.
 
 Rust failures are `ValidationFailure::{InvalidInput, Unsupported, ResourceLimit,
 Io, InvalidState}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
@@ -143,4 +161,4 @@ C2 domain (when `decodedContentContainment` is absent), metadata semantics, sour
 
 Primary byte-layout authority is the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html), identified there as source commit `8e798b02d254cea97659a333cfcb20875b62bdd4`. Its matrix-alignment rule permits omitted final column padding. Unpublished GitHub main revisions can differ; they are not silently substituted for this contract.
 
-Implicit roots are read by the I1 implicit reader, on any explicit tile, including tiles inside explicit external tilesets. Every subtree reachable through child-subtree availability is read from a confined archive member, availability is checked bit by bit, and every available tile is visited once at its exact coordinates. Each implicit tile then receives the explicit-tile checks: payload integrity, `hierarchyBounds`, `geometricErrorOrder`, `resourceReferences` and the report-level `conversion.json` budgets. The report lists `implicitAddressingAndAvailability` in `checks`; it lists `recordedBudgets.implicitTileExtras` in `notInspected`, because per-tile `extras` budgets are not compared below an implicit root. Decoded containment of implicit content (`decodedContentBounds.implicitTiling`) and uninterpreted metadata (`metadataSemantics`) remain uninspected. The subtrees on the current path share the 64 MiB `document_decoded_bytes` limit; no expanded presentation tree is built. JSON content templates are Unsupported ("implicit: unsupported external tileset content template in <member>"), as are JSON-format subtrees, region and S2 implicit roots, and `subtreeLevels` or `availableLevels` above 32. Consequently, default point-cloud, vector and deep `mesh-to-3tz` archives written before the bounded implicit forest layout, which split their hierarchy into `implicit-tileset-*.json` documents, are Unsupported; convert them again. Archives written by `convert-to-implicit`, which was removed before 0.4.0, are Unsupported when they have more than one node. Single-node convert archives have no JSON template and still validate; they list their retained original payloads in `conversion.json` `retainedContentUris`, and validation still references and checks those payloads. See the [I1 implicit read contract](architecture/i1-implicit-read-contract.md).
+Implicit roots are read by the I1 implicit reader, on any explicit tile, including tiles inside explicit external tilesets. Every subtree reachable through child-subtree availability is read from a confined archive member, availability is checked bit by bit, and every available tile is visited once at its exact coordinates. Each implicit tile then receives the explicit-tile checks: payload integrity, `hierarchyBounds`, `geometricErrorOrder`, `resourceReferences` and the report-level `conversion.json` budgets. The report lists `implicitAddressingAndAvailability` in `checks`; it lists `recordedBudgets.implicitTileExtras` in `notInspected`, because per-tile `extras` budgets are not compared below an implicit root. Decoded containment of implicit content (`decodedContentBounds.implicitTiling`) and uninterpreted metadata (`metadataSemantics`) remain uninspected. The subtrees on the current path share the 128 MiB `document_decoded_bytes` limit; no expanded presentation tree is built. JSON content templates are Unsupported ("implicit: unsupported external tileset content template in <member>"), as are JSON-format subtrees, region and S2 implicit roots, and `subtreeLevels` or `availableLevels` above 32. Consequently, default point-cloud, vector and deep `mesh-to-3tz` archives written before the bounded implicit forest layout, which split their hierarchy into `implicit-tileset-*.json` documents, are Unsupported; convert them again. Archives written by `convert-to-implicit`, which was removed before 0.4.0, are Unsupported when they have more than one node. Single-node convert archives have no JSON template and still validate; they list their retained original payloads in `conversion.json` `retainedContentUris`, and validation still references and checks those payloads. See the [I1 implicit read contract](architecture/i1-implicit-read-contract.md).
