@@ -724,3 +724,72 @@ fn x16_content_index_reservation_refuses_at_subtree_admission() {
         "subtree content entries exceed remaining references",
     );
 }
+
+/// A producer-style forest: an explicit root whose children are link tiles to
+/// external explicit tileset documents `tileset-d{n}.json`, each holding one
+/// implicit root (one tile, one payload), with the given recorded budgets.
+fn forest(budgets: Value) -> Files {
+    let mut files = Files::new();
+    let mut links = Vec::new();
+    for n in 0..2 {
+        let mut root = implicit_root(1, 1, &[&format!("c{n}/{{level}}/{{x}}/{{y}}.glb")]);
+        root["implicitTiling"]["subtrees"]["uri"] =
+            json!(format!("s{n}/{{level}}/{{x}}/{{y}}.subtree"));
+        // Padding keeps each document larger than any payload (D-2).
+        let doc = json!({"asset":{"version":"1.1","extras":{"pad":"x".repeat(1_000)}},
+            "geometricError":16,"root":root});
+        files.insert(
+            format!("tileset-d{n}.json"),
+            serde_json::to_vec(&doc).unwrap(),
+        );
+        files.insert(
+            format!("s{n}/0/0/0.subtree"),
+            Sub::new(constant(1), constant(0))
+                .set("contentAvailability", json!([constant(1)]))
+                .build(),
+        );
+        files.insert(format!("c{n}/0/0/0.glb"), point_glb());
+        links.push(
+            json!({"boundingVolume":{"box":half(8.)},"geometricError":16,
+            "refine":"REPLACE","content":{"uri":format!("tileset-d{n}.json")}}),
+        );
+    }
+    files.insert(
+        "tileset.json".into(),
+        tileset(
+            json!({"boundingVolume":{"box":half(8.)},"geometricError":16,
+            "refine":"REPLACE","children":links}),
+        ),
+    );
+    files.insert(
+        "conversion.json".into(),
+        serde_json::to_vec(&json!({"budgets":budgets})).unwrap(),
+    );
+    files
+}
+
+#[test]
+fn amendment_d1_link_tiles_are_reported_but_not_budgeted_as_tiles() {
+    // Root + 2 link tiles + 2 implicit roots: 5 reported, 3 budgeted.
+    let report = ok(&forest(json!({"tiles":3})));
+    assert_eq!((report.tiles, report.content_references), (5, 4));
+    fails(
+        &forest(json!({"tiles":2})),
+        "invalid_input",
+        "hierarchy exceeds recorded tile budget",
+    );
+}
+
+#[test]
+fn amendment_d2_external_tileset_documents_are_not_tile_payload_bytes() {
+    let glb = point_glb().len() as u64;
+    let files = forest(json!({"bytes":glb}));
+    assert!(files["tileset-d0.json"].len() as u64 > glb);
+    ok(&files);
+    // The budget still applies to the implicit tiles' payloads.
+    fails(
+        &forest(json!({"bytes":glb - 1})),
+        "invalid_input",
+        "tile exceeds recorded encoded byte budget",
+    );
+}

@@ -937,6 +937,8 @@ struct Check<'a> {
     reports: Value,
     tiles: usize,
     contents: usize,
+    /// Link tiles: explicit tiles whose contents are all external tilesets.
+    links: usize,
     active: HashSet<String>,
     schema: jsonschema::Validator,
     task_visits: u64,
@@ -1439,6 +1441,7 @@ impl Check<'_> {
             return Err(invalid("tile has both content and contents"));
         }
         let mut external_seen = false;
+        let mut payload_seen = false;
         let contents = if let Some(c) = node.get("contents") {
             c.as_array()
                 .ok_or_else(|| invalid("contents must be an array"))?
@@ -1469,16 +1472,10 @@ impl Check<'_> {
                 }
                 None => None,
             };
-            bytes = bytes
-                .checked_add(
-                    self.resources
-                        .archive
-                        .member(&name)
-                        .map_err(archive_admission_error)?
-                        .size,
-                )
-                .ok_or_else(|| invalid("tile byte count overflow"))?;
             if name.ends_with(".json") {
+                // Amendment D-2: an external tileset document is not tile
+                // payload, so it is not charged to the per-tile byte budget
+                // (it stays charged to the archive and JSON read limits).
                 external_seen = true;
                 descendants.push(ValidationTask::Tileset {
                     name,
@@ -1494,6 +1491,16 @@ impl Check<'_> {
                 });
                 continue;
             }
+            bytes = bytes
+                .checked_add(
+                    self.resources
+                        .archive
+                        .member(&name)
+                        .map_err(archive_admission_error)?
+                        .size,
+                )
+                .ok_or_else(|| invalid("tile byte count overflow"))?;
+            payload_seen = true;
             let inspected = self.payload(&name)?;
             let uri = self.c2.uri_index[&name];
             let content = content_volume.as_ref().map(volume_facts);
@@ -1507,6 +1514,11 @@ impl Check<'_> {
             vertices = vertices
                 .checked_add(inspected.vertices)
                 .ok_or_else(|| invalid("tile vertex count overflow"))?;
+        }
+        // Amendment D-1: a link tile (external tileset content only) is
+        // reported but not compared against the recorded tile budget.
+        if external_seen && !payload_seen {
+            self.links += 1;
         }
         if bytes > 0 {
             self.tile_budgets(bytes, vertices)?;
@@ -1881,6 +1893,7 @@ fn inspect_facts(
         reports: report,
         tiles: 0,
         contents: 0,
+        links: 0,
         active: HashSet::new(),
         task_visits: 0,
         elements: 0,
@@ -1929,7 +1942,8 @@ fn inspect_facts(
     }
     check.tileset("tileset.json", None, None, 0)?;
     if let Some(limit) = check.reports["budgets"]["tiles"].as_u64() {
-        if check.tiles as u64 > limit {
+        // Amendment D-1: link tiles count in the report, not in the budget.
+        if (check.tiles - check.links) as u64 > limit {
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
