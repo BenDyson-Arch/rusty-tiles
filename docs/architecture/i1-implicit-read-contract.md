@@ -1102,6 +1102,17 @@ Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publ
   `budgets.tiles` is compared against the producer hierarchy, so tiles whose only content is an
   external tileset document (P's link tiles) are not counted. External tileset `.json` members do
   not count toward per-tile `bytes`.
+  - **D-2 also changes the explicit per-tile `extras` comparison** (final review F4). The same
+    payload-only byte total feeds the recorded `extras.encodedBytes` check (`validate.rs`
+    `recorded {key} differs from payload`).
+    - For an explicit tile that mixes payload and external-tileset contents, both the budget and
+      `encodedBytes` now use payload bytes only.
+    - A tile whose only contents are external tilesets has no byte comparison.
+    - The reason is the same as D-2: an external tileset document is hierarchy, not tile payload.
+    - This is an exit-status change for explicit archives in both directions. An archive whose
+      recorded `encodedBytes` included the JSON size now fails with InvalidInput, and one that
+      recorded payload bytes only now passes.
+    - No probed producer writes such mixed tiles.
 - **C1 no-content fixture (X-9).** The C1 fixture `implicit_no_content.3tz` declared
   `"contentAvailability": []`, which is InvalidInput under this contract (empty `minItems` array).
   The fixture now omits `contentAvailability` and stays a valid no-content implicit case; its
