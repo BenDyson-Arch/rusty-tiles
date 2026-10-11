@@ -57,13 +57,16 @@ fn derived_error(root: f64, level: u32) -> Result<f64, FormatError> {
     if level == 0 {
         return Ok(root);
     }
-    let error = root * power_of_two(level);
-    if error != 0. && !error.is_normal() {
+    // The exact value is normal iff e_R ≥ 2^(level − 1022), a power of two
+    // compared exactly. Decided before multiplying: a rounded product could
+    // round a subnormal exact value up to the minimum normal.
+    let threshold = f64::from_bits(u64::from(1 + level) << 52);
+    if root != 0. && root < threshold {
         return Err(unsupported(format!(
             "derived geometric error underflow at level {level}"
         )));
     }
-    Ok(error)
+    Ok(root * power_of_two(level))
 }
 
 impl<'r> Walk<'r> {
@@ -283,7 +286,8 @@ impl<'r> Walk<'r> {
 #[cfg(test)]
 mod tests {
     use super::super::test_support::*;
-    use super::super::{admit_root, EffectiveError, ImplicitError, Resolver};
+    use super::super::{admit_root, power_of_two, EffectiveError, ImplicitError, Resolver};
+    use super::derived_error;
     use serde_json::{json, Value};
 
     fn leaf(tile: Av) -> Sub {
@@ -422,6 +426,32 @@ mod tests {
             .unwrap()
             .iter()
             .all(|t| t.error == EffectiveError::Derived(0.)));
+        // The exact level-5 value 0x1.fffffffffffffp-1023 is subnormal, though
+        // the rounded product is 0x1p-1022 (oracle fixture B-10.subnormal).
+        let below = f64::from_bits((5 << 52) | ((1 << 52) - 1));
+        assert_eq!(below * power_of_two(5), f64::MIN_POSITIVE);
+        assert!(derived_error(below, 5).is_err());
+        assert_eq!(derived_error(below, 4).unwrap(), below / 16.);
+        // Its normal neighbour 0x1p-1017 gives exactly 0x1p-1022.
+        let normal = f64::from_bits(6 << 52);
+        assert_eq!(derived_error(normal, 5).unwrap(), f64::MIN_POSITIVE);
+        assert!(derived_error(f64::from_bits((6 << 52) - 1), 5).is_err());
+        let mut deep = root_tile("QUADTREE", 6, 6, &[]);
+        let path = leaf(Av::Bits(bits(1365, &[0, 1, 5, 21, 85, 341]))).build();
+        let run_deep = |tile: &Value| {
+            let mut archive = Archive::default().with("s/0/0/0.subtree", path.clone());
+            format(walk(tile, &mut archive))
+        };
+        deep["geometricError"] = json!(below);
+        assert_unsupported(
+            run_deep(&deep),
+            "derived geometric error underflow at level 5",
+        );
+        deep["geometricError"] = json!(normal);
+        assert_eq!(
+            run_deep(&deep).unwrap()[5].error,
+            EffectiveError::Derived(f64::MIN_POSITIVE)
+        );
         // Level 0 is e_R itself, even when subnormal.
         let mut single = root_tile("QUADTREE", 2, 1, &[]);
         single["geometricError"] = json!(f64::MIN_POSITIVE / 2.);
