@@ -146,3 +146,36 @@ fn malformed_subtrees_and_metadata_fail_without_panics() {
     )))
     .is_err());
 }
+
+#[test]
+fn implicit_tiles_take_their_roots_refine() {
+    let (manifest, bytes) = fixture();
+    let refines = |manifest: &Value| {
+        let expanded = expand_tileset(manifest, |_| Ok(bytes.clone())).unwrap();
+        let mut out = Vec::new();
+        let mut tile = &expanded["root"];
+        loop {
+            out.push(tile["refine"].as_str().unwrap().to_owned());
+            match tile["children"].get(0) {
+                Some(child) => tile = child,
+                None => return out,
+            }
+        }
+    };
+    // A root without refine is REPLACE, as a tileset root must be.
+    assert_eq!(refines(&manifest), ["REPLACE"; 3]);
+    let mut add = manifest.clone();
+    add["root"]["refine"] = json!("ADD");
+    assert_eq!(refines(&add), ["ADD"; 3]);
+    // Below an explicit ADD parent, a root without refine inherits ADD.
+    let mut nested = manifest.clone();
+    let root = nested["root"].take();
+    nested["root"] = json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},"geometricError":16,
+        "refine":"ADD","children":[root]});
+    let expanded = expand_tileset(&nested, |_| Ok(bytes.clone())).unwrap();
+    assert_eq!(expanded["root"]["children"][0]["refine"], "ADD");
+    assert_eq!(
+        expanded["root"]["children"][0]["children"][0]["refine"],
+        "ADD"
+    );
+}
