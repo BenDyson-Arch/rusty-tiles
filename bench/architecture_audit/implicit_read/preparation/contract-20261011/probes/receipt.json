@@ -1,0 +1,133 @@
+{
+ "a2_retained_convert_outputs": {
+  "fragmented-array-leaf-implicit.3tz": "caef3b2ba784bd5a42f1bef16cb1dcad3b8f0f288e2f96fa9fca5dacfdc7e317",
+  "nested-alias-ancestor-implicit.3tz": "8a2906fcbd21fd7d7a8d648ef2a1f9e7db61cdd03a9bee0dc93c9a84172c6c85",
+  "nested-alias-exact-implicit.3tz": "30ec074d5e2da4a4f6d2c71feeea54155e4dc2a7be0fcac471936cb0a62178fe",
+  "opaque-extension-known-resource-implicit.3tz": "8815a18d423ff81483b5b9d7f5607c55a4581c47cbd6d01708399d93d51a8fc5",
+  "point-flat-rounded-implicit.3tz": "0c85b563a29280db45e10cb2b4fd0da79f373d236e111dc98c7f2a398a579db1",
+  "root-alias-exact-implicit.3tz": "7461d3c6c81928b9a56be30d0713c2a169c7edadc4f55fddafb1bb29f355a262",
+  "shared-relative-resources-implicit.3tz": "1417a1f3511fc1d885de34631895ad6b0e3751c3d6a0019435e3a52676adfb3d",
+  "source-subtrees-implicit.3tz": "8fc18a925dbe345d7c0c9f757ae6cceefea9d7695a56a4f328fa0b6a0e055c41",
+  "vector-compressed-implicit.3tz": "8fc2bccf29f9dcea2713042b981651e1a94d9f6ace7f8bd2920e24026ebf151b",
+  "vector-flat-rounded-implicit.3tz": "d1d19138a199cfcc567ea9ea36da572284a7bc59a714164563558b0d6751ea76",
+  "vector-quantized-compressed-implicit.3tz": "e7496d851bee0699ce19fe9524e140c2e80e6f3db4b2b9aacb8241286c998643",
+  "vector-quantized-implicit.3tz": "5758930b7e9b95433efa463cf6b59a37bf61a89f9ff986f423fb0fc7bcc1648f"
+ },
+ "binaries": {
+  "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+  "/home/bend/.cache/c2-int/target/release/rusty-tiles": "41a07d60606a0fe2622dc52a8e2ca6ca61fcbdbc8edfabcf8147bf1e35296f08"
+ },
+ "commands": [
+  "taskset -c 12,13 nice -n 10 rusty-tiles-f2238cd --json point-cloud -i cloud.las --sourceCrs local --maxPoints 40 [-o pc-deep.3tz | --explicit -o pc-deep-explicit.3tz]",
+  "taskset -c 12,13 nice -n 10 rusty-tiles-f2238cd --json vector -i perf-lane/vector.geojson --reproducible --jobs 2 [-o vec-perf.3tz | --explicit -o vec-perf-explicit.3tz]",
+  "rusty-tiles-f2238cd --json convert-to-implicit -i {vec-perf,pc-deep}-explicit.3tz -> exit 3 'irregular explicit hierarchy' (both)",
+  "python3 -I probes/materialize_a2_fixture.py <a2_semantics/{quadtree,octree}.json> DIR [rename-class]; rusty-tiles-f2238cd convert -i DIR -o X.3tz; rusty-tiles-f2238cd --json validate X.3tz",
+  "python3 -I probes/inventory_probe.py --out probes/results/<name>.json <archives>",
+  "taskset -c 12,13 nice -n 10 rusty-tiles-f2238cd --json point-cloud -i perf-lane/points.las --sourceCrs EPSG:32756 --heightOffset 0 --maxPoints 2000 -o pc-perf-2000.3tz"
+ ],
+ "corpus_artifacts": {
+  "convert-implicit-from-vector-points-lines-explicit.3tz": "460c2505ce75acff67586f0b331f739daddfc77ca38605b353ee0812c7496650",
+  "legacy-mesh-implicit.3tz": "f8865ce628aef3511ff0bd0781835990c817c5549edc8c86b0116466ff971e3e",
+  "legacy-mesh-small-implicit.3tz": "a7be1bcd9de3315cd43d31aafb1f36cc855938416386ad5ebe198a766a89946b",
+  "pointcloud-implicit.3tz": "a4d9578b3d3a344cd75e60104ef3354a984bc1d49a36e1c6c2bb7dc117db54a7",
+  "vector-points-lines-implicit.3tz": "bc9425c702cf3699cfba93abdbbd25d8f547abbf446c21d4f03558fc2f930b7b",
+  "vector-points-lines-meshopt-implicit.3tz": "67e147f8acb3affd336a36d414b37078398bac954da7f441297742c538f5d00a",
+  "vector-points-lines-quantize-implicit.3tz": "5adc1ed48564cfd99d280a25b4414ea289cc1d360ce5e5cb5e77f4972ce7386d",
+  "vector-polygons-implicit.3tz": "00a6c35e40bc78d9542fc4675b0ab1920fa70366c8e7feee174eefb2223d2b24",
+  "vector-polygons-meshopt-implicit.3tz": "25334e417c1651b98e69b0302d5a644979283ca17dd5d09ee65a6754b9a25167",
+  "vector-polygons-quantize-implicit.3tz": "5f045a9c41a91aeb74ff911d62c22c9d1b4c309f2d10aa69aa1607ffea75d668"
+ },
+ "date": "2026-10-11",
+ "develop": "f2ed077 (tree identical to /tmp/rusty-tiles-c2 HEAD 3563d53)",
+ "executed_observations": {
+  "a2 fixtures before schema-id correction": "invalid_input: tileset schema: \"id\" is a required property",
+  "a2fix/*-none.3tz validate (f2238cd)": "invalid_input: implicit subtree: unsupported tile metadata schema",
+  "a2fix/*-rename-class.3tz validate (f2238cd)": "invalid_input: implicit subtree: unsupported tile metadata schema"
+ },
+ "inputs": {
+  "/home/bend/.cache/c2-corpus/run2/inputs/cloud.las": "353b913082fec2a2062664b6e44c3b8d2258687592bf62ecffd4b017f9f2eec9",
+  "/home/bend/.cache/perf-lane/work/inputs/points.las": "67eb91b0839cb8f244d52fc1c4ca7210aa4fd5d1e2bf4fbd5252ac57f50516e3",
+  "/home/bend/.cache/perf-lane/work/inputs/vector.geojson": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+  "/tmp/rusty-tiles-c2/bench/architecture_audit/implicit_rewrite/a2_semantics/octree.json": "ec78244b10efb9ca564e037f51473b334ed4dbf4e4ece36feb918798e7fcee8b",
+  "/tmp/rusty-tiles-c2/bench/architecture_audit/implicit_rewrite/a2_semantics/quadtree.json": "23d26bc05934a203da1505b07cf31a1fd896136bcacc482dd7eaa0dbd9665637"
+ },
+ "primary_fetch": {
+  "primary-fetch/specification_ImplicitTiling_AVAILABILITY.adoc": "c0df021962dd1ff91dcc02f17573d05f4ed57c444805de052f3c282a7a1ea519",
+  "primary-fetch/specification_Metadata_README.adoc": "4797a8836ca4899129828fcccbaefcedabbf29350ed0a264ccc83fbd1361ceaa",
+  "primary-fetch/specification_Metadata_ReferenceImplementation_PropertyTable_README.adoc": "8099715c66f09e2fd8bbd3358e0b0d71f7934a86e4b7c8dfdc2756d8090231d5",
+  "primary-fetch/specification_schema_PropertyTable_propertyTable.property.schema.json": "6c4ccad8e2b9db2f344928c8bd4cce05bcee081cdd296eb74e7bc262bb37f692",
+  "primary-fetch/specification_schema_PropertyTable_propertyTable.schema.json": "d84fc875a4746d06c0186c5391666ba3eb5f8a9a48db52d947d249735be7320f",
+  "primary-fetch/specification_schema_Schema_class.property.schema.json": "628e5642ccf07bd3c0a9a45648d39ed1c88e268d07cca735b4428058f901605b",
+  "primary-fetch/specification_schema_Subtree_availability.schema.json": "16da41d074dd3be58da9e0e2004cace966653b5f308228f01580b18e95a8ec2c",
+  "primary-fetch/specification_schema_Subtree_buffer.schema.json": "7edf13ac18d798f56f0e73571b062f84f0ea23e8f7aaf2783147ad869398f87a",
+  "primary-fetch/specification_schema_Subtree_bufferView.schema.json": "35c06c8d0fe52d8da07e4e96279c585785e12c7aa230e28cc64270f7bd9cca58",
+  "primary-fetch/specification_schema_Subtree_subtree.schema.json": "88bc7ec39bbc88aa8ad54dc968e6e214ed540546a1835d77d0ac34a5a9e7265a",
+  "primary-fetch/specification_schema_subtrees.schema.json": "815328b35544f5b2c35a8fb8885f06c0e33f235f316bbc89823d21792214ceff",
+  "primary-fetch/specification_schema_tile.implicitTiling.schema.json": "ea286e717ad875a1fe2c41b3d44c965f52a90793f7e906e5b43951e9d62af34e"
+ },
+ "primary_fetch_source": "https://raw.githubusercontent.com/CesiumGS/3d-tiles/4d781014b52294759834018a931223b98ac1ce47/<path>, fetched 2026-10-11 with curl -f; file names encode the path with '/' -> '_'",
+ "primary_retained": {
+  "/tmp/rusty-tiles-a2-format-primary/3d-tiles/specification/ImplicitTiling/README.adoc": "14a37a3425520e46dd266c8afe82d884fdbcd4a8044739e0311198551f5ec672",
+  "/tmp/rusty-tiles-a2-format-primary/3d-tiles/specification/Metadata/Semantics/README.adoc": "02ac07db39258c67e702e0b51dcc3411f96c1caee873aeec2894dbad625e85a2",
+  "/tmp/rusty-tiles-a2-format-primary/3d-tiles/specification/README.adoc": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87"
+ },
+ "probe_scripts": {
+  "probes/inventory_probe.py": "3e77a5d941c55314ff5b9197d64d9c754073a1434348f8635c678ec10ad9873b",
+  "probes/materialize_a2_fixture.py": "bc959001db2f54ed58d3f45dfba7cbf1e44d2c6110c5504db772ce5afbccbd2c"
+ },
+ "purpose": "I1 contract preparation probes; facts only, not acceptance",
+ "samples": {
+  "samples/a2fix/octree-none.3tz": {
+   "bytes": 18144,
+   "sha256": "ec03367bd6f60c238119e09d6dab9559efc3294d45f3d306d7234ac1409cb186"
+  },
+  "samples/a2fix/octree-rename-class.3tz": {
+   "bytes": 18186,
+   "sha256": "8207c53993c7d2c12441f1b3eca5b7e1600b5332291cb538f452d5f514cfae61"
+  },
+  "samples/a2fix/quadtree-none.3tz": {
+   "bytes": 18006,
+   "sha256": "95555c703170dc0b3a0c478800d029098e35f1f5a91434b5585f0f92132ab8fe"
+  },
+  "samples/a2fix/quadtree-rename-class.3tz": {
+   "bytes": 18048,
+   "sha256": "2fbaffdc639f495b35896238782cba45d7414c26c474e41cf3711fb275500415"
+  },
+  "samples/pc-deep-explicit.3tz": {
+   "bytes": 13018700,
+   "sha256": "e1091cd942f8e20d2c8d76fd9dbeccb64c206fc3a05b78b716fea49fe583adfc"
+  },
+  "samples/pc-deep.3tz": {
+   "bytes": 13357687,
+   "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab"
+  },
+  "samples/pc-perf-2000.3tz": {
+   "bytes": 23904928,
+   "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8"
+  },
+  "samples/vec-perf-explicit.3tz": {
+   "bytes": 19088797,
+   "sha256": "dd22037acbc9de16bfe1600f78a108c74acd622e661be9c64f9b227bca89ef09"
+  },
+  "samples/vec-perf.3tz": {
+   "bytes": 37111575,
+   "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148"
+  }
+ },
+ "validate_timings_rough": {
+  "note": "single host, CPUs 12-13, nice 10, best of 3, f2238cd; NOT a perf-lane measurement; another agent was running the perf lane on CPUs 0-1",
+  "pc-deep.3tz": {
+   "tiles": 2233,
+   "wallSeconds": 0.222
+  },
+  "pc-perf-2000.3tz": {
+   "tiles": 428,
+   "wallSeconds": 0.098
+  },
+  "vec-perf.3tz": {
+   "contentReferences": 544,
+   "tiles": 547,
+   "wallSeconds": 0.166
+  }
+ }
+}

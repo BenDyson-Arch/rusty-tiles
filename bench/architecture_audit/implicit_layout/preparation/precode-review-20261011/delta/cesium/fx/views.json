@@ -1,0 +1,132 @@
+{
+ "height": 120.0,
+ "views": [
+  {
+   "name": "leaf-3-0",
+   "leaf": [
+    3,
+    0
+   ],
+   "target": [
+    -80.0,
+    -920.0
+   ],
+   "distanceToPlaceholderCell": 421.0,
+   "routingAncestor": false
+  },
+  {
+   "name": "control-3-0",
+   "leaf": [
+    3,
+    0
+   ],
+   "target": [
+    -752.0,
+    -750.0
+   ],
+   "distanceToPlaceholderCell": 0.0,
+   "routingAncestor": false,
+   "control": true
+  },
+  {
+   "name": "leaf-3-1",
+   "leaf": [
+    3,
+    1
+   ],
+   "target": [
+    -80.0,
+    -80.0
+   ],
+   "distanceToPlaceholderCell": 595.383909759073,
+   "routingAncestor": false
+  },
+  {
+   "name": "leaf-3-2",
+   "leaf": [
+    3,
+    2
+   ],
+   "target": [
+    920.0,
+    -920.0
+   ],
+   "distanceToPlaceholderCell": 920.0,
+   "routingAncestor": false
+  },
+  {
+   "name": "leaf-3-3",
+   "leaf": [
+    3,
+    3
+   ],
+   "target": [
+    920.0,
+    -80.0
+   ],
+   "distanceToPlaceholderCell": 1011.7514516915703,
+   "routingAncestor": false
+  },
+  {
+   "name": "leaf-3-4",
+   "leaf": [
+    3,
+    4
+   ],
+   "target": [
+    -920.0,
+    420.0
+   ],
+   "distanceToPlaceholderCell": 1301.78377620863,
+   "routingAncestor": true
+  },
+  {
+   "name": "leaf-3-5",
+   "leaf": [
+    3,
+    5
+   ],
+   "target": [
+    -920.0,
+    920.0
+   ],
+   "distanceToPlaceholderCell": 1692.8204275705086,
+   "routingAncestor": true
+  },
+  {
+   "name": "leaf-3-6",
+   "leaf": [
+    3,
+    6
+   ],
+   "target": [
+    80.0,
+    420.0
+   ],
+   "distanceToPlaceholderCell": 1012.6608514206521,
+   "routingAncestor": true
+  },
+  {
+   "name": "leaf-3-7",
+   "leaf": [
+    3,
+    7
+   ],
+   "target": [
+    80.0,
+    920.0
+   ],
+   "distanceToPlaceholderCell": 1482.0533053841214,
+   "routingAncestor": true
+  }
+ ],
+ "leafUris": {
+  "E": "e/3-{x}.glb",
+  "A": "content/3-{x}-0-0.glb",
+  "S": "content/3-{x}-0-0.glb",
+  "X": "implicit-content/2-{p}-0-1-{s}-0-0.glb",
+  "F": "c/r2-{p}/1-{s}-0.glb",
+  "D": "c/r2-{p}/1-{s}-0.glb",
+  "N": "c/r2-{p}/1-{s}-0.glb"
+ }
+}

@@ -1,0 +1,82 @@
+{
+ "script": "da6283472e136c0d41ce8831b595127f601bf938bd517c1908f5d3467011e631",
+ "results": [
+  {
+   "archive": "/home/bend/.cache/perf-lane/work/pimpl/v3/prev-perf-default.3tz",
+   "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148",
+   "payloads": 544,
+   "binIdentical": 544,
+   "spliceExact": 544,
+   "naiveExact": 544,
+   "rawHasRootTranslation": 0,
+   "hashOk": 544,
+   "deltaZero": 0,
+   "failures": [],
+   "pythonCpuSeconds": 0.134
+  },
+  {
+   "archive": "/home/bend/.cache/perf-lane/work/pimpl/v3/perf-quant.3tz",
+   "sha256": "c79524ef229c9464ab8ce5a137fc7e9896260e8372a2b43e10d690312e31d3c2",
+   "payloads": 544,
+   "binIdentical": 544,
+   "spliceExact": 544,
+   "naiveExact": 536,
+   "rawHasRootTranslation": 544,
+   "hashOk": 544,
+   "deltaZero": 0,
+   "failures": [],
+   "pythonCpuSeconds": 0.13
+  },
+  {
+   "archive": "/home/bend/.cache/perf-lane/work/pimpl/v3/perf-meshopt.3tz",
+   "sha256": "dae80561ff53bc47206f0914a3651e53c5e51cecf32f79553aed7c29fb31909a",
+   "payloads": 544,
+   "binIdentical": 544,
+   "spliceExact": 0,
+   "naiveExact": 544,
+   "rawHasRootTranslation": 0,
+   "hashOk": 544,
+   "deltaZero": 0,
+   "failures": [
+    "implicit-content/0-0-0-2-0-0-0.glb",
+    "implicit-content/3-0-0-0-0-0-0.glb",
+    "implicit-content/3-0-0-1-0-0-0.glb",
+    "implicit-content/3-0-0-2-0-0-0.glb",
+    "implicit-content/6-0-0-0-0-0-0.glb"
+   ],
+   "pythonCpuSeconds": 0.146
+  },
+  {
+   "archive": "/home/bend/.cache/perf-lane/work/pimpl/v3/perf-quant-meshopt.3tz",
+   "sha256": "9edef151d2d2491b95b6ec5ed9d4f14003ae23c7a047e1b497d874a93bf6dbca",
+   "payloads": 544,
+   "binIdentical": 544,
+   "spliceExact": 0,
+   "naiveExact": 536,
+   "rawHasRootTranslation": 544,
+   "hashOk": 544,
+   "deltaZero": 0,
+   "failures": [
+    "implicit-content/0-0-0-2-0-0-0.glb",
+    "implicit-content/3-0-0-0-0-0-0.glb",
+    "implicit-content/3-0-0-1-0-0-0.glb",
+    "implicit-content/3-0-0-2-0-0-0.glb",
+    "implicit-content/6-0-0-0-0-0-0.glb"
+   ],
+   "pythonCpuSeconds": 0.142
+  },
+  {
+   "archive": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-implicit.3tz",
+   "sha256": "56750d326a2da19e9cba47d8b1a94fe2bb161a30b77626343a2ac2521c1c9c8c",
+   "payloads": 12527,
+   "binIdentical": 12527,
+   "spliceExact": 12527,
+   "naiveExact": 12527,
+   "rawHasRootTranslation": 0,
+   "hashOk": 12527,
+   "deltaZero": 0,
+   "failures": [],
+   "pythonCpuSeconds": 2.429
+  }
+ ]
+}

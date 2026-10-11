@@ -1,0 +1,44 @@
+[
+ {
+  "archive": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-implicit.3tz",
+  "sha256": "56750d326a2da19e9cba47d8b1a94fe2bb161a30b77626343a2ac2521c1c9c8c",
+  "tiles": 12530,
+  "levels": 17,
+  "documents": 2634,
+  "subtrees": 2634,
+  "subtreeBytes": 7351280,
+  "documentBytes": 4104292,
+  "rootDoc": {
+   "valueNodes": 12606,
+   "jsonDepth": 6,
+   "bytes": 915862
+  },
+  "maxDocNodes": 12606,
+  "maxDocDepth": 6,
+  "maxDocBytes": 915862,
+  "archiveEntries": 30326,
+  "script": "today_layout.py",
+  "scriptSha256": "6ea46e4de623175d9c898dfdfbc434706730861a72160850805cfba81f10ceb9"
+ },
+ {
+  "archive": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod16-implicit.3tz",
+  "sha256": "695ba79ac510de16b7b43a94331f5bb33567f11fdc4bacca3a31a4cd81330fe9",
+  "tiles": 18778,
+  "levels": 25,
+  "documents": 4694,
+  "subtrees": 4694,
+  "subtreeBytes": 11836016,
+  "documentBytes": 7059346,
+  "rootDoc": {
+   "valueNodes": 18854,
+   "jsonDepth": 6,
+   "bytes": 1371966
+  },
+  "maxDocNodes": 18854,
+  "maxDocDepth": 6,
+  "maxDocBytes": 1371966,
+  "archiveEntries": 46942,
+  "script": "today_layout.py",
+  "scriptSha256": "6ea46e4de623175d9c898dfdfbc434706730861a72160850805cfba81f10ceb9"
+ }
+]

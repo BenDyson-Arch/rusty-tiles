@@ -1,0 +1,4 @@
+i1 delta review notes (agent-i1code). Branch heads: i1/owner ab4cfb7, i1/validator 36f9ffe (merge-base f2ed077; validator also merged origin/develop PR #159).
+Extracted: validate_i1.rs (i1/validator:src/validate.rs), validate_dev.rs (f2ed077), implicit*.rs (owner), validate.diff.
+Key: PD-13 not implemented (validate.rs:1931-1935 unchanged); link tile bytes = doc size counted into tile_budgets (1468-1512);
+schema taken from holding document only (1250-1269), missing -> implicit_metadata.rs:317 "unknown metadata class".

@@ -1,0 +1,1560 @@
+{
+ "spec": "explicit:/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-explicit.3tz",
+ "model": "forest_model.py",
+ "modelSha256": "a3c9eeaff550fb308898a8ce6b1acfc2f4911c9fac2859613bff79e8921bfd93",
+ "limits": {
+  "DOC_NODES": 16384,
+  "DOC_BYTES": 2097152,
+  "DOC_DEPTH": 12,
+  "MAX_LEVELS": 32
+ },
+ "scheme": "QUADTREE",
+ "S": 4,
+ "tiles": 12530,
+ "levels": 17,
+ "explicitTiles": 1230,
+ "linkTiles": 188,
+ "implicitRoots": 1225,
+ "implicitTiles": 11300,
+ "subtrees": 1225,
+ "subtreeBytes": 4891712,
+ "maxSubtreeBytes": 4656,
+ "maxSubtreeTiles": 11,
+ "implicitContent": 11300,
+ "retainedContent": 0,
+ "explicitContent": 1227,
+ "documents": 189,
+ "docs": [
+  {
+   "name": "tileset.json",
+   "valueNodes": 16294,
+   "jsonDepth": 20,
+   "bytes": 181949,
+   "bytesPretty": 810079,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d36.json",
+   "valueNodes": 4980,
+   "jsonDepth": 17,
+   "bytes": 69426,
+   "bytesPretty": 224275,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d37.json",
+   "valueNodes": 4879,
+   "jsonDepth": 17,
+   "bytes": 68255,
+   "bytesPretty": 219343,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d38.json",
+   "valueNodes": 3488,
+   "jsonDepth": 17,
+   "bytes": 48710,
+   "bytesPretty": 152581,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d132.json",
+   "valueNodes": 2525,
+   "jsonDepth": 15,
+   "bytes": 35563,
+   "bytesPretty": 103101,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d131.json",
+   "valueNodes": 2418,
+   "jsonDepth": 15,
+   "bytes": 34126,
+   "bytesPretty": 98187,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d133.json",
+   "valueNodes": 2418,
+   "jsonDepth": 15,
+   "bytes": 34168,
+   "bytesPretty": 98229,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d134.json",
+   "valueNodes": 2418,
+   "jsonDepth": 15,
+   "bytes": 34003,
+   "bytesPretty": 98064,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d130.json",
+   "valueNodes": 1770,
+   "jsonDepth": 15,
+   "bytes": 24863,
+   "bytesPretty": 70394,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d135.json",
+   "valueNodes": 1663,
+   "jsonDepth": 15,
+   "bytes": 23275,
+   "bytesPretty": 65297,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d1.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11488,
+   "bytesPretty": 27426,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d2.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11471,
+   "bytesPretty": 27409,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d3.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11462,
+   "bytesPretty": 27400,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d4.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11471,
+   "bytesPretty": 27409,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d5.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11446,
+   "bytesPretty": 27384,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d6.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11547,
+   "bytesPretty": 27485,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d7.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11499,
+   "bytesPretty": 27437,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d8.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11477,
+   "bytesPretty": 27415,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d9.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11525,
+   "bytesPretty": 27463,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d10.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11486,
+   "bytesPretty": 27424,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d11.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11507,
+   "bytesPretty": 27445,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d12.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11482,
+   "bytesPretty": 27420,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d13.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11514,
+   "bytesPretty": 27452,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d14.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11510,
+   "bytesPretty": 27448,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d15.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11501,
+   "bytesPretty": 27439,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d16.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11513,
+   "bytesPretty": 27451,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d17.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11528,
+   "bytesPretty": 27466,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d18.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11557,
+   "bytesPretty": 27495,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d19.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11540,
+   "bytesPretty": 27478,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d20.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11534,
+   "bytesPretty": 27472,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d21.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11536,
+   "bytesPretty": 27474,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d22.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11498,
+   "bytesPretty": 27436,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d23.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11523,
+   "bytesPretty": 27461,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d24.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11522,
+   "bytesPretty": 27460,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d25.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11496,
+   "bytesPretty": 27434,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d26.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11511,
+   "bytesPretty": 27449,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d27.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11509,
+   "bytesPretty": 27447,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d28.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11517,
+   "bytesPretty": 27455,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d29.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11469,
+   "bytesPretty": 27407,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d30.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11547,
+   "bytesPretty": 27485,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d31.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11481,
+   "bytesPretty": 27419,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d32.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11538,
+   "bytesPretty": 27476,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d33.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11500,
+   "bytesPretty": 27438,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d34.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11470,
+   "bytesPretty": 27408,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d35.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11480,
+   "bytesPretty": 27418,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d39.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11483,
+   "bytesPretty": 27421,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d40.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11551,
+   "bytesPretty": 27489,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d41.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11485,
+   "bytesPretty": 27423,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d42.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11516,
+   "bytesPretty": 27454,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d43.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11528,
+   "bytesPretty": 27466,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d44.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11517,
+   "bytesPretty": 27455,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d45.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11527,
+   "bytesPretty": 27465,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d46.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11494,
+   "bytesPretty": 27432,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d47.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11543,
+   "bytesPretty": 27481,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d48.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11560,
+   "bytesPretty": 27498,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d49.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11536,
+   "bytesPretty": 27474,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d50.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11500,
+   "bytesPretty": 27438,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d51.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11502,
+   "bytesPretty": 27440,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d52.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11512,
+   "bytesPretty": 27450,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d53.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11527,
+   "bytesPretty": 27465,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d54.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11500,
+   "bytesPretty": 27438,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d55.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11535,
+   "bytesPretty": 27473,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d56.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11500,
+   "bytesPretty": 27438,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d57.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11490,
+   "bytesPretty": 27428,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d58.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11486,
+   "bytesPretty": 27424,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d59.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11527,
+   "bytesPretty": 27465,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d60.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11523,
+   "bytesPretty": 27461,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d61.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11521,
+   "bytesPretty": 27459,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d62.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11513,
+   "bytesPretty": 27451,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d63.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11514,
+   "bytesPretty": 27452,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d64.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11507,
+   "bytesPretty": 27445,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d65.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11540,
+   "bytesPretty": 27478,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d66.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11521,
+   "bytesPretty": 27459,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d67.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11502,
+   "bytesPretty": 27440,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d68.json",
+   "valueNodes": 813,
+   "jsonDepth": 11,
+   "bytes": 11518,
+   "bytesPretty": 27456,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d69.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5626,
+   "bytesPretty": 11688,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d70.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5594,
+   "bytesPretty": 11656,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d71.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5600,
+   "bytesPretty": 11662,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d72.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d73.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5617,
+   "bytesPretty": 11679,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d74.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d75.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5614,
+   "bytesPretty": 11676,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d76.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5626,
+   "bytesPretty": 11688,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d77.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5628,
+   "bytesPretty": 11690,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d78.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5597,
+   "bytesPretty": 11659,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d79.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5649,
+   "bytesPretty": 11711,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d80.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5604,
+   "bytesPretty": 11666,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d81.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5650,
+   "bytesPretty": 11712,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d82.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5597,
+   "bytesPretty": 11659,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d83.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5595,
+   "bytesPretty": 11657,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d84.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5613,
+   "bytesPretty": 11675,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d85.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5636,
+   "bytesPretty": 11698,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d86.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5588,
+   "bytesPretty": 11650,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d87.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5594,
+   "bytesPretty": 11656,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d88.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5614,
+   "bytesPretty": 11676,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d89.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5595,
+   "bytesPretty": 11657,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d90.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5617,
+   "bytesPretty": 11679,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d91.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5658,
+   "bytesPretty": 11720,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d92.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5619,
+   "bytesPretty": 11681,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d93.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5611,
+   "bytesPretty": 11673,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d94.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5627,
+   "bytesPretty": 11689,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d95.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5628,
+   "bytesPretty": 11690,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d96.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5585,
+   "bytesPretty": 11647,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d97.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d98.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5618,
+   "bytesPretty": 11680,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d99.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5641,
+   "bytesPretty": 11703,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d100.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5658,
+   "bytesPretty": 11720,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d101.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5655,
+   "bytesPretty": 11717,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d102.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d103.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5594,
+   "bytesPretty": 11656,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d104.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5620,
+   "bytesPretty": 11682,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d105.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5629,
+   "bytesPretty": 11691,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d106.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5598,
+   "bytesPretty": 11660,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d107.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5635,
+   "bytesPretty": 11697,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d108.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5619,
+   "bytesPretty": 11681,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d109.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d110.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5641,
+   "bytesPretty": 11703,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d111.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5631,
+   "bytesPretty": 11693,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d112.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5616,
+   "bytesPretty": 11678,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d113.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5646,
+   "bytesPretty": 11708,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d114.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5619,
+   "bytesPretty": 11681,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d115.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5608,
+   "bytesPretty": 11670,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d116.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5614,
+   "bytesPretty": 11676,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d117.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5589,
+   "bytesPretty": 11651,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d118.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5598,
+   "bytesPretty": 11660,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d119.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5634,
+   "bytesPretty": 11696,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d120.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5655,
+   "bytesPretty": 11717,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d121.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5653,
+   "bytesPretty": 11715,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d122.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5607,
+   "bytesPretty": 11669,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d123.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5627,
+   "bytesPretty": 11689,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d124.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5629,
+   "bytesPretty": 11691,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d125.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5626,
+   "bytesPretty": 11688,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d126.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5620,
+   "bytesPretty": 11682,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d127.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5620,
+   "bytesPretty": 11682,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d128.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5633,
+   "bytesPretty": 11695,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d129.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5642,
+   "bytesPretty": 11704,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d136.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5616,
+   "bytesPretty": 11678,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d137.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5623,
+   "bytesPretty": 11685,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d138.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5639,
+   "bytesPretty": 11701,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d139.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5634,
+   "bytesPretty": 11696,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d140.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5617,
+   "bytesPretty": 11679,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d141.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5615,
+   "bytesPretty": 11677,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d142.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5646,
+   "bytesPretty": 11708,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d143.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5606,
+   "bytesPretty": 11668,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d144.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5634,
+   "bytesPretty": 11696,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d145.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5605,
+   "bytesPretty": 11667,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d146.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5636,
+   "bytesPretty": 11698,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d147.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5624,
+   "bytesPretty": 11686,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d148.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5603,
+   "bytesPretty": 11665,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d149.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5647,
+   "bytesPretty": 11709,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d150.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5632,
+   "bytesPretty": 11694,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d151.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5654,
+   "bytesPretty": 11716,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d152.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5631,
+   "bytesPretty": 11693,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d153.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5649,
+   "bytesPretty": 11711,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d154.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5634,
+   "bytesPretty": 11696,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d155.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5624,
+   "bytesPretty": 11686,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d156.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5629,
+   "bytesPretty": 11691,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d157.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5635,
+   "bytesPretty": 11697,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d158.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5607,
+   "bytesPretty": 11669,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d159.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5636,
+   "bytesPretty": 11698,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d160.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5621,
+   "bytesPretty": 11683,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d161.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5625,
+   "bytesPretty": 11687,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d162.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5606,
+   "bytesPretty": 11668,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d163.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5620,
+   "bytesPretty": 11682,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d164.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5624,
+   "bytesPretty": 11686,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d165.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5615,
+   "bytesPretty": 11677,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d166.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5635,
+   "bytesPretty": 11697,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d167.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5618,
+   "bytesPretty": 11680,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d168.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5639,
+   "bytesPretty": 11701,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d169.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5624,
+   "bytesPretty": 11686,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d170.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5646,
+   "bytesPretty": 11708,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d171.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5622,
+   "bytesPretty": 11684,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d172.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5618,
+   "bytesPretty": 11680,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d173.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5625,
+   "bytesPretty": 11687,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d174.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5644,
+   "bytesPretty": 11706,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d175.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5623,
+   "bytesPretty": 11685,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d176.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5602,
+   "bytesPretty": 11664,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d177.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5649,
+   "bytesPretty": 11711,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d178.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5625,
+   "bytesPretty": 11687,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d179.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5605,
+   "bytesPretty": 11667,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d180.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5602,
+   "bytesPretty": 11664,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d181.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5635,
+   "bytesPretty": 11697,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d182.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5632,
+   "bytesPretty": 11694,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d183.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5644,
+   "bytesPretty": 11706,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d184.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5643,
+   "bytesPretty": 11705,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d185.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5632,
+   "bytesPretty": 11694,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d186.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5621,
+   "bytesPretty": 11683,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d187.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5636,
+   "bytesPretty": 11698,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d188.json",
+   "valueNodes": 385,
+   "jsonDepth": 9,
+   "bytes": 5637,
+   "bytesPretty": 11699,
+   "retainedSources": 0
+  }
+ ],
+ "rootDoc": {
+  "name": "tileset.json",
+  "valueNodes": 16294,
+  "jsonDepth": 20,
+  "bytes": 181949,
+  "bytesPretty": 810079,
+  "retainedSources": 0
+ },
+ "maxDocNodes": 16294,
+ "maxDocBytes": 181949,
+ "maxDocBytesPretty": 810079,
+ "maxDocJsonDepth": 20,
+ "hierarchyVisits": 14321,
+ "archiveEntries": 13944,
+ "maxDocNodesOfLimit": 0.2486,
+ "maxDocBytesOfLimit": 0.0217,
+ "maxDocJsonDepthOfLimit": 0.3125,
+ "hierarchyVisitsOfLimit": 0.2185,
+ "archiveEntriesOfLimit": 0.2128
+}

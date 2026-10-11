@@ -1,0 +1,47 @@
+{
+ "json_detection": [
+  {
+   "template": "c/{level}-{x}-{y}-{z}.json",
+   "v3_static_detects": true,
+   "resolved_member": "c/1-0-1-0.json",
+   "resolved_is_json": true
+  },
+  {
+   "template": "c/{level}-{x}-{y}-{z}.json/.",
+   "v3_static_detects": false,
+   "resolved_member": "c/1-0-1-0.json",
+   "resolved_is_json": true
+  },
+  {
+   "template": "c/{level}-{x}-{y}-{z}.json/",
+   "v3_static_detects": false,
+   "resolved_member": "c/1-0-1-0.json",
+   "resolved_is_json": true
+  },
+  {
+   "template": "c/x.json/{level}-{x}-{y}-{z}/..",
+   "v3_static_detects": false,
+   "resolved_member": "c/x.json",
+   "resolved_is_json": true
+  },
+  {
+   "template": "c/{level}-{x}-{y}-{z}.JSON//./",
+   "v3_static_detects": false,
+   "resolved_member": "c/1-0-1-0.JSON",
+   "resolved_is_json": true
+  }
+ ],
+ "class_scan": {
+  "opaque_class_properties": 32668,
+  "subtrees": 37449,
+  "property_visits_without_memo": 1223383932
+ },
+ "content_index_live": {
+  "per_subtree_E": [
+   261000
+  ],
+  "live_sum": 261000,
+  "references": 262144,
+  "ratio": 1.0
+ }
+}

@@ -1,0 +1,418 @@
+{
+ "probe": "layout_probe.py",
+ "results": [
+  {
+   "archive": "point-cloud.3tz",
+   "sha256": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2",
+   "scheme": "OCTREE",
+   "tiles": 9,
+   "payloadTiles": 9,
+   "levels": 2,
+   "today": {
+    "documents": 1,
+    "subtrees": 1,
+    "subtreeBytes": 1848,
+    "documentBytes": 1487
+   },
+   "maxChildren": 8,
+   "childrenHistogram": {
+    "0": 8,
+    "8": 1
+   },
+   "rowsNotEnclosingChildRows": 0,
+   "escapeByLevel": {
+    "0": {
+     "tiles": 1,
+     "outside": 0,
+     "maxEscapeMetres": 0.0,
+     "maxEscapeRelative": 0.0,
+     "medianEscapeMetres": 0.0
+    },
+    "1": {
+     "tiles": 8,
+     "outside": 0,
+     "maxEscapeMetres": 0.0,
+     "maxEscapeRelative": 0.0,
+     "medianEscapeMetres": 0.0
+    }
+   },
+   "layoutA": {
+    "subtrees": 1,
+    "childSubtreeRoots": 0,
+    "placeholderUnsafeRoots": 0,
+    "maxPlaceholderEscapeMetres": 0.0
+   },
+   "layoutL1": {
+    "2": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "3": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "4": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "5": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "6": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "7": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "8": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    }
+   }
+  },
+  {
+   "archive": "vector.3tz",
+   "sha256": "30015971131cfff8e2a208bc876c32c7ffe21495eb9b9ad45f4c71a47e5d07d7",
+   "scheme": "QUADTREE",
+   "tiles": 547,
+   "payloadTiles": 544,
+   "levels": 12,
+   "today": {
+    "documents": 85,
+    "subtrees": 85,
+    "subtreeBytes": 287424,
+    "documentBytes": 141973
+   },
+   "maxChildren": 2,
+   "childrenHistogram": {
+    "0": 256,
+    "1": 36,
+    "2": 255
+   },
+   "rowsNotEnclosingChildRows": 0,
+   "escapeByLevel": {
+    "0": {
+     "tiles": 1,
+     "outside": 0,
+     "maxEscapeMetres": 0.0,
+     "maxEscapeRelative": 0.0,
+     "medianEscapeMetres": 0.0
+    },
+    "1": {
+     "tiles": 2,
+     "outside": 2,
+     "maxEscapeMetres": 6694.448296063409,
+     "maxEscapeRelative": 2.0000000000000004,
+     "medianEscapeMetres": 6694.448296063409
+    },
+    "2": {
+     "tiles": 4,
+     "outside": 4,
+     "maxEscapeMetres": 10041.67244409511,
+     "maxEscapeRelative": 5.999999999999999,
+     "medianEscapeMetres": 10029.889203808063
+    },
+    "3": {
+     "tiles": 8,
+     "outside": 8,
+     "maxEscapeMetres": 11715.284516226988,
+     "maxEscapeRelative": 13.999999997748613,
+     "medianEscapeMetres": 11691.214807423208
+    },
+    "4": {
+     "tiles": 16,
+     "outside": 16,
+     "maxEscapeMetres": 12552.090549635723,
+     "maxEscapeRelative": 29.999999986895016,
+     "medianEscapeMetres": 9188.41429117797
+    },
+    "5": {
+     "tiles": 32,
+     "outside": 32,
+     "maxEscapeMetres": 12970.493568139684,
+     "maxEscapeRelative": 61.999999973790025,
+     "medianEscapeMetres": 7978.673872266277
+    },
+    "6": {
+     "tiles": 64,
+     "outside": 64,
+     "maxEscapeMetres": 13179.695077391665,
+     "maxEscapeRelative": 125.99999994758004,
+     "medianEscapeMetres": 8166.603713937042
+    },
+    "7": {
+     "tiles": 128,
+     "outside": 128,
+     "maxEscapeMetres": 13284.295824895054,
+     "maxEscapeRelative": 253.99999975897367,
+     "medianEscapeMetres": 7410.120244602507
+    },
+    "8": {
+     "tiles": 256,
+     "outside": 256,
+     "maxEscapeMetres": 13336.596201475139,
+     "maxEscapeRelative": 509.9999994899203,
+     "medianEscapeMetres": 7455.058043410672
+    },
+    "9": {
+     "tiles": 12,
+     "outside": 12,
+     "maxEscapeMetres": 13362.746390131633,
+     "maxEscapeRelative": 1021.9999989798405,
+     "medianEscapeMetres": 9998.016505425278
+    },
+    "10": {
+     "tiles": 12,
+     "outside": 12,
+     "maxEscapeMetres": 13375.821484459886,
+     "maxEscapeRelative": 2045.9999979596814,
+     "medianEscapeMetres": 10011.091599753527
+    },
+    "11": {
+     "tiles": 12,
+     "outside": 12,
+     "maxEscapeMetres": 13382.35903162401,
+     "maxEscapeRelative": 4093.999995919363,
+     "medianEscapeMetres": 10017.629146917652
+    }
+   },
+   "layoutA": {
+    "subtrees": 273,
+    "childSubtreeRoots": 272,
+    "placeholderUnsafeRoots": 272,
+    "maxPlaceholderEscapeMetres": 13336.596201475139
+   },
+   "layoutL1": {
+    "2": {
+     "explicitTiles": 160,
+     "skeletonTiles": 158,
+     "explicitLeaves": 2,
+     "implicitRoots": 133,
+     "tilesInImplicitRoots": 387,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 665,
+     "subtreeBytesEstimate": 139802
+    },
+    "3": {
+     "explicitTiles": 88,
+     "skeletonTiles": 86,
+     "explicitLeaves": 2,
+     "implicitRoots": 73,
+     "tilesInImplicitRoots": 459,
+     "maxSubtreeLevels": 3,
+     "availabilityBitsPerStream": 1517,
+     "subtreeBytesEstimate": 104639
+    },
+    "4": {
+     "explicitTiles": 48,
+     "skeletonTiles": 46,
+     "explicitLeaves": 2,
+     "implicitRoots": 45,
+     "tilesInImplicitRoots": 499,
+     "maxSubtreeLevels": 4,
+     "availabilityBitsPerStream": 3489,
+     "subtreeBytesEstimate": 89340
+    },
+    "5": {
+     "explicitTiles": 27,
+     "skeletonTiles": 27,
+     "explicitLeaves": 0,
+     "implicitRoots": 28,
+     "tilesInImplicitRoots": 520,
+     "maxSubtreeLevels": 5,
+     "availabilityBitsPerStream": 6908,
+     "subtreeBytesEstimate": 80239
+    },
+    "6": {
+     "explicitTiles": 19,
+     "skeletonTiles": 19,
+     "explicitLeaves": 0,
+     "implicitRoots": 20,
+     "tilesInImplicitRoots": 528,
+     "maxSubtreeLevels": 6,
+     "availabilityBitsPerStream": 12708,
+     "subtreeBytesEstimate": 76793
+    },
+    "7": {
+     "explicitTiles": 15,
+     "skeletonTiles": 15,
+     "explicitLeaves": 0,
+     "implicitRoots": 16,
+     "tilesInImplicitRoots": 532,
+     "maxSubtreeLevels": 7,
+     "availabilityBitsPerStream": 29008,
+     "subtreeBytesEstimate": 78420
+    },
+    "8": {
+     "explicitTiles": 11,
+     "skeletonTiles": 11,
+     "explicitLeaves": 0,
+     "implicitRoots": 12,
+     "tilesInImplicitRoots": 536,
+     "maxSubtreeLevels": 8,
+     "availabilityBitsPerStream": 94204,
+     "subtreeBytesEstimate": 92271
+    }
+   }
+  },
+  {
+   "archive": "mesh.3tz",
+   "sha256": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b",
+   "scheme": "OCTREE",
+   "tiles": 9,
+   "payloadTiles": 9,
+   "levels": 2,
+   "today": {
+    "documents": 1,
+    "subtrees": 1,
+    "subtreeBytes": 1848,
+    "documentBytes": 1041
+   },
+   "maxChildren": 8,
+   "childrenHistogram": {
+    "0": 8,
+    "8": 1
+   },
+   "rowsNotEnclosingChildRows": 0,
+   "escapeByLevel": {
+    "0": {
+     "tiles": 1,
+     "outside": 0,
+     "maxEscapeMetres": 0.0,
+     "maxEscapeRelative": 0.0,
+     "medianEscapeMetres": 0.0
+    },
+    "1": {
+     "tiles": 8,
+     "outside": 8,
+     "maxEscapeMetres": 0.8610758781433109,
+     "maxEscapeRelative": 0.14352167997126086,
+     "medianEscapeMetres": 0.859772026538849
+    }
+   },
+   "layoutA": {
+    "subtrees": 1,
+    "childSubtreeRoots": 0,
+    "placeholderUnsafeRoots": 0,
+    "maxPlaceholderEscapeMetres": 0.0
+   },
+   "layoutL1": {
+    "2": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "3": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "4": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "5": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "6": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "7": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    },
+    "8": {
+     "explicitTiles": 0,
+     "skeletonTiles": 0,
+     "explicitLeaves": 0,
+     "implicitRoots": 1,
+     "tilesInImplicitRoots": 9,
+     "maxSubtreeLevels": 2,
+     "availabilityBitsPerStream": 9,
+     "subtreeBytesEstimate": 1734
+    }
+   }
+  }
+ ]
+}

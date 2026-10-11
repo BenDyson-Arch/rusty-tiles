@@ -1,0 +1,156 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      13,
+      15
+    ],
+    "baseline": null,
+    "rasterInsetDegrees": 0,
+    "scriptSha256": {
+      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
+      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.0202000000029803,
+      "tilesLoadedEvents": 5,
+      "selectedTiles": 4,
+      "tilesetMemoryBytes": null,
+      "usedJSHeapSize": 42002134,
+      "failures": [],
+      "rootBoundingSphereRadius": 8344.139455469209,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "vector",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/vector.3tz",
+        "bytes": 37111809,
+        "sha256": "7c619ed7096cca22053a0e2b48d7d9c33d6525110a6a1ed22d457c75680693f6"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/pimpl/r2-base1/screenshots/vector.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 41102
+        },
+        "subtree": {
+          "requests": 1,
+          "bytes": 5752
+        },
+        "content": {
+          "requests": 4,
+          "bytes": 1516936
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 6,
+        "requestBytes": 1563790,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "vector.png": "28db29fce794433d84945ad809da37f02fb3ffcabc0c61b45378560d7eda5fa3"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 15.6455,
+      "tilesLoadedEvents": 2648,
+      "selectedTiles": 1953,
+      "tilesetMemoryBytes": 2546400,
+      "usedJSHeapSize": 143277193,
+      "failures": [],
+      "rootBoundingSphereRadius": 354.0971777595277,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "pc-deep",
+      "kind": "tileset",
+      "output": {
+        "archive": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-deep.3tz",
+        "bytes": 13357687,
+        "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/pimpl/r2-base1/screenshots/pc-deep.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 208,
+          "bytes": 172361
+        },
+        "subtree": {
+          "requests": 208,
+          "bytes": 446880
+        },
+        "content": {
+          "requests": 2233,
+          "bytes": 12273740
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 2649,
+        "requestBytes": 12892981,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "pc-deep.png": "15f7a2b7776f39f336c2777d2748773eac0a73783a629d6d612cea3a61f5eb3f"
+      },
+      "problems": []
+    }
+  ]
+}

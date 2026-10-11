@@ -1,0 +1,56 @@
+{
+ "spec": "implicit:/tmp/rusty-tiles-i1-contract-20261011/samples/pc-deep.3tz",
+ "model": "forest_model.py",
+ "modelSha256": "a3c9eeaff550fb308898a8ce6b1acfc2f4911c9fac2859613bff79e8921bfd93",
+ "limits": {
+  "DOC_NODES": 16384,
+  "DOC_BYTES": 2097152,
+  "DOC_DEPTH": 12,
+  "MAX_LEVELS": 32
+ },
+ "scheme": "OCTREE",
+ "S": 4,
+ "tiles": 2233,
+ "levels": 5,
+ "explicitTiles": 1,
+ "linkTiles": 0,
+ "implicitRoots": 8,
+ "implicitTiles": 2232,
+ "subtrees": 8,
+ "subtreeBytes": 252504,
+ "maxSubtreeBytes": 38496,
+ "maxSubtreeTiles": 342,
+ "implicitContent": 2232,
+ "retainedContent": 0,
+ "explicitContent": 1,
+ "documents": 1,
+ "docs": [
+  {
+   "name": "tileset.json",
+   "valueNodes": 258,
+   "jsonDepth": 6,
+   "bytes": 4021,
+   "bytesPretty": 7438,
+   "retainedSources": 0
+  }
+ ],
+ "rootDoc": {
+  "name": "tileset.json",
+  "valueNodes": 258,
+  "jsonDepth": 6,
+  "bytes": 4021,
+  "bytesPretty": 7438,
+  "retainedSources": 0
+ },
+ "maxDocNodes": 258,
+ "maxDocBytes": 4021,
+ "maxDocBytesPretty": 7438,
+ "maxDocJsonDepth": 6,
+ "hierarchyVisits": 2243,
+ "archiveEntries": 2245,
+ "maxDocNodesOfLimit": 0.0039,
+ "maxDocBytesOfLimit": 0.0005,
+ "maxDocJsonDepthOfLimit": 0.0938,
+ "hierarchyVisitsOfLimit": 0.0342,
+ "archiveEntriesOfLimit": 0.0343
+}

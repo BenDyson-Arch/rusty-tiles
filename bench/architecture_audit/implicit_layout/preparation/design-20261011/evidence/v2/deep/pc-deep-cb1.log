@@ -1,0 +1,35 @@
+today failures [] errors ['Failed to load resource: the server responded with a status of 404 (File not found)'] requests {'total': 2625, 'unique': 2625, 'json': 208, 'subtree': 208, 'glb': 2209} overview 2497 14.48
+  leaf-p4                  leafSelected=True  pickedLeaf=True  cov=0.00 newReq=16  sec=1.50 sel=9
+  leaf-p142                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=64  sec=1.75 sel=129
+  leaf-p282                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=32  sec=1.86 sel=405
+  leaf-p421                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=8   sec=1.69 sel=417
+  leaf-p560                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.31 sel=285
+  leaf-p699                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.45 sel=541
+  leaf-p839                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.50 sel=644
+  leaf-p978                leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=1.98 sel=1148
+  leaf-p1117               leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=1.97 sel=1065
+  leaf-p1257               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.36 sel=416
+  leaf-p1396               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.30 sel=268
+  leaf-p1536               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=8   sec=1.90 sel=801
+  leaf-p1675               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.59 sel=823
+  leaf-p1815               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.67 sel=866
+  leaf-p1953               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.61 sel=832
+  leaf-p2094               leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=2.05 sel=1436
+forest4 failures [] errors ['Failed to load resource: the server responded with a status of 404 (File not found)'] requests {'total': 2218, 'unique': 2218, 'json': 1, 'subtree': 8, 'glb': 2209} overview 2090 13.11
+  leaf-p4                  leafSelected=True  pickedLeaf=True  cov=0.00 newReq=16  sec=1.51 sel=9
+  leaf-p142                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=64  sec=1.57 sel=129
+  leaf-p282                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=32  sec=1.76 sel=405
+  leaf-p421                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=8   sec=1.74 sel=417
+  leaf-p560                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.32 sel=285
+  leaf-p699                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.47 sel=541
+  leaf-p839                leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.57 sel=644
+  leaf-p978                leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=1.81 sel=1148
+  leaf-p1117               leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=1.84 sel=1065
+  leaf-p1257               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.42 sel=416
+  leaf-p1396               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.32 sel=268
+  leaf-p1536               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=8   sec=1.89 sel=801
+  leaf-p1675               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.69 sel=823
+  leaf-p1815               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.62 sel=866
+  leaf-p1953               leafSelected=True  pickedLeaf=True  cov=0.00 newReq=0   sec=1.64 sel=832
+  leaf-p2094               leafSelected=True  pickedLeaf=False cov=0.00 newReq=0   sec=2.04 sel=1436
+{"today~forest4": {"overviewSameSelection": true, "viewsSameSelection": 16, "viewsSamePick": 16, "views": 16}}
