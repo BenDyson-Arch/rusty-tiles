@@ -25,6 +25,9 @@ pub enum ValidationFailure {
     ResourceLimit(String),
     #[error(transparent)]
     Io(#[from] io::Error),
+    /// An internal invariant of the validator itself failed; never a verdict on the input.
+    #[error("{0}")]
+    InvalidState(String),
 }
 impl ValidationFailure {
     pub fn category(&self) -> (&'static str, u8) {
@@ -33,6 +36,7 @@ impl ValidationFailure {
             Self::Unsupported(_) => ("unsupported", 2),
             Self::ResourceLimit(_) => ("resource_limit", 3),
             Self::Io(_) => ("io", 1),
+            Self::InvalidState(_) => ("invalid_state", 1),
         }
     }
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
