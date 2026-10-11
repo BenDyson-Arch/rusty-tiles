@@ -19,9 +19,16 @@ use std::{
 };
 const SIDE: usize = 256;
 const TILE_BYTES: usize = SIDE * SIDE * 4;
-/// Fast PNG falls back to stored deflate blocks when compression expands:
-/// 262431 zlib bytes plus signature/IHDR/IDAT/IEND framing fit this bound.
-const PNG_BYTES: usize = TILE_BYTES + 4096;
+/// PNG uses png 0.18.1 + flate2/miniz_oxide 0.8.9 level 1 over at most
+/// 256 * (1 + 1024) = 262400 filtered bytes. DEFLATE codes are at most 15 bits
+/// and extra bits at most 5 (length) and 13 (distance): a literal costs at most
+/// 15 bits and a match of at least 3 bytes at most 48 bits, so a block body is
+/// at most 2 bits per input bit; a stored fallback adds 5 bytes. A block header
+/// plus end code is under 300 bytes. miniz_oxide ends a non-final block only
+/// after 65528 LZ code bytes (at most 1.125 per input byte) or, in its normal
+/// parser, 31744 input bytes, so there are at most 9 blocks. With zlib and PNG
+/// framing the stream is under 2 * 262400 + 9 * 300 + 64 bytes.
+const PNG_BYTES: usize = 2 * TILE_BYTES + 16384;
 /// "/{z}/{x}/{y}.png" below the tiles directory, z <= 24 and x, y < 2^24.
 const NAME_BYTES: usize = 3 + 2 + 8 + 8 + 4;
 type Encoder<'a> = PngEncoder<&'a mut Cursor<&'a mut [u8]>>;
@@ -122,12 +129,22 @@ fn read_row(ds: &Dataset, x: u64, y: u64, width: usize, row: &mut [u8]) -> Resul
     }
     Ok(())
 }
-fn encode(tile: &[u8], png: &mut [u8]) -> Result<usize, JobError> {
+/// A fully opaque tile is packed in place to RGB; any other tile stays RGBA.
+fn encode(tile: &mut [u8], png: &mut [u8]) -> Result<usize, JobError> {
+    let opaque = tile.as_chunks::<4>().0.iter().all(|p| p[3] == 255);
+    let (pixels, color) = if opaque {
+        for i in 0..SIDE * SIDE {
+            tile.copy_within(4 * i..4 * i + 3, 3 * i);
+        }
+        (&tile[..SIDE * SIDE * 3], image::ExtendedColorType::Rgb8)
+    } else {
+        (&tile[..], image::ExtendedColorType::Rgba8)
+    };
     let capacity = png.len();
     let mut cursor = Cursor::new(png);
     let encoded =
-        PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::Adaptive)
-            .write_image(tile, 256, 256, image::ExtendedColorType::Rgba8);
+        PngEncoder::new_with_quality(&mut cursor, CompressionType::Level(1), FilterType::Adaptive)
+            .write_image(pixels, 256, 256, color);
     let n = cursor.position() as usize;
     match encoded {
         Ok(()) => Ok(n),
@@ -237,7 +254,7 @@ fn tiles(
                         }
                     }
                 }
-                let n = encode(&tile, &mut png)?;
+                let n = encode(&mut tile, &mut png)?;
                 path.push(decimal(&mut name, y, ".png"));
                 fs::write(&path, &png[..n])
                     .map_err(|e| JobError::io("write raster tile", &path, e))?;
@@ -311,9 +328,9 @@ mod tests {
         );
     }
     #[test]
-    fn bounded_png_buffer_holds_incompressible_tile_and_decodes() {
+    fn bounded_png_buffer_holds_incompressible_tiles_and_decodes() {
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
-        let tile: Vec<u8> = (0..TILE_BYTES)
+        let noise: Vec<u8> = (0..TILE_BYTES)
             .map(|_| {
                 state ^= state << 13;
                 state ^= state >> 7;
@@ -321,19 +338,30 @@ mod tests {
                 (state >> 24) as u8
             })
             .collect();
-        let mut png = vec![0; PNG_BYTES];
-        let n = encode(&tile, &mut png).unwrap();
-        assert!(n > TILE_BYTES && n <= PNG_BYTES, "{n}");
-        let mut again = vec![0; PNG_BYTES];
-        assert_eq!(encode(&tile, &mut again).unwrap(), n);
-        assert_eq!(png[..n], again[..n]);
-        let decoded = image::load_from_memory(&png[..n]).unwrap().into_rgba8();
-        assert_eq!(decoded.as_raw(), &tile);
-        let mut short = vec![0; 1024];
-        assert_eq!(
-            encode(&tile, &mut short).unwrap_err().kind(),
-            JobErrorKind::ResourceLimit
-        );
+        let mut opaque = noise.clone();
+        opaque.iter_mut().skip(3).step_by(4).for_each(|a| *a = 255);
+        let mut clear = vec![0; TILE_BYTES];
+        clear[4 * 300..4 * 301].copy_from_slice(&[9, 8, 7, 255]);
+        for (source, color) in [
+            (&noise, image::ColorType::Rgba8),
+            (&opaque, image::ColorType::Rgb8),
+            (&clear, image::ColorType::Rgba8),
+        ] {
+            let mut png = vec![0; PNG_BYTES];
+            let n = encode(&mut source.clone(), &mut png).unwrap();
+            assert!(n <= PNG_BYTES, "{n}");
+            let mut again = vec![0; PNG_BYTES];
+            assert_eq!(encode(&mut source.clone(), &mut again).unwrap(), n);
+            assert_eq!(png[..n], again[..n]);
+            let decoded = image::load_from_memory(&png[..n]).unwrap();
+            assert_eq!(decoded.color(), color);
+            assert_eq!(decoded.into_rgba8().as_raw(), source);
+            let mut short = vec![0; 64];
+            assert_eq!(
+                encode(&mut source.clone(), &mut short).unwrap_err().kind(),
+                JobErrorKind::ResourceLimit
+            );
+        }
         let mut name = [0u8; 16];
         assert_eq!(decimal(&mut name, u32::MAX, ".png"), "4294967295.png");
     }

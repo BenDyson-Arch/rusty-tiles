@@ -67,7 +67,8 @@ facts/paths, sequential coherence, display or tile scratch (one finest row, one
 RGBA tile, one fixed PNG buffer refusing growth and one path), exactly N+3
 member tuples, native argument/config payload and fixed operation owners.
 Requested tiles are not charged an RGBA buffer each; beyond the one sequential
-tile they cost only their member tuples.
+tile they cost only their member tuples. A fully opaque tile is encoded as RGB
+PNG, any other tile as RGBA, both with adaptive filtering and deflate level 1.
 Logical work, physical staged file inventory and native opaque allocations are
 distinct; this is not an RSS bound. The ledger charges output path lengths,
 so it gates admission but is not published: `report.json` bytes do not depend

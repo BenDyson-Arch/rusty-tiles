@@ -175,7 +175,7 @@ rusty-tiles raster -i measurements.tif -o output/measurements \
 | Path | Contents |
 | --- | --- |
 | `source.cog.tif` | Standalone DEFLATE COG with all admitted decoded bands and critical source facts |
-| `tiles/{z}/{x}/{y}.png` | 256×256 RGBA display tiles |
+| `tiles/{z}/{x}/{y}.png` | 256×256 display tiles: RGB when fully opaque, otherwise RGBA |
 | `tilejson.json` | Relative XYZ tile addresses and approximate descriptive geographic source bounds |
 | `report.json` | Typed source, grid, display, limits and resource report |
 
@@ -202,7 +202,9 @@ valid black retains its opacity.
 The finest display uses an exact admitted grid and explicit nearest-neighbour
 warp. Every requested coarser zoom samples that closed finest image directly
 by exact integer pixel index, with east/south tie selection and transparent
-padding. Tiles are sampled and PNG-encoded sequentially in Rust. Reports expose the
+padding. Tiles are sampled and PNG-encoded sequentially in Rust. XYZ consumers
+such as CesiumJS and Leaflet accept the resulting mix of RGB and RGBA PNG
+tiles. Reports expose the
 exact target transform, dimensions and tile rectangle. Output may vary across
 native dependency versions; reproducibility claims require the same build.
 

@@ -103,7 +103,7 @@ fn coarse_zooms_sample_exact_greater_tie_finest_pixels() {
         assert!(cover[2] >= x0 + width as u64 / 256 - 1);
         assert!(cover[3] >= y0 + height as u64 / 256 - 1);
         let mut tiles = 0;
-        let (mut checked, mut padding) = (0u64, 0u64);
+        let (mut checked, mut padding, mut opaque_tiles) = (0u64, 0u64, 0u64);
         for dz in 0..=2u8 {
             let (z, k) = (zmax - dz, 1u64 << dz);
             let xs = (cover[0] >> dz)..=(cover[2] >> dz);
@@ -112,8 +112,11 @@ fn coarse_zooms_sample_exact_greater_tie_finest_pixels() {
                 for ty in ys.clone() {
                     tiles += 1;
                     let path = output.join(format!("tiles/{z}/{tx}/{ty}.png"));
-                    let tile = image::open(&path).unwrap().into_rgba8();
+                    let decoded = image::open(&path).unwrap();
+                    let color = decoded.color();
+                    let tile = decoded.into_rgba8();
                     assert_eq!(tile.dimensions(), (256, 256));
+                    let before = padding;
                     for (px, py, pixel) in tile.enumerate_pixels() {
                         let ex = (k * (tx * 256 + u64::from(px)) + k / 2).checked_sub(x0 * 256);
                         let ey = (k * (ty * 256 + u64::from(py)) + k / 2).checked_sub(y0 * 256);
@@ -137,6 +140,14 @@ fn coarse_zooms_sample_exact_greater_tie_finest_pixels() {
                             "z{z} tile {tx}/{ty} pixel {px},{py} (k={k})"
                         );
                     }
+                    // Fully opaque tiles are RGB; padded tiles keep alpha.
+                    let layout = if padding == before {
+                        opaque_tiles += 1;
+                        image::ColorType::Rgb8
+                    } else {
+                        image::ColorType::Rgba8
+                    };
+                    assert_eq!(color, layout, "z{z} tile {tx}/{ty} PNG layout");
                 }
             }
             assert_eq!(
@@ -151,5 +162,9 @@ fn coarse_zooms_sample_exact_greater_tie_finest_pixels() {
         let pixels = (width * height) as u64;
         assert_eq!(checked, pixels + pixels / 4 + pixels / 16);
         assert!(padding > 0, "coarse tiles extend beyond the finest raster");
+        assert!(
+            opaque_tiles > 0,
+            "fully covered tiles exercise the RGB layout"
+        );
     }
 }
