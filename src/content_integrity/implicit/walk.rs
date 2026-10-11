@@ -279,3 +279,331 @@ impl<'r> Walk<'r> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::*;
+    use super::super::{admit_root, EffectiveError, ImplicitError, Resolver};
+    use serde_json::{json, Value};
+
+    fn leaf(tile: Av) -> Sub {
+        Sub::new().tile(tile).child(Av::Const(0))
+    }
+
+    #[test]
+    fn preorder_across_subtrees_with_morton_x_lsb() {
+        // OCTREE L = 1, A = 3. Child index bit 0 is x, bit 1 is y, bit 2 is z.
+        let tile = root_tile("OCTREE", 1, 3, &["c/{level}/{x}/{y}/{z}.glb"]);
+        let inner = |child: usize| {
+            Sub::new()
+                .tile(Av::Const(1))
+                .child(Av::Bits(bits(8, &[child])))
+                .content(&[Av::Const(1)])
+                .build()
+        };
+        let mut archive = Archive::default()
+            .with(
+                "s/0/0/0/0.subtree",
+                Sub::new()
+                    .tile(Av::Const(1))
+                    .child(Av::Bits(bits(8, &[1, 4])))
+                    .content(&[Av::Const(0)])
+                    .build(),
+            )
+            .with("s/1/1/0/0.subtree", inner(2))
+            .with("s/1/0/0/1.subtree", inner(2))
+            .with(
+                "s/2/2/1/0.subtree",
+                leaf(Av::Const(1)).content(&[Av::Const(1)]).build(),
+            )
+            .with(
+                "s/2/0/1/2.subtree",
+                leaf(Av::Const(1)).content(&[Av::Const(1)]).build(),
+            );
+        let tiles = walk(&tile, &mut archive).unwrap();
+        assert_eq!(
+            coords(&tiles),
+            vec![
+                (0, 0, 0, 0),
+                (1, 1, 0, 0),
+                (2, 2, 1, 0),
+                (1, 0, 0, 1),
+                (2, 0, 1, 2)
+            ]
+        );
+        assert!(tiles[0].contents.is_empty());
+        assert_eq!(tiles[2].contents, vec![(0, "c/2/2/1/0.glb".to_owned())]);
+        // Child subtrees are read only when the walk descends into them.
+        let reads: Vec<&str> = archive.reads.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(
+            reads,
+            [
+                "s/0/0/0/0.subtree",
+                "s/1/1/0/0.subtree",
+                "s/2/2/1/0.subtree",
+                "s/1/0/0/1.subtree",
+                "s/2/0/1/2.subtree"
+            ]
+        );
+    }
+
+    #[test]
+    fn preorder_within_a_subtree() {
+        // QUADTREE L = 3: bits 1 (1,0,0), 3 (1,0,1), 5 (2,0,0), 8 (2,1,1),
+        // 13 (2,0,2) and 14 (2,1,2).
+        let tile = root_tile("QUADTREE", 3, 3, &[]);
+        let mut archive = Archive::default().with(
+            "s/0/0/0.subtree",
+            leaf(Av::Bits(bits(21, &[0, 1, 3, 5, 8, 13, 14]))).build(),
+        );
+        assert_eq!(
+            coords(&walk(&tile, &mut archive).unwrap()),
+            vec![
+                (0, 0, 0, 0),
+                (1, 0, 0, 0),
+                (2, 0, 0, 0),
+                (2, 1, 1, 0),
+                (1, 0, 1, 0),
+                (2, 0, 2, 0),
+                (2, 1, 2, 0)
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_child_subtree_is_the_resolvers_failure() {
+        // A-10.
+        let tile = root_tile("QUADTREE", 1, 2, &[]);
+        let mut archive = Archive::default().with(
+            "s/0/0/0.subtree",
+            Sub::new()
+                .tile(Av::Const(1))
+                .child(Av::Bits(bits(4, &[3])))
+                .build(),
+        );
+        let result = walk(&tile, &mut archive);
+        assert!(matches!(
+            result,
+            Err(ImplicitError::Resolver(m)) if m == "missing archive entry: s/1/1/1.subtree"
+        ));
+        // A sparse child bitstream reads only its set bits (C is never enumerated).
+        let wide = root_tile("QUADTREE", 8, 9, &[]);
+        let mut archive = Archive::default()
+            .with(
+                "s/0/0/0.subtree",
+                Sub::new()
+                    .tile(Av::Const(1))
+                    .child(Av::Bits(bits(65_536, &[65_535])))
+                    .build(),
+            )
+            .with(
+                "s/8/255/255.subtree",
+                leaf(Av::Bits(bits(21_845, &[0]))).build(),
+            );
+        assert_eq!(walk(&wide, &mut archive).unwrap().len(), 21_845 + 1);
+        assert_eq!(archive.reads.len(), 2);
+    }
+
+    #[test]
+    fn derived_error_is_exact_or_unsupported() {
+        let mut tile = root_tile("QUADTREE", 2, 2, &[]);
+        let member = leaf(Av::Const(1)).build();
+        let run = |tile: &Value| {
+            let mut archive = Archive::default().with("s/0/0/0.subtree", member.clone());
+            format(walk(tile, &mut archive))
+        };
+        let tiles = run(&tile).unwrap();
+        assert_eq!(tiles[1].error, EffectiveError::Derived(32.));
+        // B-10: a nonzero subnormal derived error.
+        tile["geometricError"] = json!(f64::MIN_POSITIVE);
+        assert_unsupported(run(&tile), "derived geometric error underflow at level 1");
+        tile["geometricError"] = json!(0.0);
+        assert!(run(&tile)
+            .unwrap()
+            .iter()
+            .all(|t| t.error == EffectiveError::Derived(0.)));
+        // Level 0 is e_R itself, even when subnormal.
+        let mut single = root_tile("QUADTREE", 2, 1, &[]);
+        single["geometricError"] = json!(f64::MIN_POSITIVE / 2.);
+        let mut archive =
+            Archive::default().with("s/0/0/0.subtree", leaf(Av::Bits(bits(5, &[0]))).build());
+        assert_eq!(
+            walk(&single, &mut archive).unwrap()[0].error,
+            EffectiveError::Derived(f64::MIN_POSITIVE / 2.)
+        );
+    }
+
+    /// R2 at small scale: QUADTREE L = 1, A = 4, branching 2 per level and no
+    /// payloads; every subtree padded with an unused 64-byte view.
+    fn chain() -> (Value, Archive, Vec<u64>) {
+        let tile = root_tile("QUADTREE", 1, 4, &[]);
+        let mut archive = Archive::default();
+        let mut sizes = Vec::new();
+        for level in 0..4u32 {
+            let child = if level < 3 {
+                Av::Bits(bits(4, &[0, 3]))
+            } else {
+                Av::Const(0)
+            };
+            let mut sub = Sub::new().tile(Av::Const(1)).child(child);
+            sub.view(&[7; 64]);
+            let member = sub.build();
+            sizes.push(member.len() as u64);
+            for x in 0..1u32 << level {
+                for y in 0..1u32 << level {
+                    archive
+                        .members
+                        .insert(format!("s/{level}/{x}/{y}.subtree"), member.clone());
+                }
+            }
+        }
+        (tile, archive, sizes)
+    }
+
+    #[test]
+    fn live_path_bytes_are_released_with_their_subtrees() {
+        let (tile, mut archive, sizes) = chain();
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let path: u64 = sizes.iter().sum();
+        let cumulative: u64 = (0..4).map(|l| sizes[l] << l).sum();
+        assert!(cumulative > 3 * path);
+        // Exactly the maximum live sum is admitted (R2b: far below cumulative).
+        let mut limits = limits();
+        limits.live_subtree_bytes = path;
+        assert_eq!(
+            walk_with(&root, &mut archive, &mut limits).unwrap().len(),
+            15
+        );
+        // The resolver is always offered `cap − live`.
+        let maxima: Vec<u64> = archive.reads.iter().map(|(_, m)| *m).collect();
+        assert_eq!(
+            &maxima[..4],
+            &[path, path - sizes[0], path - sizes[0] - sizes[1], sizes[3]]
+        );
+        // The sibling at the deepest level sees the released bytes again.
+        assert_eq!(maxima[4], sizes[3]);
+        assert_eq!(maxima[5], path - sizes[0] - sizes[1]);
+        // One byte less refuses the deepest read (R2).
+        let mut archive = chain().1;
+        let mut limits = super::super::test_support::limits();
+        limits.live_subtree_bytes = path - 1;
+        assert!(matches!(
+            walk_with(&root, &mut archive, &mut limits),
+            Err(ImplicitError::Resolver(m)) if m.starts_with("member exceeds admitted byte limit: s/3/")
+        ));
+    }
+
+    #[test]
+    fn repeated_subtree_members_are_unsupported() {
+        // A-11 across roots in one validation: the limits carry the set.
+        let tile = root_tile("QUADTREE", 1, 1, &[]);
+        let mut archive = Archive::default().with("s/0/0/0.subtree", leaf(Av::Const(1)).build());
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let mut limits = limits();
+        assert!(walk_with(&root, &mut archive, &mut limits).is_ok());
+        assert_unsupported(
+            format(walk_with(&root, &mut archive, &mut limits)),
+            "repeated subtree member s/0/0/0.subtree",
+        );
+        // Within one root: `{x}{y}` names (1, 10) and (11, 0) alike at level 4.
+        let mut tile = root_tile("QUADTREE", 2, 6, &[]);
+        tile["implicitTiling"]["subtrees"]["uri"] = json!("s/{level}/{x}{y}.subtree");
+        let mut archive = Archive::default();
+        for level in [0u32, 2, 4] {
+            let child = Av::Const(u64::from(level < 4));
+            for x in 0..1u32 << level {
+                for y in 0..1u32 << level {
+                    archive.members.insert(
+                        format!("s/{level}/{x}{y}.subtree"),
+                        Sub::new().tile(Av::Const(1)).child(child.clone()).build(),
+                    );
+                }
+            }
+        }
+        assert_unsupported(
+            format(walk(&tile, &mut archive)),
+            "repeated subtree member s/4/",
+        );
+    }
+
+    #[test]
+    fn post_walk_content_rule_and_walk_state() {
+        // C-14: content templates, but no tile has available content.
+        let tile = root_tile("QUADTREE", 1, 1, &["c/{level}/{x}/{y}.glb"]);
+        let empty = leaf(Av::Const(1)).content(&[Av::Const(0)]).build();
+        let mut archive = Archive::default().with("s/0/0/0.subtree", empty);
+        assert_invalid(
+            format(walk(&tile, &mut archive)),
+            "no tile has available content",
+        );
+        let full = leaf(Av::Const(1)).content(&[Av::Const(1)]).build();
+        let mut archive = Archive::default().with("s/0/0/0.subtree", full);
+        assert_eq!(walk(&tile, &mut archive).unwrap()[0].contents.len(), 1);
+        // Content-free roots have no content rule.
+        let bare = root_tile("QUADTREE", 1, 1, &[]);
+        let mut archive = Archive::default().with("s/0/0/0.subtree", leaf(Av::Const(1)).build());
+        assert!(walk(&bare, &mut archive).is_ok());
+        // finish() before the end, next() after a failure, next() after the end.
+        let root = admit_root(&bare, "tileset.json", None).unwrap();
+        let mut limits = limits();
+        let read: &mut Resolver<'_, String> = &mut |n, b, m| archive.read(n, b, m);
+        let mut early = root.walk();
+        assert!(early.next(&mut limits, read).unwrap().is_some());
+        assert!(matches!(
+            early.finish(),
+            Err(ImplicitError::InvalidState(_))
+        ));
+        let mut walk = root.walk();
+        assert!(walk.next(&mut limits, read).is_err());
+        assert!(matches!(
+            walk.next(&mut limits, read),
+            Err(ImplicitError::InvalidState(_))
+        ));
+        let mut empty = Archive::default().with("s/0/0/0.subtree", leaf(Av::Const(1)).build());
+        let read: &mut Resolver<'_, String> = &mut |n, b, m| empty.read(n, b, m);
+        let mut limits = super::super::test_support::limits();
+        let mut walk = root.walk();
+        assert!(walk.next(&mut limits, read).unwrap().is_some());
+        assert!(walk.next(&mut limits, read).unwrap().is_none());
+        assert!(walk.next(&mut limits, read).unwrap().is_none());
+        assert!(walk.finish().is_ok());
+    }
+
+    #[test]
+    fn charges_are_mirrored_exactly() {
+        // Visits by P_t, references by reads + E, bytes by reads + Scan.
+        let tile = root_tile(
+            "QUADTREE",
+            2,
+            3,
+            &["a/{level}/{x}/{y}", "b/{level}/{x}/{y}"],
+        );
+        let root_member = Sub::new()
+            .tile(Av::Bits(bits(5, &[0, 1, 2])))
+            .child(Av::Bits(bits(16, &[0])))
+            .content(&[Av::Const(0), Av::Bits(bits(5, &[0, 2]))])
+            .build();
+        // Root P_t 3, E 2, Scan 1 + 2 + 1; child P_t 1 (only level 2 < A),
+        // E 1 and Scan 1 (its content layer aliases the tile view).
+        let child_member = leaf(Av::Bits(bits(5, &[0])))
+            .content(&[Av::View(0), Av::Const(0)])
+            .build();
+        let mut archive = Archive::default()
+            .with("s/0/0/0.subtree", root_member.clone())
+            .with("s/2/0/0.subtree", child_member.clone());
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let mut limits = limits();
+        let before = (
+            limits.visits_remaining,
+            limits.refs_remaining,
+            limits.scan_remaining,
+        );
+        let tiles = walk_with(&root, &mut archive, &mut limits).unwrap();
+        assert_eq!(tiles.len(), 4);
+        assert_eq!(tiles.iter().map(|t| t.contents.len()).sum::<usize>(), 3);
+        assert_eq!(limits.visits_remaining, before.0 - 4);
+        assert_eq!(limits.refs_remaining, before.1 - 2 - 3);
+        let reads = (root_member.len() + child_member.len()) as u64;
+        assert_eq!(limits.scan_remaining, before.2 - reads - (1 + 2 + 1) - 1);
+    }
+}
