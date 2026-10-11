@@ -61,16 +61,22 @@ const { chromium } = require('playwright');
       async function inspect(tiles, entry) {
         let vertices = 0, gltfPrimitives = 0;
         const decoders = [];
-        const hierarchyLevels = new Set();
-        function walk(tile, offset = 0) {
-          const uri = tile.implicitTileset?.baseResource?.url;
-          const name = uri?.split('/').pop();
-          if (name?.startsWith('implicit-tileset-')) {
-            const parts = name.slice(17).replace('.json', '').split('-').map(Number);
-            offset = parts[0] + parts[3];
+        const hierarchyLevels = new Set(), levelMismatches = [];
+        // Forest layout: an implicit-root placeholder and an external-document link
+        // tile are the same producer tile as the root Cesium loads beneath them.
+        // Implicit coordinates must agree with the depth below their own root.
+        function walk(tile, depth = 0, implicitRoot = 0) {
+          const placeholder = tile.hasImplicitContent || tile.hasTilesetContent;
+          if (!placeholder) {
+            hierarchyLevels.add(depth);
+            if (tile.implicitCoordinates && tile.implicitCoordinates.level !== depth - implicitRoot) {
+              levelMismatches.push({ depth, implicitRoot, level: tile.implicitCoordinates.level });
+            }
           }
-          if (tile.implicitCoordinates) hierarchyLevels.add(offset + tile.implicitCoordinates.level);
-          for (const child of tile.children) walk(child, offset);
+          for (const child of tile.children) {
+            walk(child, placeholder ? depth : depth + 1,
+              tile.hasImplicitContent ? depth : implicitRoot);
+          }
         }
         walk(tiles.root);
         // Private traversal/collection fields are diagnostics confined to this probe.
@@ -102,7 +108,7 @@ const { chromium } = require('playwright');
         }
         return {
           selectedTiles: tiles._selectedTiles?.length || 0, vertices, gltfPrimitives, decoders,
-          hierarchyLevels: [...hierarchyLevels].sort((a, b) => a - b),
+          hierarchyLevels: [...hierarchyLevels].sort((a, b) => a - b), levelMismatches,
           pick: pick(entry.sample),
           samples: (entry.samples || []).map(sample => ({ expectedId: sample.id, ...pick(sample.position) })),
           gap: entry.gap ? pick(entry.gap) : null,
@@ -167,6 +173,7 @@ const { chromium } = require('playwright');
           const fine = entry.fine;
           return !entry.error && fine && !entry.coarse.failures.length &&
             fine.hierarchyLevels.length > 0 && fine.hierarchyLevels.every((level, index) => level === index) &&
+            !fine.levelMismatches.length && !entry.coarse.levelMismatches.length &&
             !fine.failures.length && picked(fine.pick) &&
             fine.samples.every(sample => picked(sample) && sample.properties._source_id === sample.expectedId) &&
             (!fine.gap || !fine.gap.rendered) &&

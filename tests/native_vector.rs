@@ -76,6 +76,37 @@ fn portable_case_distinct_property_filters_publish_or_refuse_without_clobbering(
     assert_eq!(fs::read(&input).unwrap(), before);
 }
 
+/// The sha256 of every member except the per-build reports and the 3tz index, by
+/// name. A forest baseline holds each payload once, so unchanged reuse must
+/// republish the same bytes.
+fn published(path: &std::path::Path) -> std::collections::BTreeMap<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut result = std::collections::BTreeMap::new();
+    for index in 0..zip.len() {
+        let mut file = zip.by_index(index).unwrap();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).unwrap();
+        let name = file.name().to_string();
+        if name == "tileset.json" || name.starts_with("tileset-d") {
+            assert!(!String::from_utf8_lossy(&bytes).contains("rustyTilesSourceContents"));
+        }
+        // A reuse build reports only newly encoded geometry, and the index
+        // records member offsets, which follow the report sizes.
+        if ![
+            "conversion.json",
+            "geometry-reports.jsonl",
+            "@3dtilesIndex1@",
+        ]
+        .contains(&name.as_str())
+        {
+            result.insert(name, format!("{:x}", Sha256::digest(&bytes)));
+        }
+    }
+    result
+}
+
 #[test]
 fn vector_is_reproducible_and_reuses_native_content_without_executables() {
     use serde_json::{json, Value};
@@ -127,6 +158,7 @@ fn vector_is_reproducible_and_reuses_native_content_without_executables() {
     let b = run("four.3tz", "4", None);
     assert_eq!(fs::read(&a).unwrap(), fs::read(&b).unwrap());
     let reused = run("reused.3tz", "4", Some(&a));
+    assert_eq!(published(&reused), published(&a));
     let mut zip = zip::ZipArchive::new(fs::File::open(reused).unwrap()).unwrap();
     let report: Value = serde_json::from_reader(zip.by_name("conversion.json").unwrap()).unwrap();
     assert!(report["encoding"]["maximumTilePrimitives"]
@@ -204,6 +236,7 @@ fn compressed_point_aggregates_refine_and_reuse_without_executables() {
     let b = run("four.3tz", "4", None);
     assert_eq!(fs::read(&a).unwrap(), fs::read(&b).unwrap());
     let reused = run("reused.3tz", "4", Some(&a));
+    assert_eq!(published(&reused), published(&a));
     let mut zip = zip::ZipArchive::new(fs::File::open(reused).unwrap()).unwrap();
     let manifest: Value = serde_json::from_reader(zip.by_name("tileset.json").unwrap()).unwrap();
     let summary = &manifest["root"]["extras"]["pointAggregation"];

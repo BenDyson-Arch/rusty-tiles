@@ -1,5 +1,6 @@
 //! Versioned native encoder identity, immutable content and subtree invalidation.
 use super::*;
+use crate::implicit::{ForestOutput, RebaseRecord};
 use std::fs::File;
 use store::{Counters, Node};
 
@@ -18,6 +19,17 @@ struct Record {
     fragments: usize,
     cut: Option<Cut>,
 }
+/// How to recover one raw payload that the archive publishes only rebased under
+/// `implicit-content/` (design §4.7). Keyed by the raw sha256 in `vector-build.json`.
+/// Payloads that explicit tiles publish in place (`t/<sha256>`) have no entry.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Payload {
+    member: String,
+    delta: [f64; 3],
+    root_node: String,
+    json_length: u32,
+}
 pub(super) struct Reuse {
     output: std::path::PathBuf,
     previous: Option<std::path::PathBuf>,
@@ -30,6 +42,8 @@ pub(super) struct Reuse {
     pub frame: Option<Frame>,
     config: Value,
     old_config: Value,
+    old_payloads: Value,
+    payloads: BTreeMap<String, Payload>,
     configuration_hash: String,
     reused_subtrees: usize,
     reused_tiles: usize,
@@ -123,6 +137,8 @@ impl Reuse {
             frame: None,
             config: Value::Null,
             old_config: Value::Null,
+            old_payloads: Value::Null,
+            payloads: BTreeMap::new(),
             configuration_hash: String::new(),
             reused_subtrees: 0,
             reused_tiles: 0,
@@ -230,6 +246,10 @@ impl Reuse {
                 .collect();
             result.frame = Some(frame);
             result.old_config = state["config"].clone();
+            // Interpreted only after `configure` has matched the encoder identity:
+            // archives from another encoder are refused there with "run a fresh
+            // conversion", before their (absent or different) payload map matters.
+            result.old_payloads = state.get("payloads").cloned().unwrap_or(Value::Null);
         }
         Ok(result)
     }
@@ -266,7 +286,7 @@ impl Reuse {
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
         if !options.explicit {
-            self.config["tiling"] = json!("implicit-quadtree-v2");
+            self.config["tiling"] = json!("implicit-forest-v3");
         }
         // Accepted schema/list inventory is derived from this source revision.
         // It belongs in cache signatures, but changes must rebuild content rather
@@ -285,6 +305,9 @@ impl Reuse {
             return Err(data("previous encoder, CRS or conversion settings differ; run a fresh conversion without reuseTileset"));
         }
         self.configuration_hash = digest(&self.config)?;
+        if self.previous.is_some() {
+            self.payloads = previous_payloads(std::mem::take(&mut self.old_payloads))?;
+        }
         Ok(())
     }
     pub fn signature(&self, db: &rusqlite::Connection, path: &str) -> Result<String, Error> {
@@ -377,12 +400,9 @@ impl Reuse {
                         "previous content URI is not an immutable vector content path",
                     ));
                 }
-                let mut file = archive.by_name(uri)?;
-                let mut bytes = Vec::new();
-                std::io::Read::read_to_end(&mut file, &mut bytes)?;
-                if hash(&bytes) != stem {
-                    return Err(data(format!("previous content checksum failed: {uri}")));
-                }
+                let bytes = previous_payload(archive, reuse.payloads.get(stem), uri, stem, suffix)?;
+                // Staged privately in the build workspace under its raw name; this
+                // build's writer rebases or publishes it per the new layout.
                 let target = reuse.output.join(uri);
                 if !target.exists() {
                     std::fs::write(target, bytes)?;
@@ -430,11 +450,13 @@ impl Reuse {
             },
         );
     }
+    /// Record build state and publish only referenced raw payloads. `forest` is the
+    /// producer's explicit hierarchy and the writer's output for implicit archives.
     pub fn publish(
         &mut self,
         manifest: &mut Value,
         frame: &Frame,
-        explicit_root: Option<&Value>,
+        forest: Option<(&Value, &ForestOutput)>,
     ) -> Result<Value, Error> {
         fn used(node: &Value, result: &mut BTreeSet<String>) {
             for content in contents(node) {
@@ -449,15 +471,30 @@ impl Reuse {
             }
         }
         let mut contents = BTreeSet::new();
-        used(explicit_root.unwrap_or(&manifest["root"]), &mut contents);
-        for entry in std::fs::read_dir(self.output.join("t"))? {
-            let entry = entry?;
-            if !contents.contains(&format!("t/{}", entry.file_name().to_string_lossy())) {
-                std::fs::remove_file(entry.path())?;
+        used(
+            forest.map_or(&manifest["root"], |(root, _)| root),
+            &mut contents,
+        );
+        // Raw payloads stay published only where a tile names them in place: every
+        // content of an explicit archive, a forest's explicit-tile payloads. The
+        // forest writer has already removed the raw sources it rebased.
+        let published: BTreeSet<&str> = match forest {
+            Some((_, output)) => output.members.iter().map(String::as_str).collect(),
+            None => contents.iter().map(String::as_str).collect(),
+        };
+        let raw = self.output.join("t");
+        if raw.is_dir() {
+            for entry in std::fs::read_dir(raw)? {
+                let entry = entry?;
+                let name = format!("t/{}", entry.file_name().to_string_lossy());
+                if !published.contains(name.as_str()) {
+                    std::fs::remove_file(entry.path())?;
+                }
             }
         }
-        let mut state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,"manifestSha256":digest(manifest)?});
-        if let Some(root) = explicit_root {
+        let mut state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,
+            "payloads":payload_map(forest.map(|(_, output)| output)),"manifestSha256":digest(manifest)?});
+        if let Some((root, _)) = forest {
             state["explicitRoot"] = root.clone();
         }
         let raw = canonical(&state)?;
@@ -469,6 +506,117 @@ impl Reuse {
             "publishedContents":contents.len(),"rebuiltContents":contents.difference(&self.reused_uris).count()}),
         )
     }
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn unhex(text: &str) -> Option<[u8; 32]> {
+    let mut result = [0; 32];
+    if text.len() != 64
+        || !text
+            .bytes()
+            .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v))
+    {
+        return None;
+    }
+    for (i, byte) in result.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(result)
+}
+
+/// One entry per distinct raw payload the forest publishes only rebased, first in
+/// tile preorder. Shared raw contents need one location; any one restores exactly.
+fn payload_map(forest: Option<&ForestOutput>) -> BTreeMap<String, Payload> {
+    let mut map = BTreeMap::new();
+    for content in forest
+        .into_iter()
+        .flat_map(|output| &output.tiles)
+        .flat_map(|tile| &tile.contents)
+    {
+        if let Some(record) = &content.rebase {
+            map.entry(hex(&record.raw_sha256))
+                .or_insert_with(|| Payload {
+                    member: content.member.clone(),
+                    delta: record.delta,
+                    root_node: record.raw_root_node.clone(),
+                    json_length: record.raw_json_length,
+                });
+        }
+    }
+    map
+}
+
+/// Validate the shape of the recorded payload map once, at the reuse boundary.
+fn previous_payloads(value: Value) -> Result<BTreeMap<String, Payload>, Error> {
+    let map: BTreeMap<String, Payload> = serde_json::from_value(value)
+        .map_err(|error| data(format!("invalid previous payload record: {error}")))?;
+    for (key, entry) in &map {
+        let name = entry.member.strip_prefix("implicit-content/");
+        if unhex(key).is_none()
+            || !entry.delta.iter().all(|v| v.is_finite())
+            || name.is_none_or(|name| {
+                name.is_empty()
+                    || name.contains('/')
+                    || name.contains('\\')
+                    || name.starts_with('.')
+            })
+        {
+            return Err(data(format!("invalid previous payload record: {key}")));
+        }
+    }
+    Ok(map)
+}
+
+fn read_member(archive: &mut zip::ZipArchive<File>, name: &str) -> Result<Option<Vec<u8>>, Error> {
+    let mut file = match archive.by_name(name) {
+        Ok(file) => file,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut file, &mut bytes)?;
+    Ok(Some(bytes))
+}
+
+/// Recover the exact raw bytes of `uri` (`t/<stem>.<suffix>`) from the previous
+/// archive: in place, or by inverting the recorded rebase of the published member.
+/// Every failure, including a missing member or a record that does not invert, is
+/// an integrity error: the result must hash to its immutable name.
+fn previous_payload(
+    archive: &mut zip::ZipArchive<File>,
+    entry: Option<&Payload>,
+    uri: &str,
+    stem: &str,
+    suffix: &str,
+) -> Result<Vec<u8>, Error> {
+    let failed =
+        |reason: String| data(format!("previous content checksum failed: {uri}: {reason}"));
+    let bytes = match entry {
+        None => read_member(archive, uri)?
+            .ok_or_else(|| failed("the archive has no such member".into()))?,
+        Some(entry) => {
+            if !entry.member.ends_with(&format!(".{suffix}")) {
+                return Err(data(format!("invalid previous payload record: {stem}")));
+            }
+            let published = read_member(archive, &entry.member)?
+                .ok_or_else(|| failed(format!("published member {} is absent", entry.member)))?;
+            let record = RebaseRecord {
+                raw_sha256: unhex(stem).ok_or_else(|| failed("invalid content name".into()))?,
+                delta: entry.delta,
+                raw_root_node: entry.root_node.clone(),
+                raw_json_length: entry.json_length,
+            };
+            crate::implicit::restore_payload(&published, &record)
+                .map_err(|error| failed(format!("{} does not restore: {error}", entry.member)))?
+        }
+    };
+    if hash(&bytes) != stem {
+        return Err(failed("sha256 differs".into()));
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]

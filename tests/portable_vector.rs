@@ -364,8 +364,35 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
                 .unwrap()
                 .ok
         );
+        // Forest classification (design §4.1, S = 4): the root is the single
+        // implicit root iff the producer hierarchy's root height is below S;
+        // otherwise the root is explicit and implicit roots sit below it.
+        // Explicit output carries no implicit tiling anywhere.
+        fn height(node: &Value) -> usize {
+            node["children"]
+                .as_array()
+                .and_then(|children| children.iter().map(height).max())
+                .map_or(0, |h| h + 1)
+        }
+        fn implicit_roots(node: &Value) -> usize {
+            usize::from(node.get("implicitTiling").is_some())
+                + node["children"]
+                    .as_array()
+                    .map_or(0, |children| children.iter().map(implicit_roots).sum())
+        }
         let manifest = archive_json(&output, "tileset.json");
-        assert_eq!(manifest["root"].get("implicitTiling").is_some(), !explicit);
+        if explicit {
+            assert_eq!(implicit_roots(&manifest["root"]), 0, "{manifest}");
+        } else {
+            let state = archive_json(&output, "vector-build.json");
+            let root_is_implicit = height(&state["explicitRoot"]) < 4;
+            assert_eq!(
+                manifest["root"].get("implicitTiling").is_some(),
+                root_is_implicit,
+                "{manifest}"
+            );
+            assert!(implicit_roots(&manifest["root"]) > 0, "{manifest}");
+        }
     }
 }
 

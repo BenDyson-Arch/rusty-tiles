@@ -171,6 +171,78 @@ class ReuseTests(unittest.TestCase):
             self.assertEqual(details(b),{})
 
 
+def members(path):
+    """Every published file except the per-build reports (reuse reports only newly encoded geometry)."""
+    root=pathlib.Path(path)
+    return {f.relative_to(root).as_posix():f.read_bytes() for f in root.rglob('*') if f.is_file() and f.name not in ('conversion.json','geometry-reports.jsonl')}
+
+
+def assert_forest_layout(test,path):
+    """v3 forest archive: no retained raw sources; every raw content recoverable (design 4.7)."""
+    import hashlib
+    published=members(path);referenced=set()
+    def uris(node,out):
+        for content in node.get('contents',[node['content']] if 'content' in node else []):out.add(content['uri'])
+        for child in node.get('children',[]):uris(child,out)
+    for name,data in published.items():
+        if name=='tileset.json' or (name.startswith('tileset-d') and name.endswith('.json')):
+            test.assertNotIn(b'rustyTilesSourceContents',data);uris(json.loads(data)['root'],referenced)
+    for name in published:
+        if name.startswith('t/'):test.assertIn(name,referenced,'unreferenced raw member')
+    state=json.loads(published['vector-build.json']);mapped=state['payloads']
+    for key,entry in mapped.items():
+        test.assertTrue(entry['member'].startswith('implicit-content/'));test.assertIn(entry['member'],published)
+    raw=set();uris(state['explicitRoot'],raw)
+    only=[uri for uri in raw if uri not in published]
+    for uri in only:test.assertIn(pathlib.PurePosixPath(uri).stem,mapped,uri+' is unrecoverable')
+    for name,data in published.items():
+        if name.startswith('t/'):test.assertEqual(pathlib.PurePosixPath(name).stem,hashlib.sha256(data).hexdigest())
+    return len(only)
+
+
+class ForestReuseTests(unittest.TestCase):
+    """The default implicit forest publishes each payload once; reuse restores rebased ones."""
+    def args(self,p,out,previous=None):
+        # Two LOD levels keep partition splits inside implicit roots, so payloads
+        # are published with nonzero rebases as well as byte copies.
+        args=ReuseTests().args(p,out,previous);args.explicit=False;args.reproducible=True;args.lod_levels=2;return args
+
+    def test_unchanged_forest_reuse_republishes_identical_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=ReuseTests().make_source(tmp);a=pathlib.Path(tmp)/'a';b=pathlib.Path(tmp)/'b';previous=pathlib.Path(tmp)/'previous.3tz'
+            vector.run(self.args(p,a));archive(a,previous)
+            self.assertGreater(assert_forest_layout(self,a),0,'no payload is published only under implicit-content/')
+            entries=json.loads((a/'vector-build.json').read_text())['payloads'].values()
+            self.assertTrue(any(e['delta']!=[0,0,0] for e in entries),'no payload is published with a nonzero rebase')
+            vector.run(self.args(p,b,previous))
+            self.assertEqual(members(a),members(b))
+            r=report(b)['reuse'];self.assertEqual(r['rebuiltContents'],0);self.assertEqual(r['reusedContents'],r['publishedContents'])
+
+    def test_forest_attribute_edit_reuse_matches_fresh_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=ReuseTests().make_source(tmp);a=pathlib.Path(tmp)/'a';b=pathlib.Path(tmp)/'b';fresh=pathlib.Path(tmp)/'fresh';previous=pathlib.Path(tmp)/'previous.3tz'
+            vector.run(self.args(p,a));archive(a,previous)
+            ds=ogr.Open(str(p),1);layer=ds.GetLayer(0);f=layer.GetFeature(7);f.SetField('name','edited');layer.SetFeature(f);ds=None
+            vector.run(self.args(p,b,previous));vector.run(self.args(p,fresh))
+            assert_forest_layout(self,b);self.assertEqual(members(b),members(fresh))
+            r=report(b)['reuse'];self.assertGreater(r['rebuiltContents'],0);self.assertGreater(r['reusedContents'],r['rebuiltContents'])
+
+    def test_altered_published_forest_payload_fails_integrity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=ReuseTests().make_source(tmp);a=pathlib.Path(tmp)/'a';previous=pathlib.Path(tmp)/'previous.3tz'
+            vector.run(self.args(p,a));archive(a,previous)
+            mapped={entry['member'] for entry in json.loads((a/'vector-build.json').read_text())['payloads'].values() if entry['delta']!=[0,0,0]}
+            bad=pathlib.Path(tmp)/'altered.3tz'
+            with zipfile.ZipFile(previous) as src,zipfile.ZipFile(bad,'w') as dst:
+                target=sorted(mapped)[0]
+                for name in src.namelist():
+                    data=src.read(name)
+                    if name==target:data=data[:-1]+bytes([data[-1]^1])
+                    dst.writestr(name,data)
+            out=pathlib.Path(tmp)/'out'
+            with self.assertRaisesRegex(ValueError,'previous content checksum failed'):vector.run(self.args(p,out,bad))
+
+
 class CliReuseTests(unittest.TestCase):
     @requires_bin('set RUSTY_TILES_BIN for native reuse acceptance')
     def test_cli_reuses_archive_and_failed_update_does_not_publish(self):
