@@ -41,7 +41,7 @@ REASONS = [
 
 DEFAULT_LIMITS = {
     "containmentSpanBits": 4096,
-    "containmentWorkUnits": 2 ** 32,
+    "containmentWorkUnits": 2 ** 28,  # coordinator cap decision (PR #157 review): was 2 ** 32
     "containmentBytesRead": 2 ** 31,
     "containmentDecodedBytes": 2 ** 31,
     "containmentNodeDepth": 64,

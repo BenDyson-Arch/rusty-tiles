@@ -32,7 +32,7 @@ From this directory:
 
 ```sh
 python3 -I oracle/self_test/run.py            # 36 checks, exit 0
-python3 -I witnesses/generate.py --large      # 259 cases, 16 control pairs; exit 0 when all agree
+python3 -I witnesses/generate.py --large      # 261 cases, 16 control pairs; exit 0 when all agree
 python3 -I oracle/mutants/run.py              # 13 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
 python3 -I oracle/c2_oracle.py some.3tz --json
@@ -67,6 +67,24 @@ It covers three cases from the contract text:
 `caveats` lists what the oracle did not examine, for example implicit
 subtrees. `precheck` reports, per reference, `sInst`, `levelSpans`, the units,
 `bytes`, `decoded` and `maxNodeDepth`, plus the running totals.
+
+### Default C2 caps
+
+The oracle's defaults mirror `ValidationLimits`:
+
+| Limit | Default |
+| --- | --- |
+| `containmentSpanBits` | 4096 |
+| `containmentWorkUnits` | 2^28 = 268,435,456 (coordinator decision for PR #157, from measured per-unit cost; was 2^32) |
+| `containmentBytesRead` | 2 GiB |
+| `containmentDecodedBytes` | 2 GiB |
+| `containmentNodeDepth` | 64 |
+
+Override any of them with `--limit NAME=VALUE`.
+
+The lower work-units default changes no expectation. The largest archive
+totals are 24,000,420 units among the witnesses and controls (the repeated-index
+control) and 5,987,468 in the corpus (point cloud explicit).
 
 ### Oracle work bounds
 
@@ -200,9 +218,19 @@ The artifacts were treated as data and are not committed.
     values outside their pair;
   - f32 exactness, `R(q)` exact orthogonality, the quaternion window boundary,
     and the integer predicate against the `Fraction` predicate.
-- **Witnesses and controls: 259 cases, all agree.** No expectation mismatches.
-  - 14 literal (W01–W13, plus the W01 no-RTC variant), 21 context and 48
-    control cases.
+- **Witnesses and controls: 261 cases, all agree.** No expectation mismatches.
+  - 14 literal (W01–W13, plus the W01 no-RTC variant), 21 context, 48
+    control and 2 review cases.
+  - **Review cases (PR #157 nonauthor review B1).** The generator rebuilds the
+    reviewer's `probe/empty_mesh_span.py` (sha256 `db8b8886…`). Its output is
+    byte-identical to the reviewer's files.
+    - Both cases nest three nodes rotated by `[2^-1000, 0, 0, 1]`, ending in a
+      mesh with no primitives.
+    - **`review-B1-empty-mesh-only`** expects Contained. The URI has no drawn
+      instance, so it skips the span check (v3.2 (4)).
+    - **`review-B1-empty-mesh-plus-real`** adds a triangle instance at the
+      scene root and expects NotInspected(numericSpan) with `sInst` 6008.
+      `sInst(u)` covers the empty mesh's instance path too.
   - 176 one-ulp mutants.
   - Every literal frame value the oracle exposes matches its witness exactly.
     That covers W13 under the normalized meaning, W06's rational value and
