@@ -15,7 +15,7 @@ consumes and the cost of each ceiling at its old and new value.
 | --- | --- | --- | --- | --- |
 | `archive_entries` | 65,536 | **524,288** (2^19) | 250,874 (2.51/tile) | 2.09x |
 | `hierarchy_visits` (and implicit presentation nodes) | 65,536 | **262,144** (2^18) | 125,462 nodes (1.25/tile) | 2.09x |
-| `references` | 262,144 | **1,048,576** (2^20) | 250,872 | 4.18x |
+| `references` | 262,144 | **1,048,576** (2^20) | 250,872 (the old cap had 1.05x; raised for the entry cap, see below) | 4.18x |
 | `central_directory_bytes` | 16 MiB | **32 MiB** | 24.1 MB (241 B/tile) | 1.39x |
 | `document_items` (JSON value nodes per document) | 65,536 | **131,072** (2^17) | 100,607 (`tileset.json`) | 1.30x |
 | `member_bytes` | 64 MiB | **128 MiB** | 92.5 MB (`vector-build.json`, 925 B/tile) | 1.45x |
@@ -40,10 +40,26 @@ Why each value:
     entries − 1 + K. At 2^19 entries, the `se-19` stress needs 524,375
     references.
   - A references cap of 2^19 would therefore make the entry cap unreachable.
-    The cost is one counter and one hash lookup per visit.
-- **Visits: 2^18.** Implicit vector output charges about 1.19–1.25
-  presentation nodes per tile to the same budget, which gives 2.09x. The
-  traversal tasks are about 1.0 per tile.
+    The old cap (262,144) still met tile demand at 100,000 tiles (1.05x); the
+    raise follows from the entry cap, not from tile demand.
+  - Each reference is not just a counter. Every content reference is also a
+    separate C2 phase-2 re-read and re-decode (`src/validate.rs` near 1041),
+    which C2's own unchanged caps bound: 2^28 work units and 2 GiB of re-reads.
+    The nonauthor review measured this at the cap (`results/references.json`,
+    `review/refs_stress.py`):
+
+    | Archive (2^18 visits, shared GLBs) | Result | Time | Peak RSS |
+    | --- | --- | --- | --- |
+    | exactly 1,048,576 references | admitted; C2 reports `decodedContentBounds.workLimit` | 1.81 s | 231 MiB |
+    | 1,048,577 references | `resource_limit` "archive exceeds 1048576 reference visits" | 5.00 s | 230 MiB |
+    | 600,000 references | admitted, C2 Contained (every reference streamed) | 7.95 s | 214 MiB |
+- **Visits: 2^18.** The same value also sets the implicit presentation-node
+  budget (`ExpansionBudget::new`), but the two are separate counters: an
+  implicit archive can spend up to 2^18 presentation nodes and then up to 2^18
+  traversal visits on the expanded tree. Implicit vector output needs about
+  1.19–1.25 presentation nodes per tile, which gives 2.09x. The traversal tasks
+  are about 1.0 per tile. The node budget also gates subtree size, so quadtree
+  `subtreeLevels` 9 and octree 6 are now admitted (previously 8 and 5).
 - **The other four** bound structures that grow with tile count:
   - central directory: about 97 B per entry;
   - `tileset.json` value nodes: `rustyTilesSourceContents` lists every retained
@@ -96,6 +112,16 @@ reports Contained.
 | `st-19`: 2^19 entries and 2^19 visits | wide probe | admitted | 16.83 s | 817 MiB |
 
 The `wide probe` row uses the probe binary, which has every ceiling widened.
+
+Each cap's exact value was tested by admitting an archive at the cap and
+refusing one just over it. Entries, visits, central directory and value nodes
+were tested at exactly one over. Member and decoded bytes were tested at 4
+bytes over, to keep 4-byte alignment. References are covered by the review's
+run above. `json_bytes` and the four volume caps are unchanged and were not
+re-tested.
+
+These per-cap costs come from minimal-payload synthetic archives. Real admitted
+vector output costs more; see the next section.
 
 From `st-16` to `st-18`, each tile with an entry and a visit costs **31 µs and
 1.41 KiB**. From `st-18` to `se-19`, each extra content entry, a GLB
@@ -178,9 +204,38 @@ and 2.2 GB of reads. That is a separate decision, left open.
   and so more entries per tile. The structural ceiling is 4 entries per tile
   for single-content tiles, which is 400,000 at 100,000 tiles. That fits 2^19,
   but its 39 MB central directory would exceed 32 MiB.
-- **`--explicit` vector output is still refused** above about 12,800 tiles.
-  Its single `tileset.json` grows by 656 B per tile and reaches the unchanged
-  8 MiB JSON ceiling.
+- **`--explicit` vector output is refused above about 2,595 tiles.** This was
+  executed (`explicit_threshold.sh`, `results/explicit-threshold.jsonl`). Its
+  single `tileset.json` holds exactly 50.5 value nodes per tile plus 7.5 (the
+  fit is exact at 2,047, 2,351, 2,551, 2,751 and 3,151 tiles).
+  - The 131,072 value-node ceiling therefore binds at 2,595 tiles. The old
+    65,536 bound at 1,297.
+  - 2,551 tiles are admitted (128,833 nodes). 2,751 are refused with "JSON
+    exceeds value-node limit" (138,933 nodes).
+  - The 8 MiB byte ceiling, at 656 B per tile, would bind only at about
+    12,800 tiles. At 90k tiles it is reported first because member size is
+    checked before parsing.
+- **The implicit subtree cache can use more memory than it charges (known
+  limit, pre-existing, not executed).**
+  - The per-expansion cache charges only each subtree's source bytes
+    (`cache_bytes`, `src/implicit/tileset.rs` near 1099).
+  - The parsed availability is a `Vec<bool>` of `(templates + 1) × tiles +
+    children` entries. A `constant` availability expands from a few source
+    bytes without being charged (near 931), and a bitstream expands 8x.
+  - Outer caches stay live across nested `implicit-tileset-*.json`
+    expansions, up to 32 deep.
+  - This slice raises the node budget 4x, the byte budget 2x and the template
+    value-node allowance 2x, so the worst parsed-to-source ratio grows by
+    about 4-8x. This is the main way RSS can exceed the figures above;
+    VALIDATION.md already disclaims whole-process bounds.
+  - Remedy: charge parsed availability to the budget. The I1 implicit reader,
+    in flight as part of the combined PR, replaces this expander path in the
+    validator, so the remedy belongs there.
+- **The largest admissible real archive was not run.** At about 136,000 points
+  tiles the source-byte cap binds. Linear extrapolation from the 114,463-tile
+  run gives about 1.15 GiB and about 19 s.
+- **Recorded times are load-sensitive.** The review re-ran `se-19` at 20.15 s
+  (RSS unchanged at 717 MiB) under load 2-2.7.
 - **Archives with denser vector content reach the volume ceilings first**, as
   described above.
 
@@ -195,7 +250,9 @@ and 2.2 GB of reads. That is a separate decision, left open.
 | `probe.patch` | Measurement-only probe build: widened ceilings and one counter line on stderr |
 | `measure.py`, `run_all.sh` | Pinned runner that holds the Cargo lock and records `wait4` costs |
 | `margins.py` | Per-tile ratios and margins |
-| `results/` | `binaries.json` (identities), `stress.json`, `vector.json`, `analyze.jsonl`, `margins.json`, `stress-plan.jsonl`, logs |
+| `explicit_threshold.sh` | `--explicit` output against the value-node ceiling |
+| `review/refs_stress.py` | The nonauthor review's reference-cap writer, copied byte-identically. Its `sys.path` names the worktree `/tmp/rusty-tiles-vcaps` |
+| `results/` | `binaries.json` (identities), `stress.json`, `vector.json`, `analyze.jsonl`, `margins.json`, `stress-plan.jsonl`, `references.json` (from the review), `explicit-threshold.jsonl`, logs |
 
 To reproduce, keep large files outside the repository:
 

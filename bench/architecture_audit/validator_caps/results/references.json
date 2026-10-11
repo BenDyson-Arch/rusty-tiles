@@ -1,0 +1,109 @@
+{
+ "source": "nonauthor review of PR #160 (/tmp/vcaps-review-20261011/refs.json, sha256 a262813da8733539416ab56bafa57a68617c3c43dd26864910ec49c0dda2c131); final archives only, superseded iterations omitted",
+ "generator": "review/refs_stress.py (copied byte-identically from the review, sha256 53306c2e2b3debb9cc63bb93b8d0c8620ea665a94c7e24f1a5d6283738761520)",
+ "shape": "explicit tree, hierarchy visits 2^18, child tiles with 4-5 contents naming a few shared GLBs: each content is one C1 reference and one C2 phase-2 stream",
+ "rows": [
+  {
+   "label": "review-refs",
+   "binary": "/home/bend/.cache/vcaps/bin/rusty-tiles-proposed-native",
+   "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+   "archive": "refs-20.3tz",
+   "archiveSha256": "07a1e18789b991efcbdce80d11f15eec9c6b64bb185a7917a9b2f5479c0eb11e",
+   "archiveBytes": 46024083,
+   "loadavg": [
+    1.8271484375,
+    2.47412109375,
+    2.8447265625
+   ],
+   "medianElapsedSeconds": 1.8073,
+   "medianUserSeconds": 1.7474,
+   "maxRssKiB": 236468,
+   "runs": [
+    {
+     "exitCode": 0,
+     "elapsedSeconds": 1.8073,
+     "userSeconds": 1.7474,
+     "systemSeconds": 0.0478,
+     "maxRssKiB": 236468,
+     "ok": true,
+     "tiles": 262022,
+     "entries": 67,
+     "contentReferences": 1048515,
+     "contained": false,
+     "errorCode": null,
+     "errorMessage": null,
+     "probe": [],
+     "stdoutSha256": "90a3688bf54b2d4ea2e95a7cc66932b5a7ebe44b8d36db487da8683142ea705b"
+    }
+   ]
+  },
+  {
+   "label": "review-refs",
+   "binary": "/home/bend/.cache/vcaps/bin/rusty-tiles-proposed-native",
+   "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+   "archive": "refs-20-p1.3tz",
+   "archiveSha256": "191d59210180b18abf5bc06672e49f394635b4c8bb7c5246879387cd3dfbfd39",
+   "archiveBytes": 46024101,
+   "loadavg": [
+    1.95166015625,
+    2.0810546875,
+    2.61328125
+   ],
+   "medianElapsedSeconds": 4.9961,
+   "medianUserSeconds": 3.1047,
+   "maxRssKiB": 235920,
+   "runs": [
+    {
+     "exitCode": 3,
+     "elapsedSeconds": 4.9961,
+     "userSeconds": 3.1047,
+     "systemSeconds": 0.0733,
+     "maxRssKiB": 235920,
+     "ok": false,
+     "tiles": null,
+     "entries": null,
+     "contentReferences": null,
+     "contained": null,
+     "errorCode": "resource_limit",
+     "errorMessage": "archive exceeds 1048576 reference visits",
+     "probe": [],
+     "stdoutSha256": "55c569ca2ffb9d52a2a19669610c242c519c28db21fdb4f656a2f04da8d9456f"
+    }
+   ]
+  },
+  {
+   "label": "review-refs",
+   "binary": "/home/bend/.cache/vcaps/bin/rusty-tiles-proposed-native",
+   "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+   "archive": "refs-600k.3tz",
+   "archiveSha256": "6172dd7300dce2898c31acef16c27290aaff790067e30508a66f3a3d3fe6fa22",
+   "archiveBytes": 37948679,
+   "loadavg": [
+    1.4326171875,
+    2.23486328125,
+    2.73681640625
+   ],
+   "medianElapsedSeconds": 7.9476,
+   "medianUserSeconds": 7.7392,
+   "maxRssKiB": 219460,
+   "runs": [
+    {
+     "exitCode": 0,
+     "elapsedSeconds": 7.9476,
+     "userSeconds": 7.7392,
+     "systemSeconds": 0.1661,
+     "maxRssKiB": 219460,
+     "ok": true,
+     "tiles": 262022,
+     "entries": 65,
+     "contentReferences": 599939,
+     "contained": true,
+     "errorCode": null,
+     "errorMessage": null,
+     "probe": [],
+     "stdoutSha256": "72a8eafb4832d9511e9955392221b379f67348c3dea0f58f18ebf81cbd4ed015"
+    }
+   ]
+  }
+ ]
+}
