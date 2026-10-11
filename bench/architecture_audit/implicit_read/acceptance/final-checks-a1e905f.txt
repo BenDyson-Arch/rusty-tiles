@@ -1,0 +1,11 @@
+head a1e905fe20c65145cb833ba79fb945d897d61ea8 dirty=0
+fmt 0
+clippy-native 0
+clippy-python 0
+test-native-geospatial 0
+vector-acceptance-native 0
+i1-parity-release 0
+done 02:43:55
+native tests: 905 passed, 0 failed, 6 ignored
+I1 parity (release): controls 181/181, oSide 0, skipped none; corpus 41/41
+script: bench/architecture_audit/implicit_read/acceptance/scripts/final_checks.sh
