@@ -1,0 +1,77 @@
+diff --git a/src/implicit/tileset.rs b/src/implicit/tileset.rs
+index 7b06476..e966048 100644
+--- a/src/implicit/tileset.rs
++++ b/src/implicit/tileset.rs
+@@ -644,6 +644,9 @@ pub(crate) struct ExpansionBudget {
+     max_bytes: usize,
+ }
+ impl ExpansionBudget {
++    pub(crate) fn probe(&self) -> (usize, usize) {
++        (self.nodes, self.bytes)
++    }
+     pub(crate) fn new(max_nodes: usize, max_bytes: usize) -> Self {
+         Self {
+             nodes: 0,
+diff --git a/src/validate.rs b/src/validate.rs
+index eb314e4..4277f50 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1661,6 +1661,20 @@ fn inspect_facts(
+         }
+     }
+     check.tileset("tileset.json", None, None, 0)?;
++    {
++        let (nodes, bytes) = check.expansion_budget.probe();
++        eprintln!(
++            "{{\"vcapsProbe\":true,\"entries\":{},\"hierarchyVisits\":{},\"references\":{},\"bytesReadAfterHierarchy\":{},\"expansionNodes\":{},\"expansionBytes\":{},\"tiles\":{},\"contents\":{}}}",
++            check.resources.names.len(),
++            check.task_visits,
++            check.resources.reference_visits,
++            check.resources.bytes_read,
++            nodes,
++            bytes,
++            check.tiles,
++            check.contents
++        );
++    }
+     if let Some(limit) = check.reports["budgets"]["tiles"].as_u64() {
+         if check.tiles as u64 > limit {
+             return Err(invalid("hierarchy exceeds recorded tile budget"));
+diff --git a/src/validate/types.rs b/src/validate/types.rs
+index 0f464c6..2878926 100644
+--- a/src/validate/types.rs
++++ b/src/validate/types.rs
+@@ -81,21 +81,21 @@ pub struct ValidationLimits {
+ impl Default for ValidationLimits {
+     fn default() -> Self {
+         Self {
+-            json_bytes: 8 * 1024 * 1024,
++            json_bytes: 1 << 30,
+             json_depth: 64,
+-            member_bytes: 64 * 1024 * 1024,
+-            archive_stored_bytes: 1024 * 1024 * 1024,
+-            archive_entries: 65536,
++            member_bytes: 1 << 31,
++            archive_stored_bytes: 1 << 36,
++            archive_entries: 1 << 24,
+             accessor_elements: 4_000_000,
+-            document_decoded_bytes: 64 * 1024 * 1024,
+-            hierarchy_visits: 65536,
++            document_decoded_bytes: 1 << 31,
++            hierarchy_visits: 1 << 24,
+             hierarchy_depth: 128,
+-            references: 262144,
+-            total_payload_elements: 16_000_000,
+-            total_bytes_read: 2 * 1024 * 1024 * 1024,
+-            source_archive_bytes: 1024 * 1024 * 1024,
+-            central_directory_bytes: 16 * 1024 * 1024,
+-            document_items: 65536,
++            references: 1 << 24,
++            total_payload_elements: 1 << 34,
++            total_bytes_read: 1 << 38,
++            source_archive_bytes: 1 << 36,
++            central_directory_bytes: 1 << 30,
++            document_items: 1 << 24,
+             containment_span_bits: 4096,
+             containment_work_units: 1 << 28,
+             containment_bytes_read: 2 * 1024 * 1024 * 1024,
