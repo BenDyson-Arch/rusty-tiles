@@ -452,8 +452,8 @@
       "numericSpan"
      ]
     },
-    "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere.3tz",
-    "id": "rotated-TRS-chain-depth-16-with-sphere",
+    "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere-enclosed.3tz",
+    "id": "rotated-TRS-chain-depth-16-with-sphere-enclosed",
     "limits": {},
     "oracle": {
      "facts": null,
@@ -463,7 +463,7 @@
      ],
      "why": null
     },
-    "sha256": "54cf169e530bf0a45cb95339ad3f65b6ce7ca98715928680204189eccd795f56"
+    "sha256": "9dcbeaaea261a746325394865f7fcc1906acc18779f2ab087498ff1db799fa7a"
    },
    "what": "sphere content volume added at the same depth"
   },
