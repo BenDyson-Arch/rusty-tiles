@@ -1229,9 +1229,9 @@ mod tests {
     }
 
     /// Documented bound: the 2 GiB finest RGBA ceiling admits 8192 finest
-    /// tiles, and the worst pyramid over zooms 0..=24 (a two-tile-wide strip
-    /// straddling the z1 boundary on both axes) has 16451 tiles, so the
-    /// default 100000-tile cap cannot bind.
+    /// tiles. A two-tile-wide strip straddling the z1 boundary on both axes
+    /// reaches 16451 tiles over zooms 0..=24; a separate exhaustive count over
+    /// w*h <= 8192 shapes (nonauthor review of #156) found no larger pyramid.
     #[test]
     fn finest_rgba_ceiling_bounds_default_pyramid_tile_count() {
         let tile = 256.0 * power_of_two(-7 - 24).unwrap() * H;

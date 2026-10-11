@@ -43,7 +43,8 @@ are at most 65536 each. Checked target dimensions fit native i32 and at most
 2 GiB finest RGBA; the source ceiling does not impose another target ceiling.
 That ceiling admits at most 8192 finest 256x256 tiles, and with integer
 ancestors a pyramid over zooms 0 through 24 has at most 16451 tiles (a
-two-tile-wide finest strip), so the default tile cap of 100000 cannot bind.
+two-tile-wide finest strip), so the default tile cap of 100000 never refuses
+a request the ceiling admits. The tile cap is checked first and names an oversized request.
 Finest coverage is calculated once and coarse addresses are integer ancestors.
 An exact supplied target geotransform is created before Warp into the existing
 destination, avoiding extent/size resolution recomputation. Each requested zoom
