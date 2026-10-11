@@ -3362,7 +3362,7 @@ mod containment_controls {
     fn implicit_archives_are_not_inspected() {
         // RC-12a: I1 reads the implicit root (on any tile) and registers nothing
         // below R, so C2 keeps the `implicitTiling` exclusion. The C1 fixture
-        // `implicit_no_content.3tz` declared `"contentAvailability": []`, now
+        // `implicit_no_content.3tz` once declared `"contentAvailability": []`, now
         // InvalidInput (X-9, schema minItems), so this builds its valid form.
         use super::i1_fixtures::{constant, implicit_root, tileset, Sub};
         let subtree = Sub::new(constant(1), constant(0)).build();
