@@ -61,11 +61,13 @@ report sidecar. See the three contracts for exact admitted domains and limits.
 
 ## Remaining removal and foundation gates
 
-Three producer families still create legacy output::Job: broader mesh, raster
-pyramid and explicit-to-implicit rewrite. Private tileset wrapping shortcuts
-serve broader mesh; they are part of that family's remaining gate. Python
-run_conversion still serves mesh_to_3tz and convert_to_implicit. Legacy CLI
-result/report adapters still serve the remaining families. Vector's finalized
+The explicit-to-implicit rewrite (`convert-to-implicit`) was removed on
+2026-10-11 rather than migrated; see the
+[disposition](implicit-rewrite-contract.md#disposition-2026-10-11). Legacy
+output::Job is now created only by broader mesh (`tile.rs` and its private
+`tileset.rs` wrapping shortcuts), which are part of that family's remaining
+gate. Python run_conversion now serves only mesh_to_3tz. Legacy CLI
+result/report adapters still serve broader mesh. Vector's finalized
 report writer still calls output::write_report independently of Job creation.
 Shared Error, report types, helper calls and provisional public codecs require
 caller disposition before global Job/Reporter/ConversionResult deletion. In-place

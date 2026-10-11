@@ -1,5 +1,12 @@
 # A2 implicit rewrite audit and baseline probes
 
+**Retired 2026-10-11.** The user retired `convert-to-implicit` for 0.4.0 instead
+of resolving the terminal external-template gate; producers already emit
+implicit tiling by default. See the contract's
+[disposition](../../../docs/architecture/implicit-rewrite-contract.md#disposition-2026-10-11).
+The evidence below is retained as history. Its drivers that invoke the legacy
+command or API need source at or before `develop` `f2ed077`.
+
 This is preparation for the next operation under #126, not acceptance or an
 implementation of its replacement. The [draft contract](../../../docs/architecture/implicit-rewrite-contract.md)
 and [ownership audit](audits/ownership.md) distinguish settled ownership from

@@ -66,8 +66,6 @@ enum Command {
     CreateTilesetJson(ModelManifestArgs),
     /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(IoArgs),
-    /// Rewrite an eligible rusty-tiles explicit point/vector .3tz as implicit tiling
-    ConvertToImplicit(IoArgs),
     /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(ModelArchiveArgs),
@@ -98,7 +96,6 @@ impl Command {
             Self::EncodeVectorContent { .. } => "encode-vector-content",
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
-            Self::ConvertToImplicit(_) => "convert-to-implicit",
             Self::GlbTo3tz(_) => "glb-to-3tz",
             Self::MeshTo3tz(_) => "mesh-to-3tz",
             Self::MeshLocalTo3tz(_) => "mesh-local-to-3tz",
@@ -1199,14 +1196,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             let request = PackageRequest::directory(a.input, a.output).with_policy(policy);
             Outcome::Pack(package(request, &run)?)
         }
-        Command::ConvertToImplicit(a) => {
-            Outcome::Converted(rusty_tiles::convert_to_implicit_reported(
-                &a.input,
-                &a.output,
-                &rusty_tiles::ConvertToImplicitOptions { force: a.force },
-                reporter,
-            )?)
-        }
         Command::GlbTo3tz(a) => {
             let request = ModelWrapRequest::local_gltf(a.io.input, a.io.output)
                 .with_policy(if a.io.force {
@@ -1721,9 +1710,7 @@ mod tests {
         let mut seen = Vec::new();
         for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
             let name = command.get_name();
-            // convert-to-implicit is retired for 0.4.0 (removed on its own
-            // branch); doctor no longer reports it.
-            if name == "doctor" || name == "convert-to-implicit" {
+            if name == "doctor" {
                 continue;
             }
             let readiness = doctor::Command::from_name(name)
