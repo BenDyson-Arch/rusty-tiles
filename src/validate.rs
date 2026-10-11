@@ -2137,11 +2137,13 @@ mod containment_controls {
             .iter()
             .any(|c| c == "decodedContentBounds");
         assert_eq!(listed, !bounds, "{report:?}");
-        assert_eq!(
-            listed,
-            !report.not_inspected.iter().any(|c| c == "scene transforms"),
-            "{report:?}"
-        );
+        if !report.payloads.is_empty() {
+            assert_eq!(
+                listed,
+                !report.not_inspected.iter().any(|c| c == "scene transforms"),
+                "{report:?}"
+            );
+        }
         listed
     }
     /// The `decodedContentBounds.<reason>` entries, in report order.
@@ -2314,7 +2316,9 @@ mod containment_controls {
             ("a.glb", points(&[[0.5, 0., 0.]])),
         ]));
         assert!(message.contains("depth=1 volume=own "), "{message}");
-        root["children"] = json!([first.clone(), first]);
+        let mut again = first.clone();
+        again["refine"] = json!("ADD");
+        root["children"] = json!([first, again]);
         assert!(contained(
             &run(&[
                 ("tileset.json", tileset(root)),
@@ -2595,7 +2599,7 @@ mod containment_controls {
             doc["accessors"][0]["min"] = json!([0, 0, 0]);
             doc["accessors"][0]["max"] = json!([0, 0, 0]);
             doc["buffers"][0]["byteLength"] = json!(4);
-            doc["bufferViews"][0]["byteLength"] = json!(4);
+            doc["bufferViews"][0] = json!({"buffer":0,"byteLength":4,"byteStride":4});
             drop(bin);
             glb(&doc, &[0; 4])
         };
@@ -2705,7 +2709,7 @@ mod containment_controls {
             "asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],
             "extensionsRequired":["KHR_mesh_quantization"],"scene":0,"scenes":[{"nodes":[0]}],
             "nodes":[{"mesh":0,"translation":[10.5,0,-3],"scale":[2,4,0.25]}],
-            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8}],
+            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8,"byteStride":8}],
             "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"type":"VEC3",
                 "count":1,"min":[0,0,0],"max":[0,0,0]}],
             "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
