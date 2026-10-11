@@ -823,9 +823,13 @@ mod tests {
         q: [0.0, 0.0, 0.0, 1.0],
         s: [2.0, 4.0, 0.25],
     };
-    fn worked_levels(own_half: [f64; 3]) -> [LevelFacts; 2] {
+    /// The contract's literal own box: row 1 is the plane −z = 0, which no vertex reaches.
+    const LITERAL_CENTRE: [f64; 3] = [1.5, 0.0, 2.0];
+    /// O's adjusted fixture (v3.3): row-1 centre 3, so vertices with raw z = 0 lie on the plane.
+    const ADJUSTED_CENTRE: [f64; 3] = [1.5, 3.0, 2.0];
+    fn worked_levels(own_centre: [f64; 3]) -> [LevelFacts; 2] {
         [
-            level(None, &[(Role::Own, bx([1.5, 0.0, 2.0], own_half))]),
+            level(None, &[(Role::Own, bx(own_centre, [100.0, 0.0, 50.0]))]),
             level(
                 Some(affine([1.0; 3], [1000.25, -20.0, 0.0])),
                 &[(Role::Ancestor(1), bx([0.0; 3], [2048.0; 3]))],
@@ -854,7 +858,7 @@ mod tests {
         assert_eq!(s_pos, 22);
         let u = uri(&[WORKED_NODE], Normalization::U16);
         assert_eq!((u.pair0, u.s_inst, u.s_pos), (pair0, 5, 22));
-        let levels = worked_levels([100.0, 0.0, 50.0]);
+        let levels = worked_levels(LITERAL_CENTRE);
         let at_cap = level_spans(&u, &levels, caps(29)).unwrap();
         assert_eq!(at_cap.iter().collect::<Vec<_>>(), [23, 29]);
         assert_eq!(vertex_units(4, &at_cap), Some(8));
@@ -866,64 +870,64 @@ mod tests {
     }
 
     #[test]
-    fn worked_example_walks_at_cap_without_fault() {
-        let u = uri(&[WORKED_NODE], Normalization::U16);
-        // Row 1 has half-length 0 and every vertex has −z = 3 − a₂/(4·65535) ≠ 0.
-        let levels = worked_levels([100.0, 0.0, 50.0]);
-        let mut a = arena_with(29, &[WORKED_NODE]);
-        let raw = RawVertex::Int([0, 0, 0]);
-        let outside = Verdict::Outside {
+    fn worked_example_verdicts_at_cap_and_one_over() {
+        let n = Normalization::U16;
+        let u = uri(&[WORKED_NODE], n);
+        let own = Verdict::Outside {
             role: Role::Own,
             level: 0,
         };
-        assert_eq!(walk(&mut a, Normalization::U16, raw, &levels), outside);
-        // A row-1 half-length of 8 keeps s₀ = 23 and contains every vertex at both levels.
-        let levels = worked_levels([100.0, 8.0, 50.0]);
-        assert_eq!(spans(&u, &levels, 29), [23, 29]);
         let mut rng = Rng(7);
-        for i in 0..64 {
-            let v = if i < 8 {
-                [i & 1, i >> 1 & 1, i >> 2 & 1].map(|b| b * 65535)
-            } else {
-                [0; 3].map(|_| rng.below(65536) as i32)
-            };
-            let raw = RawVertex::Int(v);
+        let mut vertices: Vec<[i32; 3]> = (0..8)
+            .map(|i| [i & 1, i >> 1 & 1, i >> 2 & 1].map(|b| b * 65535))
+            .collect();
+        vertices.extend((0..56).map(|_| [0; 3].map(|_| rng.below(65536) as i32)));
+        for centre in [LITERAL_CENTRE, ADJUSTED_CENTRE] {
+            let levels = worked_levels(centre);
+            assert_eq!(spans(&u, &levels, 29), [23, 29]);
             assert_eq!(
-                walk(&mut a, Normalization::U16, raw, &levels),
-                Verdict::Contained
+                level_spans(&u, &levels, caps(28)).err(),
+                Some(Exclusion::NumericSpan)
             );
+        }
+        let mut a = arena_with(29, &[WORKED_NODE]);
+        // Literal: after U, row 1 is 3 − a₂/(4·65535) ∈ [2.75, 3], never on the plane −z = 0.
+        let literal = worked_levels(LITERAL_CENTRE);
+        for &v in &vertices {
+            assert_eq!(walk(&mut a, n, RawVertex::Int(v), &literal), own);
+        }
+        // Adjusted: raw z = 0 lies exactly on the row-1 plane at 3; raw z = 1 is off it.
+        let adjusted = worked_levels(ADJUSTED_CENTRE);
+        for &[x, y, z] in &vertices {
+            let on = RawVertex::Int([x, y, 0]);
+            assert_eq!(walk(&mut a, n, on, &adjusted), Verdict::Contained);
+            let off = RawVertex::Int([x, y, z.max(1)]);
+            assert_eq!(walk(&mut a, n, off, &adjusted), own);
         }
         assert!(!a.fault());
         // x = 2·a₀/65535 + 10.5 + 1000.25 reaches 1012.75 exactly at a₀ = 65535.
-        let tight = [
-            levels[0],
-            level(
-                levels[1].to_parent,
-                &[(Role::Ancestor(1), bx([0.0; 3], [1012.75, 2048.0, 2048.0]))],
-            ),
-        ];
+        let parent = |h: f64| {
+            [
+                adjusted[0],
+                level(
+                    adjusted[1].to_parent,
+                    &[(Role::Ancestor(1), bx([0.0; 3], [h, 2048.0, 2048.0]))],
+                ),
+            ]
+        };
         let corner = RawVertex::Int([65535, 0, 0]);
         assert_eq!(
-            walk(&mut a, Normalization::U16, corner, &tight),
+            walk(&mut a, n, corner, &parent(1012.75)),
             Verdict::Contained
         );
-        let tight = [
-            tight[0],
-            level(
-                tight[1].to_parent,
-                &[(
-                    Role::Ancestor(1),
-                    bx([0.0; 3], [prev(1012.75), 2048.0, 2048.0]),
-                )],
-            ),
-        ];
         assert_eq!(
-            walk(&mut a, Normalization::U16, corner, &tight),
+            walk(&mut a, n, corner, &parent(prev(1012.75))),
             Verdict::Outside {
                 role: Role::Ancestor(1),
                 level: 1
             }
         );
+        assert_eq!(spans(&u, &parent(1012.75), 29), [23, 29]);
         assert!(!a.fault());
     }
 
@@ -1653,7 +1657,7 @@ mod tests {
     #[cfg_attr(debug_assertions, should_panic(expected = "capacity exceeded"))]
     fn arena_below_the_bound_faults_instead_of_wrapping() {
         let u = uri(&[WORKED_NODE], Normalization::U16);
-        let levels = worked_levels([100.0, 8.0, 50.0]);
+        let levels = worked_levels(ADJUSTED_CENTRE);
         assert_eq!(spans(&u, &levels, 29), [23, 29]);
         // One limb holds a 0-bit cap only; the walk must breach, never wrap.
         let mut a = arena_with(0, &[WORKED_NODE]);
