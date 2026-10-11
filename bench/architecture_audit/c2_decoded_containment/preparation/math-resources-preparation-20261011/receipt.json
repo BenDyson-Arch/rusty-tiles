@@ -1,0 +1,187 @@
+{
+  "status": "FROZEN_C2_AUTHOR_PREPARATION",
+  "timestampUtc": "2026-10-10T20:05:07.030758+00:00",
+  "modelStatus": "PASS_MODEL_ONLY_16_CASES_5_CONTROLS",
+  "scheduler": {
+    "actualNice": 10,
+    "actualAffinity": [
+      0,
+      1
+    ]
+  },
+  "sourceMutation": false,
+  "compilerNativeCargoGitRemoteExecution": false,
+  "scope": "Read/static/source-copy and tiny standalone interval/rational arithmetic only. Not final independent review or production acceptance.",
+  "records": [
+    {
+      "path": "README.md",
+      "bytes": 2008,
+      "sha256": "0d3679785798d023216f162beddf25655d1759f7e027965a40c5566c62d97409"
+    },
+    {
+      "path": "decisions.json",
+      "bytes": 2975,
+      "sha256": "a3b57a128c56a77b496ec4055ee48a01ec4c48c7ed19c015338cf4163d3e5d50"
+    },
+    {
+      "path": "domain-coordination-pin.json",
+      "bytes": 1250,
+      "sha256": "801881e4cc7e3ddc878e93c97794f16472de55e04d7a79c0b8df70b6a3745d1f"
+    },
+    {
+      "path": "encoding-policy-literals.json",
+      "bytes": 3760,
+      "sha256": "7dd15e702855b41065490d5f464397cf27120d24121abe15a6396443654269ae"
+    },
+    {
+      "path": "input-pin.json",
+      "bytes": 5536,
+      "sha256": "6da755b140cf2d335738d27a34f0cc74d2a58ca2d4a4695e3bb1f354172f11ca"
+    },
+    {
+      "path": "math-contract.md",
+      "bytes": 11663,
+      "sha256": "b2936327039e4dba334331eae13d24abbd1ede2319ea01b0e2f520036eeb893c"
+    },
+    {
+      "path": "model-first-failure.json",
+      "bytes": 619,
+      "sha256": "7f899ec02251075d2dbd38b901838f63f1b0fc631674169dfd8a1e1131c8eef8"
+    },
+    {
+      "path": "model-first.py",
+      "bytes": 9740,
+      "sha256": "f0fb5121d6ce0348d3b2277a1686e6c2160146e99c82a423c3f7a8caaa91329c"
+    },
+    {
+      "path": "model-second.py",
+      "bytes": 9737,
+      "sha256": "53fe4a109699883f2b849f74538f4bef3efdab72e140b594f0cc203644e1a8ca"
+    },
+    {
+      "path": "model.py",
+      "bytes": 10160,
+      "sha256": "40080211b50f27e7629bc4b6964e5731290f515c56f3f6ef653f37dd1e9d2b82"
+    },
+    {
+      "path": "observed-second.json",
+      "bytes": 15449,
+      "sha256": "973d94e9fe526db7df7e9f46def22940bc49b63ce8c100bd3e33fcdb1e1a0476"
+    },
+    {
+      "path": "observed.json",
+      "bytes": 15593,
+      "sha256": "9d46031bb82b317b124a829ec1f463bd5d70395bde591af33996314420ac96f1"
+    },
+    {
+      "path": "parser-ledger-match.json",
+      "bytes": 1044,
+      "sha256": "03ad61bc8eed29b216ea80aa3fe3648d279fd8d8b72726675f50fac1165514fe"
+    },
+    {
+      "path": "primary/3d-tiles-core.adoc",
+      "bytes": 63585,
+      "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87"
+    },
+    {
+      "path": "primary/KHR_mesh_quantization.md",
+      "bytes": 12593,
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc"
+    },
+    {
+      "path": "primary/feature-table.adoc",
+      "bytes": 6905,
+      "sha256": "3158281f21460941ccfd90a41dc0bffda04aeae5e5de296a5ba8197cc1934ece"
+    },
+    {
+      "path": "primary/gltf-2.0.1.adoc",
+      "bytes": 148064,
+      "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff"
+    },
+    {
+      "path": "primary/modern-b3dm.adoc",
+      "bytes": 11172,
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e"
+    },
+    {
+      "path": "primary/node.schema.json",
+      "bytes": 4201,
+      "sha256": "bd4463cf13f1154fb83fc39b311d8e9d0af1f263115c3f47cd93416b12a5b30a"
+    },
+    {
+      "path": "primary/primary-pins.json",
+      "bytes": 9069,
+      "sha256": "14660f5ae4c5b0557fd385dea3517122fb2327078ed78a43fb3e059a07a4dbd7"
+    },
+    {
+      "path": "resource-contract.md",
+      "bytes": 10898,
+      "sha256": "3461c15f9e710123e2feec39c31c20e99baa3cb6fc5e908bf9f6ddb1aeff7e0c"
+    },
+    {
+      "path": "resource-control-recipes.json",
+      "bytes": 2038,
+      "sha256": "03854165a2d07d09d83852344bf2670241baf1bd73d501e1be703ec52939232a"
+    },
+    {
+      "path": "source/AGENTS.md",
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0"
+    },
+    {
+      "path": "source/docs/VALIDATION.md",
+      "bytes": 8810,
+      "sha256": "3b5f542dd2db09b6954aa621c1433c346c11e1b4a5040ab3827a1c3016758c0e"
+    },
+    {
+      "path": "source/docs/architecture/c1-payload-integrity-contract.md",
+      "bytes": 35453,
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    {
+      "path": "source/src/archive3tz/read.rs",
+      "bytes": 58673,
+      "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06"
+    },
+    {
+      "path": "source/src/content_integrity/json.rs",
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    {
+      "path": "source/src/content_integrity/meshopt.rs",
+      "bytes": 3105,
+      "sha256": "ccaf4ce61fa60fd23b4d0ec48ca6514911394cc4ae91286f0d964d571b7a8c7e"
+    },
+    {
+      "path": "source/src/content_integrity/payload/numbers.rs",
+      "bytes": 884,
+      "sha256": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42"
+    },
+    {
+      "path": "source/src/content_integrity/payload/records.rs",
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    {
+      "path": "source/src/content_integrity/payload.rs",
+      "bytes": 64682,
+      "sha256": "316f5010db03b93b3b9a49430159977c859d58c80ef20bba2ffd31a544b2bce7"
+    },
+    {
+      "path": "source/src/content_integrity.rs",
+      "bytes": 1187,
+      "sha256": "faedaa701efb91671ba7cb1aaaee9c015d0f329561b1c30ddc7b56b85eaaf2f2"
+    },
+    {
+      "path": "source/src/validate/types.rs",
+      "bytes": 3219,
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+    },
+    {
+      "path": "source/src/validate.rs",
+      "bytes": 50701,
+      "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "currentJsonSourceSha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+  "acceptedReviewJsonSourceSha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18",
+  "sourceByteIdentityMatches": true,
+  "reviewInputs": [
+    {
+      "path": "/tmp/rusty-tiles-codec-parser-coefficient-review/review.md",
+      "bytes": 7039,
+      "sha256": "cf28cd68202a1678e07c1ee9bd642cd22ee797a8e378fa754ab53e6e0b086d82"
+    },
+    {
+      "path": "/tmp/rusty-tiles-codec-parser-coefficient-review/input-pins.json",
+      "bytes": 5645,
+      "sha256": "4736e27496a0770cf1448b7007624b7b8262510114f0bb8dfb37d67eb44a8d64"
+    },
+    {
+      "path": "/tmp/rusty-tiles-codec-parser-coefficient-review/integrity.json",
+      "bytes": 802,
+      "sha256": "9e93b87b60603ccccde7e87397fd70674c1433226d700caf6de58dbd8562a769"
+    }
+  ],
+  "scope": "Current source hash comparison only. Pinned compiler/library/target owner sizes and actual C2 error/consumer overlap have not been observed; no full implementation acceptance."
+}

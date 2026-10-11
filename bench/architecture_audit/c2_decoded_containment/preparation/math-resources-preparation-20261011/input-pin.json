@@ -1,0 +1,131 @@
+{
+  "status": "PREPARATION_SOURCE_ONLY",
+  "reportedR2Head": "c376386cdd25ef7170ac6f8574740e0e49ec3147",
+  "inputs": [
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/AGENTS.md",
+      "copy": "source/AGENTS.md",
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/validate.rs",
+      "copy": "source/src/validate.rs",
+      "bytes": 50701,
+      "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/validate/types.rs",
+      "copy": "source/src/validate/types.rs",
+      "bytes": 3219,
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity.rs",
+      "copy": "source/src/content_integrity.rs",
+      "bytes": 1187,
+      "sha256": "faedaa701efb91671ba7cb1aaaee9c015d0f329561b1c30ddc7b56b85eaaf2f2"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/json.rs",
+      "copy": "source/src/content_integrity/json.rs",
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/meshopt.rs",
+      "copy": "source/src/content_integrity/meshopt.rs",
+      "bytes": 3105,
+      "sha256": "ccaf4ce61fa60fd23b4d0ec48ca6514911394cc4ae91286f0d964d571b7a8c7e"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload.rs",
+      "copy": "source/src/content_integrity/payload.rs",
+      "bytes": 64682,
+      "sha256": "316f5010db03b93b3b9a49430159977c859d58c80ef20bba2ffd31a544b2bce7"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload/records.rs",
+      "copy": "source/src/content_integrity/payload/records.rs",
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload/numbers.rs",
+      "copy": "source/src/content_integrity/payload/numbers.rs",
+      "bytes": 884,
+      "sha256": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/archive3tz/read.rs",
+      "copy": "source/src/archive3tz/read.rs",
+      "bytes": 58673,
+      "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/c1-payload-integrity-contract.md",
+      "copy": "source/docs/architecture/c1-payload-integrity-contract.md",
+      "bytes": 35453,
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/VALIDATION.md",
+      "copy": "source/docs/VALIDATION.md",
+      "bytes": 8810,
+      "sha256": "3b5f542dd2db09b6954aa621c1433c346c11e1b4a5040ab3827a1c3016758c0e"
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary-pins.json",
+      "copy": "primary/primary-pins.json",
+      "bytes": 9069,
+      "sha256": "14660f5ae4c5b0557fd385dea3517122fb2327078ed78a43fb3e059a07a4dbd7",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary/3d-tiles-core.adoc",
+      "copy": "primary/3d-tiles-core.adoc",
+      "bytes": 63585,
+      "sha256": "b841fade126f8269d50c1c177e32a30acb01b3d59f1d73820984816378222f87",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary/modern-b3dm.adoc",
+      "copy": "primary/modern-b3dm.adoc",
+      "bytes": 11172,
+      "sha256": "539762ac799aa8b685035647682b54a40b728904c51ee0685838e29a1ce04f3e",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary/gltf-2.0.1.adoc",
+      "copy": "primary/gltf-2.0.1.adoc",
+      "bytes": 148064,
+      "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary/node.schema.json",
+      "copy": "primary/node.schema.json",
+      "bytes": 4201,
+      "sha256": "bd4463cf13f1154fb83fc39b311d8e9d0af1f263115c3f47cd93416b12a5b30a",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    },
+    {
+      "source": "/tmp/rusty-tiles-c2-domain-preparation-20261011/primary/KHR_mesh_quantization.md",
+      "copy": "primary/KHR_mesh_quantization.md",
+      "bytes": 12593,
+      "sha256": "f59a411d42b52ff7099b98d57fcb2bf4cb2835e7f543d55ab2b08e40c9bec6dc",
+      "acquisition": "Retained primary byte-exact copy; not a new network body fetch."
+    }
+  ],
+  "scheduler": {
+    "actualNice": 10,
+    "actualAffinity": [
+      0,
+      1
+    ]
+  },
+  "ogcPublishedFetch": {
+    "url": "https://docs.ogc.org/cs/22-025r4/22-025r4.html",
+    "status": "Web search snippets observed; direct web open failed Content length too large 52897656. Full body not acquired; retained pinned primary Tiles source is used with this limitation."
+  }
+}
