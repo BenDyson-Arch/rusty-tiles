@@ -1,0 +1,1115 @@
+#!/usr/bin/env python3
+"""Materialize the C2 slice-1 witnesses and controls as `.3tz` fixtures, run the
+oracle on each and write the expected-versus-actual report.
+
+    python3 -I witnesses/generate.py [--large]
+
+Inputs (pinned by sha256, copied under witnesses/inputs/):
+  witnesses.json, slice1-witness-expectations.json, w13-normalized.json.
+Outputs:
+  witnesses/fixtures/*.3tz, witnesses/report.json,
+  controls/fixtures/*.3tz, controls/manifest.json,
+  controls/large/*.3tz (only with --large; not committed, hashes pinned).
+
+Expected verdicts come from the expectation file and from exact membership of
+independently known points (literal witness values, or points computed by
+build.py's own exact helpers). The oracle's verdict is then compared with them.
+"""
+
+import argparse
+import ast
+import copy
+import hashlib
+import json
+import math
+import os
+import random
+import shutil
+import struct
+import sys
+from fractions import Fraction
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOP = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(TOP, "oracle"))
+
+import build as B  # noqa: E402
+from c2o.check import Oracle  # noqa: E402  (verdicts only; never used for expectations)
+
+INPUT_PINS = {
+    "witnesses.json": ("/tmp/rusty-tiles-c2-domain-preparation-20261011/witnesses.json",
+                       "cee818541b58c1cda6fe1e5ba0d7f86e3688d1515ffff7bc22e727f89e438cb2"),
+    "slice1-witness-expectations.json": (
+        "/tmp/rusty-tiles-c2-contract-20261011/verify/slice1-witness-expectations.json",
+        "5086105c7bef651ccd62aeeafcc523aa36b742988610933a1d35befa983b1bcb"),
+    "w13-normalized.json": ("/tmp/rusty-tiles-c2-contract-20261011/verify/w13-normalized.json",
+                            "356c36fa2040186f13f71c66c6758b670a0aafd217635332721b17c76f536a17"),
+}
+
+
+def load_inputs():
+    os.makedirs(os.path.join(HERE, "inputs"), exist_ok=True)
+    out = {}
+    for name, (source, digest) in INPUT_PINS.items():
+        local = os.path.join(HERE, "inputs", name)
+        if not os.path.exists(local):
+            shutil.copyfile(source, local)
+        with open(local, "rb") as fh:
+            data = fh.read()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise SystemExit("input %s does not match its pin" % name)
+        out[name] = json.loads(data)
+    return out
+
+
+def safe_eval(expr, names=None):
+    """Exact value of a +,-,*,/ expression over integer literals and names."""
+    names = names or {}
+
+    def ev(node):
+        if isinstance(node, ast.Expression):
+            return ev(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return Fraction(node.value)
+        if isinstance(node, ast.Name):
+            return names[node.id]
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -ev(node.operand)
+        if isinstance(node, ast.BinOp):
+            a, b = ev(node.left), ev(node.right)
+            return {ast.Add: a + b, ast.Sub: a - b, ast.Mult: a * b}.get(type(node.op)) \
+                if not isinstance(node.op, ast.Div) else a / b
+        raise ValueError("unsupported expression %r" % expr)
+
+    return ev(ast.parse(expr, mode="eval"))
+
+
+def F(v):
+    return [Fraction(x) for x in v]
+
+
+# ---------------------------------------------------------------- payloads
+
+
+def payload_from_spec(spec, patch=None, b3dm_table=None, b3dm_bin=b""):
+    """GLB (or b3dm when b3dm_table is given) from a witnesses.json case."""
+    g = B.Gltf()
+    ctype = spec.get("componentType", 5126)
+    declared = (spec.get("declared_min"), spec.get("declared_max"))
+    pos = g.positions(spec["positions"], ctype, spec.get("normalized", False),
+                      spec.get("viewless", False), declared)
+    prim = {"attributes": {"POSITION": pos}, "mode": spec.get("mode", 0)}
+    if "indices" in spec:
+        prim["indices"] = g.indices(spec["indices"], spec.get("indexType", 5123))
+    g.doc["meshes"] = [{"primitives": [prim]}]
+    g.doc["nodes"] = copy.deepcopy(spec["nodes"])
+    g.doc["scenes"] = copy.deepcopy(spec["scenes"])
+    if "scene" in spec:
+        g.doc["scene"] = spec["scene"]
+    if ctype != 5126:
+        g.doc["extensionsUsed"] = ["KHR_mesh_quantization"]
+        g.doc["extensionsRequired"] = ["KHR_mesh_quantization"]
+    if patch:
+        patch(g)
+    glb = g.glb()
+    if b3dm_table is not None:
+        return B.b3dm(glb, b3dm_table, b3dm_bin)
+    return glb
+
+
+def add_used(g, name, required=False):
+    g.doc.setdefault("extensionsUsed", []).append(name)
+    if required:
+        g.doc.setdefault("extensionsRequired", []).append(name)
+
+
+# ---------------------------------------------------------------- cases
+
+
+class Case:
+    """One fixture: tileset documents, payload members, expectations and the
+    tested volumes (for one-ulp mutants)."""
+
+    def __init__(self, cid, group, expect, source=None):
+        self.id = cid
+        self.group = group
+        self.expect = expect  # {"outcome":..., "reasons"|"facts"}
+        self.source = source
+        self.tilesets = {}  # member -> dict
+        self.payloads = []  # (member, bytes)
+        self.limits = {}
+        self.tracks = []  # [(node, [point at level 0, 1, ...])] in streaming order
+        self.tested = []  # {"member", "path", "level", "role"}
+        self.literal = []  # {"what", "track", "level"|"node_yp", "expected"}
+        self.production = None  # production expectation when it differs (C1 precedes)
+        self.notes = []
+        self.mutants = True
+        self.large = False
+        self.draw_visits = None
+
+    def members(self):
+        out = [(name, B.json_bytes(doc)) for name, doc in self.tilesets.items()]
+        return out + list(self.payloads)
+
+    def get(self, member, path):
+        obj = self.tilesets[member]
+        for key in path:
+            obj = obj[key]
+        return obj
+
+    def set(self, member, path, value):
+        obj = self.tilesets[member]
+        for key in path[:-1]:
+            obj = obj[key]
+        obj[path[-1]] = value
+
+
+def chain_case(case, payload_name, payload, transforms, level0_tracks, content_volume=True,
+               ext_index=None, root_extra=None):
+    """Nested tiles root-first with `transforms` (None = no transform); the last
+    tile holds the payload. With ext_index e, tile e is the root of external
+    tileset ext.json, referenced by tile e-1. Volumes are tight boxes around the
+    points; each ancestor is the image of its child box."""
+    n = len(transforms)
+    case.payloads.append((payload_name, payload))
+    tracks = []
+    for node, p0 in level0_tracks:
+        levels = [list(p0)]
+        for level in range(1, n):
+            child = transforms[n - level]
+            p = levels[-1]
+            levels.append(B.apply(B.col_major(child), p) if child is not None else list(p))
+        tracks.append((node, levels))
+    case.tracks = tracks
+    boxes = [B.tight_box([t[1][0] for t in tracks])]
+    for level in range(1, n):
+        child = transforms[n - level]
+        boxes.append(B.image_box(boxes[-1], child) if child is not None else copy.deepcopy(boxes[-1]))
+    # Build tiles from the leaf upwards.
+    tiles = [None] * n
+    for i in reversed(range(n)):
+        level = n - 1 - i
+        t = B.tile(copy.deepcopy(boxes[level]), transform=transforms[i],
+                   geometric_error=0.0 if i == n - 1 else 10.0 * (n - i))
+        tiles[i] = t
+    leaf = tiles[-1]
+    leaf["content"] = {"uri": payload_name}
+    if content_volume:
+        leaf["content"]["boundingVolume"] = copy.deepcopy(boxes[0])
+    for i in range(n - 1):
+        if ext_index is not None and i == ext_index - 1:
+            tiles[i]["content"] = {"uri": "ext.json",
+                                   "boundingVolume": copy.deepcopy(tiles[i]["boundingVolume"])}
+        else:
+            tiles[i]["children"] = [tiles[i + 1]]
+    if root_extra:
+        tiles[0].update(root_extra)
+    if ext_index is None:
+        case.tilesets["tileset.json"] = B.tileset(tiles[0])
+        roots = [("tileset.json", 0)]
+    else:
+        case.tilesets["tileset.json"] = B.tileset(tiles[0])
+        case.tilesets["ext.json"] = B.tileset(tiles[ext_index])
+        roots = [("tileset.json", 0), ("ext.json", ext_index)]
+    # Tested volume paths.
+    for i in range(n):
+        level = n - 1 - i
+        member, start = roots[0] if ext_index is None or i < ext_index else roots[1]
+        path = ("root",) + ("children", 0) * (i - start)
+        role = "own" if level == 0 else "ancestor"
+        case.tested.append({"member": member, "path": path + ("boundingVolume",),
+                            "level": level, "role": role})
+        if level == 0 and content_volume:
+            case.tested.append({"member": member, "path": path + ("content", "boundingVolume"),
+                                "level": 0, "role": "content"})
+        if ext_index is not None and i == ext_index - 1:
+            case.tested.append({"member": member, "path": path + ("content", "boundingVolume"),
+                                "level": level, "role": "externalContent"})
+    return case
+
+
+def separating_box(p, avoid):
+    """Single-point box tight on p whose faces exclude `avoid` where p != avoid."""
+    c, h = [], []
+    for j in range(3):
+        if avoid[j] > p[j]:
+            cj = B.round_down(p[j])
+            hj = B.round_up(p[j] - Fraction(cj))
+        elif avoid[j] < p[j]:
+            cj = B.round_up(p[j])
+            hj = B.round_up(Fraction(cj) - p[j])
+        else:
+            cj = float(p[j])
+            hj = B.round_up(abs(p[j] - Fraction(cj)))
+        c.append(cj)
+        h.append(hj)
+    box = {"box": [c[0], c[1], c[2], h[0], 0.0, 0.0, 0.0, h[1], 0.0, 0.0, 0.0, h[2]]}
+    assert B.box_contains(box, p) and (p == avoid or not B.box_contains(box, avoid))
+    return box
+
+
+def literal_points(w, key="own_tile_local"):
+    return [F(p) for p in w["expected"][key]]
+
+
+def build_cases(inputs):
+    W = {w["id"][:3]: w for w in inputs["witnesses.json"]["cases"]}
+    ctx = {c["id"]: c for c in inputs["witnesses.json"]["context_controls"]}
+    cases = []
+
+    def contained():
+        return {"outcome": "Contained"}
+
+    def ni(*reasons):
+        return {"outcome": "NotInspected", "reasons": sorted(reasons)}
+
+    def nodes_of(w):
+        return [n for n in range(len(w["nodes"])) if "mesh" in w["nodes"][n]]
+
+    def single(cid, group, w, expect, points=None, patch=None, source=None, nodes=None, **kw):
+        case = Case(cid, group, expect, source or w["id"])
+        pts = points if points is not None else literal_points(w)
+        sel = nodes if nodes is not None else w["expected"].get("selected_nodes", nodes_of(w))
+        tracks = list(zip(sel, pts))
+        chain_case(case, "w.glb", payload_from_spec(w, patch), [None], tracks, **kw)
+        return case
+
+    # ---- 13 literal witnesses (W01 also as the no-RTC Contained variant)
+    w = W["W01"]
+    rtc_points = literal_points(w)
+    case = Case("W01-ordered-node-U-RTC-tile-chain", "literal", ni("rtcCenter"), w["id"])
+    chain_case(case, "w.b3dm", payload_from_spec(w, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": w["rtc"]}),
+               w["tile_chain_root_first"], [(0, rtc_points[0])])
+    case.literal.append({"what": "node_yp", "track": 0, "node_yp": True, "expected": F(w["expected"]["node_yp"][0])})
+    case.literal.append({"what": "own_tile_local minus rtc (slice 1 does not apply RTC)", "track": 0,
+                         "level": 0, "expected": [a - b for a, b in zip(rtc_points[0], F(w["rtc"]))]})
+    case.literal.append({"what": "parent_tile_local (literal, includes RTC) == T1(own_tile_local)",
+                         "generator_only": True, "track": 0, "level": 1,
+                         "expected": F(w["expected"]["parent_tile_local"][0])})
+    case.notes.append("Volumes enclose the RTC-applied literal points (slice-2 frame truth).")
+    cases.append(case)
+    no_rtc = [a - b for a, b in zip(rtc_points[0], F(w["rtc"]))]
+    case = Case("W01-noRTC-variant", "literal", contained(), w["id"])
+    chain_case(case, "w.b3dm", payload_from_spec(w, b3dm_table={"BATCH_LENGTH": 0}),
+               w["tile_chain_root_first"], [(0, no_rtc)])
+    case.literal.append({"what": "own_tile_local [4,-42,22]", "track": 0, "level": 0, "expected": F([4, -42, 22])})
+    case.literal.append({"what": "node_yp", "track": 0, "node_yp": True, "expected": F(w["expected"]["node_yp"][0])})
+    cases.append(case)
+
+    for key in ("W02", "W03", "W04", "W05", "W07", "W08", "W10", "W12"):
+        w = W[key]
+        case = single(w["id"], "literal", w, contained())
+        for i, p in enumerate(literal_points(w)):
+            case.literal.append({"what": "own_tile_local", "track": i, "level": 0, "expected": p})
+        if "node_yp" in w["expected"]:
+            case.literal.append({"what": "node_yp", "track": 0, "node_yp": True,
+                                 "expected": F(w["expected"]["node_yp"][0])})
+        case.draw_visits = w["expected"]["draw_visits"]
+        cases.append(case)
+
+    w = W["W06"]
+    pts = [[safe_eval(s) for s in w["expected"]["own_tile_local_rational"][0]]]
+    case = single(w["id"], "literal", w, contained(), points=pts)
+    case.literal.append({"what": "own_tile_local_rational", "track": 0, "level": 0, "expected": pts[0]})
+    cases.append(case)
+
+    w = W["W09"]
+    case = single(w["id"], "literal", w, contained())
+    case.literal.append({"what": "node_yp", "track": 0, "node_yp": True, "expected": F(w["expected"]["node_yp"][0])})
+    case.literal.append({"what": "own_tile_local", "track": 0, "level": 0, "expected": F([1, 2, 3])})
+    cases.append(case)
+
+    w = W["W11"]
+    case = Case(w["id"], "literal", contained(), w["id"])
+    chain_case(case, "w.glb", payload_from_spec(w), w["tile_chain_root_first"],
+               [(0, F(w["expected"]["own_tile_local"][0]))], ext_index=w["external_root_chain_index"])
+    case.literal.append({"what": "own_tile_local", "track": 0, "level": 0, "expected": F(w["expected"]["own_tile_local"][0])})
+    case.literal.append({"what": "external_root_local", "track": 0, "level": 1,
+                         "expected": F(w["expected"]["external_root_local"][0])})
+    case.literal.append({"what": "parent_tile_local", "track": 0, "level": 2,
+                         "expected": F(w["expected"]["parent_tile_local"][0])})
+    cases.append(case)
+
+    w = W["W13"]
+    norm = inputs["w13-normalized.json"]
+    pts = [[safe_eval(s.replace("/", "/")) for s in norm["own_tile_local_exact"]]]
+    case = single(w["id"], "literal", w, contained(), points=pts, nodes=[1])
+    case.literal.append({"what": "own_tile_local (normalized meaning, verify/w13-normalized.json)",
+                         "track": 0, "level": 0, "expected": pts[0]})
+    consts = {k: safe_eval(v) for k, v in w["expected"]["constants"].items()}
+    raw = [safe_eval(e, consts) for e in w["expected"]["own_tile_local_exact_expression"][0]]
+    case.raw_reading = raw
+    # Place each face between the two readings: tight on the normalized value,
+    # with the raw-polynomial value outside (the only way to observe the 1e-15 gap).
+    box = separating_box(pts[0], raw)
+    for tv in case.tested:
+        case.set(tv["member"], tv["path"], copy.deepcopy(box))
+    case.notes.append("The one-ulp row-0/row-2 boxes are tight on the normalized reading; the raw "
+                      "polynomial reading %s lies outside them (fault 'use raw polynomial')."
+                      % [float(v) for v in raw])
+    cases.append(case)
+
+    # ---- 17 context recipes
+    w03, w12, w02, w01 = W["W03"], W["W12"], W["W02"], W["W01"]
+    w12pts = literal_points(w12)
+
+    # 1. same URI, other reference outside
+    def same_uri(cid, exclude):
+        case = Case(cid, "context", {"outcome": "Outside", "facts": {"reference": 1, "level": 0,
+                                                                    "role": "own", "node": 1}}
+                    if exclude else contained(), "same-URI-other-reference-outside")
+        pts = literal_points(w03)
+        box_a = B.tight_box(pts)
+        box_b = B.tight_box(pts[:1]) if exclude else copy.deepcopy(box_a)
+        shift = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 100, 0, 0, 1]
+        root_box = {"box": [56.0, -3.0, 2.0, 60.0, 0, 0, 0, 8.0, 0, 0, 0, 8.0]}
+        case.tilesets["tileset.json"] = B.tileset(B.tile(root_box, geometric_error=10.0, children=[
+            B.tile(box_a, content="w.glb"), B.tile(box_b, content="w.glb", transform=shift)]))
+        case.payloads.append(("w.glb", payload_from_spec(w03)))
+        case.tracks = [(0, [pts[0]]), (1, [pts[1]])]
+        case.tested = [{"member": "tileset.json", "path": ("root", "children", 0, "boundingVolume"),
+                        "level": 0, "role": "own"}]
+        case.mutants = not exclude
+        return case
+    cases.append(same_uri("same-URI-other-reference-outside", True))
+    cases.append(same_uri("same-URI-both-references-inside (control base)", False))
+
+    # 2. child volume escapes, content inside
+    case = Case("child-volume-escapes-but-content-inside", "context", contained(),
+                "child-volume-escapes-but-content-inside")
+    case.production = "C1:InvalidInput(hierarchyBounds)"
+    spec = {"positions": [[0, 0, 0]], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}
+    case.payloads.append(("w.glb", payload_from_spec(spec)))
+    case.tilesets["tileset.json"] = B.tileset(B.tile({"sphere": [0, 0, 0, 2.0]}, geometric_error=10.0,
+                                                     children=[B.tile({"sphere": [0, 0, 0, 3.0]}, content="w.glb")]))
+    case.mutants = False
+    case.notes.append("Oracle C2 verdict is Contained; production stops at C1 hierarchyBounds (D4).")
+    cases.append(case)
+
+    # 3. sole scene, no default
+    spec = copy.deepcopy(w12)
+    del spec["scene"]
+    cases.append(single("sole-scene-no-default", "context", spec, contained(), points=w12pts,
+                        source="sole-scene-no-default"))
+    # 4. ambiguous
+    spec = copy.deepcopy(w02)
+    del spec["scene"]
+    cases.append(single("ambiguous-scene-no-default", "context", spec, ni("sceneSelection"),
+                        points=literal_points(w02)))
+    # 5. node cycle
+    spec = copy.deepcopy(w12)
+    spec["nodes"][0]["children"] = [0]
+    cases.append(single("node-cycle", "context", spec, {"outcome": "InvalidNode"}, points=w12pts))
+    # 6. shared child
+    spec = copy.deepcopy(w03)
+    spec["nodes"].append({})
+    spec["nodes"][0]["children"] = [2]
+    spec["nodes"][1]["children"] = [2]
+    cases.append(single("shared-child-not-shared-mesh", "context", spec, {"outcome": "InvalidNode"},
+                        points=literal_points(w03)))
+    # 7. matrix and TRS on the RTC b3dm
+    spec = copy.deepcopy(w01)
+    spec["nodes"][0]["translation"] = [0, 0, 0]
+    case = Case("matrix-and-TRS", "context", {"outcome": "InvalidNode"}, "matrix-and-TRS")
+    chain_case(case, "w.b3dm", payload_from_spec(spec, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": w01["rtc"]}),
+               w01["tile_chain_root_first"], [(0, rtc_points[0])])
+    cases.append(case)
+    # 8. zero quaternion
+    spec = copy.deepcopy(w12)
+    spec["nodes"][0]["rotation"] = [0, 0, 0, 0]
+    cases.append(single("zero-quaternion", "context", spec, {"outcome": "InvalidNode"}, points=w12pts))
+
+    # 9. unknown node position extension (declared optional)
+    def acme(g):
+        add_used(g, "ACME_position")
+        g.doc["nodes"][0]["extensions"] = {"ACME_position": {"offset": [100, 0, 0]}}
+    cases.append(single("unknown-node-position-extension", "context", w12, ni("gltfExtension"),
+                        points=w12pts, patch=acme, source="unknown-node-position-extension"))
+
+    # 10. opaque extras
+    def extras(g):
+        g.doc["nodes"][0]["extras"] = {"extensions": {"ACME_position": {"offset": [100, 0, 0]}}}
+    cases.append(single("opaque-extras-position-like-data", "context", w12, contained(), points=w12pts,
+                        patch=extras, source="opaque-extras-position-like-data"))
+
+    # 11. morph targets with zero weight
+    def morph(g):
+        acc = g.positions([[1, 0, 0]])
+        g.doc["meshes"][0]["primitives"][0]["targets"] = [{"POSITION": acc}]
+        g.doc["nodes"][0]["weights"] = [0]
+    cases.append(single("selected-morph-even-zero-weight", "context", w12, ni("morphTargets"),
+                        points=w12pts, patch=morph, source="selected-morph-even-zero-weight"))
+
+    # 12. skin, with and without joint attributes
+    def skin(with_attributes):
+        def patch(g):
+            g.doc["nodes"][0]["skin"] = 0
+            g.doc["nodes"][0]["children"] = [1]
+            g.doc["nodes"].append({})
+            g.doc["skins"] = [{"joints": [1]}]
+            if with_attributes:
+                view = g.view(bytes([0, 0, 0, 0]), target=34962)
+                j = g.accessor(view, 5121, 1, "VEC4")
+                view = g.view(struct.pack("<4f", 1, 0, 0, 0), target=34962)
+                wt = g.accessor(view, 5126, 1, "VEC4")
+                g.doc["meshes"][0]["primitives"][0]["attributes"].update({"JOINTS_0": j, "WEIGHTS_0": wt})
+        return patch
+    case = single("selected-skin", "context", w12, ni("skin"), points=w12pts, patch=skin(True),
+                  source="selected-skin")
+    case.production = "C1:Unsupported"
+    case.expect_c1_caveat = "JOINTS_0"
+    cases.append(case)
+    cases.append(single("selected-skin-without-joint-attributes", "context", w12, ni("skin"),
+                        points=w12pts, patch=skin(False), source="selected-skin (contract note)"))
+
+    # 13. animation
+    def anim(g):
+        view = g.view(struct.pack("<f", 0.0))
+        inp = g.accessor(view, 5126, 1, "SCALAR", min=[0.0], max=[0.0])
+        view = g.view(struct.pack("<3f", 0, 0, 0))
+        out = g.accessor(view, 5126, 1, "VEC3")
+        g.doc["animations"] = [{"channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}],
+                                "samplers": [{"input": inp, "output": out}]}]
+    cases.append(single("animation-no-chosen-playback", "context", w12, ni("animation"), points=w12pts,
+                        patch=anim, source="animation-no-chosen-playback"))
+
+    # 14. GPU instancing, optional and required
+    def gpu(required):
+        def patch(g):
+            add_used(g, "EXT_mesh_gpu_instancing", required)
+            view = g.view(struct.pack("<3f", 0, 0, 0))
+            acc = g.accessor(view, 5126, 1, "VEC3")
+            g.doc["nodes"][0]["extensions"] = {"EXT_mesh_gpu_instancing": {"attributes": {"TRANSLATION": acc}}}
+        return patch
+    cases.append(single("GPU-instancing-not-core-instances", "context", w12, ni("gltfExtension"),
+                        points=w12pts, patch=gpu(False), source="GPU-instancing-not-core-instances"))
+    case = single("GPU-instancing-required", "context", w12, ni("gltfExtension"), points=w12pts,
+                  patch=gpu(True), source="GPU-instancing-not-core-instances (required form)")
+    case.production = "C1:Unsupported"
+    case.expect_c1_caveat = "EXT_mesh_gpu_instancing"
+    cases.append(case)
+
+    # 15. region ancestor
+    case = Case("region-bound", "context", ni("regionVolume"), "region-bound")
+    ecef = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6378137.0, 0, 0, 1]
+    case.payloads.append(("w.glb", payload_from_spec(w12)))
+    case.tilesets["tileset.json"] = B.tileset(B.tile(
+        {"region": [-0.001, -0.001, 0.001, 0.001, -1000.0, 1000.0]}, geometric_error=10.0,
+        children=[B.tile(B.tight_box(w12pts), content="w.glb", transform=ecef)]))
+    cases.append(case)
+
+    # 16/17. RTC binary form and range overrun
+    rtc_bin = bytes(4) + struct.pack("<3f", *w01["rtc"])
+    for cid, offset in (("RTC-binary-form", 4), ("RTC-range-overrun", 8)):
+        case = Case(cid, "context", ni("rtcCenter"), cid)
+        chain_case(case, "w.b3dm", payload_from_spec(
+            w01, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": {"byteOffset": offset}}, b3dm_bin=rtc_bin),
+            w01["tile_chain_root_first"], [(0, rtc_points[0])])
+        cases.append(case)
+
+    # ---- new slice-1 controls
+    controls = build_new_controls(W, contained, ni, single)
+    return cases + controls
+
+
+def build_new_controls(W, contained, ni, single):
+    cases = []
+    w12 = W["W12"]
+    w12pts = literal_points(w12)
+
+    # CESIUM_RTC optional with a root extension object
+    def cesium(g):
+        add_used(g, "CESIUM_RTC")
+        g.doc["extensions"] = {"CESIUM_RTC": {"center": [1.0, 2.0, 3.0]}}
+    cases.append(single("CESIUM_RTC-optional", "control", w12, ni("gltfExtension"), points=w12pts,
+                        patch=cesium, source="newSlice1Controls[1]"))
+
+    # quaternion window
+    def quat_case(cid, x, expect):
+        spec = {"positions": [[1, 2, 3]], "nodes": [{"rotation": [x, 0.0, 0.0, 1.0], "mesh": 0}],
+                "scenes": [{"nodes": [0]}], "scene": 0}
+        p = B.tile_points(spec["nodes"], [0], F([1, 2, 3]))
+        return single(cid, "control", spec, expect, points=[p], nodes=[0], source="newSlice1Controls[2]")
+    cases.append(quat_case("quaternion-window-at-2^-18", 2.0 ** -9, contained()))
+    cases.append(quat_case("quaternion-window-next-beyond", B.next_up(2.0 ** -9), ni("quaternionWindow")))
+
+    # rotated box
+    case = Case("rotated-box", "control", ni("rotatedBox"), "newSlice1Controls[3]")
+    case.payloads.append(("w.glb", payload_from_spec(w12)))
+    c = [float(v) for v in w12pts[0]]
+    case.tilesets["tileset.json"] = B.tileset(B.tile({"box": c + [3.0, 4.0, 0.0, -4.0, 3.0, 0.0, 0.0, 0.0, 5.0]},
+                                                     content="w.glb"))
+    cases.append(case)
+
+    # external content volume (I2): base contained, shrunk excludes
+    for cid, shrink in (("external-content-volume-contains", False), ("external-content-volume-excludes", True)):
+        expect = ({"outcome": "Outside", "facts": {"level": 1, "role": "externalContent"}}
+                  if shrink else contained())
+        case = Case(cid, "control", expect, "newSlice1Controls[4]")
+        chain_case(case, "w.glb", payload_from_spec(w12), [None, None], [(0, w12pts[0])],
+                   content_volume=False, ext_index=1)
+        if shrink:
+            bv = case.get("tileset.json", ("root", "content", "boundingVolume"))
+            bv["box"][3] = 0.5  # half-length 0.5 around x = 8: excludes x = 8? centre stays 8
+            bv["box"][0] = 7.0  # [6.5, 7.5] excludes x = 8
+            case.mutants = False
+        cases.append(case)
+
+    # tileset S2 declaration, tile metadata
+    case = single("tileset-extension-S2-declared", "control", w12, ni("tilesetExtension"), points=w12pts,
+                  source="newSlice1Controls[5]")
+    case.tilesets["tileset.json"]["extensionsUsed"] = ["3DTILES_bounding_volume_S2"]
+    case.mutants = False
+    cases.append(case)
+    case = single("tile-metadata", "control", w12, ni("tileMetadata"), points=w12pts, source="newSlice1Controls[6]")
+    ts = case.tilesets["tileset.json"]
+    ts["schema"] = {"id": "c2", "classes": {"t": {"properties": {"name": {"type": "STRING"}}}}}
+    ts["root"]["metadata"] = {"class": "t", "properties": {"name": "x"}}
+    case.mutants = False
+    cases.append(case)
+
+    # tight non-integer centre box
+    x = B.f32(0.3)
+    h = Fraction(x) - Fraction(0.1)
+    assert Fraction(float(h)) == h, "x - 0.1 must be a double"
+    for cid, vx, hx, expect in (
+            ("tight-non-integer-centre-on-boundary", x, float(h), contained()),
+            ("tight-non-integer-centre-vertex-one-ulp-beyond", B.f32_next_up(x), float(h),
+             {"outcome": "Outside", "facts": {"level": 0, "role": "own"}}),
+            ("tight-non-integer-centre-h-one-ulp-smaller", x, B.next_down(float(h)),
+             {"outcome": "Outside", "facts": {"level": 0, "role": "own"}})):
+        spec = {"positions": [[vx, 0, 0]], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}
+        case = Case(cid, "control", expect, "newSlice1Controls[7]")
+        case.payloads.append(("w.glb", payload_from_spec(spec)))
+        case.tilesets["tileset.json"] = B.tileset(B.tile({"box": [0.1, 0.0, 0.0, hx, 0, 0, 0, 1.0, 0, 0, 0, 1.0]},
+                                                         content="w.glb"))
+        case.mutants = False
+        case.notes.append("centre 0.1 (binary64), vertex f32(0.3) on the upper face of row 0")
+        cases.append(case)
+
+    cases += worked_example_cases(contained, ni)
+    cases += work_limit_cases(contained, ni)
+    cases += rotated_chain_cases(contained, ni)
+    cases += polygon_cases(contained)
+    cases += identity_cases(contained)
+    cases += hull_cases(contained, ni)
+    cases += repeated_index_cases(contained, ni)
+    return cases
+
+
+def worked_example_cases(contained, ni):
+    out = []
+    nodes = [{"translation": [10.5, 0, -3], "scale": [2, 4, 0.25], "mesh": 0}]
+    raw = [[0, 0, 0], [65535, 0, 0], [0, 65535, 0], [65535, 65535, 0]]
+    spec = {"positions": raw, "componentType": 5123, "normalized": True, "nodes": nodes,
+            "scenes": [{"nodes": [0]}], "scene": 0}
+    payload = payload_from_spec(spec)
+    child_t = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1000.25, -20, 0, 1]
+    pts = [B.tile_points(nodes, [0], [Fraction(c, 65535) for c in v]) for v in raw]
+    for variant, c1 in (("literal", 0.0), ("adjusted", 3.0)):
+        own = {"box": [1.5, c1, 2.0, 100.0, 0, 0, 0, 0.0, 0, 0, 0, 50.0]}
+        inside = all(B.box_contains(own, p) for p in pts)
+        for bits in (29, 28):
+            cid = "worked-example-%s-containmentSpanBits-%d" % (variant, bits)
+            if bits == 28:
+                expect = ni("numericSpan")
+            elif inside:
+                expect = contained()
+            else:
+                expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own"}}
+            case = Case(cid, "control", expect, "newSlice1Controls[8] / contract Worked example")
+            case.payloads.append(("w.glb", payload))
+            case.tilesets["tileset.json"] = B.tileset(B.tile(
+                {"box": [0.0, 0.0, 0.0, 2048.0, 0, 0, 0, 2048.0, 0, 0, 0, 2048.0]}, geometric_error=10.0,
+                children=[B.tile(own, content="w.glb", transform=child_t)]))
+            case.limits = {"containmentSpanBits": bits}
+            case.expect_spans = {"sInst": 5, "levelSpans": [23, 29]}
+            case.mutants = False
+            if variant == "literal":
+                case.notes.append("Contract finding: own box row 1 has c=0, h=0 but every vertex has "
+                                  "tile row 1 = 3 - 0.25*z/65535 in [2.75, 3]; no vertex can be inside, so "
+                                  "'Contained at 29' is unrealizable with the literal volumes.")
+                if bits == 29:
+                    case.contract_expectation = "Contained"
+            else:
+                case.notes.append("Adjusted: own box centre row 1 = 3 (z = 0 for every vertex); the "
+                                  "normative spans stay sInst=5, levels [23, 29].")
+            out.append(case)
+    # One-ulp mutant of the adjusted variant, at the default cap (any one-ulp change of
+    # a worked-example volume value changes its spans past 29).
+    case = Case("worked-example-adjusted-default-cap", "control", contained(), "worked example")
+    case.payloads.append(("w.glb", payload))
+    case.tilesets["tileset.json"] = B.tileset(B.tile(
+        {"box": [0.0, 0.0, 0.0, 2048.0, 0, 0, 0, 2048.0, 0, 0, 0, 2048.0]}, geometric_error=10.0,
+        children=[B.tile({"box": [1.5, 3.0, 2.0, 100.0, 0, 0, 0, 0.0, 0, 0, 0, 50.0]}, content="w.glb",
+                         transform=child_t)]))
+    case.tracks = [(0, [p, B.apply(B.col_major(child_t), p)]) for p in pts]
+    case.tested = [{"member": "tileset.json", "path": ("root", "children", 0, "boundingVolume"),
+                    "level": 0, "role": "own"}]
+    out.append(case)
+    return out
+
+
+def meshopt_glb(positions, indices, nodes, scene_nodes):
+    """GLB whose POSITION (ATTRIBUTES) and indices (TRIANGLES) views are meshopt
+    compressed into the BIN chunk, with a URI-less fallback buffer 1."""
+    raw = b"".join(struct.pack("<3f", *p) for p in positions)
+    comp_v = B.meshopt_attributes(raw, len(positions), 12)
+    comp_i = B.meshopt_triangles(indices)
+    binary = bytearray(comp_v + bytes(-len(comp_v) % 4))
+    off_i = len(binary)
+    binary += comp_i + bytes(-len(comp_i) % 4)
+    off_fallback_i = len(raw) + (-len(raw) % 4)
+    fl = [[B.f32(c) for c in p] for p in positions]
+    doc = {
+        "asset": {"version": "2.0", "generator": "rusty-tiles C2 oracle witness generator"},
+        "buffers": [{"byteLength": len(binary)},
+                    {"byteLength": off_fallback_i + 2 * len(indices),
+                     "extensions": {"EXT_meshopt_compression": {"fallback": True}}}],
+        "bufferViews": [
+            {"buffer": 1, "byteOffset": 0, "byteLength": len(raw), "byteStride": 12, "target": 34962,
+             "extensions": {"EXT_meshopt_compression": {
+                 "buffer": 0, "byteOffset": 0, "byteLength": len(comp_v), "byteStride": 12,
+                 "count": len(positions), "mode": "ATTRIBUTES", "filter": "NONE"}}},
+            {"buffer": 1, "byteOffset": off_fallback_i, "byteLength": 2 * len(indices), "target": 34963,
+             "extensions": {"EXT_meshopt_compression": {
+                 "buffer": 0, "byteOffset": off_i, "byteLength": len(comp_i), "byteStride": 2,
+                 "count": len(indices), "mode": "TRIANGLES"}}}],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": len(positions), "type": "VEC3",
+             "min": [min(p[j] for p in fl) for j in range(3)], "max": [max(p[j] for p in fl) for j in range(3)]},
+            {"bufferView": 1, "componentType": 5123, "count": len(indices), "type": "SCALAR"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1, "mode": 4}]}],
+        "nodes": nodes, "scenes": [{"nodes": scene_nodes}], "scene": 0,
+        "extensionsUsed": ["EXT_meshopt_compression"],
+        "extensionsRequired": ["EXT_meshopt_compression"],
+    }
+    return B.glb_bytes(doc, bytes(binary))
+
+
+def work_limit_cases(contained, ni):
+    nodes = [{"children": [1]}, {"translation": [1.0, 2.0, 3.0], "children": [2]},
+             {"scale": [2.0, 2.0, 2.0], "mesh": 0}]
+    positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+    payload = meshopt_glb(positions, [0, 1, 2], nodes, [0])
+    pts = [B.tile_points(nodes, [0, 1, 2], F(p)) for p in positions]
+    case = Case("work-base-meshopt", "control", contained(), "newSlice1Controls[9]")
+    chain_case(case, "w.glb", payload, [None, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10.0, 0, 0, 1]],
+               [(2, p) for p in pts])
+    case.work_base = True
+    return [case]
+
+
+def rotated_chain_cases(contained, ni):
+    rng = random.Random(20261011)
+    quats, trans = [], []
+    for _ in range(40):
+        q = [rng.uniform(-1, 1) for _ in range(4)]
+        n = math.sqrt(sum(v * v for v in q))
+        quats.append([v / n for v in q])
+        trans.append([rng.uniform(-10, 10) for _ in range(3)])
+
+    def spec_for(depth):
+        nodes = []
+        for i in range(depth):
+            node = {"rotation": quats[i], "translation": trans[i]}
+            if i + 1 < depth:
+                node["children"] = [i + 1]
+            else:
+                node["mesh"] = 0
+            nodes.append(node)
+        return {"positions": [[1, 2, 3]], "nodes": nodes, "scenes": [{"nodes": [0]}], "scene": 0}
+
+    def make(depth, sphere):
+        spec = spec_for(depth)
+        p = B.tile_points(spec["nodes"], list(range(depth)), F([1, 2, 3]))
+        cid = "rotated-TRS-chain-depth-%d-%s" % (depth, "with-sphere" if sphere else "box-only")
+        case = Case(cid, "control", ni("numericSpan") if sphere else contained(), "newSlice1Controls[11]")
+        chain_case(case, "w.glb", payload_from_spec(spec), [None], [(depth - 1, p)], content_volume=False)
+        if sphere:
+            c = case.get("tileset.json", ("root", "boundingVolume"))["box"][:3]
+            case.tilesets["tileset.json"]["root"]["content"]["boundingVolume"] = {"sphere": c + [100.0]}
+            case.mutants = False
+        return case
+
+    # Depth: the smallest depth where the oracle's normative spans put the sphere
+    # variant over 4096 while the box-only variant stays within (parameter choice only).
+    import tempfile
+    chosen = None
+    with tempfile.TemporaryDirectory() as tmp:
+        for depth in range(10, 33):
+            spans = []
+            for sphere in (False, True):
+                case = make(depth, sphere)
+                path = os.path.join(tmp, "probe.3tz")
+                B.write_3tz(path, case.members())
+                report = Oracle(path, {"containmentSpanBits": 1 << 30}).run()
+                spans.append(max([report["precheck"]["references"][0]["sInst"]]
+                                 + report["precheck"]["references"][0]["levelSpans"]))
+            if spans[0] <= 4096 < spans[1]:
+                chosen = depth
+                break
+    out = [make(chosen, False), make(chosen, True)]
+    for case in out:
+        case.notes.append("depth %d chosen as the smallest depth (from 10) where box-only spans <= 4096 "
+                          "< spans with the sphere (generic normalized quaternions, seed 20261011)" % chosen)
+    return out
+
+
+def polygon_cases(contained):
+    g = B.Gltf()
+    positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [500, 500, 500]]
+    pos = g.positions(positions)
+    idx = g.indices([0, 1, 2], 5125)
+    ext = {"count": 1, "indicesOffsets": g.scalars([0], 5125), "loopIndices": g.scalars([0, 1, 3], 5125),
+           "loopIndicesOffsets": g.scalars([0], 5125)}
+    g.doc["meshes"] = [{"primitives": [{"attributes": {"POSITION": pos}, "indices": idx, "mode": 4,
+                                        "extensions": {"EXT_mesh_polygon": ext}}]}]
+    g.doc["nodes"] = [{"mesh": 0}]
+    g.doc["scenes"] = [{"nodes": [0]}]
+    g.doc["scene"] = 0
+    g.doc["extensionsUsed"] = ["EXT_mesh_polygon"]
+    case = Case("EXT_mesh_polygon-undrawn-loop-vertex-outside", "control", contained(), "newSlice1Controls[12]")
+    pts = [B.up(F(p)) for p in positions[:3]]
+    chain_case(case, "w.glb", g.glb(), [None], [(0, p) for p in pts])
+    case.expect_observation = {"outsideAnyVolume": 1, "firstOutside": [3]}
+    return [case]
+
+
+def identity_cases(contained):
+    out = []
+    parent = {"translation": [3.25, -7.0, 1000000.0], "rotation": [0.6, 0.0, 0.0, 0.8], "children": [1]}
+    for name, child in (("mesh-only", {"mesh": 0}),
+                        ("identity-TRS", {"mesh": 0, "translation": [0, 0, 0], "rotation": [0, 0, 0, 1],
+                                          "scale": [1, 1, 1]}),
+                        ("identity-matrix", {"mesh": 0, "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]})):
+        spec = {"positions": [[1, 2, 3]], "nodes": [parent, child], "scenes": [{"nodes": [0]}], "scene": 0}
+        p = B.tile_points(spec["nodes"], [0, 1], F([1, 2, 3]))
+        case = Case("identity-node-equivalence-" + name, "control", contained(), "newSlice1Controls[13]")
+        chain_case(case, "w.glb", payload_from_spec(spec), [None, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1]],
+                   [(1, p)])
+        case.identity_group = True
+        out.append(case)
+    return out
+
+
+def hull_cases(contained, ni):
+    out = []
+    big, small = 2.0 ** 1000, 2.0 ** -1000
+    nodes = [{"scale": [big, big, big], "mesh": 0}, {"scale": [small, small, small], "mesh": 0}]
+    for cid, roots, expect in (("hull-one-instance", [0], contained()),
+                               ("hull-two-instances", [0, 1], ni("numericSpan"))):
+        spec = {"positions": [[1, 2, 3]], "nodes": nodes, "scenes": [{"nodes": roots}], "scene": 0}
+        pts = [B.tile_points(nodes, [n], F([1, 2, 3])) for n in roots]
+        d2 = max(sum(c * c for c in p) for p in pts)
+        r = float(math.sqrt(14.0)) * big
+        while Fraction(r) ** 2 < d2:
+            r = B.next_up(r)
+        while Fraction(B.next_down(r)) ** 2 >= d2:
+            r = B.next_down(r)
+        case = Case(cid, "control", expect, "newSlice1Controls[14] (v3.1 H1)")
+        case.payloads.append(("w.glb", payload_from_spec(spec)))
+        case.tilesets["tileset.json"] = B.tileset(B.tile({"sphere": [0.0, 0.0, 0.0, r]}, content="w.glb"))
+        case.tracks = [(n, [p]) for n, p in zip(roots, pts)]
+        case.sphere_mutant = ("tileset.json", ("root", "boundingVolume"), B.next_down(r))
+        out.append(case)
+    return out
+
+
+def repeated_index_cases(contained, ni):
+    out = []
+    positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+    pattern = [0, 1, 2] * (3999990 // 3)
+    case = Case("repeated-index-three-payloads", "control", contained(), "newSlice1Controls[10]")
+    children = []
+    for i in range(3):
+        g = B.Gltf()
+        pos = g.positions(positions)
+        idx = g.indices(pattern, 5123)
+        g.doc["meshes"] = [{"primitives": [{"attributes": {"POSITION": pos}, "indices": idx, "mode": 4}]}]
+        g.doc["nodes"] = [{"mesh": 0}]
+        g.doc["scenes"] = [{"nodes": [0]}]
+        g.doc["scene"] = 0
+        case.payloads.append(("p%d.glb" % i, g.glb()))
+        children.append(B.tile(B.tight_box([B.up(F(p)) for p in positions]), content="p%d.glb" % i))
+    case.tilesets["tileset.json"] = B.tileset(B.tile(B.tight_box([B.up(F(p)) for p in positions]),
+                                                     geometric_error=10.0, children=children))
+    case.large = True
+    case.mutants = False
+    case.notes.append("24 MB stored archive: generated with --large into controls/large/ (not committed).")
+    out.append(case)
+    return out
+
+
+# ---------------------------------------------------------------- expectations for mutants
+
+
+def stream_first_failure(case, level, role, volume):
+    """First track (streaming order) excluded by a mutated volume at (level, role)."""
+    for node, levels in case.tracks:
+        if not B.box_contains(volume, levels[level]):
+            return node
+    return None
+
+
+def mutants_of(case):
+    out = []
+    for tv in case.tested:
+        base = case.get(tv["member"], tv["path"])
+        if "box" not in base:
+            continue
+        points = [levels[tv["level"]] for _, levels in case.tracks]
+        for row, mutated, how in B.ulp_mutants(base, points):
+            m = copy.deepcopy(case)
+            m.id = "%s~ulp-L%d-%s-r%d" % (case.id, tv["level"], tv["role"], row)
+            m.group = case.group + "-mutant"
+            m.set(tv["member"], tv["path"], mutated)
+            node = stream_first_failure(case, tv["level"], tv["role"], mutated)
+            m.expect = {"outcome": "Outside", "facts": {"level": tv["level"], "role": tv["role"], "node": node}}
+            m.notes = ["one-ulp mutant of %s: %s at %s" % (case.id, how, "/".join(map(str, tv["path"])))]
+            if tv["level"] > 0 or tv["role"] == "content" or base["box"][3 + 4 * row] == 0:
+                m.notes.append("declared nesting may be broken by one ulp; production C1 "
+                               "hierarchyBounds slack decides whether C2 is reached")
+            m.mutants = False
+            m.literal = []
+            m.expect_observation = None
+            if hasattr(m, "raw_reading"):
+                del m.raw_reading
+            out.append(m)
+    if getattr(case, "sphere_mutant", None):
+        member, path, r = case.sphere_mutant
+        m = copy.deepcopy(case)
+        m.id = case.id + "~ulp-sphere-r"
+        m.group = case.group + "-mutant"
+        m.get(member, path)["sphere"][3] = r
+        m.expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own", "node": case.tracks[0][0]}}
+        m.notes = ["sphere radius one ulp smaller than the smallest enclosing binary64 radius"]
+        m.mutants = False
+        out.append(m)
+    return out
+
+
+# ---------------------------------------------------------------- evaluation
+
+
+def compare(expect, report, case):
+    outcome = report.get("outcome")
+    if outcome != expect["outcome"]:
+        return False
+    if outcome == "NotInspected":
+        return sorted(report.get("reasons", [])) == expect["reasons"]
+    if outcome == "Outside":
+        facts = report["facts"]
+        for key, value in expect.get("facts", {}).items():
+            if value is not None and facts.get(key) != value:
+                return False
+    if getattr(case, "expect_c1_caveat", None):
+        if not any(case.expect_c1_caveat in c for c in report.get("c1Caveats", [])):
+            return False
+    return True
+
+
+def literal_results(case, oracle):
+    out = []
+    trace = oracle.trace()
+    for chk in case.literal:
+        if chk.get("generator_only"):
+            node, levels = case.tracks[chk["track"]]
+            got = levels[chk["level"]]
+            out.append({"what": chk["what"] + " [generator chain arithmetic]",
+                        "expected": [str(v) for v in chk["expected"]], "got": [str(v) for v in got],
+                        "ok": got == chk["expected"]})
+            continue
+        entry = trace[chk["track"]] if chk["track"] < len(trace) else None
+        if entry is None:
+            out.append({"what": chk["what"], "ok": False, "got": None})
+            continue
+        got = entry["node_yp"] if chk.get("node_yp") else entry["levels"][chk["level"]]
+        out.append({"what": chk["what"], "expected": [str(v) for v in chk["expected"]],
+                    "got": [str(v) for v in got], "node": entry["node"], "ok": list(got) == list(chk["expected"])})
+    if case.draw_visits is not None:
+        out.append({"what": "draw_visits", "expected": case.draw_visits, "got": len(trace),
+                    "ok": len(trace) == case.draw_visits})
+    if hasattr(case, "raw_reading"):
+        own = case.get("tileset.json", ("root", "boundingVolume"))
+        raw_inside = B.box_contains(own, case.raw_reading)
+        out.append({"what": "W13 raw-polynomial reading is outside the normalized-tight own box",
+                    "got": not raw_inside, "ok": not raw_inside})
+    return out
+
+
+def run_case(case, directory, report_rows, large_ok):
+    if case.large and not large_ok:
+        report_rows.append({"id": case.id, "group": case.group, "skipped": "needs --large"})
+        return None
+    path = os.path.join(directory, case.id.replace("/", "_").replace(" ", "_") + ".3tz")
+    digest = B.write_3tz(path, case.members())
+    oracle = Oracle(path, case.limits)
+    report = oracle.run()
+    row = {"id": case.id, "group": case.group, "source": case.source,
+           "file": os.path.relpath(path, TOP), "sha256": digest, "limits": case.limits,
+           "expected": case.expect, "oracle": {k: report.get(k) for k in ("outcome", "reasons", "facts", "why")},
+           "c1Caveats": report.get("c1Caveats", []), "notes": case.notes}
+    if case.production:
+        row["expectedProduction"] = case.production
+    if getattr(case, "contract_expectation", None):
+        row["contractExpectation"] = case.contract_expectation
+        row["contractFinding"] = True
+    row["agree"] = compare(case.expect, report, case)
+    if report.get("outcome") in ("Contained", "Outside") or case.literal:
+        try:
+            row["literal"] = literal_results(case, oracle)
+            row["agree"] = row["agree"] and all(r["ok"] for r in row["literal"])
+        except Exception as err:  # never hide a trace failure
+            row["literal"] = [{"what": "trace", "ok": False, "got": repr(err)}]
+            row["agree"] = False
+    if getattr(case, "expect_spans", None):
+        refs = (report.get("precheck") or {}).get("references") or []
+        got = {"sInst": refs[0].get("sInst"), "levelSpans": refs[0].get("levelSpans")} if refs else None
+        row["spans"] = {"expected": case.expect_spans, "got": got}
+        row["agree"] = row["agree"] and got == case.expect_spans
+    if getattr(case, "expect_observation", None):
+        obs = report.get("observations") or []
+        got = {k: obs[0][k] for k in case.expect_observation} if obs else None
+        row["observation"] = {"expected": case.expect_observation, "got": got}
+        row["agree"] = row["agree"] and got == case.expect_observation
+    if report.get("precheck"):
+        row["precheck"] = report["precheck"]
+    report_rows.append(row)
+    return report
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--large", action="store_true", help="also build and run the 24 MB repeated-index control")
+    args = parser.parse_args()
+    inputs = load_inputs()
+    cases = build_cases(inputs)
+    wdir = os.path.join(HERE, "fixtures")
+    cdir = os.path.join(TOP, "controls", "fixtures")
+    ldir = os.path.join(TOP, "controls", "large")
+    for d in (wdir, cdir, ldir):
+        os.makedirs(d, exist_ok=True)
+    for d in (wdir, cdir):
+        for name in os.listdir(d):
+            os.remove(os.path.join(d, name))
+    rows = []
+    reports = {}
+    all_cases = []
+    for case in cases:
+        all_cases.append(case)
+        if case.mutants and case.expect["outcome"] == "Contained":
+            all_cases += mutants_of(case)
+    for case in all_cases:
+        directory = ldir if case.large else (cdir if case.group.startswith("control") else wdir)
+        reports[case.id] = run_case(case, directory, rows, args.large)
+    controls = build_controls(cases, reports, rows, cdir, ldir, args.large)
+    identity = [r for r in rows if r["id"].startswith("identity-node-equivalence-") and "~" not in r["id"]]
+    spans = [json.dumps(r.get("precheck", {}).get("references", [{}])[0].get("levelSpans")) for r in identity]
+    summary = {
+        "cases": len([r for r in rows if "skipped" not in r]),
+        "agree": len([r for r in rows if r.get("agree")]),
+        "disagree": [r["id"] for r in rows if "skipped" not in r and not r.get("agree")],
+        "skipped": [r["id"] for r in rows if "skipped" in r],
+        "contractFindings": [r["id"] for r in rows if r.get("contractFinding")],
+        "identityLevelSpansIdentical": len(set(spans)) == 1,
+        "controlPairs": len(controls["pairs"]),
+        "controlPairsAgree": len([p for p in controls["pairs"] if p["agree"]]),
+    }
+    with open(os.path.join(HERE, "report.json"), "w") as fh:
+        json.dump({"summary": summary, "inputs": {k: v[1] for k, v in INPUT_PINS.items()},
+                   "rows": rows}, fh, indent=1, sort_keys=True)
+    print(json.dumps(summary, indent=1))
+    return 0 if not summary["disagree"] and summary["controlPairsAgree"] == summary["controlPairs"] else 1
+
+
+def build_controls(cases, reports, rows, cdir, ldir, large_ok):
+    """Data-control pairs: base fixture + mutated fixture, both hashed, with expectations."""
+    by_id = {r["id"]: r for r in rows}
+    pairs = []
+
+    def pair(name, base_id, mutated_id, what):
+        base, mut = by_id.get(base_id), by_id.get(mutated_id)
+        if base is None or mut is None:
+            raise SystemExit("control %s refers to unknown case" % name)
+        if "skipped" in base or "skipped" in mut:
+            pairs.append({"control": name, "what": what, "skipped": "needs --large", "agree": True})
+            return
+        pairs.append({"control": name, "what": what,
+                      "base": {k: base[k] for k in ("id", "file", "sha256", "limits", "expected", "oracle")},
+                      "mutated": {k: mut[k] for k in ("id", "file", "sha256", "limits", "expected", "oracle")},
+                      "agree": bool(base["agree"] and mut["agree"])})
+
+    pair("one-ulp-outside", "W12-TRS-half-turn-order", "W12-TRS-half-turn-order~ulp-L0-own-r0",
+         "own box row 0 half-length one ulp smaller")
+    pair("RTC-added", "W01-noRTC-variant", "W01-ordered-node-U-RTC-tile-chain", "b3dm feature table gains RTC_CENTER")
+    pair("quaternion-past-window", "quaternion-window-at-2^-18", "quaternion-window-next-beyond",
+         "x component moves to the next binary64")
+    pair("span-at-cap-and-one-over", "worked-example-adjusted-containmentSpanBits-29",
+         "worked-example-adjusted-containmentSpanBits-28", "same fixture, containmentSpanBits 29 -> 28")
+    pair("external-content-volume-shrunk", "external-content-volume-contains", "external-content-volume-excludes",
+         "referencing tile content.boundingVolume shrunk to exclude the payload position")
+    pair("same-URI-different-reference", "same-URI-both-references-inside (control base)",
+         "same-URI-other-reference-outside", "second reference's own volume excludes the second instance")
+    pair("hull-two-instances", "hull-one-instance", "hull-two-instances", "second instance added to the URI")
+    pair("tight-non-integer-centre", "tight-non-integer-centre-on-boundary",
+         "tight-non-integer-centre-vertex-one-ulp-beyond", "vertex moves one f32 ulp beyond the face")
+    pair("rotated-chain-sphere", [c.id for c in cases if c.id.startswith("rotated-TRS") and "box-only" in c.id][0],
+         [c.id for c in cases if c.id.startswith("rotated-TRS") and "sphere" in c.id][0],
+         "sphere content volume added at the same depth")
+    # Undrawn outlier made drawn (W04 indices [0] -> [0, 1]).
+    w04 = [c for c in cases if c.id.startswith("W04")][0]
+    drawn = copy.deepcopy(w04)
+    drawn.id = "W04-outlier-made-drawn"
+    drawn.group = "control"
+    spec = json.loads(json.dumps(load_inputs()["witnesses.json"]["cases"][3]))
+    spec["indices"] = [0, 1]
+    drawn.payloads = [("w.glb", payload_from_spec(spec))]
+    drawn.expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own", "vertex": 1}}
+    drawn.literal = []
+    drawn.draw_visits = None
+    drawn.notes = ["W04 with indices [0, 1]: the outlier (1000, -1000, 1000) is drawn"]
+    run_case(drawn, cdir, rows, large_ok)
+    by_id[drawn.id] = rows[-1]
+    pair("undrawn-outlier-made-drawn", w04.id, drawn.id, "index 1 added to the draw")
+    # Work caps at the base archive's computed totals and one below.
+    base_row = by_id["work-base-meshopt"]
+    totals = base_row["precheck"]["totals"]
+    work_case = [c for c in cases if c.id == "work-base-meshopt"][0]
+    for limit, key in (("containmentWorkUnits", "units"), ("containmentBytesRead", "bytes"),
+                       ("containmentDecodedBytes", "decoded"), ("containmentNodeDepth", "maxNodeDepth")):
+        for delta in (0, -1):
+            c = copy.deepcopy(work_case)
+            c.id = "work-%s-%s" % (limit, "at-sum" if delta == 0 else "sum-minus-1")
+            c.limits = {limit: totals[key] + delta}
+            c.expect = {"outcome": "Contained"} if delta == 0 else {"outcome": "NotInspected", "reasons": ["workLimit"]}
+            c.mutants = False
+            c.literal = []
+            run_case(c, cdir, rows, large_ok)
+            by_id[c.id] = rows[-1]
+        pair("%s-at-cap-and-one-over" % limit, "work-%s-at-sum" % limit, "work-%s-sum-minus-1" % limit,
+             "%s = archive total (%d), then total - 1" % (limit, totals[key]))
+    # Repeated-index pair (large).
+    rep = [c for c in cases if c.id == "repeated-index-three-payloads"][0]
+    rep_row = by_id.get(rep.id)
+    if rep_row and "skipped" not in rep_row:
+        c = copy.deepcopy(rep)
+        c.id = "repeated-index-three-payloads-units-minus-1"
+        c.limits = {"containmentWorkUnits": rep_row["precheck"]["totals"]["units"] - 1}
+        c.expect = {"outcome": "NotInspected", "reasons": ["workLimit"]}
+        run_case(c, ldir, rows, large_ok)
+        by_id[c.id] = rows[-1]
+        pair("repeated-index-work-units", rep.id, c.id, "containmentWorkUnits one below the archive sum")
+    else:
+        pairs.append({"control": "repeated-index-work-units", "skipped": "needs --large", "agree": True})
+    manifest = {"record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. "
+                          "Production and the oracle must both report both verdicts.",
+                "pairs": pairs}
+    with open(os.path.join(TOP, "controls", "manifest.json"), "w") as fh:
+        json.dump(manifest, fh, indent=1, sort_keys=True)
+    return manifest
+
+
+if __name__ == "__main__":
+    sys.exit(main())
