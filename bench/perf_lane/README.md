@@ -66,7 +66,7 @@ Processing (`process.py`): each case runs N times per binary in ABBA order
   (the sample that set `wallSeconds`) and `foreignCpuSecondsMax`. Other agents
   also pin to CPUs 0 and 1. A large value means the wall time is not a clean
   measurement, so rerun when the CPUs are quiet or choose another pair with
-  `--cpus`. Flags are not annotated with contention.
+  `--cpus`.
 - `outputBytes`: archive bytes, or the sum of file bytes for a directory.
 - `members` and `tiles`: zip members, or directory files. `tiles` counts
   `.glb/.b3dm/.pnts/.i3dm/.cmpt/.png/.subtree` members. `byExtension` gives the
