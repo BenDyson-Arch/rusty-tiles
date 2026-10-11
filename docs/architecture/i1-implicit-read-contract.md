@@ -1105,6 +1105,14 @@ Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publ
 - **Pinned C1 context controls (X-14).** The 2026-10-10 context-control manifest's two implicit
   expected reports were amended additively for the label change only; hashes and reason are in
   [C2-PIN-AMENDMENT.md](../../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/C2-PIN-AMENDMENT.md).
+- **Validator caps (#160, merged from `develop` `766b92b`).** The default ceilings this text
+  cites were raised: `hierarchy_visits` 65,536 to 262,144, `references` 262,144 to 1,048,576,
+  `archive_entries` to 524,288, `document_items` to 131,072, and `member_bytes` and
+  `document_decoded_bytes` (and so the live-path subtree cap) from 64 to 128 MiB. I1's formulas
+  and outcomes are unchanged; only the default values move. The R9 control in
+  `tests/i1_implicit_read.rs` is rescaled from K = 2,500 to K = 7,200 `Const1` slots, so the
+  first child subtree's reservation (2 × 525,600) still exceeds the default `references`. The
+  W2 visit example (431) and the DC-8 receipt use explicit limits and are unaffected.
 - **DC-8 receipt (R2b lower bound).** Executed on the integration branch through
   `inspect_selected` with only `document_decoded_bytes` changed, on W2 (`pc-perf-2000.3tz`,
   sha256 `964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8`):
