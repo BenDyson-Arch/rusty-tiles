@@ -30,10 +30,23 @@ const requireDocuments = process.argv.includes('--require-documents');
       }
       for(const [name,tiles] of [['mesh',window.tiles],['point-cloud',window.pointCloud]]) {
         tiles.show=true;tiles.maximumScreenSpaceError=8;
+        // The deep point chain sits in millimetre boxes inside a kilometre
+        // tileset, so its screen-space error is far below one pixel. Cesium's
+        // default dynamicScreenSpaceError subtracts a fog term that keeps it
+        // from ever refining past level 1, even at the fine view's 1e-7, and
+        // the probe would never reach the link document or the implicit root.
+        if(name==='point-cloud')tiles.dynamicScreenSpaceError=false;
+        // Settling needs tilesLoaded on 10 consecutive rendered frames, within
+        // 180 s. The chain refines one level per load, so tilesLoaded is
+        // briefly true between levels: a single sample can stop early. And
+        // SwiftShader on two CPUs can need more than 30 s for the fine views.
+        let loadedFrames=0;
+        const countFrames=v.scene.postRender.addEventListener(()=>{loadedFrames=tiles.tilesLoaded?loadedFrames+1:0;});
         function frame(multiplier){v.camera.viewBoundingSphere(tiles.boundingSphere,
           new C.HeadingPitchRange(0,-Math.PI/2,tiles.boundingSphere.radius*multiplier));v.camera.lookAtTransform(C.Matrix4.IDENTITY);}
-        async function settle(){await wait(250);for(let i=0;i<600&&!tiles.tilesLoaded;i++)await wait(50);await wait(400);
-          if(!tiles.tilesLoaded)throw Error(`${name} did not settle`);}
+        async function settle(){loadedFrames=0;await wait(250);const deadline=Date.now()+180000;
+          while(loadedFrames<10&&Date.now()<deadline)await wait(50);
+          if(loadedFrames<10||!tiles.tilesLoaded)throw Error(`${name} did not settle`);}
         // A forest root's single subtree instantiates all of its tiles, so a
         // selected tile without children is a producer leaf.
         function selected(){return tiles._selectedTiles.map(tile=>({url:tile.content.url,level:level(tile),
@@ -62,7 +75,7 @@ const requireDocuments = process.argv.includes('--require-documents');
         }
         outputs.push({name,coarse,fine,levels:[...levels].sort((a,b)=>a-b),implicitRoots,nestedRoots,documents,implicitTiles,
           picked,failures:window.failures.slice()});
-        tiles.show=false;
+        countFrames();tiles.show=false;
       }
       return {version:C.VERSION,outputs};
     });

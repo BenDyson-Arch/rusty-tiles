@@ -749,7 +749,10 @@ recorded separately.
       `"decodedContentBounds.implicitTiling"` and `"metadataSemantics"` (I1 `:713-720`);
     - `tiles` = |H| + link tiles (I1's counter), while the `budgets.tiles` comparison uses |H|
       (PD-13);
-    - `contentReferences` = emitted contents.
+    - `contentReferences` = every content entry the validator reads: payload contents (explicit
+      and emitted implicit) plus explicit external-tileset contents, so each link tile's
+      document counts once (coordinator ruling after acceptance; production's counter, unchanged
+      from develop). On mf2-lod3 that is 12,715 = 12,527 payloads + 188 links.
   - R records the full expected arrays per case before the run, and the run must match them
     exactly.
   - No Unsupported, no ResourceLimit.
@@ -763,6 +766,12 @@ recorded separately.
     - payloads (R-11): the GLB BIN chunk byte-identical; the JSON chunk equal as parsed JSON
       except for the scene-root `translation` or `matrix`; and that translation equal to the
       composed δ under the same summation rule.
+  - **Domain (recorded at acceptance).** A-4 needs a reference build that is H. That holds for
+    vector, whose `--explicit` build is H, and for the M2 wrapper. It does not hold for point
+    cloud or legacy mesh: their `--explicit` builds are a different partition (the legacy
+    point-cloud partition; mesh "median partitioning"), as already at f2238cd (point cloud 63
+    explicit tiles against 73 implicit on W1). For those producers A-4 is inapplicable and only
+    the archive-only checks apply (A-2's P1–P12 rules and A-3).
 - **A-5, Cesium** (PO, ported from `evidence/v2/cesium/`).
   1. Fixture suite E/A/S/X/F/D/N. `A` must fail 8/8, `N` must fail (F-1 sensitivity), and
      `F`/`S`/`D` must pass 8/8.
@@ -772,7 +781,13 @@ recorded separately.
      - with `cullWithChildrenBounds: false`, identical selections;
      - with defaults, differences only where the head selects an ancestor (R-14), with equal pixel
        coverage; the share of such views is reported.
+
+     Leaf targets need plain float POSITION data, and mesh outputs are meshopt-compressed by
+     default. The mesh case therefore runs on `--noMeshopt` builds of the same recipe on both
+     sides (recorded at acceptance). The meshopt default is covered by A-2 and A-3 only.
   3. `tests/fixtures/implicit_levels.cjs` (PP) crosses implicit-root and document boundaries.
+     It disables `dynamicScreenSpaceError` on the point cloud: with Cesium's default, a tiny deep
+     chain (millimetre boxes in a kilometre tileset) never refines (recorded at acceptance).
 - **A-6, perf lane**, lane scripts extracted from `bb7d054` (R-10).
   - `process.py --base develop --head combined --repeat 3`, gate 1.25 with its floors. Every case
     is explained or fixed.
@@ -805,11 +820,28 @@ recorded separately.
     Negative cases: an altered published member, or a wrong record, fails the sha256 check
     ("previous content checksum failed").
   - **PV integration** (`tests/vector_reuse_payloads.rs`). For the perf input and an LOD-chain
-    configuration, a v3 default archive is a reuse baseline. Reusing it for an edit gives:
-    - tile payloads, documents and subtrees byte-identical to a fresh v3 build of the edited input
-      (excluding `conversion.json`'s volatile fields);
-    - `reusedContents` equal to the §5.4 counts for the same edits;
-    - **no `t/*` member** that no tile references.
+    configuration, a v3 default archive is a reuse baseline. What reuse guarantees:
+    - **byte-exact payload recovery.** Every reused payload is restored from its published
+      member and must match its sha256 name ("previous content checksum failed" otherwise);
+    - **identical output for unchanged inputs.** Reusing a baseline for its own input gives tile
+      payloads, documents and subtrees byte-identical to the baseline. The excluded volatile
+      members are `conversion.json`, `geometry-reports.jsonl` and the 3TZ index;
+    - **a valid archive** that passes A-2 and `validate`, with **no `t/*` member** that no tile
+      references;
+    - `reusedContents` equal to the §5.4 counts for the same edits.
+
+    For an edit, reuse output is **not guaranteed to be byte-identical to a fresh build at
+    scale**. Reuse keeps the previous partition cuts of unchanged subtrees, so its hierarchy can
+    differ from a fresh partition of the edited input. That predates P: develop does the same.
+
+    Measured at acceptance (head `e3a67bf`, the §5.4 small edit):
+    - perf-default reuse equals fresh (534 reused, 10 rebuilt);
+    - mf2-lod3 reuse keeps 4 more tiles than fresh, as on develop: 12,531 against 12,527
+      published contents;
+    - P's preorder root names (`r{n}`) then renumber about 11,300 members.
+
+    `tests/vector_reuse_payloads.rs` asserts reuse = fresh only on its small configurations,
+    where the partitions coincide.
 
     A pre-v3 archive is refused with "run a fresh conversion".
   - **Timing (R's process lane, ABBA ×3).** `reuse_bench.py`'s edits (small-edit, medium-edit,

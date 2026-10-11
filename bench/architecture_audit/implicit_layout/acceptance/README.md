@@ -17,7 +17,7 @@ The binaries, inputs and producer commands are shared with the I1 record
 | `cesium/prepare_real.py` / `run_real.py` / `judge_deep.py` | `619cf351…66d4` / `dce0e36d…9d14` / `a8c02bac…f95` |
 | `cesium/make_fixtures.py` / `run.py` / `judge_fixtures.py` / `probe.cjs` | `578884d8…ee63` / `6a3c3935…5cd` / `c4697828…e3dc` / `fb2d0fdb…d5fe` |
 | `bench/perf_lane/process.py` / `cesium.py` / `cesium.cjs` / `corpus.py` | `0e734d91…1084` / `a4ff2697…8b8e` / `b2b67479…71ce` / `a6cd738c…5245` |
-| `tests/fixtures/implicit_levels.cjs` | `3cba880e…ed1` |
+| `tests/fixtures/implicit_levels.cjs` | `3cba880e…ed1` at e3a67bf; `bb5ce1f6…f95b` after the follow-up fix |
 
 Pins: Cesium 1.146.0, Chromium 1243 (SwiftShader) and Node 26.10.0. Browsers ran one at a time
 at `nice -n 10`.
@@ -32,8 +32,8 @@ at `nice -n 10`.
 | Perf lane Cesium, base against head | **PASS**: 0 Cesium errors and no head gate problems |
 | Deep views (A-5.2), four cases × child-bounds 0 and 1 | **PASS** |
 | Fixture suite (A-5.1) | **PASS** |
-| `implicit_levels.cjs --require-documents` (A-5.3) | **FAIL as committed**. Probe defect, archive sound; see below |
-| A-8 reuse timing (mf2-lod3, small edit) | **PASS** on timing. The "byte-identical to fresh" clause fails on this input, a pre-existing reuse behaviour |
+| `implicit_levels.cjs --require-documents` (A-5.3) | Failed as committed at e3a67bf (probe defect, archive sound). **PASS** 3/3 on 2 CPUs after the follow-up probe fix |
+| A-8 reuse (mf2-lod3, small edit) | **PASS** on timing and on the corrected guarantees. Reuse = fresh does not hold at mf2-lod3 scale, which predates P; the contract clause is corrected |
 
 ## 3. Forest checker and P7
 
@@ -56,6 +56,8 @@ Results are in `forest-check/*.verdict.json`.
     1,443). Mesh `--explicit` is documented as "median partitioning".
   - With the `--explicit` reference the A4 rules fail as a consequence (`*.verdict.json`
     without `.archive-only`). This is a proof limit, not a writer defect.
+  - Coordinator ruling: A-4 is inapplicable to point cloud and mesh, and only the archive-only
+    checks apply. This is now recorded in the P contract's A-4 "Domain" note.
   - W7 (M2 wrapper) passes with its `--explicit` reference, A4 included.
 - **`glb-to-3tz`** is not a forest producer: it writes one explicit tile, byte-identical to
   f2238cd. It fails `skeleton.S4` by construction and is out of P's scope.
@@ -129,7 +131,8 @@ busy share was 11–24% during the runs. Siblings 12 and 14 stayed ≤ 2%.
   (0 views). The mesh case therefore used `--noMeshopt` builds of the W6d recipe:
   - develop `a699f7a8…`, head `b701588a…`;
   - the head build also passes the checker.
-- The meshopt default itself is covered by the checker and by I1 only.
+- The meshopt default itself is covered by the checker and by I1 only. The use of `--noMeshopt`
+  builds for the mesh case is now recorded in the P contract's A-5.2.
 
 **Fixture suite** (`cesium-fixtures/`): **pass**.
 - E, S, X, F and D select and pick 8/8, and their in-cell controls pass.
@@ -163,8 +166,28 @@ with an unpacked head vector output as the annotations layer, which the probe on
    - mesh unchanged;
    - no browser errors.
 
-The archives are sound. The defect is in PP's probe (or in the recipe's framing), and A-5.3 is
-unmet until the probe is fixed and re-run.
+The archives are sound; the defect was in PP's probe.
+
+**Follow-up (coordinator ruling): probe fixed and green.** `tests/fixtures/implicit_levels.cjs`
+now makes two changes:
+- it sets `dynamicScreenSpaceError=false` on the point cloud, with a comment explaining why;
+- settling requires `tilesLoaded` on 10 consecutive rendered frames within 180 s.
+
+The second change is needed because a longer timeout alone was not enough. The chain refines
+one level per load, so `tilesLoaded` is briefly true between levels: a single sample stopped
+early ("did not settle" after 13 s). The mesh's fine view could also exceed the old 30 s window
+on 2 CPUs.
+
+Re-run on CPUs 13 and 15 (2 CPUs), with the same archives and `--require-documents`: **3 of 3
+pass**, in 17–18 s each, with identical results and no browser errors (`runs.json`
+`fixedProbe`):
+- mesh: levels 0–5, 43 nested roots, 1,222 implicit tiles; fine selection is all leaves at
+  levels 2–5, and a pick succeeds;
+- point cloud: levels 0–20, 1 document, 1 implicit root, 44 implicit tiles; the fine selection
+  is all leaves, and a pick returns the LAS properties.
+
+During the runs CPUs 13 and 15 were 23–29% busy. CPUs 0 and 1 carried 74–83% foreign load
+(not this run). `implicit_levels_diag.patch` is the earlier diagnostic, kept for the record.
 
 ## 6. A-8 reuse timing (`reuse/reuse-ab.json`, `scripts/reuse_ab.py`)
 
@@ -199,8 +222,19 @@ reuse output is "byte-identical to a fresh v3 build of the edited input". On thi
 
 P's preorder root names (`r{n}`) turn those 4 tiles into thousands of renamed members. Both reuse
 outputs pass `forest_check.py` and `validate` (12,722 tiles). The repository test
-(`tests/vector_reuse_payloads.rs`, `--lodLevels 2`) does not exercise this case. The clause
-therefore holds only on inputs where reuse reproduces the fresh partition.
+(`tests/vector_reuse_payloads.rs`, `--lodLevels 2`) does not exercise this case.
+
+**Follow-up (coordinator ruling): the contract clause is corrected.** The guarantees now stated
+were executed on the head (`reuse/reuse-guarantees.json`, `scripts/reuse_guarantees.py`).
+Comparisons exclude `conversion.json`, `geometry-reports.jsonl` and the 3TZ index, the PV test's
+volatile set:
+
+| Guarantee | perf-default | mf2-lod3 |
+| --- | --- | --- |
+| Unchanged input: reuse = baseline | 0 differing members (544 reused, 0 rebuilt) | 0 differing members (12,527 reused, 0 rebuilt) |
+| Small edit: reuse = fresh | 0 differing members (534 reused, 10 rebuilt) | not guaranteed: 11,308 differing members (12,469 reused, 62 rebuilt, 12,531 published) |
+| Byte-exact payload recovery | every reused payload passed reuse's sha256 check; `vectorBuild.reuseMap` passes on every vector forest | same |
+| Valid archive | yes | yes: `forest_check.py` and `validate` pass |
 
 ## Not established here
 

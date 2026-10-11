@@ -696,8 +696,9 @@ entry at `l − 1` as its parent (RC-21).
    `expand_tileset` (`:610-615`, `:667-1168`, tests `:1199+`). Its `validate::ValidationFailure`
    dependency (`:656-660`) remains until `expand_tileset` itself is retired (G6 or P).
 4. **Counters.** `tiles` = explicit tiles + available implicit tiles, with R and I_0 counted once.
-   `content_references` = emitted contents. Both are unchanged for every non-chunked output
-   (verified: W1 73/73, W2 428/428).
+   `content_references` = every content entry read: explicit payload and external-tileset
+   contents plus emitted implicit contents (coordinator ruling after acceptance). Both are
+   unchanged for every non-chunked output (verified: W1 73/73, W2 428/428).
 
 ### Exactly what the report says
 

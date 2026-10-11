@@ -226,5 +226,236 @@
    "browserErrors": []
   }
  ],
- "probeSha256": "3cba880ebcd845b1abc11ce2b81b999f12cbed8c0e76b46f748d62e537997ed1"
+ "committedProbeAtE3a67bfSha256": "3cba880ebcd845b1abc11ce2b81b999f12cbed8c0e76b46f748d62e537997ed1",
+ "fixedProbe": {
+  "sha256": "bb5ce1f6fa2bbacf751f0b51526177a87b2adb66c242b5c940fbcbe9adcdf95b",
+  "change": "dynamicScreenSpaceError=false on the point cloud; settle needs tilesLoaded on 10 consecutive rendered frames within 180 s",
+  "runs": [
+   {
+    "file": "levels-final.out",
+    "sha256": "2e0a9f3305e84569e9346097865ad7e90757c807e13c2ddead1e7ced63862d64",
+    "cpus": "13,15",
+    "exit": 0,
+    "outputs": [
+     {
+      "name": "mesh",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "implicitRoots": 43,
+      "nestedRoots": 43,
+      "documents": 0,
+      "implicitTiles": 1222,
+      "failures": [],
+      "coarse": 46,
+      "fine": 865,
+      "fineLevels": [
+       2,
+       3,
+       4,
+       5
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     },
+     {
+      "name": "point-cloud",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20
+      ],
+      "implicitRoots": 1,
+      "nestedRoots": 1,
+      "documents": 1,
+      "implicitTiles": 44,
+      "failures": [],
+      "coarse": 2,
+      "fine": 36,
+      "fineLevels": [
+       1,
+       19,
+       20
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     }
+    ],
+    "browserErrors": []
+   },
+   {
+    "file": "levels-final-r2.out",
+    "sha256": "2e0a9f3305e84569e9346097865ad7e90757c807e13c2ddead1e7ced63862d64",
+    "cpus": "13,15",
+    "exit": 0,
+    "outputs": [
+     {
+      "name": "mesh",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "implicitRoots": 43,
+      "nestedRoots": 43,
+      "documents": 0,
+      "implicitTiles": 1222,
+      "failures": [],
+      "coarse": 46,
+      "fine": 865,
+      "fineLevels": [
+       2,
+       3,
+       4,
+       5
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     },
+     {
+      "name": "point-cloud",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20
+      ],
+      "implicitRoots": 1,
+      "nestedRoots": 1,
+      "documents": 1,
+      "implicitTiles": 44,
+      "failures": [],
+      "coarse": 2,
+      "fine": 36,
+      "fineLevels": [
+       1,
+       19,
+       20
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     }
+    ],
+    "browserErrors": []
+   },
+   {
+    "file": "levels-final-r3.out",
+    "sha256": "2e0a9f3305e84569e9346097865ad7e90757c807e13c2ddead1e7ced63862d64",
+    "cpus": "13,15",
+    "exit": 0,
+    "outputs": [
+     {
+      "name": "mesh",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "implicitRoots": 43,
+      "nestedRoots": 43,
+      "documents": 0,
+      "implicitTiles": 1222,
+      "failures": [],
+      "coarse": 46,
+      "fine": 865,
+      "fineLevels": [
+       2,
+       3,
+       4,
+       5
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     },
+     {
+      "name": "point-cloud",
+      "levels": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20
+      ],
+      "implicitRoots": 1,
+      "nestedRoots": 1,
+      "documents": 1,
+      "implicitTiles": 44,
+      "failures": [],
+      "coarse": 2,
+      "fine": 36,
+      "fineLevels": [
+       1,
+       19,
+       20
+      ],
+      "fineAllLeaves": true,
+      "picked": true
+     }
+    ],
+    "browserErrors": []
+   }
+  ]
+ }
 }
