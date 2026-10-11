@@ -1635,6 +1635,9 @@ fn inspect_facts(
         if let Some(name) = check.reports["geometryReports"].as_str() {
             check.resources.reference(uri("conversion.json", name)?)?;
         }
+        // The convert-to-implicit producer was removed in 0.4.0. Archives it
+        // already wrote reference their retained original payloads only here,
+        // so validation keeps reading this marker and checking those payloads.
         if check.reports["operation"] == "convert-to-implicit" {
             if let Some(sources) = check.reports["retainedContentUris"].as_array().cloned() {
                 for source in sources {

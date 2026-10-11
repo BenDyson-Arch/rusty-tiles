@@ -6,7 +6,6 @@
 mod archive3tz;
 pub mod bbox;
 mod content_integrity;
-pub mod convert_implicit;
 mod crs;
 pub mod error;
 pub mod fixtures;
@@ -42,9 +41,6 @@ mod tileset_node;
 mod vec3;
 pub mod vector;
 
-pub use convert_implicit::{
-    convert_to_implicit, convert_to_implicit_reported, ConvertToImplicitOptions,
-};
 pub use error::Error;
 pub use georef::{
     parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,

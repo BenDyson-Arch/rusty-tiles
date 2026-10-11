@@ -41,7 +41,7 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. To move an existing explicit archive to implicit tiling, re-run its converter from the original source without `--explicit`; there is no archive-to-archive rewrite command. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
 
 ## Converters
 
@@ -225,25 +225,6 @@ process statuses: `invalid_request` and `unsupported` exit 2, `invalid_input`
 exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or
 `invalid_state` exit 1.
 
-### convert-to-implicit
-
-Rewrites an eligible rusty-tiles explicit point-cloud or vector `.3tz` archive into 3D Tiles 1.1 implicit tiling. Takes `-i/--input`, `-o/--output` and `-f/--force`; both paths must end in `.3tz` and must identify different files.
-
-```sh
-rusty-tiles convert-to-implicit -i explicit.3tz -o implicit.3tz
-rusty-tiles --json convert-to-implicit -i explicit.3tz -o implicit.3tz --force
-```
-
-Eligibility is deliberately narrower than the source converters. Earlier explicit clouds use binary midpoint splits; explicit vectors use binary median splits and may include successive LOD nodes in the same cell. They are not automatically octrees or quadtrees. This command accepts a tree only when every child fits one distinct midpoint cell derived from the root box at its depth. Clouds use octants and vectors use quadrants in local XY. Bounds may exceed a cell only by documented minimum thickness and recorded float32/quantization padding. Same-cell LOD chains, cells crossed by content bounds, non-translation child transforms, request volumes, depths beyond 31, external tileset `schemaUri` declarations, explicit tile metadata, content bounding volumes, foreign provenance, already implicit archives and mesh archives are refused. Meshes remain outside this command's scope even when their current source converter produces octrees. Errors identify the offending eligibility rule and the source command to re-run without `--explicit`.
-
-Older explicit vector archives can contain b3dm payloads whose total byte length is not a multiple of eight. These malformed payloads are refused: repairing their alignment would change the bytes. Re-run `vector` from source without `--explicit`; its implicit emitter supplies valid alignment.
-
-The command verifies the existing 3TZ index, archive paths, content checksums, resource references and bounds. Each original content tile becomes an implicit tileset root that owns its replacement descendants. A bounded subtree routes child cells to standard external tileset roots, preserving each original child translation, content declaration, feature metadata and `extras`, while retaining every original GLB/b3dm payload byte-for-byte. Payload URI aliases and subtree URIs include every required implicit coordinate; aliases remain beside their source payloads so relative resources keep resolving. The report records original retained payload URIs. The shared subtree writer preserves actual padded bounds and geometric errors as semantic metadata. Keeping content and descendants under the same root ensures parent proxies retire during replacement refinement. The additional tileset roots add requests; their layout differs from a fresh implicit source conversion. The archive retains original payload members and adds an unchanged copy for each coordinate-template content slot. This typically doubles payload storage, and can cost more when multiple tiles share one source payload. Conversion never re-partitions content or recomputes source LODs.
-
-The [pinned 3D Tiles 1.1 implicit-root constraints](https://github.com/CesiumGS/3d-tiles/blob/4d781014b52294759834018a931223b98ac1ce47/specification/ImplicitTiling/README.adoc#implicit-root-tile) prohibit actual external content at an implicit root. Here the root's external-link availability is false; actual external links occur only in terminal level-one child cells. Each linked document owns the next content tile and its descendants. Raw subtree tests check these availability constraints and the absence of child-subtree links.
-
-`conversion.json` records the operation, scheme, source tile count, external tileset root count and byte preservation, with the original report under `sourceReport`. The candidate archive is validated before atomic publication. A failure leaves an existing output intact, including with `--force`. Vector build state is preserved as provenance; converted archives are not a compatible `--reuse-tileset` baseline, so re-run from source to establish a new reusable implicit baseline.
-
 ## Checking and viewing
 
 ### validate
@@ -293,7 +274,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | Option | Default | Serves |
 | --- | --- | --- |
 | `--cesium` | required | A Cesium 1.146.0 `Build/Cesium` directory containing `Cesium.js` |
-| `--host` | `127.0.0.1` | Listen address |
+| `--host` | `127.0.0.1` | Listen IP address. Host names are refused, not resolved. |
 | `--port` | `9227` | Listen port. 0 picks a free port. |
 | `--mesh` | none | Extracted mesh directory with `tileset.json` |
 | `--point-cloud` | none | Extracted point-cloud directory with `tileset.json` |
@@ -302,6 +283,19 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | `--terrain` | none | Terrain mesh directory with `tileset.json` |
 
 Select at least one layer.
+
+Preview is read-only. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file inside that directory; otherwise the command exits 3 with `data`. The server answers only `GET` and `HEAD` for `/`, `/config.json` and regular files under a selected layer's route. A path below a route is decoded once; invalid UTF-8 returns 400.
+
+Every platform then applies the same two rules, and any path that fails either returns 404:
+
+- **Lexical rule:** the path consists of non-empty `/`-separated segments. No segment may be `.` or `..` or contain a backslash, `:` or a control character, so a trailing slash or `//` also fails.
+- **Exact-name rule:** each segment must name the stored file or directory exactly. On case-sensitive filesystems a case variant names a different, usually missing, file; where the filesystem folds case or normalizes Unicode and reports stored names, the variant fails the exact-name comparison. A Windows short name or trailing dot, or any symlink below the selected directory, fails, as do directories and unselected layers. A file reached by a variant is always inside the selected directory. The selected directory itself may be a symlink.
+
+On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A request without `Host`, such as a bare HTTP/1.0 request, is refused too. The IPv4-mapped `::ffff:127.0.0.1` counts as loopback. A non-loopback `--host`, such as `0.0.0.0`, is an explicit opt-in to serve every host that can reach it: it accepts any `Host` and prints a warning on stderr.
+
+Imagery uses the TileJSON `bounds`, `minzoom` and `maxzoom`. The rectangle is inset by 1/1024 of a finest-zoom pixel in longitude (under 1/88 of a pixel in latitude) to work around Cesium 1.146, which stops rendering on tile-aligned bounds.
+
+`--json` prints one startup object, `{"ok":true,"url":…,"layers":{…},"loopback":true}`, after the listener is bound. The server runs until it is signalled (for example, SIGTERM or Ctrl-C). It writes nothing, so stopping it needs no cleanup. See the [T1 tooling contract](architecture/t1-tooling-contract.md).
 
 ### doctor
 
@@ -312,9 +306,23 @@ rusty-tiles doctor --command vector --command terrain
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--command` | all | Check only these commands. Repeat to select several. Aliases are accepted. |
-| `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium` | Where to look for a Cesium runtime. This check is informational only. |
+| `--cesium DIR` | `target/preview-runtime/node_modules/cesium/Build/Cesium`, relative to the working directory | Where to look for a Cesium runtime. This check is informational only. |
 
-`doctor` reports linked GDAL, PROJ and GEOS versions when enabled. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Default-build vector readiness lists GeoJSON/GeoPackage readers, Rust geometry support and grid-free CRS limits independently of native dependencies. Native vector readiness retains GDAL/GEOS/PROJ checks. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
+Each selected command has a `status`:
+
+- `ready`: the command can run in this build.
+- `unavailable`: the build includes the capability, but a runtime dependency failed. Examples are the GDAL or PROJ version, the PROJ database, a GDAL driver and GEOS. The `reason` names the failure.
+- `unsupported`: this build does not include the capability. For example, the standard CLI does not include `raster`, `terrain` or `raster-tile-to-directory`; rebuild with `--features native-geospatial`.
+
+`ready` is `true` exactly when `status` is `ready`. Each command that is not ready has a `refusal` with the `code` and `exitCode` that the command itself returns for the same cause; readiness uses the command's own capability check where it has one. The first such command in name order sets the `error.code` and exit status of `doctor`. All are currently `unsupported` and exit 2.
+
+One known exception: with no GTiff driver, `terrain` and `raster-tile-to-directory` fail to open their source and report `invalid_input` (exit 3), while `doctor` reports `unsupported`. The JSON result keeps the full inventory alongside `error` and `exitCode`.
+
+Terrain and `raster-tile-to-directory` require the GDAL GTiff driver. `raster` requires GTiff and COG, and these three also need the PROJ database for their source CRS. Native vector needs GDAL with GEOS and its drivers but no PROJ database; each source's CRS operation is checked during conversion.
+
+`probes` names every check that ran. In a native-geospatial build, the version, PROJ offline-policy and PROJ database checks always run. Configured PROJ directories (`PROJ_DATA`, `PROJ_LIB` and, natively, GDAL's search paths) are always listed. GDAL driver, GEOS and Cesium checks run only for the commands that need them. PROJ directory listings are top-level only and capped at 4096 entries per directory. `doctor` starts no processes, keeps PROJ networking off and writes no files.
+
+`doctor` reports linked GDAL, PROJ and GEOS versions when enabled. It also reports readiness for the selected commands, the PROJ search paths and the local grid count. Point-cloud readiness lists the pure-Rust CRS classes and native fallback readiness; grid-free placement needs no PROJ database. Default-build vector readiness lists GeoJSON/GeoPackage readers, Rust geometry support and grid-free CRS limits independently of native dependencies. Native vector readiness uses the vector converter's own GDAL/GEOS driver check. `--command` limits the command inventory in both human and JSON output. Without a filter it lists every command. It never installs anything or fetches grids. A listed grid does not prove a height operation is available. Conversion checks the exact operation offline.
 
 ## Exit codes
 

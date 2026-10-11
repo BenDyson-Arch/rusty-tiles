@@ -1669,9 +1669,11 @@ pub(super) fn produce(
         }
     }
 }
+/// Driver inventory for doctor. Registration goes through the shared,
+/// once-guarded `init` that execution uses, never a second GDALAllRegister.
 pub(super) fn capabilities() -> Result<RasterCapabilities, JobError> {
     let _quiet = QuietErrors::new();
-    unsafe { gdal_sys::GDALAllRegister() };
+    init()?;
     let has = |n: &CStr| unsafe { !gdal_sys::GDALGetDriverByName(n.as_ptr()).is_null() };
     Ok(RasterCapabilities {
         native_version: version()?,
@@ -2015,11 +2017,14 @@ fn check_standalone(ds: &Dataset, expected: &Path) -> Result<(), JobError> {
 }
 
 pub(super) fn require_outputs() -> Result<(), JobFailure> {
+    output_drivers().map_err(failure)
+}
+
+/// The output-driver admission shared by execution and doctor readiness.
+pub(super) fn output_drivers() -> Result<(), JobError> {
     for name in [c"GTiff", c"COG"] {
         if unsafe { gdal_sys::GDALGetDriverByName(name.as_ptr()) }.is_null() {
-            return Err(failure(unsupported(
-                "requested raster output driver unavailable",
-            )));
+            return Err(unsupported("requested raster output driver unavailable"));
         }
     }
     Ok(())

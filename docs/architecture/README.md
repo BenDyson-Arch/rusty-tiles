@@ -78,8 +78,8 @@ remain proposals wherever the concrete scope has not adopted them.
 - [F1d1 implementation and remaining approximation gates](f1d1-implementation.md)
 - [F1d1 independent artifact and consumer evidence](../../bench/architecture_audit/mesh_approximation/README.md)
 
-- [Next #126 implicit rewrite contract draft](implicit-rewrite-contract.md)
-- [Implicit rewrite baseline probes and proof limits](../../bench/architecture_audit/implicit_rewrite/README.md)
+- [Implicit rewrite contract draft, retired 2026-10-11](implicit-rewrite-contract.md)
+- [Implicit rewrite baseline probes and proof limits (historical)](../../bench/architecture_audit/implicit_rewrite/README.md)
 - [Lossless F1c2 evidence storage and verification](../../bench/architecture_audit/f1c2/README.md)
 - [F1c2/W1 implementation and remaining removal gates](f1c2-implementation.md)
 - [F1c2/W1 evidence](f1c2-evidence.md)

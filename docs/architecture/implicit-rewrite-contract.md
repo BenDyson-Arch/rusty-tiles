@@ -1,6 +1,7 @@
 # A2: explicit archive to implicit rewrite proposal
 
-Status: draft, unproved; this document authorizes no implementation retention,
+Status: retired 2026-10-11; see [Disposition](#disposition-2026-10-11). The
+draft below is historical: unproved, it authorizes no implementation retention,
 acceptance, legacy removal or release. It is the next operation audit under
 [#126](https://github.com/BenDyson-Arch/rusty-tiles/issues/126), after the wrapping
 and package facade slices. Source inspected:
@@ -10,6 +11,42 @@ and package facade slices. Source inspected:
 records concrete source observations. Separate [baseline probes](../../bench/architecture_audit/implicit_rewrite/README.md)
 exercise one current vector fixture and sensitive controls; they do not accept
 the replacement or prove this draft's broader semantic domain.
+
+## Disposition (2026-10-11)
+
+**Retired for 0.4.0 by user decision.** The production replacement stopped at
+the terminal external-template gate described below: in the selected design, an
+unavailable root slot of a terminal external template would name JSON, and the
+pinned 3D Tiles 1.1 text prohibits external tileset content at an implicit root.
+Neither a justified finite interpretation nor independent format acceptance was
+established, and the user chose not to pursue one. The point-cloud, vector and
+mesh producers already emit implicit tiling by default, so users re-run them
+from source instead of rewriting archives.
+
+The legacy operation was removed rather than migrated: the `convert-to-implicit`
+CLI subcommand, `convert_implicit::{ConvertToImplicitOptions,
+convert_to_implicit, convert_to_implicit_reported}` with their root exports, the
+Python `convert_to_implicit` function, its Rust and browser tests, and the
+fixture/preview helpers. The last source containing them is `develop`
+`f2ed077`. No wrapper or fallback remains. `validate` still recognizes the
+`conversion.json` `retainedContentUris` markers of archives written by earlier
+runs, so those existing archives can still be inspected. Shared subtree,
+metadata and archive utilities keep their producer owners.
+
+Everything below is retained as the audit history. Reviving the operation
+requires a new typed operation, not restoring the legacy code, and needs:
+
+1. Settlement of the terminal external-template gate. Either justify the
+   finite interpretation of unavailable root slots that name JSON, with
+   independent format acceptance and proof that actual consumers select the
+   right content, or choose a representation that avoids such templates. A
+   partial-implicit product is a separate product decision, not a fallback.
+2. The remaining gates recorded below: imported semantic metadata and extras
+   dispositions, captured-source lifecycle and measured Rust resource limits
+   within one F0 run, C1 acceptance of the new inventory roles,
+   Rust/CLI/installed-wheel parity, viewer coarse/fine ownership and picking
+   evidence, and a separate nonauthor review.
+3. A user decision to reintroduce the archive-rewrite use case.
 
 ### Current A2 settlement checkpoint — 2026-10-10
 
@@ -292,6 +329,10 @@ viewer coarse/fine ownership/picking. Bind receipts to exact final source and
 artifact identities. A separate nonauthor review remains required.
 
 ## Removal gates and remaining #126 sequence
+
+Superseded on 2026-10-11: the legacy operation was removed without a
+replacement; see [Disposition](#disposition-2026-10-11). The original gates
+follow unchanged.
 
 Replace the current convert_implicit lifecycle and JSON tree mutation together;
 do not layer the new facade over the old semantic transformation. Delete the old
