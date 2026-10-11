@@ -548,3 +548,464 @@ fn rank(table: &[u32], bytes: Option<&[u8]>, i: u64) -> u64 {
     }
     rank
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::*;
+    use super::super::{admit_root, Resolver, VisitedTile};
+    use super::{FormatError, RANK_ALLOCATIONS, SCAN_LIMIT, SOURCE_PASSES};
+    use serde_json::{json, Value};
+
+    const ROOT: &str = "s/0/0/0.subtree";
+
+    fn quad(levels: u32, available: u32, contents: &[&str]) -> Value {
+        root_tile("QUADTREE", levels, available, contents)
+    }
+    fn run(tile: &Value, members: Vec<(String, Vec<u8>)>) -> Result<Vec<VisitedTile>, FormatError> {
+        let mut archive = Archive::default();
+        archive.members.extend(members);
+        format(walk(tile, &mut archive))
+    }
+    fn root_only(tile: &Value, sub: Sub) -> Result<Vec<VisitedTile>, FormatError> {
+        run(tile, vec![(ROOT.into(), sub.build())])
+    }
+    /// QUADTREE `L = 2`: T = 5, C = 16.
+    fn l2() -> Value {
+        quad(2, 2, &[])
+    }
+    fn leaf(tile: Av) -> Sub {
+        Sub::new().tile(tile).child(Av::Const(0))
+    }
+
+    #[test]
+    fn encoding_rules() {
+        assert_eq!(root_only(&l2(), leaf(Av::Const(1))).unwrap().len(), 5);
+        let set = |key: &str, value: Value| root_only(&l2(), leaf(Av::Const(1)).set(key, value));
+        assert_invalid(
+            set("tileAvailability", json!({"constant": 1, "bitstream": 0})),
+            "exactly one of bitstream and constant",
+        );
+        assert_invalid(set("tileAvailability", json!({})), "exactly one");
+        assert_invalid(
+            set("childSubtreeAvailability", json!({"constant": 2})),
+            "0 or 1",
+        );
+        assert_invalid(
+            set("tileAvailability", json!({"constant": 0})),
+            "constant 0",
+        );
+        assert_invalid(set("tileAvailability", json!(1)), "must be an object");
+        assert_invalid(
+            set("tileAvailability", json!({"bitstream": 3})),
+            "names no bufferView",
+        );
+        // Bitstream length is exactly ceil(bits/8): T = 5 needs 1 byte.
+        assert_invalid(
+            root_only(&l2(), leaf(Av::Bits(vec![1, 0]))),
+            "byteLength must be ceil(5/8)",
+        );
+        // A-5: trailing bits beyond T.
+        assert_invalid(
+            root_only(&l2(), leaf(Av::Bits(vec![0b0010_0001]))),
+            "nonzero trailing availability bits",
+        );
+        // A-4: availableCount against the memoized popcount.
+        let counted = |count: u64| {
+            let mut sub = leaf(Av::Bits(bits(5, &[0, 1])));
+            sub.json["tileAvailability"]["availableCount"] = json!(count);
+            root_only(&l2(), sub)
+        };
+        assert!(counted(2).is_ok());
+        assert_invalid(counted(1), "availableCount");
+        assert_invalid(counted(3), "availableCount");
+        let constant = |count: u64| {
+            set(
+                "tileAvailability",
+                json!({"constant": 1, "availableCount": count}),
+            )
+        };
+        assert!(constant(5).is_ok());
+        assert_invalid(constant(4), "availableCount");
+        let child = |count: u64| {
+            root_only(
+                &quad(2, 2, &[]),
+                leaf(Av::Const(1)).set(
+                    "childSubtreeAvailability",
+                    json!({"constant": 0, "availableCount": count}),
+                ),
+            )
+        };
+        assert!(child(0).is_ok());
+        assert_invalid(child(1), "availableCount");
+    }
+
+    #[test]
+    fn root_bit_parent_rule_and_lsb_order() {
+        // A-3: bit 2 is level 1, Morton 1: x = 1, y = 0 (LSB-first).
+        let tiles = root_only(&l2(), leaf(Av::Bits(vec![0b0000_0101]))).unwrap();
+        assert_eq!(coords(&tiles), vec![(0, 0, 0, 0), (1, 1, 0, 0)]);
+        // Read MSB-first, the same byte would set bits 5 and 7 (beyond T).
+        assert_invalid(
+            root_only(&l2(), leaf(Av::Bits(vec![0b1010_0000]))),
+            "trailing",
+        );
+        assert_invalid(
+            root_only(&l2(), leaf(Av::Bits(bits(5, &[1])))),
+            "root tile of the subtree is unavailable",
+        );
+        // A-1: L = 3; bit 9 is level 2, Morton 4, whose parent is bit 2.
+        let three = quad(3, 3, &[]);
+        assert_eq!(
+            root_only(&three, leaf(Av::Bits(bits(21, &[0, 2, 9]))))
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_invalid(
+            root_only(&three, leaf(Av::Bits(bits(21, &[0, 1, 9])))),
+            "tile has an unavailable parent",
+        );
+    }
+
+    #[test]
+    fn levels_rule() {
+        // A View tile source: nothing available at global level ≥ A.
+        assert_invalid(
+            root_only(&quad(2, 1, &[]), leaf(Av::Bits(bits(5, &[0, 1])))),
+            "beyond availableLevels",
+        );
+        assert_eq!(
+            root_only(&quad(2, 1, &[]), leaf(Av::Bits(bits(5, &[0]))))
+                .unwrap()
+                .len(),
+            1
+        );
+        // Const1 in closed form: InvalidInput iff g + L − 1 ≥ A.
+        assert_invalid(
+            root_only(&quad(2, 1, &[]), leaf(Av::Const(1))),
+            "beyond availableLevels",
+        );
+        assert!(root_only(&quad(2, 2, &[]), leaf(Av::Const(1))).is_ok());
+        // A-8: a set child bit with g + L ≥ A.
+        let child = Sub::new()
+            .tile(Av::Const(1))
+            .child(Av::Bits(bits(16, &[0])));
+        assert_invalid(
+            root_only(&quad(2, 2, &[]), child.clone()),
+            "child subtree beyond",
+        );
+        let members = vec![
+            (ROOT.to_owned(), child.build()),
+            (
+                "s/2/0/0.subtree".to_owned(),
+                leaf(Av::Bits(bits(5, &[0]))).build(),
+            ),
+        ];
+        assert_eq!(run(&quad(2, 3, &[]), members).unwrap().len(), 6);
+    }
+
+    #[test]
+    fn content_layers_and_content_implies_tile() {
+        let one = quad(2, 2, &["c/{level}/{x}/{y}.glb"]);
+        let tile = || bits(5, &[0, 1]);
+        let sub = |layers: &[Av]| leaf(Av::Bits(tile())).content(layers);
+        let ok = root_only(&one, sub(&[Av::Bits(bits(5, &[1]))])).unwrap();
+        assert_eq!(ok[1].contents, vec![(0, "c/1/0/0.glb".to_owned())]);
+        // A-6.
+        assert_invalid(
+            root_only(&one, sub(&[Av::Bits(bits(5, &[2]))])),
+            "content belongs to an unavailable tile",
+        );
+        // Const1 content needs every tile.
+        assert_invalid(root_only(&one, sub(&[Av::Const(1)])), "unavailable tile");
+        assert_eq!(
+            root_only(&one, leaf(Av::Const(1)).content(&[Av::Const(1)]))
+                .unwrap()
+                .iter()
+                .filter(|t| t.contents.len() == 1)
+                .count(),
+            5
+        );
+        // A content layer aliasing the tile view is the same source.
+        let mut aliased = leaf(Av::Bits(tile()));
+        aliased = aliased.content(&[Av::View(0)]);
+        let tiles = root_only(&one, aliased).unwrap();
+        assert!(tiles.iter().all(|t| t.contents.len() == 1));
+        // Layer count equals the template count; absent without templates.
+        assert_invalid(
+            root_only(&one, leaf(Av::Const(1))),
+            "count differs from templates",
+        );
+        assert_invalid(
+            root_only(&one, sub(&[Av::Const(0), Av::Const(0)])),
+            "count differs from templates",
+        );
+        assert_invalid(
+            root_only(&l2(), leaf(Av::Const(1)).content(&[Av::Const(0)])),
+            "count differs from templates",
+        );
+    }
+
+    #[test]
+    fn child_implies_tile() {
+        // A-7: child Morton 4 sits under level-1 Morton 1 (bit 2), unavailable.
+        let sub = Sub::new()
+            .tile(Av::Bits(bits(5, &[0, 1])))
+            .child(Av::Bits(bits(16, &[4])));
+        assert_invalid(
+            root_only(&quad(2, 3, &[]), sub),
+            "child subtree has an unavailable parent",
+        );
+        // A-14: Const1 child availability with level L−1 incomplete, decided
+        // with no child read; complete, every child subtree is read lazily.
+        let sub = Sub::new()
+            .tile(Av::Bits(bits(5, &[0, 1, 2, 3])))
+            .child(Av::Const(1));
+        assert_invalid(
+            root_only(&quad(2, 3, &[]), sub),
+            "child subtree has an unavailable parent",
+        );
+        let mut members = vec![(
+            ROOT.to_owned(),
+            Sub::new()
+                .tile(Av::Bits(bits(5, &[0, 1, 2, 3, 4])))
+                .child(Av::Const(1))
+                .build(),
+        )];
+        for x in 0..4 {
+            for y in 0..4 {
+                members.push((
+                    format!("s/2/{x}/{y}.subtree"),
+                    leaf(Av::Bits(bits(5, &[0]))).build(),
+                ));
+            }
+        }
+        assert_eq!(run(&quad(2, 3, &[]), members).unwrap().len(), 5 + 16);
+    }
+
+    #[test]
+    fn scan_is_charged_once_per_distinct_source_before_any_pass() {
+        // R7 at small scale: K = 50 content layers alias one all-zero view.
+        let k = 50;
+        let templates: Vec<String> = (0..k)
+            .map(|i| format!("c{i}/{{level}}/{{x}}/{{y}}.glb"))
+            .collect();
+        let templates: Vec<&str> = templates.iter().map(String::as_str).collect();
+        let tile = quad(2, 2, &templates);
+        let mut sub = leaf(Av::Bits(bits(5, &[0, 1])));
+        let zero = sub.view(&[0]);
+        let layers = vec![Av::View(zero); k];
+        let member = sub.clone().content(&layers).build();
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let attempt = |scan: u64| {
+            let mut limits = limits();
+            limits.scan_remaining = member.len() as u64 + scan;
+            SOURCE_PASSES.with(|n| n.set(0));
+            let mut archive = Archive::default().with(ROOT, member.clone());
+            let result = format(walk_with(&root, &mut archive, &mut limits));
+            (
+                result,
+                SOURCE_PASSES.with(|n| n.get()),
+                limits.scan_remaining,
+            )
+        };
+        // Scan = |tile| + |zero| = 2: one pass per distinct source.
+        let (result, passes, remaining) = attempt(2);
+        assert_invalid(result, "no tile has available content");
+        assert_eq!((passes, remaining), (2, 0));
+        let (result, passes, _) = attempt(1);
+        assert_limit(result, SCAN_LIMIT);
+        assert_eq!(passes, 0);
+        // R7a: one more layer with the root bit set is admitted.
+        let mut templates = templates.clone();
+        templates.push("last/{level}/{x}/{y}.glb");
+        let mut layers = layers.clone();
+        layers.push(Av::Bits(bits(5, &[0])));
+        let tiles = root_only(&quad(2, 2, &templates), sub.content(&layers)).unwrap();
+        assert_eq!(
+            tiles[0].contents,
+            vec![(k as u16, "last/0/0/0.glb".to_owned())]
+        );
+        assert!(tiles[1].contents.is_empty());
+    }
+
+    #[test]
+    fn distinct_views_are_distinct_sources() {
+        // R7b at small scale: four views with identical spans are four sources,
+        // charged in full before any bit pass. One carries a trailing-bit defect.
+        let templates = [
+            "a/{level}/{x}/{y}.glb",
+            "b/{level}/{x}/{y}.glb",
+            "c/{level}/{x}/{y}.glb",
+        ];
+        let tile = quad(2, 2, &templates);
+        let mut sub = leaf(Av::Bits(bits(5, &[0])));
+        sub.bin.extend([0; 7]);
+        sub.bin.extend([1, 0, 0, 0, 0, 0, 0, 0x80]);
+        let view = json!({"buffer": 0, "byteOffset": 8, "byteLength": 1});
+        let mut views = sub.views.clone();
+        views.extend([view.clone(), view.clone(), view]);
+        let member = sub
+            .set("bufferViews", Value::Array(views))
+            .set("buffers", json!([{"byteLength": 16}]))
+            .set(
+                "contentAvailability",
+                json!([{"bitstream": 1}, {"bitstream": 2}, {"bitstream": 3}]),
+            )
+            .build();
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let attempt = |scan: u64| {
+            let mut limits = limits();
+            limits.scan_remaining = member.len() as u64 + scan;
+            let mut archive = Archive::default().with(ROOT, member.clone());
+            format(walk_with(&root, &mut archive, &mut limits))
+        };
+        assert_limit(attempt(3), SCAN_LIMIT);
+        assert!(attempt(4).is_ok());
+        // With the trailing defect in the second byte of the views' span.
+        let mut bad = member.clone();
+        let at = bad.len() - 16 + 8;
+        bad[at] = 0b0010_0001;
+        let mut limits = limits();
+        limits.scan_remaining = bad.len() as u64 + 3;
+        let mut archive = Archive::default().with(ROOT, bad.clone());
+        assert_limit(
+            format(walk_with(&root, &mut archive, &mut limits)),
+            SCAN_LIMIT,
+        );
+        let mut archive = Archive::default().with(ROOT, bad);
+        assert_invalid(
+            format(walk_with(
+                &root,
+                &mut archive,
+                &mut super::super::test_support::limits(),
+            )),
+            "trailing",
+        );
+    }
+
+    #[test]
+    fn visit_reservation_precedes_rank_table_and_tables() {
+        // R5b / R1b: popcount 3 against 2 remaining visits, with a later
+        // step-12 defect (a tileMetadata index naming no table).
+        let member = leaf(Av::Bits(bits(5, &[0, 1, 2])))
+            .set("tileMetadata", json!(7))
+            .build();
+        let root = admit_root(&l2(), "tileset.json", None).unwrap();
+        let attempt = |visits: u64| {
+            let mut limits = limits();
+            limits.visits_remaining = visits;
+            RANK_ALLOCATIONS.with(|n| n.set(0));
+            let mut archive = Archive::default().with(ROOT, member.clone());
+            let result = format(walk_with(&root, &mut archive, &mut limits));
+            (
+                result,
+                RANK_ALLOCATIONS.with(|n| n.get()),
+                limits.visits_remaining,
+            )
+        };
+        let (result, allocations, _) = attempt(2);
+        assert_limit(result, "exceeds remaining hierarchy visits");
+        assert_eq!(allocations, 0);
+        let (result, allocations, remaining) = attempt(3);
+        assert_invalid(result, "tileMetadata names no property table");
+        assert_eq!((allocations, remaining), (1, 0));
+        // R3 at no cost: a Const1 OCTREE L = 8 source is never materialized.
+        let octree = root_tile("OCTREE", 8, 8, &[]);
+        let mut archive = Archive::default().with("s/0/0/0/0.subtree", leaf(Av::Const(1)).build());
+        RANK_ALLOCATIONS.with(|n| n.set(0));
+        assert_limit(format(walk(&octree, &mut archive)), "hierarchy visits");
+        assert_eq!(RANK_ALLOCATIONS.with(|n| n.get()), 0);
+    }
+
+    #[test]
+    fn content_entries_are_reserved_at_admission() {
+        // R9 at small scale: L = 1, A = 2, three Const1 slots: E = 3 per subtree.
+        let templates = [
+            "a/{level}/{x}/{y}.glb",
+            "b/{level}/{x}/{y}.glb",
+            "a/{level}/{x}/{y}.glb",
+        ];
+        let tile = quad(1, 2, &templates);
+        let three = [Av::Const(1), Av::Const(1), Av::Const(1)];
+        let mut archive = Archive::default().with(
+            ROOT,
+            Sub::new()
+                .tile(Av::Const(1))
+                .child(Av::Const(1))
+                .content(&three)
+                .build(),
+        );
+        for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            archive.members.insert(
+                format!("s/1/{x}/{y}.subtree"),
+                leaf(Av::Const(1)).content(&three).build(),
+            );
+        }
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        // Five reads and 5 × 3 reserved entries: exactly 20 references.
+        let mut limits = limits();
+        limits.refs_remaining = 20;
+        let tiles = walk_with(&root, &mut archive, &mut limits).unwrap();
+        assert_eq!(tiles.iter().map(|t| t.contents.len()).sum::<usize>(), 15);
+        assert_eq!(limits.refs_remaining, 0);
+        // Reserved at once: after the first tile, 1 read + E = 3 are charged.
+        let mut limits = super::super::test_support::limits();
+        limits.refs_remaining = 7;
+        let mut walk = root.walk();
+        let read: &mut Resolver<'_, String> = &mut |n, b, m| archive.read(n, b, m);
+        let first = walk.next(&mut limits, read).unwrap().unwrap();
+        assert_eq!(first.contents.len(), 3);
+        assert_eq!(limits.refs_remaining, 3);
+        // The first child subtree's step 10 refuses before its index exists.
+        let error = walk.next(&mut limits, read).unwrap_err();
+        assert_limit(format::<()>(Err(error)), "exceed remaining references");
+    }
+
+    #[test]
+    fn content_index_is_slot_ordered_and_alias_invariant() {
+        // A-13: aliased layers give the same facts as the unaliased form.
+        let templates = [
+            "a/{level}/{x}/{y}",
+            "b/{level}/{x}/{y}",
+            "c/{level}/{x}/{y}",
+            "d/{level}/{x}/{y}",
+            "e/{level}/{x}/{y}",
+        ];
+        let tile = quad(2, 2, &templates);
+        let shared = bits(5, &[0, 2, 4]);
+        let mut aliased = leaf(Av::Const(1));
+        let v = aliased.view(&shared);
+        let aliased = aliased.content(&[
+            Av::View(v),
+            Av::View(v),
+            Av::Const(1),
+            Av::Const(0),
+            Av::View(v),
+        ]);
+        let plain = leaf(Av::Const(1)).content(&[
+            Av::Bits(shared.clone()),
+            Av::Bits(shared.clone()),
+            Av::Const(1),
+            Av::Const(0),
+            Av::Bits(shared),
+        ]);
+        let a = root_only(&tile, aliased).unwrap();
+        assert_eq!(a, root_only(&tile, plain).unwrap());
+        let slots: Vec<Vec<u16>> = a
+            .iter()
+            .map(|t| t.contents.iter().map(|c| c.0).collect())
+            .collect();
+        assert_eq!(
+            slots,
+            vec![
+                vec![0, 1, 2, 4],
+                vec![2],
+                vec![0, 1, 2, 4],
+                vec![2],
+                vec![0, 1, 2, 4]
+            ]
+        );
+        assert_eq!(a[1].contents[0].1, "c/1/0/0");
+    }
+}
