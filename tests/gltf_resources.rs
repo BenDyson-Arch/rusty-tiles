@@ -384,13 +384,13 @@ fn implicit_resource_collisions_missing_schemas_and_escapes_preserve_prior_outpu
         (doc, "escape"),
     ] {
         doc["buffers"][0]["uri"] = json!(if name == "collision" {
-            "0-0-0-0-0.gltf"
+            "r0-0-0-0-0-0.gltf"
         } else {
             "model.bin"
         });
         fs::write(
             work.path().join(if name == "collision" {
-                "0-0-0-0-0.gltf"
+                "r0-0-0-0-0-0.gltf"
             } else {
                 "model.bin"
             }),
