@@ -1,39 +1,30 @@
 {
- "base": "387a7bb (each patch is a git diff against it)",
- "harness": "acceptance/oracle_parity.rs (I1_ONLY, panic guard)",
- "build": "release lib-test binary, --locked, CARGO_BUILD_JOBS=2; run on CPUs 0,1 at nice 10",
- "unitFilter": [
-  "content_integrity::implicit",
-  "validate::tests::i1_"
- ],
+ "base": "387a7bb",
+ "rules": {
+  "fiveSecondBound": [
+   "R7",
+   "R7a",
+   "R7b",
+   "R7c",
+   "R8"
+  ],
+  "R8a": "<= 2x R8a.nopad and <= 60 s",
+  "probes": {
+   "R5b": "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables"
+  }
+ },
  "clean": {
-  "parity": {
-   "controlsFlipped": [],
-   "corpusFlipped": [],
-   "unitFailed": []
-  },
-  "timed": {
-   "R7": [
-    {
-     "id": "R7",
-     "kind": "InvalidInput",
-     "wall": 0.163347967
-    }
-   ],
-   "R7c": [
-    {
-     "id": "R7c",
-     "kind": "Accepted",
-     "wall": 0.418090793
-    }
-   ],
-   "R8a": [
-    {
-     "id": "R8a",
-     "kind": "Accepted",
-     "wall": 0.694858169
-    }
-   ]
+  "controls": [],
+  "corpus": [],
+  "unitFailed": [],
+  "timedWalls": {
+   "R7": 0.218039505,
+   "R7a": 0.219246889,
+   "R7b": 0.059864114,
+   "R7c": 0.613278976,
+   "R8": 0.167925694,
+   "R8a": 1.131738539,
+   "R8a.nopad": 0.969669783
   }
  },
  "mutants": [
@@ -42,66 +33,65 @@
    "patchSha256": "b5095032b1a46c5ff1266deadc489553560d2a2fdcda9f4ef9a87eeef1a55674",
    "paired": "A-3",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "BQ",
-    "BO",
-    "A-2",
-    "A-9.32",
-    "A-11.base",
     "A-11",
+    "A-11.base",
     "A-12c.base",
     "A-12d",
-    "A-13.base",
     "A-13",
+    "A-13.base",
+    "A-2",
+    "A-9.32",
     "B-1",
+    "B-10.l1",
+    "B-10.normal",
+    "B-10.root",
+    "B-10.subnormal",
+    "B-12",
+    "B-12b",
     "B-2",
     "B-3",
     "B-4",
     "B-4e",
     "B-6",
     "B-7",
+    "B-7o",
     "B-7t",
-    "B-10.subnormal",
-    "B-10.normal",
-    "B-10.root",
-    "B-10.l1",
-    "B-12",
-    "B-12b",
+    "BO",
+    "BQ",
+    "C-11",
+    "C-11b",
+    "C-12",
+    "C-12.base",
+    "C-12b.group.base",
+    "C-12b.uri.base",
+    "C-13",
+    "C-13.base",
+    "C-15",
     "C-4.base",
     "C-5.base",
     "C-6.base",
     "C-7b.base",
     "C-7c.base",
-    "C-7d.base",
     "C-7d",
+    "C-7d.base",
     "C-7e",
     "C-8",
-    "C-11",
-    "C-12.base",
-    "C-12",
-    "C-13.base",
-    "C-13",
-    "C-12b.uri.base",
-    "C-12b.group.base",
-    "C-15",
-    "C-11b",
-    "B-7o",
+    "D-11b",
     "D-6",
     "D-7",
     "D-7b",
     "D-8",
-    "D-11b",
     "R1b",
+    "R2",
+    "R2-1",
+    "R2b.cum-1",
+    "R2b.mid",
     "R4",
     "R4-1",
     "R5",
-    "R2",
-    "R2-1",
-    "R2b.mid",
-    "R2b.cum-1",
+    "R5b (probe)",
     "R6",
     "R7a",
     "W9'.octree-n0",
@@ -145,8 +135,11 @@
     "W10.portable.W5.quantize",
     "W10.portable.W5.meshopt"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [
+    "R5b"
+   ],
    "pairedFlipped": [],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::child_implies_tile",
     "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile",
@@ -184,74 +177,72 @@
    "patchSha256": "560794333c55aaeed667236227fbb4c5c387f605c6cf817d05d453b55adeb548",
    "paired": "B-1, W1",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "BQ",
-    "BO",
+    "A-11",
+    "A-11.base",
+    "A-12c.base",
+    "A-13",
+    "A-13.base",
     "A-2",
     "A-9.32",
-    "A-11.base",
-    "A-11",
-    "A-12c.base",
-    "A-13.base",
-    "A-13",
     "B-1",
+    "B-10.l1",
+    "B-10.normal",
+    "B-10.root",
+    "B-10.subnormal",
+    "B-12",
+    "B-12b",
     "B-2",
     "B-3",
     "B-4",
     "B-4e",
     "B-6",
-    "B-10.subnormal",
-    "B-10.normal",
-    "B-10.root",
-    "B-10.l1",
-    "B-12",
-    "B-12b",
+    "BO",
+    "BQ",
+    "C-11",
+    "C-11b",
+    "C-12.base",
+    "C-12b.group.base",
+    "C-12b.uri.base",
+    "C-13.base",
+    "C-15",
     "C-4.base",
     "C-5.base",
     "C-6.base",
     "C-7b.base",
     "C-7c.base",
-    "C-7d.base",
     "C-7d",
+    "C-7d.base",
     "C-7e",
     "C-8",
-    "C-11",
-    "C-12.base",
-    "C-13.base",
-    "C-12b.uri.base",
-    "C-12b.group.base",
-    "C-15",
-    "C-11b",
+    "D-11b",
     "D-6",
     "D-7",
     "D-7b",
     "D-8",
-    "D-11b",
     "D-9.base",
-    "T-0",
-    "T-1a",
-    "T-1b",
-    "T-2a",
-    "T-2b",
-    "T-3.base",
     "R1b",
+    "R2",
+    "R2-1",
+    "R2b.cum-1",
+    "R2b.mid",
     "R4",
     "R4-1",
     "R5",
-    "R8b.1024",
-    "R2",
-    "R2-1",
-    "R2b.mid",
-    "R2b.cum-1",
     "R6",
     "R7",
     "R7a",
     "R7c",
     "R8a",
     "R8a.nopad",
+    "R8b.1024",
+    "T-0",
+    "T-1a",
+    "T-1b",
+    "T-2a",
+    "T-2b",
+    "T-3.base",
     "W9'.octree-n0",
     "W9'.octree-n0.f32",
     "W9'.octree-n1",
@@ -307,11 +298,12 @@
     "W10.portable.W5.quantize",
     "W10.portable.W5.meshopt"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-1",
     "W1"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::child_implies_tile",
     "content_integrity::implicit::availability::tests::content_entries_are_reserved_at_admission",
@@ -356,13 +348,12 @@
    "patchSha256": "011f59cf2672767eea75ed01fbc181684d0a92980f9d7840d624c84615bdd466",
    "paired": "A-6",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [],
-   "parityDetects": false,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile"
    ],
@@ -373,17 +364,16 @@
    "patchSha256": "88c7a5d2f6d035f7d60551a75faa2e5fc507108950c8bca92b94ac76d6050ed3",
    "paired": "A-7",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-7"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "A-7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::child_implies_tile"
    ],
@@ -394,18 +384,17 @@
    "patchSha256": "c8bc8b354fe6acbc3aa42d2f58519ef6511ca05018f9d2acf6820ac3f7ea91eb",
    "paired": "A-4",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-4+1",
     "A-4-1"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "A-4"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::encoding_rules"
    ],
@@ -416,59 +405,57 @@
    "patchSha256": "de5d21357617c2b51198c81a7e1d123db92cc5cc2e54978b1f302918d11a4fab",
    "paired": "B-3",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "BQ",
-    "BO",
+    "A-11.base",
+    "A-13",
+    "A-13.base",
     "A-2",
     "A-9.32",
-    "A-11.base",
-    "A-13.base",
-    "A-13",
     "B-1",
+    "B-10.normal",
+    "B-10.root",
+    "B-11",
+    "B-12",
+    "B-12b",
     "B-2",
     "B-3",
     "B-4",
     "B-4e",
     "B-6",
     "B-7",
+    "B-7o",
     "B-7t",
-    "B-9.neg",
     "B-9.nan",
-    "B-10.normal",
-    "B-10.root",
-    "B-12",
-    "B-11",
-    "B-12b",
+    "B-9.neg",
+    "BO",
+    "BQ",
+    "C-11",
+    "C-12.base",
+    "C-12b.group.base",
+    "C-12b.uri.base",
+    "C-13.base",
+    "C-15",
     "C-4.base",
     "C-5.base",
     "C-6.base",
     "C-7b.base",
     "C-7c.base",
-    "C-7d.base",
     "C-7d",
+    "C-7d.base",
     "C-7e",
     "C-8",
-    "C-11",
-    "C-12.base",
-    "C-13.base",
-    "C-12b.uri.base",
-    "C-12b.group.base",
-    "C-15",
-    "B-7o",
+    "D-11b",
     "D-6",
     "D-8",
-    "D-11b",
+    "R4",
+    "R5",
     "T-0",
     "T-1a",
     "T-1b",
     "T-2a",
     "T-2b",
     "T-3.base",
-    "R4",
-    "R5",
     "W9'.octree-n0",
     "W9'.octree-n0.f32",
     "W9'.octree-n1",
@@ -491,10 +478,11 @@
     "W9'.quadtree-n4.f32"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-3"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::content_metadata_tables",
     "content_integrity::implicit::metadata::tests::interpreted_shapes_and_modifiers",
@@ -511,50 +499,48 @@
    "patchSha256": "bb07dbb93c11f441814766d9bcac6c8287a7bcaae01be993e8310ca26d52c7e9",
    "paired": "B-4, W6",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "BQ",
-    "BO",
+    "A-11.base",
+    "A-13",
+    "A-13.base",
     "A-2",
     "A-9.32",
-    "A-11.base",
-    "A-13.base",
-    "A-13",
     "B-1",
+    "B-10.normal",
+    "B-10.root",
+    "B-12",
     "B-2",
     "B-3",
     "B-4e",
     "B-6",
-    "B-10.normal",
-    "B-10.root",
-    "B-12",
+    "BO",
+    "BQ",
+    "C-11",
+    "C-12.base",
+    "C-12b.group.base",
+    "C-12b.uri.base",
+    "C-13.base",
+    "C-15",
     "C-4.base",
     "C-5.base",
     "C-6.base",
     "C-7b.base",
     "C-7c.base",
-    "C-7d.base",
     "C-7d",
+    "C-7d.base",
     "C-7e",
     "C-8",
-    "C-11",
-    "C-12.base",
-    "C-13.base",
-    "C-12b.uri.base",
-    "C-12b.group.base",
-    "C-15",
+    "D-11b",
     "D-6",
     "D-8",
-    "D-11b",
+    "R4",
+    "R5",
     "T-0",
     "T-1a",
     "T-1b",
     "T-2a",
     "T-3.base",
-    "R4",
-    "R5",
     "W9'.octree-n0",
     "W9'.octree-n0.f32",
     "W9'.octree-n1",
@@ -608,11 +594,12 @@
     "W10.portable.W5.quantize",
     "W10.portable.W5.meshopt"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-4",
     "W6"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
     "validate::tests::i1_facts_follow_the_walk_exactly",
@@ -625,50 +612,48 @@
    "patchSha256": "1f8597da9bfcd65cb4fa6e53a32e57fe96a86dbd98c77eb5e0991dd93b5ebba5",
    "paired": "C-1, W2",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "BQ",
-    "BO",
+    "A-11",
+    "A-11.base",
+    "A-13",
+    "A-13.base",
     "A-2",
     "A-9.32",
-    "A-11.base",
-    "A-11",
-    "A-13.base",
-    "A-13",
     "B-1",
+    "B-10.normal",
+    "B-10.subnormal",
+    "B-12",
+    "B-12b",
     "B-2",
     "B-3",
     "B-4",
     "B-4e",
     "B-6",
-    "B-10.subnormal",
-    "B-10.normal",
-    "B-12",
-    "B-12b",
+    "BO",
+    "BQ",
     "C-1",
+    "C-11",
+    "C-11b",
+    "C-12.base",
+    "C-12b.group.base",
+    "C-12b.uri.base",
+    "C-13.base",
+    "C-15",
     "C-4.base",
     "C-5.base",
     "C-6.base",
     "C-7b.base",
     "C-7c.base",
-    "C-7d.base",
     "C-7d",
+    "C-7d.base",
     "C-7e",
     "C-8",
-    "C-11",
-    "C-12.base",
-    "C-13.base",
-    "C-12b.uri.base",
-    "C-12b.group.base",
-    "C-15",
-    "C-11b",
+    "D-11b",
     "D-6",
     "D-7",
     "D-7b",
     "D-8",
-    "D-11b",
     "R1b",
     "R4",
     "R4-1",
@@ -697,11 +682,12 @@
     "W10.portable.W5.quantize",
     "W10.portable.W5.meshopt"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-1",
     "W2"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::root_bit_parent_rule_and_lsb_order",
     "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
@@ -717,25 +703,24 @@
    "patchSha256": "a3ebdd5d41134548ad51be7320e95367bbbe25fbb7fab659ba0e3dc77e14a8fc",
    "paired": "B-12",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "B-4e",
     "B-10.normal",
     "B-12",
+    "B-4e",
     "R2",
-    "R2b.mid",
     "R2b.cum-1",
+    "R2b.mid",
     "R7c",
     "R8a",
     "R8a.nopad"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-12"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
     "content_integrity::implicit::walk::tests::derived_error_is_exact_or_unsupported",
@@ -748,13 +733,12 @@
    "patchSha256": "1d754ad00829df90a59511a382fe969777f94ecccbe1ee07cef3ee5e67420575",
    "paired": "A-8, A-9",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [],
-   "parityDetects": false,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::levels_rule"
    ],
@@ -765,9 +749,7 @@
    "patchSha256": "6da25c6f0e5ee07b07a43291327917943ac66883d71bb7a086cd6f76988ce4d0",
    "paired": "B-6",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "B-6",
     "W9'.octree-n0.f32",
@@ -782,10 +764,11 @@
     "W9'.quadtree-n4.f32"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-6"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
     "validate::tests::i1_facts_follow_the_walk_exactly"
@@ -797,15 +780,14 @@
    "patchSha256": "a9cf4249a3c20a69c6b65e67c2a17f6bc4188022168db64c477ea1b6d9eac573",
    "paired": "A-5",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-12c.trailing"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::distinct_views_are_distinct_sources",
     "content_integrity::implicit::availability::tests::encoding_rules",
@@ -818,16 +800,14 @@
    "patchSha256": "ad8194f5877708d666c36ba70858985b2d0fd87ab78cb6ad80bc8c0367379bae",
    "paired": "C-6, W5u",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-12a",
     "C-4",
-    "C-7.upper.never",
-    "C-7.escaped.never",
     "C-7.dot.never",
+    "C-7.escaped.never",
     "C-7.slash.never",
+    "C-7.upper.never",
     "C-7.upperdot.never",
     "W9u.octree-rename-class",
     "W9u.quadtree-rename-class"
@@ -836,8 +816,9 @@
     "W9u.coordinator.octree-rename-class",
     "W9u.coordinator.quadtree-rename-class"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment",
     "content_integrity::implicit::tests::root_admission_profile_and_shape"
@@ -849,18 +830,17 @@
    "patchSha256": "ebfaa136d348126a9d45e88a0ddcd20b6b16a272a0568d8db0e283225bb0264e",
    "paired": "C-7",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "C-7.upper.never",
     "C-7.upperdot.never"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment"
    ],
@@ -871,18 +851,17 @@
    "patchSha256": "dc4d8d913815af56ba7df9dfc1f218c1df720952f4985dbecec94b08b6db46bc",
    "paired": "B-7",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "B-7",
     "B-7t"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "B-7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::interpreted_shapes_and_modifiers"
    ],
@@ -893,18 +872,17 @@
    "patchSha256": "c38e71eef6efe37d418c2e0aec4e882bf643e793661957cd0627afd00d163e76",
    "paired": "C-12",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "C-12",
     "C-12b.uri"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-12"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::content_metadata_tables",
     "content_integrity::implicit::metadata::tests::unsupported_semantics_in_walked_tables",
@@ -917,18 +895,17 @@
    "patchSha256": "bb05e13a53e3261f24a5144b385a7b102ac8368121e61e91cfcf259ce0289320",
    "paired": "C-13",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "C-13",
-    "C-12b.group"
+    "C-12b.group",
+    "C-13"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-13"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::content_metadata_tables",
     "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission"
@@ -940,18 +917,17 @@
    "patchSha256": "273b38a96749f6dd94a8d486ae95cd5cff59787e3d6ca60efb541f6a0f96c0f7",
    "paired": "A-11",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-11",
     "C-11b"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "A-11"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::walk::tests::post_walk_content_rule_and_walk_state",
     "content_integrity::implicit::walk::tests::repeated_subtree_members_are_unsupported"
@@ -963,37 +939,39 @@
    "patchSha256": "54f8ffa5874269e8bc31df7b341ef7d97de7245128cd5560463f532f52cec80c",
    "paired": "R7 (time bound)",
    "timingCase": "R7",
-   "timeoutSeconds": 60,
    "timedOut": true,
-   "timedCaseWall": null,
-   "controlsFlipped": null,
-   "corpusFlipped": null,
-   "pairedFlipped": [
-    "(timeout)"
+   "controlsFlipped": [
+    "R7"
    ],
-   "parityDetects": true,
+   "corpusFlipped": [],
+   "boundBreaches": {
+    "R7": "exceeded the run timeout"
+   },
+   "probeClausesFailed": [],
+   "pairedFlipped": [
+    "R7"
+   ],
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass"
    ],
-   "diagnosis": "R7 exceeds the 60 s timeout (clean 0.16 s)."
+   "diagnosis": "R7 misses its 5 s bound: the run exceeds the 60 s cap (clean 0.16 s)."
   },
   {
    "name": "scan-per-object",
    "patchSha256": "a635ed8af3905bba0b51063bd47e052f3274bfa67003e94196e9e4afc332f6c0",
    "paired": "R7 (ResourceLimit)",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "R7",
     "R7a"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "R7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
     "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly"
@@ -1005,34 +983,41 @@
    "patchSha256": "37423b1efbd3ebed55fddf2807ead3e822f0baed0bd2558b1a77d732210871e5",
    "paired": "R5b",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
-   "controlsFlipped": [],
+   "controlsFlipped": [
+    "R5b (probe)"
+   ],
    "corpusFlipped": [],
-   "pairedFlipped": [],
-   "parityDetects": false,
+   "boundBreaches": {},
+   "probeClausesFailed": [
+    "R5b"
+   ],
+   "pairedFlipped": [
+    "R5b"
+   ],
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables"
    ],
-   "diagnosis": "FLIPS NO PARITY CONTROL: R5b keeps its ResourceLimit verdict; the defect (a rank-table allocation before the refusal) is visible only to the RANK_ALLOCATIONS probe, whose unit test fails."
+   "diagnosis": "Flipped by R5b as the contract defines it: R5b's clause 'a test-only allocation probe records zero rank-table allocation attempts' is asserted by availability::tests::visit_reservation_precedes_rank_table_and_tables, which fails under the mutant. The ResourceLimit verdict is identical by construction."
   },
   {
    "name": "per-visit-charging",
    "patchSha256": "502ef5f58f345591cabfae9b8f4ec7624aeb47c22dab317cd08b44f4a632bf78",
    "paired": "R1b",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "R1b"
+    "R1b",
+    "R5b (probe)"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [
+    "R5b"
+   ],
    "pairedFlipped": [
     "R1b"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables",
     "validate::tests::i1_visits_follow_the_reservation_formula"
@@ -1044,17 +1029,16 @@
    "patchSha256": "cbf796977dff365e53a2bf126948402acc2fc684c4c940f1d5ff49043953890d",
    "paired": "R2",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "R2-1"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "R2"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::subtree::tests::external_buffers",
     "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
@@ -1067,22 +1051,21 @@
    "patchSha256": "7dcfc5704c82702076b4cefbb80b8291612a9329573baf86ddb00606a1840c70",
    "paired": "R2b",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "R2",
-    "R2b.mid",
-    "R2b.cum-1"
+    "R2b.cum-1",
+    "R2b.mid"
    ],
    "corpusFlipped": [
     "R2b.W2.190944",
     "R2b.W2.246583"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "R2b"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
     "validate::tests::i1_live_path_cap_admits_the_path_sum_only"
@@ -1094,9 +1077,7 @@
    "patchSha256": "e1378a713e15c4fb918e19604f91e7158f90bd688df9de8b99601c87fbf06044",
    "paired": "W7",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "A-12c.base",
     "C-15",
@@ -1109,10 +1090,11 @@
    "corpusFlipped": [
     "W7"
    ],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "W7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "validate::tests::i1_facts_follow_the_walk_exactly"
    ],
@@ -1123,17 +1105,16 @@
    "patchSha256": "92868ea70f80227fc236b1ac54767bc7d6f4cac3caf1e236cd8d4accf9a86688",
    "paired": "D-8",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "D-8"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "D-8"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::subtree::tests::header_and_json_chunk"
    ],
@@ -1144,18 +1125,17 @@
    "patchSha256": "54f667b4e7ef782a31145af53095d0b57c04c44ffe53081cf03fee79e1eb9caf",
    "paired": "C-14",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "C-14",
     "R7"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-14"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
     "content_integrity::implicit::walk::tests::post_walk_content_rule_and_walk_state"
@@ -1167,17 +1147,16 @@
    "patchSha256": "357260e693083389542378d65708510ad8b9bd7f3f71fd9f50c5ba384e02b4f7",
    "paired": "T-1",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "T-1a"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "T-1"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [],
    "diagnosis": "T-1a flips; no unit test detects it."
   },
@@ -1186,20 +1165,19 @@
    "patchSha256": "c08af4f24c75f483e7556d5eaae38279c1b4e2a8d7b83b3124f7b212298ece64",
    "paired": "C-7 DC-2 forms",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "C-7.escaped.never",
     "C-7.dot.never",
+    "C-7.escaped.never",
     "C-7.slash.never",
     "C-7.upperdot.never"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-7"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment"
    ],
@@ -1210,36 +1188,38 @@
    "patchSha256": "16b168d74a980fab61ab1b9afeb932995f22e961301a551a6350add813abd475",
    "paired": "R8a (timeout)",
    "timingCase": "R8a",
-   "timeoutSeconds": 300,
    "timedOut": true,
-   "timedCaseWall": null,
-   "controlsFlipped": null,
-   "corpusFlipped": null,
-   "pairedFlipped": [
-    "(timeout)"
+   "controlsFlipped": [
+    "R8a"
    ],
-   "parityDetects": true,
+   "corpusFlipped": [],
+   "boundBreaches": {
+    "R8a": "exceeded the run timeout"
+   },
+   "probeClausesFailed": [],
+   "pairedFlipped": [
+    "R8a"
+   ],
    "unitTestsFailed": [],
-   "diagnosis": "R8a exceeds the 300 s timeout (clean 0.69 s)."
+   "diagnosis": "R8a misses its bound (at most 2x R8a.nopad and 60 s): the run exceeds the 300 s cap (clean 0.69 s)."
   },
   {
    "name": "no-variable-survival-check",
    "patchSha256": "fbc98db90671754d74cd0b774164cee3df565b4524530633b9319560a65f17ff",
    "paired": "C-7c, R8",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "C-7c",
     "R8"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-7c",
     "R8"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::variable_survival_and_length_cap"
    ],
@@ -1250,17 +1230,16 @@
    "patchSha256": "869f1d1f3f898ee8523bebc3ed81bdc654d10cc34dd27d06e58df6110aa263af",
    "paired": "C-7b",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "C-7b"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-7b"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::escape_guard_applies_in_every_segment"
    ],
@@ -1271,17 +1250,16 @@
    "patchSha256": "2158446307f67225b0ace15e567a5f8b4f7e0c2289e9c53c206d8619d422f684",
    "paired": "R9",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
     "R9"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "R9"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::content_entries_are_reserved_at_admission",
     "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly"
@@ -1293,37 +1271,39 @@
    "patchSha256": "79653d8982682f262bc9b80a08efca3dc124139daf4da90dcc93a4c1955df166",
    "paired": "R7c (timeout)",
    "timingCase": "R7c",
-   "timeoutSeconds": 60,
    "timedOut": false,
-   "timedCaseWall": [
-    17.424103114
+   "controlsFlipped": [
+    "R7c"
    ],
-   "controlsFlipped": [],
-   "corpusFlipped": null,
-   "pairedFlipped": [],
-   "parityDetects": false,
+   "corpusFlipped": [],
+   "boundBreaches": {
+    "R7c": "17.42 s > 5 s"
+   },
+   "probeClausesFailed": [],
+   "pairedFlipped": [
+    "R7c"
+   ],
    "unitTestsFailed": [
     "content_integrity::implicit::metadata::tests::classes_are_classified_once_per_schema_document"
    ],
-   "diagnosis": "NO VERDICT FLIP: R7c stays Accepted but takes 17.4 s (clean 0.42 s), breaking the contract's 5 s bound for R7c; it does not reach the contract's 60 s mutant timeout (Rust is faster than the contract's estimate). Caught by the CLASS_SCANS unit test."
+   "diagnosis": "Flipped by R7c's own bound: R7c is 'Accepted within 5 s' and the mutant takes 17.4 s (clean 0.42 s). The verdict stays Accepted, and the run stays under the 60 s cap. The CLASS_SCANS unit test also fails."
   },
   {
    "name": "header-metadata-not-classified",
    "patchSha256": "5ab282e2d929e8bc0cf6adda5f24db66f35f89deb15cffb17b654043b4c0037b",
    "paired": "C-12b",
    "timingCase": null,
-   "timeoutSeconds": null,
    "timedOut": false,
-   "timedCaseWall": null,
    "controlsFlipped": [
-    "C-12b.uri",
-    "C-12b.group"
+    "C-12b.group",
+    "C-12b.uri"
    ],
    "corpusFlipped": [],
+   "boundBreaches": {},
+   "probeClausesFailed": [],
    "pairedFlipped": [
     "C-12b"
    ],
-   "parityDetects": true,
    "unitTestsFailed": [
     "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission"
    ],
@@ -1332,20 +1312,18 @@
  ],
  "summary": {
   "total": 35,
-  "parityDetects": 31,
-  "pairedControlFlips": 28,
-  "parityFlipsNothing": [
-   "drop-content-implies-tile",
-   "ge-vs-gt-on-A",
-   "reservation-after-rank-table",
-   "per-table-class-scan"
-  ],
+  "pairedControlFlips": 30,
   "pairedControlDoesNotFlip": [
    "msb-first",
+   "drop-content-implies-tile",
+   "ge-vs-gt-on-A",
    "ignore-trailing-bits",
    "admit-json-templates"
   ],
-  "unitTestsDetect": 33,
-  "detectedByNothing": []
+  "flipsNoControl": [
+   "drop-content-implies-tile",
+   "ge-vs-gt-on-A"
+  ],
+  "unitTestsDetect": 33
  }
 }

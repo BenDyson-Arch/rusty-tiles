@@ -3,7 +3,7 @@
 # run the release lib-test binary outside it on CPUs 0,1. Per mutant: the parity harness (both tests)
 # and the I1 unit tests (content_integrity::implicit, validate::tests::i1_*). Timing mutants run only
 # their paired large control under the contract's timeout.
-R=/home/bend/.cache/forest-acc/mutant-src; A=/home/bend/.cache/forest-acc; P=${1:?patch dir}; O=${2:?out dir}
+R=/home/bend/.cache/forest-acc/mutant-src; A=/home/bend/.cache/forest-acc; P=${1:?patch dir}; O=${2:?out dir}; ONLY=${3:-}
 mkdir -p $O; cd $R
 export CARGO_TARGET_DIR=$A/target-mutants CARGO_BUILD_JOBS=2 TMPDIR=$A/tmp RAYON_NUM_THREADS=2
 build() {
@@ -52,17 +52,21 @@ EOF
 }
 git checkout -q -- src
 run clean "" ""
-for timing in "R7:60" "R7c:60" "R8a:300"; do I1_ONLY=${timing%%:*} run clean-${timing%%:*} ${timing%%:*} ${timing##*:}; done
+# Timed controls are judged by their own contract bounds in build_report.py; the timeouts only cap a run.
+for timing in "R7:60" "R7c:60" "R8a,R8a.nopad:300"; do run clean-${timing%%[,:]*} ${timing%%:*} ${timing##*:}; done
 python3 -c "
 import json
 for r in json.load(open('$P/mutants.json')):
     t = r['timingCase'] or ''
     lim = {'R7':60,'R7c':60,'R8a':300}.get(t,'')
+    t = 'R8a,R8a.nopad' if t == 'R8a' else t
     print(r['name'], t or '-', lim or '-')" > $O/queue.txt
 while read name timing limit; do
   [ "$timing" = "-" ] && timing="" && limit=""
+  if [ -n "$ONLY" ] && [[ ",$ONLY," != *",$name,"* ]]; then continue; fi
   git apply $P/$name.patch || { echo "$name APPLY FAILED"; continue; }
   run $name "$timing" "$limit"
   git checkout -q -- src
 done < $O/queue.txt
+python3 -I "$P/scripts/build_report.py" "$P" "$O"
 echo "done $(date +%T)"
