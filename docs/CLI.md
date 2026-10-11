@@ -145,15 +145,18 @@ TileJSON and typed `report.json`. See the [imagery profile](FORMATS.md#imagery).
 | `--alphaBand` | `--alpha-band` | `0` | Explicit opacity band; 0 selects the declared alpha, or opaque when absent |
 | `--displayMin` | `--display-min` | required for gray | Raw value shown as black |
 | `--displayMax` | `--display-max` | required for gray | Raw value shown as white; finite increasing range with finite width |
-| `--jobs` | | `2` | Worker cap, 1 through 4, capped by available CPUs |
+| `--jobs` | | `2` | Worker cap, 1 through 4; resolves to min(requested, available CPUs) |
 | `--max-source-bytes` | | `536870912` | Aggregate admitted source and companion bytes |
 | `--max-source-pixels` | | `268435456` | Source pixel count |
 | `--max-decoded-bytes` | | `2147483648` | Decoded source samples and independent mask |
-| `--max-tiles` | | `100000` | Total tiles across requested zooms |
+| `--max-tiles` | | `100000` | Total tiles across requested zooms; see the finest ceiling below |
 | `--max-output-bytes` | | `8589934592` | Closed output members including both JSON files |
 | `--max-working-bytes` | | `17179869184` | Logical source, derivative and concrete owner allowance; also caps closed staged files, including intermediates |
 
-All six limits must be positive. JSON success includes `rasterReport`, equal to
+All six limits must be positive. The finest zoom also has a fixed 2 GiB RGBA
+ceiling: at most 8192 finest 256×256 tiles, which bounds a pyramid over zooms 0
+through 24 to at most 16,451 tiles. The default `--max-tiles` therefore never
+binds; set a lower value to cap tile count. JSON success includes `rasterReport`, equal to
 published `report.json`; the precommit `raster_complete` progress reports the actual tile count.
 Replacement occurs only after the complete directory is closed and sealed.
 On Linux the output parent must be on ext, btrfs, tmpfs or xfs (kernel 4.9 or
