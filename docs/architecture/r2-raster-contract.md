@@ -62,10 +62,12 @@ metadata/block refusal does not imply zero allocation. Completed-file caps are
 checked after close; they are not filesystem quotas.
 
 The concrete ledger uses actual type sizes, admitted counts and observed Rust
-capacities. It charges source and target logical pyramids, requested RGBA tiles,
-finite source facts/paths, sequential coherence, display or tile scratch (one
-finest row, one RGBA tile, one fixed PNG buffer refusing growth and one path), exactly
-N+3 member tuples, native argument/config payload and fixed operation owners.
+capacities. It charges source and target logical pyramids, finite source
+facts/paths, sequential coherence, display or tile scratch (one finest row, one
+RGBA tile, one fixed PNG buffer refusing growth and one path), exactly N+3
+member tuples, native argument/config payload and fixed operation owners.
+Requested tiles are not charged an RGBA buffer each; beyond the one sequential
+tile they cost only their member tuples.
 Logical work, physical staged file inventory and native opaque allocations are
 distinct; this is not an RSS bound. The ledger charges output path lengths,
 so it gates admission but is not published: `report.json` bytes do not depend

@@ -1518,7 +1518,6 @@ pub(super) fn planned_work(
         p.checked_mul(4),
         t.checked_mul(4),
         q.checked_mul(b + c),
-        grid.total_tiles().checked_mul(262144),
         Some(owners),
         Some(source.companion_bytes()?),
     ];

@@ -1022,12 +1022,18 @@ fn enter_phase(index: usize) {
 mod owner_controls {
     use super::*;
     fn request(root: &Path, limits: RasterLimits) -> RasterRequest {
-        RasterRequest::image(root.join("source.tif"), root.join("output"), 2, 4)
+        zoom_request(root, limits, 2)
+    }
+    fn zoom_request(root: &Path, limits: RasterLimits, min_zoom: u8) -> RasterRequest {
+        RasterRequest::image(root.join("source.tif"), root.join("output"), min_zoom, 4)
             .with_policy(OutputPolicy::Replace)
             .with_limits(limits)
     }
     fn admitted_work(root: &Path, limits: RasterLimits) -> u64 {
-        let request = request(root, limits);
+        admitted_zoom_work(root, limits, 2).0
+    }
+    fn admitted_zoom_work(root: &Path, limits: RasterLimits, min_zoom: u8) -> (u64, u64) {
+        let request = zoom_request(root, limits, min_zoom);
         let control = RunControl::default();
         let attempt = control.begin().unwrap();
         let target = DirectoryTarget::prepare(&request.output, request.policy).unwrap();
@@ -1079,7 +1085,7 @@ mod owner_controls {
         );
         let failure = staging.fail(closed.error);
         assert!(failure.secondary.is_empty());
-        work
+        (work, grid.total_tiles())
     }
     #[test]
     fn tiny_actual_owners_ignore_huge_caps_and_l_minus_one_refuses_before_backing() {
@@ -1096,6 +1102,17 @@ mod owner_controls {
         fs::write(root.path().join("output/previous"), b"original").unwrap();
         let normal = RasterLimits::default();
         let work = admitted_work(root.path(), normal);
+        // One sequential tile buffer: extra requested tiles cost only their
+        // retained inventory members, so the default tile cap stays admissible.
+        let (fewer, few) = admitted_zoom_work(root.path(), normal, 2);
+        let (more, many) = admitted_zoom_work(root.path(), normal, 0);
+        assert!(many > few);
+        assert_eq!(more - fewer, (many - few) * size_of::<Member>() as u64);
+        let at_cap = (normal.max_tiles - few)
+            .checked_mul(size_of::<Member>() as u64)
+            .and_then(|n| n.checked_add(fewer))
+            .unwrap();
+        assert!(at_cap <= normal.max_working_bytes, "{at_cap}");
         let huge = RasterLimits {
             max_source_bytes: u64::MAX,
             max_source_pixels: u64::MAX,
