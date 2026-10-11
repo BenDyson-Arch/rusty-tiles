@@ -43,6 +43,12 @@ def glb_point(p):
             + struct.pack("<I", len(bn)) + b"BIN\x00" + bn)
 
 
+def glb_tile_point(p):
+    """A GLB whose point lands at tile-frame `p` after glTF's y-up to z-up rotation U(x, y, z) = (x, -z, y)
+    (core README :441).  Used for explicit payloads, which C2 checks; implicit payloads keep glb_point."""
+    return glb_point([p[0], p[2], -p[1]])
+
+
 def subtree_binary(js_bytes, bin_bytes, magic=b"subt", version=1):
     js = pad(js_bytes, 8, b" ")
     bn = pad(bin_bytes, 8)

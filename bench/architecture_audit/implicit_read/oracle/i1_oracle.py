@@ -642,6 +642,7 @@ class State:
         self.tiles = []
         self.explicit_nodes = 0
         self.explicit_contents = 0
+        self.external_links = 0
         self.tilesets = 0
         self.roots = []
         self.subtrees = 0
@@ -1404,6 +1405,7 @@ def node(st, tile, doc, parent, depth, refine_in, active, exact):
             if member in active:
                 invalid("external tileset cycle", stage)
             sub_parent = {"values": values, "error": err}
+            st.external_links += 1
             run_tileset(st, member, sub_parent, depth + 1, refine, active, exact)
         else:
             st.explicit_contents += 1
@@ -1467,7 +1469,9 @@ def evaluate(path, limits=None, exact=False):
             "tilesets": st.tilesets,
             "roots": roots,
             "tiles": st.explicit_nodes + st.implicit_tiles - roots,
-            "contentReferences": st.emitted + st.explicit_contents,
+            "externalTilesetLinks": st.external_links,
+            # Every content entry, external-tileset links included (production's counter; amendment 3).
+            "contentReferences": st.emitted + st.explicit_contents + st.external_links,
             "maxLivePathBytes": st.max_live,
             "cumulativeSubtreeBytes": st.cumulative_subtree_bytes,
             "maxDepth": st.max_depth,

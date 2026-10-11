@@ -18,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from fixturelib import (Implicit, Slot, SubIR, cell, cjson, glb_point, morton, offset, pad,  # noqa: E402
+from fixturelib import (Implicit, Slot, SubIR, cell, cjson, glb_point, glb_tile_point, morton, offset, pad,  # noqa: E402
                         subtree_binary, tileset, write_3tz)
 
 ROOT = os.path.dirname(HERE)
@@ -466,7 +466,7 @@ def family_c():
             "geometricError": 0.0}
     top = {"boundingVolume": {"box": [24.0, 8.0, 2.0, 24.0, 0, 0, 0, 8.0, 0, 0, 0, 2.0]},
            "children": [r.root_tile(), leaf], "geometricError": 2048.0, "refine": "ADD"}
-    m["leaf.glb"] = glb_point([40.0, 8.0, 2.0])
+    m["leaf.glb"] = glb_tile_point([40.0, 8.0, 2.0])  # post-freeze amendment 2
     m["tileset.json"] = cjson(tileset(top, r.schema_classes()))
     case("C-8", m, "Accepted", ref="C-8 (X-8)", note="R (refine REPLACE) is the first child of an ADD root")
 
@@ -600,7 +600,8 @@ def family_c():
         m = external(BO(), [1000.0, 2000.0, 0.0], 30.0, 400.0)
         top = json.loads(m["tileset.json"])
         child = top["root"]
-        top["root"] = {"boundingVolume": child["boundingVolume"], "children": [dict(child), dict(child)],
+        second = dict(child, geometricError=child["geometricError"] - 1.0)  # post-freeze amendment 1: uniqueItems
+        top["root"] = {"boundingVolume": child["boundingVolume"], "children": [dict(child), second],
                        "geometricError": 500.0, "refine": "REPLACE"}
         m["tileset.json"] = cjson(top)
         return m
@@ -1129,7 +1130,7 @@ def family_w():
 def family_z():
     doc = tileset({"boundingVolume": {"box": BQ_BOX}, "content": {"uri": "a.glb"}, "geometricError": 0.0,
                    "refine": "ADD"})
-    case("Z-payload", {"tileset.json": cjson(doc), "a.glb": glb_point([16.0, 8.0, 2.0])}, "Undecided",
+    case("Z-payload", {"tileset.json": cjson(doc), "a.glb": glb_tile_point([16.0, 8.0, 2.0])}, "Undecided",
          production="Accepted", ref="O-extra: explicit-only archive carrying the oracle's minimal GLB "
          "(production must accept it before any control relies on payload validity)")
 

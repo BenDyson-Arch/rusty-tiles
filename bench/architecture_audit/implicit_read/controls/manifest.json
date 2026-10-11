@@ -1701,7 +1701,7 @@
    "sha256": "09d38ab3dfe28d13e5d7f3279c26e050a861c2cdb5b2b0fbd9fa6149cfa3d2b9"
   },
   {
-   "bytes": 19829,
+   "bytes": 19833,
    "expected": "Accepted",
    "file": "fixtures/C-8.3tz",
    "id": "C-8",
@@ -1709,7 +1709,7 @@
    "members": 29,
    "note": "R (refine REPLACE) is the first child of an ADD root",
    "ref": "C-8 (X-8)",
-   "sha256": "6aa78383dc15b7decba09eb4059e18389ea3fa215398bc4be27ac4be0c9e4376"
+   "sha256": "06d5f32cfc2aa5d4c8ff13f44e1d44cabe6dc8966af591c4dbcae337cda9d1f0"
   },
   {
    "bytes": 19076,
@@ -2159,7 +2159,7 @@
    "members": 16,
    "pair": "C-11",
    "ref": "v3.2: OD-7 validation-wide (one implicit-root external tileset referenced twice)",
-   "sha256": "9fcbbc96fb95e885b1ec361de28c7662a15c6771f12bfe4aebc0dacc03201e14"
+   "sha256": "1bf5e5c0c5d90e855140a2df5877719211dbf8766d6e30c60d6911cd42e3a76f"
   },
   {
    "bytes": 10994,
@@ -3212,7 +3212,7 @@
    "sha256": "558f4915ed3f6c7c4afc0e6faeb1da428122dbbb9647e3e97eef79951f226fe0"
   },
   {
-   "bytes": 942,
+   "bytes": 946,
    "expected": "Undecided",
    "file": "fixtures/Z-payload.3tz",
    "id": "Z-payload",
@@ -3220,7 +3220,7 @@
    "members": 2,
    "production": "Accepted",
    "ref": "O-extra: explicit-only archive carrying the oracle's minimal GLB (production must accept it before any control relies on payload validity)",
-   "sha256": "f71f268f7291c2eedff5ba2623f7f594a48173016b633078a71fdbd883f3a3f1"
+   "sha256": "08e06a9fb1b071ab6eabfed01e2eb949f36d29e4376d54ea179d578e620f6dbd"
   }
  ],
  "contract": "9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496",

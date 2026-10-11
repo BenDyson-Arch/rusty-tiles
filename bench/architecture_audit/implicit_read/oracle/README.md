@@ -43,7 +43,7 @@ Wall times on the coordinator host: self-test 0.9 s; small generation 0.6 s; lar
 
 | Input | sha256 |
 | --- | --- |
-| Contract `contract-draft.md` v3.1 | `9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496` |
+| Contract `contract-draft.md` v3.1 (post-freeze amendments: see below) | `9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496` |
 | `change-log.md` including **v3.2 coordinator rulings** | `52b01d2b71436bcae5ecfb005693122559a794020c9d4522af40803a0c6898a3` |
 | `ownership-plan.md` v3.1 | `95d41487b514c99e21cdc9f8fa9d5f4d3a96e049b1091ac1c23e85b1aa334ffc` |
 | `open-decisions.md` v3.1 | `6a774c48df53c89ed70f1165caf3b54cf0eefaefdef36213dd023a318bbc4f09` |
@@ -260,6 +260,29 @@ All nine rulings were checked against the pinned texts, and none contradicts the
 | A duplicated semantic of any kind in a class is InvalidInput | Already the case | B-5 (interpreted), B-5b (opaque `NAME`) |
 | Rows are checked eagerly at table admission | Already the case | B-9 fires at `§5` of the subtree |
 | OD-7 is validation-wide | Already the case | C-11b: the same implicit-root external tileset referenced twice is Unsupported |
+
+## Post-freeze amendments (2026-10-12)
+
+These were requested by the coordinator after acceptance parity on `feat/implicit-forest`, where production was
+right. No verdict expectation changed. Only the three named archives and one counter changed; every other fixture
+hash is identical, and generation stays byte-reproducible.
+
+1. **C-11b** (sha256 now `06d5f32c…`). The two explicit children were identical JSON objects, so the core tile
+   schema's `uniqueItems` made production refuse the archive as InvalidInput before OD-7 could apply. The second
+   child's `geometricError` is now 399 instead of 400. Both still reference the same implicit-root
+   `ext/tileset.json`, so the control tests OD-7 (Unsupported, repeated subtree member).
+2. **Z-payload** (now `08e06a9f…`) and **C-8** (`leaf.glb`, now `1bf5e5c0…`). These explicit payloads placed their
+   point without glTF's y-up to z-up rotation `U(x, y, z) = (x, -z, y)` (core `:441`). Once decoded, the point lay
+   outside the tile box, and C2 (merged after the freeze) refused Z-payload.
+   - `fixturelib.glb_tile_point` now writes the glTF point as `(a, c, -b)`, so that `U` maps it to the tile-frame
+     point `(a, b, c)`.
+   - C-8 was not refused, because C2 excludes archives with implicit tiles. It is fixed anyway, being the only other
+     explicit payload.
+   - Implicit payloads keep the raw `glb_point`. Their positions matter to no I1 or C2 check today, but **C2 slice 3
+     will need them rotated too**.
+3. **`contentReferences`** now counts every content entry, external-tileset links included, as production does. A
+   new `externalTilesetLinks` count shows the link part. This changes counts only, no verdicts. Examples: C-11
+   goes 10 → 11, C-11b → 12, T-3.base → 1. The corpus facts (`corpus/facts/*.json`, tile lists) did not depend on it.
 
 ## Contract questions (my readings; please confirm or correct)
 
