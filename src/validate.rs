@@ -2242,7 +2242,7 @@ mod containment_controls {
         ]));
         assert!(message.contains("depth=0 volume=content "), "{message}");
         // Ancestor (I1): the child volume passes C1's tolerant hierarchy check.
-        let edge = 10f32 + f32::EPSILON * 8.;
+        let edge = f32::from_bits(10f32.to_bits() + 1);
         let mut root = tile(boxed([0.; 3], [10.; 3]));
         root["children"] = json!([content_tile(boxed([0.; 3], [10.000002, 10., 10.]), "a.glb")]);
         let message = outside(run(&[
