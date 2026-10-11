@@ -34,7 +34,7 @@ rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg
 
 Large meshes are split into full-detail leaves with simplified, textured parents. An input within both `--max-triangles` and `--max-bytes` is wrapped without splitting.
 
-The default hierarchy uses midpoint octree cells, assigning each triangle by its centroid. The atlas fit test and single oversized triangle escape remain in place. Standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserve the actual bounds and measured errors. If a subtree's content extends beyond its regular cell, an external implicit tileset root exposes its actual bounds before viewer culling. Coincident centroids are distributed in source order to keep splitting finite; their actual boxes remain authoritative.
+The default hierarchy uses midpoint octree cells, assigning each triangle by its centroid. The atlas fit test and single oversized triangle escape remain in place. Standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserve the actual bounds and measured errors. The output uses the bounded implicit forest described in the [command reference](CLI.md#conventions): upper levels stay explicit, and each implicit root covers at most four levels in one subtree whose rows carry every tile's actual bounds, so viewers never cull by a derived regular cell. Coincident centroids are distributed in source order to keep splitting finite; their actual boxes remain authoritative.
 
 `--explicit` keeps the earlier median partition, folded hierarchy and output bytes. It is intended for consumers that walk the explicit `children` array.
 
@@ -133,7 +133,7 @@ The converter automatically uses native fallback when that feature is built. Oth
 
 ### What the output keeps
 
-The default output uses a disk-backed midpoint octree and binary implicit subtrees. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
+The default output uses a disk-backed midpoint octree written as the bounded implicit forest, with one binary subtree per implicit root. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
 
 - Points stream through disk-backed partitions. Chunk/leaf budgets limit record counts; schema, hierarchy and encoded metadata still contribute memory. P1 records measured RSS/scratch/descriptor growth rather than promising a whole-job bound.
 - Parents hold voxel samples. Leaves keep every point, including coincident points.
