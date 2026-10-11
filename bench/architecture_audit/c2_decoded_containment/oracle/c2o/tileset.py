@@ -9,7 +9,7 @@ import zipfile
 
 from . import spans as S
 from .gltf import resolve
-from .numbers import JsonNumberError, OracleUndecided, exact, is_number, load_json
+from .numbers import JsonNumberError, OracleUndecided, contains_overflow, exact, is_number, load_json
 from .volumes import parse_volume
 
 TILESET_ALLOWLIST = {"3DTILES_content_gltf_vector"}
@@ -44,7 +44,10 @@ class Archive:
             raise OracleUndecided("archive member %r is missing (C1 is expected to reject)" % name)
         if info.file_size > self.max_member_bytes:
             raise OracleUndecided("member %r exceeds the oracle's member-size limit" % name)
-        data = self.zip.read(info)
+        try:
+            data = self.zip.read(info)
+        except (zipfile.BadZipFile, OSError, EOFError, NotImplementedError, RuntimeError, ValueError) as err:
+            raise OracleUndecided("archive member %r is unreadable (C1 is expected to reject): %s" % (name, err))
         self.cache[name] = data
         return data
 
@@ -151,9 +154,12 @@ class Traversal:
         try:
             doc = load_json(self.archive.read(member))
         except JsonNumberError as err:
-            raise TilesetInvalid(str(err), member)
+            raise OracleUndecided("tileset JSON has a NaN/Infinity token (not JSON) in %s: %s" % (member, err))
         except (ValueError, UnicodeDecodeError) as err:
             raise OracleUndecided("tileset JSON unreadable %s: %s" % (member, err))
+        if contains_overflow(doc):
+            # Tileset JSON is owned whole; a non-finite literal anywhere is refused.
+            raise TilesetInvalid("number literal overflows binary64", member)
         if not isinstance(doc, dict) or not isinstance(doc.get("root"), dict):
             raise OracleUndecided("tileset %s has no root tile" % member)
         for key in ("extensionsUsed", "extensionsRequired"):

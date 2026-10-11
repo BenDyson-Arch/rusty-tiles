@@ -16,7 +16,7 @@ from fractions import Fraction
 
 from . import spans as S
 from .gltf import RESTART, Payload, PayloadError
-from .numbers import JsonNumberError, OracleUndecided, frac_str
+from .numbers import OracleUndecided, frac_str
 from .scene import NodeInvalid, QUAT_WINDOW, Walk, admit, quaternion_excess, select_scene, selected_nodes
 from .tileset import Archive, Traversal
 from .volumes import LevelTest
@@ -249,9 +249,6 @@ class Oracle:
                 except NodeInvalid as err:
                     return {"outcome": "InvalidNode", "facts": dict(err.facts, why=err.why,
                                                                     member=ref.member, reference=ref.index)}
-                except JsonNumberError as err:
-                    return {"outcome": "InvalidNode", "facts": {"why": "number literal overflows "
-                            "binary64: %s" % err, "member": ref.member, "reference": ref.index}}
                 self.uri_facts[ref.member] = facts
                 self.report["c1Caveats"] += facts.c1_caveats
             for reason in facts.exclusions:

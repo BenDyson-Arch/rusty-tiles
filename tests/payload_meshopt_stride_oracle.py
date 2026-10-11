@@ -22,8 +22,9 @@ def main():
     root = Path(__file__).resolve().parents[1]
     controls = root / 'bench/architecture_audit/c1_payload_integrity/production_controls'
     lanes = [
-        ('stride6', controls / 'stride_controls/2026-10-10',
-         'a3c07122e5fc902272bcf668a85e694601551a66556a7be3806132febd592aee', 6),
+        # C2 amendment (2026-10-11): stride_controls/2026-10-10 with C2 report expectations.
+        ('stride6', controls / 'c2_amendment/2026-10-11/stride_controls',
+         '8516d51342c559d983e9f7fa83adeb3dc320078a21bf7ff9438c2fb9783e3557', 6),
         ('parent1', controls / 'stride_parent_control/2026-10-10',
          '9a049a589538aef1e0d5d566460b4200966063f6eda7b7007f08f3b0fdd063f0', 1),
     ]

@@ -19417,7 +19417,7 @@
    "oracle": {
     "facts": {
      "where": "tileset.json",
-     "why": "number literal overflows binary64: 1e999"
+     "why": "number literal overflows binary64"
     },
     "outcome": "InvalidInput",
     "reasons": null,
