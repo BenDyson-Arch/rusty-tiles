@@ -1,0 +1,17 @@
+{
+  "decision": "ACCEPT_PR154_LOSSLESS_RETENTION_AND_MERGE_IDENTITY",
+  "independentNonauthor": true,
+  "indexSha256": "7199bf434519aebd237fe30f943004368a19e8f7b7d292f60a7b7b82f873c123",
+  "head": "e9fb073184ad25a1f5c7839ea5d1cd9e02830887",
+  "base": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "merge": "6c5ea2acac9fc403bfabfa9581464223b52259d7",
+  "tree": "e395a4c22e8b0e86d3c72169c332fbea1e5d8eb5",
+  "blockingFindings": [],
+  "fullOriginalRecords": 234,
+  "uniqueGzipBlobs": 165,
+  "compressedBytes": 1420841,
+  "externalBinaryMetadataOnly": 20,
+  "acceptedProductPlatformTestsReplayed": false,
+  "r2SourcePolicyAccepted": false,
+  "mainTagPublicationReleaseAuthorized": false
+}

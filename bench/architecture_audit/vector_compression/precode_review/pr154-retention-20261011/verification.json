@@ -1,0 +1,25 @@
+{
+  "status": "PASS_LOSSLESS_PR154_RETENTION_AND_ACCEPTED_MERGE_IDENTITY",
+  "indexSha256": "7199bf434519aebd237fe30f943004368a19e8f7b7d292f60a7b7b82f873c123",
+  "head": "e9fb073184ad25a1f5c7839ea5d1cd9e02830887",
+  "base": "f5401dd120441b4f9aac5ad229dbfffe03fe4428",
+  "merge": "6c5ea2acac9fc403bfabfa9581464223b52259d7",
+  "tree": "e395a4c22e8b0e86d3c72169c332fbea1e5d8eb5",
+  "fullOriginalRecordsCompared": 234,
+  "uniqueGzipBlobsCompared": 165,
+  "uniqueCompressedBytes": 1420841,
+  "sourceDirectoriesCompletelyRepresented": true,
+  "externalMetadataMatchedAcceptedArtifactReceipts": 20,
+  "externalBinaryBytesRetained": false,
+  "externalBinaryHashReplay": false,
+  "actualMergedAt": "2026-10-10T16:56:54Z",
+  "developAtAcceptedMerge": true,
+  "reviewerNice": 10,
+  "reviewerAffinity": [
+    0,
+    1
+  ],
+  "scope": "Lossless selected remote source/final reviews, original reviewer mistakes, API/job/log/report/verifier and actual merge records. Actual downloaded 15 ZIPs and five wheels remain external with byte hashes. Blender distribution/executable and CI test binary hashes are job-computed observations, not locally downloaded/rehashed binary claims. Bounded foundation accepted; no exhaustive OS closure, RSS, full A2, complete content/rendering semantics, main/tag/publication/release or issue-closure acceptance.",
+  "newProductOrPlatformExecution": false,
+  "r2SourceOrPolicyAdjudicated": false
+}

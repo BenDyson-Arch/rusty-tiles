@@ -147,7 +147,15 @@ Waveforms, array/untyped or undocumented extra dimensions, unknown VLR preservat
 
 ## Imagery
 
-`raster` needs the `native-geospatial` build. It uses GDAL's COG, display and tiling APIs directly, so no Python or `gdal` executable is involved.
+`raster` needs the `native-geospatial` build and calls GDAL directly, without
+Python or executable lookup. Its local source profile admits GTiff, PNG, JPEG
+and AAIGrid when the selected build provides that driver. Sources need static
+EPSG:4326 or EPSG:3857 coordinates, a finite nonsingular affine transform and
+coverage within longitude ±180° and latitude ±85° for EPSG:4326.
+EPSG:3857 admits its separate represented square, ±20,037,508.342789244 metres
+on each axis. Other projected CRSs, polar and wrapped coverage require
+preprocessing. Keep sources, their companions and native configuration stable
+during the call.
 
 For byte imagery:
 
@@ -156,7 +164,7 @@ rusty-tiles raster -i orthophoto.tif -o output/imagery \
   --min-zoom 10 --max-zoom 18 --display image
 ```
 
-For numeric data, choose a band and an explicit display range:
+For numeric data, choose a band and a raw display range:
 
 ```sh
 rusty-tiles raster -i measurements.tif -o output/measurements \
@@ -164,38 +172,53 @@ rusty-tiles raster -i measurements.tif -o output/measurements \
   --display-min -10 --display-max 10
 ```
 
-### What the output contains
-
 | Path | Contents |
 | --- | --- |
-| `source.cog.tif` | Original values, bands, masks and NoData in a DEFLATE COG |
-| `tiles/{z}/{x}/{y}.png` | Reprojected display tiles |
-| `tilejson.json` | TileJSON manifest for the display tiles |
-| `conversion.json` | Settings and source details |
+| `source.cog.tif` | Standalone DEFLATE COG with all admitted decoded bands and critical source facts |
+| `tiles/{z}/{x}/{y}.png` | 256×256 RGBA display tiles |
+| `tilejson.json` | Relative XYZ tile addresses and approximate descriptive geographic source bounds |
+| `report.json` | Typed source, grid, display, limits and resource report |
 
-Display tiles are a derivative. The COG is the faithful copy.
+The COG is checked against every source sample and independent Boolean mask
+before display production. Bands must share a supported real sample type and
+common NoData declaration. Critical affine, CRS, Area/Point, roles, NoData,
+scale, offset, units and normalized opaque palettes are preserved. A single
+otherwise ordinary Undefined band has the named Undefined→Gray role migration
+reported explicitly. This does not promise original encoded bytes, JPEG
+entropy, arbitrary metadata or 16-bit palette precision. External overviews,
+reference-bearing companions, remote sources and ambiguous authority are
+unsupported. Source internal overviews may exist; output overviews are rebuilt.
 
-### Transparency
+Display styling uses raw samples; scale and offset remain source metadata.
+Gray maps the finite increasing range to 0–255 with nearest integer rounding
+and clamps values outside it. Byte image display selects RGB, gray or opaque
+palette colors. `--alpha-band` selects opacity explicitly; otherwise the
+unique applicable declared alpha is used, or opacity 255. Numeric alpha clamps
+to 0–255 and rounds without scaling. Independent masks are Boolean validity,
+so any nonzero mask value is valid. NoData and independent masks still apply
+with an explicit alpha override. Invalid samples become transparent black;
+valid black retains its opacity.
 
-Masks and alpha are intersected in 256 by 256 source windows before resampling. `--alpha-band` selects a band holding opacity values from 0 (transparent) to 255 (opaque), for either `image` or `gray` display. Gray display also accepts alpha stored in numeric bands such as Int16: alpha is converted to Byte without scaling, clamping values outside 0–255. The selected data band's mask/NoData and the display alpha still apply, so masked pixels stay transparent. Image display continues to require byte imagery.
+The finest display uses an exact admitted grid and explicit nearest-neighbour
+warp. Every requested coarser zoom samples that closed finest image directly,
+with east/south tie selection and transparent padding. Reports expose the
+exact target transform, dimensions and tile rectangle. Output may vary across
+native dependency versions; reproducibility claims require the same build.
 
-For rendered greyscale stored in Int16 bands with alpha in band 4:
+Six positive limits cover source bytes, source pixels, decoded bytes, tile
+count, completed output bytes and logical work. Defaults are 512 MiB,
+268,435,456 pixels, 2 GiB, 100,000 tiles, 8 GiB and 16 GiB respectively.
+The finest RGBA derivative has a fixed 2 GiB ceiling. Source dimensions are
+limited to 65,536 on each axis; target dimensions must fit positive native
+32-bit integers. Native block cache and warp budgets are 64 MiB each. Workers
+default to two; `--jobs` permits one through four, capped by available CPUs.
+Native thresholds may choose fewer workers. Logical work includes concrete
+Rust owners and temporary derivatives; it is not a process RSS or in-call
+filesystem quota. Completed member bytes are checked after close. Failure
+preserves the previous output through the completed-directory publisher.
 
-```sh
-rusty-tiles raster -i survey.tif -o output/survey \
-  --min-zoom 10 --max-zoom 18 --display gray --band 1 \
-  --display-min 0 --display-max 255 --alpha-band 4
-```
-
-### Limits and resources
-
-- A job over 100,000 display tiles fails with advice to narrow the zoom range.
-- Polar and antimeridian coverage needs preprocessing.
-- The GDAL block cache and display warp budget are 64 MiB each.
-- COG compression and tiling each use up to four workers, capped by available CPUs.
-- Temporary display TIFFs are uncompressed for speed. Allow scratch space for source-resolution and reprojected bands.
-- Display resampling follows the installed GDAL defaults, so output can differ across GDAL versions.
-- There is no PMTiles writer.
+There is no PMTiles writer. The [R2 contract](architecture/r2-raster-contract.md)
+records the detailed source and ownership boundaries and acceptance status.
 
 ## Archives
 

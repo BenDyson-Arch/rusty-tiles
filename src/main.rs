@@ -17,7 +17,8 @@ use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
     MeshApproximation, MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest,
     ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
-    RasterDirectoryRequest, RasterDirectoryResult, Reporter, RunControl, RunEvent,
+    RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest, RasterResult,
+    Reporter, RunControl, RunEvent,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -251,9 +252,10 @@ struct RasterArgs {
     /// image (RGB/RGBA bands) or gray (one band stretched by displayMin/displayMax)
     #[arg(long, default_value = "image")]
     display: String,
-    #[arg(long, default_value_t = 1)]
-    band: u16,
-    /// Alpha band for image or gray display (0..255 opacity); 0 uses mask/NoData
+    /// Selected gray band; defaults to 1 for gray display
+    #[arg(long)]
+    band: Option<u16>,
+    /// Explicit opacity band; 0 selects the declared alpha, otherwise opaque
     #[arg(long = "alphaBand", visible_alias = "alpha-band", default_value_t = 0)]
     alpha_band: u16,
     /// Value mapped to black for gray display
@@ -270,6 +272,24 @@ struct RasterArgs {
         allow_hyphen_values = true
     )]
     display_max: Option<f64>,
+    /// Operation worker cap (1..4)
+    #[arg(long, default_value_t = RasterLimits::default().workers)]
+    jobs: u8,
+    /// Aggregate admitted source bytes
+    #[arg(long, default_value_t = RasterLimits::default().max_source_bytes)]
+    max_source_bytes: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_source_pixels)]
+    max_source_pixels: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_decoded_bytes)]
+    max_decoded_bytes: u64,
+    #[arg(long, default_value_t = RasterLimits::default().max_tiles)]
+    max_tiles: u64,
+    /// Completed output bytes; checked after artifact close
+    #[arg(long, default_value_t = RasterLimits::default().max_output_bytes)]
+    max_output_bytes: u64,
+    /// Logical work and completed workspace allowance; not an RSS quota
+    #[arg(long, default_value_t = RasterLimits::default().max_working_bytes)]
+    max_working_bytes: u64,
 }
 
 #[derive(Args)]
@@ -593,6 +613,7 @@ enum Outcome {
     ModelArchive(Box<ModelWrapResult>),
     ModelManifest(Box<ModelManifestResult>),
     RasterDirectory(RasterDirectoryResult),
+    Raster(Box<RasterResult>),
     Vector(vector::VectorResult),
     Terrain(Box<terrain::TerrainResult>),
     PointCloud(Box<rusty_tiles::point_cloud::PointCloudResult>),
@@ -671,6 +692,7 @@ fn main() -> ExitCode {
                 Outcome::RasterDirectory(result) => {
                     Some((raster_directory_summary(&result), result.output))
                 }
+                Outcome::Raster(result) => Some((raster_summary(&result), result.output)),
                 Outcome::Done => None,
             };
             if let Some((summary, output)) = summary {
@@ -804,6 +826,19 @@ fn raster_directory_summary(result: &RasterDirectoryResult) -> Value {
     let mut summary = output_summary(&result.output, None, false);
     summary["rasterReport"] = json!(result.report);
     summary["counts"] = json!({"tiles":1});
+    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
+    summary
+}
+
+fn raster_summary(result: &RasterResult) -> Value {
+    let mut summary = output_summary(&result.output, None, false);
+    summary["rasterReport"] = json!(&result.report);
+    summary["counts"] = json!({"tiles":result.report.tiles,
+        "sourceBands":result.report.source.bands.as_slice().len()});
+    summary["settings"] = json!({"minZoom":result.report.grid.min_zoom,
+        "maxZoom":result.report.grid.max_zoom,"workers":result.report.resolved_workers});
+    summary["conversionReport"] =
+        json!({"path":result.output.join("report.json").to_string_lossy()});
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
 }
@@ -1268,22 +1303,73 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             .with_policy(policy);
             Outcome::Terrain(Box::new(terrain::terrain_to_directory(request, &run)?))
         }
-        Command::Raster(a) => Outcome::Converted(rusty_tiles::raster::raster_reported(
-            &a.io.input,
-            &a.io.output,
-            &rusty_tiles::raster::RasterOptions {
-                force: a.io.force,
-                min_zoom: a.min_zoom,
-                max_zoom: a.max_zoom,
-                display: a.display,
-                band: a.band,
-                alpha_band: a.alpha_band,
-                display_min: a.display_min,
-                display_max: a.display_max,
-            },
-            reporter,
-        )?),
+        Command::Raster(a) => {
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let control = RunControl::new(observer);
+            Outcome::Raster(Box::new(rusty_tiles::raster_to_pyramid(
+                raster_request(a)?,
+                &control,
+            )?))
+        }
     })
+}
+
+fn raster_request(args: RasterArgs) -> Result<RasterRequest, Error> {
+    let invalid = |message: &'static str| {
+        Error::Job(rusty_tiles::JobFailure {
+            error: JobError::new(JobErrorKind::InvalidRequest, message),
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })
+    };
+    let request = match args.display.as_str() {
+        "image" => {
+            if args.band.is_some() || args.display_min.is_some() || args.display_max.is_some() {
+                return Err(invalid(
+                    "--band/--displayMin/--displayMax require --display gray",
+                ));
+            }
+            RasterRequest::image(args.io.input, args.io.output, args.min_zoom, args.max_zoom)
+        }
+        "gray" => {
+            let (Some(low), Some(high)) = (args.display_min, args.display_max) else {
+                return Err(invalid(
+                    "--display gray requires --displayMin and --displayMax",
+                ));
+            };
+            RasterRequest::gray(
+                args.io.input,
+                args.io.output,
+                args.min_zoom,
+                args.max_zoom,
+                args.band.unwrap_or(1),
+                low,
+                high,
+            )
+        }
+        _ => return Err(invalid("--display must be image or gray")),
+    };
+    let request = if args.alpha_band == 0 {
+        request
+    } else {
+        request.with_alpha_band(args.alpha_band)
+    };
+    Ok(request
+        .with_policy(if args.io.force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        })
+        .with_limits(RasterLimits {
+            max_source_bytes: args.max_source_bytes,
+            max_source_pixels: args.max_source_pixels,
+            max_decoded_bytes: args.max_decoded_bytes,
+            max_tiles: args.max_tiles,
+            max_output_bytes: args.max_output_bytes,
+            max_working_bytes: args.max_working_bytes,
+            workers: args.jobs,
+        }))
 }
 
 fn legacy_mesh_placement(

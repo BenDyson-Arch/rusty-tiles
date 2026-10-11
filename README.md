@@ -36,7 +36,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
-| GeoTIFF or other GDAL imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
+| Local GTiff, PNG, JPEG or AAIGrid imagery | `raster` | Source COG, PNG XYZ tiles and TileJSON | Yes |
 | Elevation rasters | `terrain` | Bounded 3D Tiles terrain meshes | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 

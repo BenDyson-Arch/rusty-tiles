@@ -18,7 +18,7 @@ impl Drop for Row {
     }
 }
 pub(super) struct Reader {
-    dataset: Option<Dataset<'static>>,
+    dataset: Option<Dataset>,
     layers: Vec<gdal_sys::OGRLayerH>,
     pub driver: String,
     pub schemas: BTreeMap<String, String>,

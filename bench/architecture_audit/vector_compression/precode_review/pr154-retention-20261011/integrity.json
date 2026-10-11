@@ -1,0 +1,34 @@
+{
+  "algorithm": "sha256",
+  "scope": "Independent bounded PR154 full retention and actual accepted merge identity; no new R2/product/release acceptance.",
+  "files": {
+    "decision.json": {
+      "bytes": 685,
+      "sha256": "ea25a18cac14e318e3d476959868232bc60c4089314b3fdff6979338c98696e8"
+    },
+    "develop-live.json": {
+      "bytes": 5402,
+      "sha256": "680d8e02acb34cfa82048b6c984e6e298987c22ea9c84c9648dbf55e80395ef0"
+    },
+    "merge-commit-live.json": {
+      "bytes": 2780,
+      "sha256": "6112b79d014906226331dba940b782674978e44f83559391f3a65cb57f665035"
+    },
+    "merged-pr-live.json": {
+      "bytes": 20486,
+      "sha256": "5a34e55d9e08b7dbd92b6c988549370e9f37a2f6f6d1493d6048abe5caa5b117"
+    },
+    "review.md": {
+      "bytes": 2803,
+      "sha256": "470678baf469513201ab277e7c9fdd6698c72830db2f40458ffd15fd71cef206"
+    },
+    "verification.json": {
+      "bytes": 1414,
+      "sha256": "0980cf6e408dbc2ce4c6f9d76281798d0ac6d336d86e197238ca3750c160a1f9"
+    },
+    "verify.py": {
+      "bytes": 5223,
+      "sha256": "0523cb15b3b54b8e7ff07b8166d39df792a7a8e17441735eee8da8bf3c27837b"
+    }
+  }
+}

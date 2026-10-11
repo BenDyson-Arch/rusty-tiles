@@ -1,0 +1,20 @@
+{
+  "status": "FROZEN_INDEPENDENT_RETENTION_REVIEW",
+  "records": [
+    {
+      "path": "/tmp/rusty-tiles-r2-followup-retention-review-20261011/decision.json",
+      "bytes": 828,
+      "sha256": "f59c5cc3ad114970fd06305c2eb25009e4e22cee1367f529440b797a51c69824"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-followup-retention-review-20261011/verification.json",
+      "bytes": 1646,
+      "sha256": "ac0a0a3717f05a99aac472d40b5ca3ea098d5169ae80619a934fdac7bc1b3f63"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-followup-retention-review-20261011/verify.py",
+      "bytes": 2499,
+      "sha256": "e7f477fb8affe3115adcbb65beea47b00e952c1b0e57e6ef0682e0151f8832c3"
+    }
+  ]
+}
