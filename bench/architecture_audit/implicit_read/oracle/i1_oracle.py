@@ -1348,6 +1348,8 @@ def run_tileset(st, name, parent, depth, refine_in, active, exact):
         invalid("tileset geometricError", stage)
     doc = {"name": name, "key": name, "schema": load_schema(st, ts, name, stage)}
     active.add(name)
+    doc["error"] = float(ts["geometricError"])
+    doc["root_tile"] = ts["root"]
     node(st, ts["root"], doc, parent, depth, refine_in, active, exact)
     active.discard(name)
     st.visit(1, f"exit {stage}")
@@ -1382,6 +1384,9 @@ def node(st, tile, doc, parent, depth, refine_in, active, exact):
             invalid("hierarchyBounds: tile volume outside its parent", stage)
         if not error_ok(err, parent["error"]):
             invalid("geometricErrorOrder: tile error exceeds its parent", stage)
+    if tile is doc.get("root_tile") and not error_ok(err, doc["error"]):
+        # Pre-I1 explicit rule (post-freeze amendment 4): a document root's error <= the document's geometricError.
+        invalid("geometricErrorOrder: root error exceeds its document geometricError", stage)
     ext = tile.get("extensions")
     if isinstance(ext, dict) and "3DTILES_implicit_tiling" in ext:
         unsupported("3DTILES_implicit_tiling (1.0)", stage)

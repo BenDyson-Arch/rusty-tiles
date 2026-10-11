@@ -603,6 +603,7 @@ def family_c():
         second = dict(child, geometricError=child["geometricError"] - 1.0)  # post-freeze amendment 1: uniqueItems
         top["root"] = {"boundingVolume": child["boundingVolume"], "children": [dict(child), second],
                        "geometricError": 500.0, "refine": "REPLACE"}
+        top["geometricError"] = 500.0  # post-freeze amendment 4: root error <= document geometricError
         m["tileset.json"] = cjson(top)
         return m
     case("C-11b", ext_twice(), "Unsupported", pair="C-11",
@@ -769,6 +770,9 @@ def family_t():
     def ext_t(implicit_half):
         b = single(row_half_x=9.0, half=9.0, e_0=90.0)
         return external(b, [5.0, 5.0, 5.0], 10.0, 200.0, implicit_half=implicit_half)
+    # Post-freeze amendment 4: a document root's error must not exceed its document's geometricError.
+    case("T-4", implicit_archive(single(), error=100.0 - 2 * 1e-8 * 101.0), "InvalidInput", pair="T-0",
+         ref="O-extra: root geometricError above its document's geometricError (pre-I1 rule)")
     case("T-3.base", ext_t(10.0), "Accepted", ref="T-3 base (V_R = referencing tile)")
     case("T-3", ext_t(12.0), "InvalidInput", pair="T-3.base", ref="T-3 (V_R escapes P; V_0 does not; X-11)")
 

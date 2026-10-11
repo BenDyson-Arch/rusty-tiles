@@ -2159,7 +2159,7 @@
    "members": 16,
    "pair": "C-11",
    "ref": "v3.2: OD-7 validation-wide (one implicit-root external tileset referenced twice)",
-   "sha256": "1bf5e5c0c5d90e855140a2df5877719211dbf8766d6e30c60d6911cd42e3a76f"
+   "sha256": "5898f6e4d650f2cd1e898dacfd2195930a0c92c3e24b9147e57f757473c700d9"
   },
   {
    "bytes": 10994,
@@ -2611,6 +2611,24 @@
    "pair": "T-2a",
    "ref": "T-2",
    "sha256": "348dc178c34c76dbeb16ddfd692bd16ebad085f11c0bc998f10facb37acef25c"
+  },
+  {
+   "bytes": 1455,
+   "diff": {
+    "added": [],
+    "changed": {
+     "tileset.json": "length 573 -> 579"
+    },
+    "removed": []
+   },
+   "expected": "InvalidInput",
+   "file": "fixtures/T-4.3tz",
+   "id": "T-4",
+   "limits": {},
+   "members": 2,
+   "pair": "T-0",
+   "ref": "O-extra: root geometricError above its document's geometricError (pre-I1 rule)",
+   "sha256": "38668d703708267e3627195ccd19deab6bca5e3320c54a6f55785f8ff278c62b"
   },
   {
    "bytes": 1833,
