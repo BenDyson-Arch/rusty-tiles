@@ -26,3 +26,4 @@ summary = {"binary_sha256": hashlib.sha256(open(BIN, "rb").read()).hexdigest(), 
 json.dump(summary, open(OUT, "w"), indent=1)
 print(json.dumps({k: (v if not isinstance(v, list) else len(v)) for k, v in summary.items() if k != "rows"}))
 for d in summary["disagree"]: print(json.dumps(d))
+sys.exit(1 if summary["disagree"] else 0)

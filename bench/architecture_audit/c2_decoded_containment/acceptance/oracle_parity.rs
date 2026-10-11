@@ -54,10 +54,10 @@ fn production(file: &Path, limits: ValidationLimits) -> Value {
                 Some((role, k)) => (role, k.parse::<u64>().unwrap()),
                 None => (fields["volume"], 0),
             };
+            let n = |k: &str| fields[k].parse::<u64>().unwrap();
             json!({"outcome":"Outside","facts":{
-                "depth": fields["depth"].parse::<u64>().unwrap(),
-                "level": level, "role": role,
-                "node": fields["node"].parse::<u64>().unwrap()}})
+                "depth": n("depth"), "level": level, "role": role, "node": n("node"),
+                "mesh": n("mesh"), "primitive": n("primitive"), "vertex": n("vertex")}})
         }
         Err(ValidationFailure::InvalidInput(m))
             if m.starts_with("child bounds escape parent") || m == "content bounds escape tile" =>
@@ -68,7 +68,7 @@ fn production(file: &Path, limits: ValidationLimits) -> Value {
     }
 }
 
-fn agrees(expected: &Value, got: &Value) -> bool {
+fn agrees(expected: &Value, oracle: &Value, got: &Value) -> bool {
     let outcome = expected["outcome"].as_str().unwrap();
     match outcome {
         "Contained" => got["outcome"] == "Contained",
@@ -83,11 +83,19 @@ fn agrees(expected: &Value, got: &Value) -> bool {
             want.dedup();
             got["outcome"] == "NotInspected" && got["reasons"] == json!(want)
         }
+        // Expected facts pin depth/level/role/node; the oracle's own computed
+        // facts additionally pin the first escaping mesh, primitive and vertex.
         "Outside" => {
             got["outcome"] == "Outside"
                 && ["depth", "level", "role", "node"].iter().all(|k| {
                     expected["facts"]
                         .get(*k)
+                        .is_none_or(|v| got["facts"][*k] == *v)
+                })
+                && ["mesh", "primitive", "vertex"].iter().all(|k| {
+                    oracle["facts"]
+                        .get(*k)
+                        .filter(|v| !v.is_null())
                         .is_none_or(|v| got["facts"][*k] == *v)
                 })
         }
@@ -128,7 +136,7 @@ fn production_matches_every_oracle_witness_and_control() {
             continue;
         }
         let got = production(&file, limits(row));
-        if agrees(&row["expected"], &got) {
+        if agrees(&row["expected"], &row["oracle"], &got) {
             agree += 1;
         } else if got["outcome"] == "C1Hierarchy"
             && row["c1Precondition"]["judgement"]
@@ -145,6 +153,15 @@ fn production_matches_every_oracle_witness_and_control() {
     if let Some(out) = std::env::var_os("C2_PARITY_OUT") {
         std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
     }
+    // The recorded runs had no C1-precondition refusals; any new one is a change to review.
+    assert!(
+        summary["c1PreconditionRefused"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
     assert!(
         summary["disagree"].as_array().unwrap().is_empty(),
         "{}",
