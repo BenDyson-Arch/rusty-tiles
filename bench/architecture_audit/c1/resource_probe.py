@@ -26,6 +26,11 @@ def worker(config_path):
        stdout=(root/'stdout').read_text(),stderr=(root/'stderr').read_text())))
 
 
+# The implicit cases must be refused for the reason they target, not an earlier one.
+INTENDED={'implicit_json_limit':'JSON exceeds byte limit','implicit_json_items_limit':'JSON exceeds value-node limit',
+          'implicit_capacity_limit':'implicit: subtree tile availability exceeds remaining hierarchy visits'}
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=pathlib.Path,required=True)
     p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
@@ -44,15 +49,21 @@ def main():
     archive(corpus/'json_limit.3tz',{'tileset.json':manifest,'tile.glb':glb(large,binary)})
     with zipfile.ZipFile(corpus/'implicit_no_content.3tz') as z:
         implicit_manifest=json.loads(z.read('tileset.json'))
-    subtree={'tileAvailability':{'constant':1},'contentAvailability':[],'childSubtreeAvailability':{'constant':0}}
+    # A valid content-free subtree: contentAvailability is omitted, because an
+    # empty array is InvalidInput under I1 (X-9). Only the padding below exceeds a limit.
+    subtree={'tileAvailability':{'constant':1},'childSubtreeAvailability':{'constant':0}}
     for name,extras in [('implicit_json_limit',{'padding':'x'*(8*1024*1024)}),
                         ('implicit_json_items_limit',{'nodes':[0]*131073})]:
         doc=dict(subtree,extras=extras);text=json.dumps(doc).encode();text+=b' '*(-len(text)%8)
         data=struct.pack('<4sIQQ',b'subt',1,len(text),0)+text
         archive(corpus/(name+'.3tz'),{'tileset.json':json.dumps(implicit_manifest).encode(),'0-0-0.subtree':data})
     implicit_manifest['root']['implicitTiling'].update(subtreeLevels=16,availableLevels=16)
-    # No subtree resource is supplied: capacity admission must precede reads.
-    archive(corpus/'implicit_capacity_limit.3tz',{'tileset.json':json.dumps(implicit_manifest).encode()})
+    # I1 (X-5) reads a subtree before judging its capacity, so the subtree is supplied.
+    # Its constant availability declares (4^16-1)/3 tiles; their visits are reserved at
+    # subtree admission and refused before any rank table or tile visit.
+    text=json.dumps(subtree).encode();text+=b' '*(-len(text)%8)
+    data=struct.pack('<4sIQQ',b'subt',1,len(text),0)+text
+    archive(corpus/'implicit_capacity_limit.3tz',{'tileset.json':json.dumps(implicit_manifest).encode(),'0-0-0.subtree':data})
     before=snapshot(corpus); results=[]
     for name in ['triangle','count_limit','count_sum_overflow','meshopt_count_limit','json_limit','shared_primitives','legal_shared_indices','implicit_json_limit','implicit_json_items_limit','implicit_capacity_limit']:
         for repeat in range(2):
@@ -68,6 +79,8 @@ def main():
             assert result['exitCode'] in [0,2,3],result
             if name in ['count_limit','count_sum_overflow','meshopt_count_limit','json_limit','implicit_json_limit','implicit_json_items_limit','implicit_capacity_limit']:
                 assert report['error']['code']=='resource_limit',result
+            if name in INTENDED:
+                assert INTENDED[name] in report['error']['message'],result
             if name=='legal_shared_indices':assert report['ok'] is True,result
             results.append(result)
     assert snapshot(corpus)==before
