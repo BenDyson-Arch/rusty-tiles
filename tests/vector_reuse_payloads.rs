@@ -581,3 +581,28 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
     let (_, result) = run("explicit-cache.3tz", Some(&updated), true);
     assert!(!result.status.success());
 }
+
+/// VALIDATION-DEPENDENT (for R): the develop validator refuses implicit roots on
+/// explicit tiles, so forest archives validate only with I1's reader. Enable on
+/// the combined I1+P branch; do not weaken it to pass here.
+#[test]
+#[ignore = "needs I1's validator: run on the combined I1+P branch with --ignored"]
+fn reused_and_fresh_forest_archives_validate() {
+    let case = Case::new(&[
+        "--maxFeatures",
+        "2",
+        "--lodLevels",
+        "2",
+        "--quantize",
+        "--meshopt",
+    ]);
+    let (base, _, _) = case.convert("base", "base.3tz", None);
+    let (reused, _, _) = case.convert("edit", "reused.3tz", Some(&base));
+    let (fresh, _, _) = case.convert("edit", "fresh.3tz", None);
+    for path in [&base, &reused, &fresh] {
+        let request = rusty_tiles::validate::ValidationRequest::new(path);
+        let report = rusty_tiles::validate::inspect(request)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        assert!(report.ok, "{}", path.display());
+    }
+}
