@@ -34,7 +34,8 @@ def native_run(args):
         archive = pathlib.Path(scratch) / 'output.3tz'
         command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
         # Frozen oracle and explicit-hierarchy audits retain their original
-        # contract. Browser fixtures opt into the converter's implicit default.
+        # contract. Browser fixtures and forest reuse tests opt into the
+        # converter's implicit-forest default with explicit=False.
         if getattr(args, 'explicit', True):
             command.append('--explicit')
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
