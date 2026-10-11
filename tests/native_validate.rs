@@ -155,6 +155,56 @@ fn valid_archive_and_corruption_categories() {
     }
 }
 
+/// `convert-to-implicit` was removed in 0.4.0, but archives it already wrote
+/// list their retained original payloads only in `conversion.json`. Validation
+/// keeps accepting that marker and still checks each retained payload.
+#[test]
+fn retained_content_from_removed_convert_to_implicit_remains_valid() {
+    let root = tempfile::tempdir().unwrap();
+    let original = fixture(root.path());
+    for (name, operation, corrupt) in [
+        ("retained", "convert-to-implicit", false),
+        ("unmarked", "vector", false),
+        ("corrupt", "convert-to-implicit", true),
+    ] {
+        let directory = root.path().join(name);
+        fs::create_dir(&directory).unwrap();
+        let mut archive = zip::ZipArchive::new(fs::File::open(&original).unwrap()).unwrap();
+        archive.extract(&directory).unwrap();
+        fs::remove_file(directory.join("@3dtilesIndex1@")).unwrap();
+        fs::create_dir(directory.join("retained")).unwrap();
+        let mut bytes = fs::read(payload(&directory)).unwrap();
+        if corrupt {
+            bytes.truncate(bytes.len() - 4);
+        }
+        fs::write(directory.join("retained/original.glb"), bytes).unwrap();
+        change_json(&directory, "conversion.json", |v| {
+            v["operation"] = json!(operation);
+            v["retainedContentUris"] = json!(["retained/original.glb"]);
+        });
+        let out = root.path().join(format!("{name}.3tz"));
+        let packed = support::rusty_tiles()
+            .args(["convert", "-i"])
+            .arg(&directory)
+            .arg("-o")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert!(packed.status.success(), "{name}");
+        let (result, report) = validate(&out, &[]);
+        if name == "retained" {
+            assert!(result.status.success(), "{name}: {report}");
+            assert_eq!(report["ok"], true, "{name}: {report}");
+        } else {
+            assert!(!result.status.success(), "{name}: {report}");
+        }
+        if name == "unmarked" {
+            let message = report["error"]["message"].as_str().unwrap();
+            assert!(message.contains("unreferenced"), "{name}: {report}");
+        }
+    }
+}
+
 #[test]
 fn point_archive_and_feature_attributes_use_valid_core_types() {
     let root = tempfile::tempdir().unwrap();

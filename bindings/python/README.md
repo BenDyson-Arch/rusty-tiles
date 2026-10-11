@@ -48,7 +48,7 @@ assert rusty_tiles.validate(result.output)["ok"]
 ```
 
 All inputs and outputs are filesystem paths (`str` or `os.PathLike`).
-Legacy mesh and implicit conversions return `ConversionResult` with `output` (a `pathlib.Path`), `archive`
+Legacy `mesh_to_3tz` returns `ConversionResult` with `output` (a `pathlib.Path`), `archive`
 (a boolean) and `report` (a dictionary or `None`). Existing outputs are
 preserved unless `force=True`; publication uses the Rust library's private
 staging and atomic archive replacement.
@@ -64,7 +64,6 @@ results with required reports and cleanup diagnostics, as described below.
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
-| `convert_to_implicit(input, output, ...)` | `force=False` |
 | `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
 
 For legacy `mesh_to_3tz`, `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
@@ -356,7 +355,10 @@ a read-only DMG mount and detaches it; it does not modify a system installation.
 Updating the Blender pin requires reviewing the official checksum file,
 updating the manifest and rerunning all four platform jobs.
 
-`convert_to_implicit(input, output, *, force=False)` rewrites an eligible rusty-tiles explicit point-cloud/vector `.3tz` as implicit tiling, returning `ConversionResult`. It preserves original GLB/b3dm bytes through implicit tileset roots that own their replacement descendants. Retained originals and coordinate-template aliases typically double payload storage. Eligibility requires distinct regular midpoint cells, with only recorded rounding/minimum-thickness padding; many older binary trees and vector LOD chains need a fresh source conversion. Meshes, foreign and already implicit archives are refused. See [command eligibility and publication semantics](../../docs/CLI.md#convert-to-implicit).
+`convert_to_implicit` was removed in 0.4.0. To obtain implicit tiling for an
+explicit point-cloud or vector archive, re-run `point_cloud_to_3tz` or
+`vector_to_3tz` from the original source without `explicit=True`; implicit
+tiling is their default.
 
 `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` exposes
 the bounded raster directory request/error boundary. The standard wheel has no GDAL raster capability
