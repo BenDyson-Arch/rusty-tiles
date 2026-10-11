@@ -3,6 +3,7 @@ use crate::archive3tz::TZ_INDEX_NAME;
 use crate::content_integrity::{
     json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
 };
+mod containment;
 mod types;
 pub use types::{
     PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
