@@ -5,8 +5,8 @@
 //!
 //! Compared per case: the outcome kind (Accepted / InvalidInput / Unsupported /
 //! ResourceLimit and its limit name), and for Accepted cases the canonical tile list
-//! (`tilesSha256`, the oracle's digest form) plus the `tiles` and `contentReferences`
-//! counters. Writes a JSON summary to `I1_PARITY_OUT`; `I1_PROD_FACTS_DIR` receives the
+//! (`tilesSha256`, the oracle's digest form) plus the `tiles`, `implicitTiles` and
+//! `contentReferences` counters (every content entry, external tilesets included). Writes a JSON summary to `I1_PARITY_OUT`; `I1_PROD_FACTS_DIR` receives the
 //! production tile list of every Accepted case for offline diffing.
 use crate::content_integrity::implicit::EffectiveVolume;
 use crate::validate::{
@@ -20,22 +20,18 @@ use std::{collections::BTreeMap, path::Path, time::Instant};
 const ROOT: &str = "bench/architecture_audit/implicit_read";
 
 /// Disagreements diagnosed as O-side (fixture or stale production note), each pinned to the
-/// exact production outcome observed at e3a67bf. They are reported, never counted as
-/// agreement, and the test fails if one changes. Production defects are never listed here.
-const O_SIDE: &[(&str, &str, &str)] = &[
-    (
-        "C-11b",
-        "InvalidInput",
-        "fixture: the two children are identical objects, so the core tile schema's \
-         `children.uniqueItems` refuses the tileset before OD-7 can apply",
-    ),
-    (
-        "Z-payload",
-        "InvalidInput",
-        "stale production note: O's point (16, 8, 2) is glTF Y-up, i.e. (16, -2, 8) in the \
-         tile frame, outside the box; C2 (merged after O froze) refuses it as Outside",
-    ),
-];
+/// exact production outcome observed. They are reported, never counted as agreement, and the test
+/// fails if one changes. Production defects are never listed here. Z-payload was fixed by the
+/// i1/oracle amendment `2ecbad1`; C-11b remains (below).
+const O_SIDE: &[(&str, &str, &str)] = &[(
+    "C-11b",
+    "InvalidInput",
+    "O models geometricErrorOrder against the path-parent tile only; production (unchanged \
+     from develop) also bounds each document root by that document's top-level \
+     geometricError. The amended fixture's root is 500 under a top-level 400, so production \
+     refuses at error order before OD-7. With the top-level raised to 500 both give \
+     Unsupported \"repeated subtree member\"",
+)];
 
 /// The oracle's frozen `DEFAULT_LIMITS` (`oracle/i1_oracle.py:29-39`, pre-#160 values). Parity
 /// runs production under the same ceilings O decided with; `I1_PRODUCTION_DEFAULTS=1` instead
@@ -240,21 +236,10 @@ fn production_matches_every_i1_oracle_witness_and_control() {
                 problems.push("tilesSha256".into());
             }
             let counts = &o["counts"];
-            for k in ["tiles", "implicitTiles"] {
+            for k in ["tiles", "implicitTiles", "contentReferences"] {
                 if got[k] != counts[k] {
                     problems.push(format!("{k} {} != {}", got[k], counts[k]));
                 }
-            }
-            // Production's `content_references` also counts each explicit external-tileset
-            // content (unchanged from develop); O's counts only emitted and payload contents.
-            // O's `tilesets` counter includes the root document, each other reached once.
-            let n = |k: &str| counts[k].as_u64().unwrap();
-            let want_refs = n("contentReferences") + n("tilesets") - 1;
-            if got["contentReferences"].as_u64() != Some(want_refs) {
-                problems.push(format!(
-                    "contentReferences {} != {want_refs} (O {} + external tilesets {})",
-                    got["contentReferences"], n("contentReferences"), n("tilesets") - 1
-                ));
             }
         }
         let o_side = O_SIDE
@@ -342,15 +327,10 @@ fn production_matches_the_oracle_on_the_w_corpus() {
                 problems.push("tilesSha256".into());
             }
             let c = &o["counts"];
-            for k in ["tiles", "implicitTiles"] {
+            for k in ["tiles", "implicitTiles", "contentReferences"] {
                 if got[k] != c[k] {
                     problems.push(format!("{k} {} != {}", got[k], c[k]));
                 }
-            }
-            let n = |k: &str| c[k].as_u64().unwrap();
-            let want_refs = n("contentReferences") + n("tilesets") - 1;
-            if got["contentReferences"].as_u64() != Some(want_refs) {
-                problems.push(format!("contentReferences {} != {want_refs}", got["contentReferences"]));
             }
         }
         let row = json!({"id":id,"expected":a["expected"],"productionExpected":want,"production":got,

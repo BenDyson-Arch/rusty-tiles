@@ -5,8 +5,54 @@ the frozen O-implicit oracle (`../oracle`, `../controls`, `../corpus`). Every ve
 from O's committed expectations. No production code changed. The only `src/` edit is the
 test-only `#[cfg(test)] #[path]` include in `src/lib.rs`, which follows C2's pattern.
 
-**Result: FAIL.** One production defect (B-10.subnormal) remains. Every other case agrees, or
-differs for a diagnosed O-side reason.
+**Result at e3a67bf: FAIL.** One production defect (B-10.subnormal) remained. Every other case
+agreed, or differed for a diagnosed O-side reason.
+
+**Result after the follow-ups (`ce9838e` plus this record): PASS, 179/180, with 1 diagnosed
+O-side difference and 0 production disagreements.** See "Follow-up" below.
+
+## Follow-up: owner fix and oracle amendment merged
+
+These commits are now in the branch:
+- `5ffbf71` (owner): decides derived-error subnormality on the exact value, using
+  `e_R < 2^(level−1022)`, before multiplying.
+- `2ecbad1` (oracle author, post-freeze), merged as `ce9838e`. It changes three things:
+  - C-11b's children are made distinct;
+  - Z-payload's and C-8's points go through glTF's Y-up rotation;
+  - `contentReferences` now counts external-tileset links, per the coordinator's ruling.
+
+The merged oracle replays exactly:
+- self-test 50/50;
+- `generate.py --large --check`: 180 cases byte-identical;
+- `check.py`: 167 + 13 cases, 0 disagreements;
+- `corpus/run.py`: 41/41.
+
+`corpus/results.json` was regenerated from the merged oracle. mf2-lod3 `contentReferences` is
+now 12,715. The facts digests are unchanged.
+
+The harness now compares `contentReferences` directly. Its sha256 is
+`e7e8541e907578b7f52e6cf37c1fc75f4cd40e4c99098b3cb7ab44da0d9abb43`.
+
+| Run (release, merged head) | Cases | Agree | O-side | Production disagreements |
+| --- | --- | --- | --- | --- |
+| `parity-merged-release.json` (O defaults) | 180 | **179** | 1 (C-11b) | **0** |
+| `corpus-parity-merged-release.json` | 41 | **41** | 0 | 0 |
+| `parity-merged-release-production-defaults.json` (informational) | 180 | 178 | 1 | R9 only (#160 default rescale, as before) |
+
+- **B-10.subnormal** now agrees: Unsupported, "derived geometric error underflow at level 5".
+- **Z-payload** and **C-8** now agree: Accepted.
+- **C-11b** gives InvalidInput, "geometricError increases at depth 0", so it still does not reach
+  OD-7.
+  - **Cause.** The amended `tileset.json` keeps top-level `geometricError` 400 but wraps the two
+    links in a root whose error is 500. Production bounds each document root by its document's
+    top-level `geometricError` (for an external root, the minimum of that and the link's error).
+    That is the explicit skeleton's `geometricErrorOrder`, unchanged from develop. O models the
+    order against the path-parent tile only.
+  - **Evidence that OD-7 itself agrees.** `scripts/c11b_variant.py` raises only that top-level
+    value to 500 and repackages with O's `write_3tz` (`5898f6e4…`). Both O and production then
+    give Unsupported "repeated subtree member" (`ext/st/0.0.0.0.subtree`).
+  - **Who acts.** O's fixture should set the top-level error to at least 500, or O should model
+    the document-level bound. The harness pins C-11b as O-side with this diagnosis.
 
 ## Identities
 
