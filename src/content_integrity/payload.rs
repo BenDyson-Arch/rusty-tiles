@@ -378,7 +378,8 @@ fn check_extensions(raw: &RawValue, used: &BTreeSet<String>, ceiling: usize) -> 
     Ok(())
 }
 /// C1 integrity plus C2 scene/node admission and exclusion facts, without a
-/// scene consumer.
+/// scene consumer (format controls and producer self-checks).
+#[cfg(test)]
 pub(crate) fn inspect<E>(
     kind: PayloadKind,
     bytes: &[u8],

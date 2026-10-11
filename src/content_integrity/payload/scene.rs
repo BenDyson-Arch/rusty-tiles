@@ -115,8 +115,10 @@ pub(crate) trait SceneConsumer {
     fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Self::Error>;
 }
 
-/// The phase-1 C1-only consumer, used by callers without a C2 consumer.
+/// The C1-only consumer, used by callers without a C2 consumer.
+#[cfg(test)]
 pub(crate) struct NoScene;
+#[cfg(test)]
 impl SceneConsumer for NoScene {
     type Error = std::convert::Infallible;
     fn instances_only(&self) -> bool {

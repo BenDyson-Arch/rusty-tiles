@@ -144,6 +144,24 @@ fn read_member(
         .read_member(name, maximum)
         .map_err(archive_admission_error)
 }
+/// A C2 phase-2 re-read: identical members to phase 1, so the precheck's
+/// `containmentBytesRead` total bounds it. Exceeding it means the archive changed.
+fn read_rerun(
+    archive: &mut Archive,
+    name: &str,
+    reread: &mut u64,
+    cap: u64,
+    maximum: u64,
+) -> Result<Vec<u8>, Error> {
+    let size = archive.member(name).map_err(archive_admission_error)?.size;
+    *reread = reread
+        .checked_add(size)
+        .filter(|&n| n <= cap && size <= maximum)
+        .ok_or_else(|| invalid("source archive changed during inspection"))?;
+    archive
+        .read_member(name, maximum)
+        .map_err(archive_admission_error)
+}
 fn uri(base: &str, value: &str) -> Result<String, Error> {
     if value.is_empty() || value.contains('\\') {
         return Err(invalid(format!("invalid resource URI: {value}")));
@@ -337,6 +355,498 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
         })),
     }
 }
+// ---- C2 decoded-content containment: operation owner ----
+use containment::{
+    Arena, Exclusion, LevelFacts, Local, Normalization, RawVertex, Role, SpanCaps, UriBounds,
+    Verdict, VolumeFacts, Word,
+};
+use payload::scene::{
+    ContentExclusions, Instance, NodeTransform, PositionFormat, PositionWord, SceneConsumer,
+};
+
+/// The frozen 15-name not-inspected reason enum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reason {
+    ImplicitTiling,
+    TilesetExtension,
+    TileMetadata,
+    UpAxisOverride,
+    RegionVolume,
+    RotatedBox,
+    RtcCenter,
+    GltfExtension,
+    SceneSelection,
+    Skin,
+    MorphTargets,
+    Animation,
+    QuaternionWindow,
+    NumericSpan,
+    WorkLimit,
+}
+const REASONS: [Reason; 15] = [
+    Reason::ImplicitTiling,
+    Reason::TilesetExtension,
+    Reason::TileMetadata,
+    Reason::UpAxisOverride,
+    Reason::RegionVolume,
+    Reason::RotatedBox,
+    Reason::RtcCenter,
+    Reason::GltfExtension,
+    Reason::SceneSelection,
+    Reason::Skin,
+    Reason::MorphTargets,
+    Reason::Animation,
+    Reason::QuaternionWindow,
+    Reason::NumericSpan,
+    Reason::WorkLimit,
+];
+impl Reason {
+    fn name(self) -> &'static str {
+        match self {
+            Self::ImplicitTiling => "implicitTiling",
+            Self::TilesetExtension => "tilesetExtension",
+            Self::TileMetadata => "tileMetadata",
+            Self::UpAxisOverride => "upAxisOverride",
+            Self::RegionVolume => "regionVolume",
+            Self::RotatedBox => "rotatedBox",
+            Self::RtcCenter => "rtcCenter",
+            Self::GltfExtension => "gltfExtension",
+            Self::SceneSelection => "sceneSelection",
+            Self::Skin => "skin",
+            Self::MorphTargets => "morphTargets",
+            Self::Animation => "animation",
+            Self::QuaternionWindow => "quaternionWindow",
+            Self::NumericSpan => "numericSpan",
+            Self::WorkLimit => "workLimit",
+        }
+    }
+    fn bit(self) -> u16 {
+        1 << self as u16
+    }
+}
+const TILESET_ALLOWLIST: [&str; 1] = ["3DTILES_content_gltf_vector"];
+fn content_reasons(facts: &ContentExclusions) -> u16 {
+    [
+        (facts.rtc_center, Reason::RtcCenter),
+        (facts.gltf_extension, Reason::GltfExtension),
+        (facts.scene_selection, Reason::SceneSelection),
+        (facts.skin, Reason::Skin),
+        (facts.morph_targets, Reason::MorphTargets),
+        (facts.animation, Reason::Animation),
+    ]
+    .into_iter()
+    .filter(|(applies, _)| *applies)
+    .fold(0, |bits, (_, reason)| bits | reason.bit())
+}
+/// A capacity breach inside the exact arithmetic is a validator defect, never a verdict.
+fn containment_fault() -> Error {
+    Error::InvalidState("internal containment invariant: exact arena capacity exceeded".into())
+}
+fn refused() -> Error {
+    Error::limit("containment storage allocation refused")
+}
+fn try_push<T>(values: &mut Vec<T>, value: T) -> Result<(), Error> {
+    values.try_reserve(1).map_err(|_| refused())?;
+    values.push(value);
+    Ok(())
+}
+fn volume_facts(volume: &Volume) -> VolumeFacts {
+    match volume {
+        Volume::Box(b) => VolumeFacts::Box(std::array::from_fn(|i| b[i])),
+        Volume::Sphere(s) => VolumeFacts::Sphere(std::array::from_fn(|i| s[i])),
+        Volume::Region(_) => VolumeFacts::Region,
+    }
+}
+fn local(transform: &NodeTransform) -> Local {
+    match *transform {
+        NodeTransform::Skip => Local::Skip,
+        NodeTransform::Matrix(m) => Local::Matrix(m),
+        NodeTransform::Trs { t, q, s } => Local::Trs { t, q, s },
+    }
+}
+fn normalization(format: PositionFormat) -> Normalization {
+    match format {
+        PositionFormat::F32 => Normalization::None(Word::F32),
+        PositionFormat::I8 { normalized: true } => Normalization::I8,
+        PositionFormat::U8 { normalized: true } => Normalization::U8,
+        PositionFormat::I16 { normalized: true } => Normalization::I16,
+        PositionFormat::U16 { normalized: true } => Normalization::U16,
+        PositionFormat::I8 { .. } | PositionFormat::U8 { .. } => Normalization::None(Word::Int8),
+        PositionFormat::I16 { .. } | PositionFormat::U16 { .. } => Normalization::None(Word::Int16),
+    }
+}
+fn raw_vertex(word: PositionWord) -> RawVertex {
+    match word {
+        PositionWord::F32(v) => RawVertex::F32(v),
+        PositionWord::Int(v) => RawVertex::Int(v),
+    }
+}
+fn scene_error(error: payload::SceneError<Error, Error>) -> Error {
+    match error {
+        payload::SceneError::Payload(error) => payload_error(error),
+        payload::SceneError::Consumer(error) => error,
+    }
+}
+fn payload_kind(name: &str) -> Result<payload::PayloadKind, Error> {
+    match name.to_ascii_lowercase().rsplit_once('.') {
+        Some((_, "glb")) => Ok(payload::PayloadKind::Glb),
+        Some((_, "gltf")) => Ok(payload::PayloadKind::LocalGltf),
+        Some((_, "b3dm")) => Ok(payload::PayloadKind::B3dm),
+        _ => Err(Error::unsupported(
+            "payload format outside GLB/local glTF 2.0",
+        )),
+    }
+}
+
+/// Per-URI static facts, aggregated over every instance during the first C1
+/// inspection (D4). Never a verdict.
+#[derive(Clone, Copy)]
+struct UriFacts {
+    /// Hull over every (instance, distinct POSITION accessor); None without instances.
+    bounds: Option<UriBounds>,
+    t: u64,
+    /// None when the checked sum overflowed (counts as over the cap).
+    nodes: Option<u64>,
+    idx: u64,
+    e: u64,
+    dec: u64,
+    b: u64,
+    max_depth: u64,
+    exclusions: u16,
+}
+/// One tile of the traversed hierarchy: f64 facts only.
+struct TileFact {
+    /// The tile's own transform into its parent frame, when present.
+    transform: Option<[f64; 16]>,
+    volume: VolumeFacts,
+    /// For an external-tileset root: the referencing content's boundingVolume.
+    external: Option<VolumeFacts>,
+    parent: Option<usize>,
+    depth: usize,
+}
+/// One payload content reference, in traversal order.
+struct Reference {
+    tile: usize,
+    uri: usize,
+    content: Option<usize>,
+}
+struct Containment {
+    caps: SpanCaps,
+    work_cap: u64,
+    bytes_cap: u64,
+    decoded_cap: u64,
+    exclusions: u16,
+    precheck: Option<Reason>,
+    units: u64,
+    bytes: u64,
+    decoded: u64,
+    tiles: Vec<TileFact>,
+    references: Vec<Reference>,
+    content_volumes: Vec<VolumeFacts>,
+    uris: Vec<(String, UriFacts)>,
+    uri_index: HashMap<String, usize>,
+    levels: Vec<LevelFacts>,
+    arena: Option<Arena>,
+}
+impl Containment {
+    fn new(limits: &ValidationLimits) -> Self {
+        Self {
+            caps: SpanCaps {
+                span_bits: limits.containment_span_bits,
+                node_depth: limits.containment_node_depth,
+            },
+            work_cap: limits.containment_work_units,
+            bytes_cap: limits.containment_bytes_read,
+            decoded_cap: limits.containment_decoded_bytes,
+            exclusions: 0,
+            precheck: None,
+            units: 0,
+            bytes: 0,
+            decoded: 0,
+            tiles: Vec::new(),
+            references: Vec::new(),
+            content_volumes: Vec::new(),
+            uris: Vec::new(),
+            uri_index: HashMap::new(),
+            levels: Vec::new(),
+            arena: None,
+        }
+    }
+    fn exclude(&mut self, reason: Reason) {
+        self.exclusions |= reason.bit();
+    }
+    fn arena(arena: &mut Option<Arena>, caps: SpanCaps) -> Result<&mut Arena, Error> {
+        if arena.is_none() {
+            *arena = Some(Arena::reserve(caps).map_err(|_| refused())?);
+        }
+        Ok(arena.as_mut().unwrap())
+    }
+    fn tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        try_push(&mut self.tiles, fact)?;
+        Ok(self.tiles.len() - 1)
+    }
+    /// The level chain of a reference: own tile and content volume at level 0,
+    /// then each ancestor through external-tileset roots (I1, I2).
+    fn build_levels(&mut self, tile: usize, content: Option<usize>) -> Result<(), Error> {
+        self.levels.clear();
+        let content = content.map(|c| (Role::Content, self.content_volumes[c]));
+        try_push(
+            &mut self.levels,
+            LevelFacts {
+                to_parent: None,
+                volumes: [Some((Role::Own, self.tiles[tile].volume)), content, None],
+            },
+        )?;
+        let mut current = tile;
+        while let Some(parent) = self.tiles[current].parent {
+            let level = self.levels.len() as u32;
+            let child = &self.tiles[current];
+            let fact = LevelFacts {
+                to_parent: child.transform,
+                volumes: [
+                    Some((Role::Ancestor(level), self.tiles[parent].volume)),
+                    None,
+                    child.external.map(|v| (Role::ExternalContent(level), v)),
+                ],
+            };
+            try_push(&mut self.levels, fact)?;
+            current = parent;
+        }
+        Ok(())
+    }
+    /// Collect chain exclusions and run the precheck step for one reference, in
+    /// traversal order. The precheck stops at its first violation.
+    fn reference(
+        &mut self,
+        tile: usize,
+        content: Option<&Volume>,
+        uri: usize,
+    ) -> Result<(), Error> {
+        let content = match content {
+            Some(volume) => {
+                try_push(&mut self.content_volumes, volume_facts(volume))?;
+                Some(self.content_volumes.len() - 1)
+            }
+            None => None,
+        };
+        try_push(&mut self.references, Reference { tile, uri, content })?;
+        let facts = self.uris[uri].1;
+        self.exclusions |= facts.exclusions;
+        self.build_levels(tile, content)?;
+        let mut chain = 0;
+        for level in &self.levels {
+            for (_, volume) in level.volumes.iter().flatten() {
+                match containment::volume_exclusion(volume) {
+                    Some(Exclusion::RegionVolume) => chain |= Reason::RegionVolume.bit(),
+                    Some(Exclusion::RotatedBox) => chain |= Reason::RotatedBox.bit(),
+                    Some(Exclusion::NumericSpan) | None => {}
+                }
+            }
+        }
+        self.exclusions |= chain;
+        // Any exclusion anywhere overrides the precheck reason, so the precheck
+        // only runs while the archive is still entirely in domain.
+        if self.exclusions != 0 || self.precheck.is_some() {
+            return Ok(());
+        }
+        self.precheck = self.precheck_step(&facts);
+        Ok(())
+    }
+    fn precheck_step(&mut self, facts: &UriFacts) -> Option<Reason> {
+        let vertex_units = match &facts.bounds {
+            None => 0,
+            Some(bounds) => match containment::level_spans(bounds, &self.levels, self.caps) {
+                Err(Exclusion::NumericSpan) => return Some(Reason::NumericSpan),
+                Err(Exclusion::RegionVolume) => return Some(Reason::RegionVolume),
+                Err(Exclusion::RotatedBox) => return Some(Reason::RotatedBox),
+                Ok(spans) => match containment::vertex_units(facts.t, &spans) {
+                    Some(units) => units,
+                    None => return Some(Reason::WorkLimit),
+                },
+            },
+        };
+        if facts.max_depth > self.caps.node_depth {
+            return Some(Reason::WorkLimit);
+        }
+        let units = facts.nodes.and_then(|nodes| {
+            vertex_units
+                .checked_add(nodes)?
+                .checked_add(facts.idx)?
+                .checked_add(facts.e)
+        });
+        let within = |total: u64, add: Option<u64>, cap: u64| {
+            add.and_then(|add| total.checked_add(add))
+                .filter(|sum| *sum <= cap)
+        };
+        let (Some(units), Some(bytes), Some(decoded)) = (
+            within(self.units, units, self.work_cap),
+            within(self.bytes, Some(facts.b), self.bytes_cap),
+            within(self.decoded, Some(facts.dec), self.decoded_cap),
+        ) else {
+            return Some(Reason::WorkLimit);
+        };
+        self.units = units;
+        self.bytes = bytes;
+        self.decoded = decoded;
+        None
+    }
+}
+
+/// Phase 1: per-URI static facts through M's bound functions, plus the
+/// quaternion window over every selected node.
+struct FactConsumer<'a> {
+    arena: &'a mut Option<Arena>,
+    caps: SpanCaps,
+    /// Composite bound and the maximum `s_step` along the current path.
+    stack: Vec<(containment::Composite, u32)>,
+    bounds: Option<UriBounds>,
+    t: u64,
+    nodes: Option<u64>,
+    idx: u64,
+    max_depth: u64,
+    quaternion_window: bool,
+}
+impl SceneConsumer for FactConsumer<'_> {
+    type Error = Error;
+    fn instances_only(&self) -> bool {
+        false
+    }
+    fn enter(&mut self, transform: &NodeTransform, depth: u64) -> Result<(), Error> {
+        self.max_depth = self.max_depth.max(depth);
+        let l = local(transform);
+        if let Local::Trs { q, .. } = l {
+            let arena = Containment::arena(self.arena, self.caps)?;
+            let outcome = containment::admit_rotation(q, arena);
+            if arena.fault() {
+                return Err(containment_fault());
+            }
+            match outcome {
+                containment::RotationOutcome::Ok => {}
+                containment::RotationOutcome::QuaternionWindow => self.quaternion_window = true,
+                containment::RotationOutcome::InvalidZeroOrRange => {
+                    return Err(invalid(
+                        "glTF node rotation must be nonzero with components in [-1, 1]",
+                    ))
+                }
+            }
+        }
+        if l == Local::Skip {
+            self.nodes = self.nodes.and_then(|n| n.checked_add(1));
+            return Ok(());
+        }
+        let (g, path) = match self.stack.last() {
+            Some((g, path)) => (*g, *path),
+            None => (containment::composite_identity(), 0),
+        };
+        let (g, step) = containment::node_step_bound(&g, &l);
+        self.nodes = self
+            .nodes
+            .and_then(|n| n.checked_add(containment::node_units(step)));
+        try_push(&mut self.stack, (g, path.max(step)))
+    }
+    fn leave(&mut self, transform: &NodeTransform) {
+        if *transform != NodeTransform::Skip {
+            self.stack.pop();
+        }
+    }
+    fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Error> {
+        let (g, s_inst) = match self.stack.last() {
+            Some((g, path)) => (*g, *path),
+            None => (containment::composite_identity(), 0),
+        };
+        for &accessor in instance.positions() {
+            let (pair0, s_pos) =
+                containment::position_bound(&g, normalization(instance.format(accessor)));
+            let member = UriBounds {
+                pair0,
+                s_inst,
+                s_pos,
+            };
+            self.bounds = Some(match &self.bounds {
+                Some(bounds) => containment::hull(bounds, &member),
+                None => containment::hull(&UriBounds::identity(), &member),
+            });
+        }
+        self.t = self.t.saturating_add(instance.vertex_total());
+        self.idx = self.idx.saturating_add(instance.index_total());
+        Ok(())
+    }
+}
+
+/// Phase 2: serial streaming of one reference over the live C1 views.
+struct StreamConsumer<'a> {
+    arena: &'a mut Arena,
+    bitmap: &'a mut Vec<u64>,
+    levels: &'a [LevelFacts],
+    member: &'a str,
+    depth: usize,
+}
+impl SceneConsumer for StreamConsumer<'_> {
+    type Error = Error;
+    fn instances_only(&self) -> bool {
+        true
+    }
+    fn enter(&mut self, transform: &NodeTransform, _: u64) -> Result<(), Error> {
+        let l = local(transform);
+        if l != Local::Skip {
+            containment::push_node(self.arena, &l);
+            if self.arena.fault() {
+                return Err(containment_fault());
+            }
+        }
+        Ok(())
+    }
+    fn leave(&mut self, transform: &NodeTransform) {
+        if *transform != NodeTransform::Skip {
+            containment::pop_node(self.arena);
+        }
+    }
+    fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Error> {
+        for &accessor in instance.positions() {
+            let words = instance.count(accessor).div_ceil(64);
+            if self.bitmap.len() < words {
+                self.bitmap
+                    .try_reserve_exact(words - self.bitmap.len())
+                    .map_err(|_| refused())?;
+                self.bitmap.resize(words, 0);
+            }
+            let bitmap = &mut self.bitmap[..words];
+            bitmap.fill(0);
+            instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));
+            let n = normalization(instance.format(accessor));
+            for (w, &bits) in bitmap.iter().enumerate() {
+                let mut bits = bits;
+                while bits != 0 {
+                    let vertex = w * 64 + bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let raw = raw_vertex(instance.vertex(accessor, vertex));
+                    let verdict = containment::walk(self.arena, n, raw, self.levels);
+                    if self.arena.fault() {
+                        return Err(containment_fault());
+                    }
+                    if let Verdict::Outside { role, .. } = verdict {
+                        let volume = match role {
+                            Role::Own => "own".to_owned(),
+                            Role::Content => "content".to_owned(),
+                            Role::ExternalContent(k) => format!("externalContent:{k}"),
+                            Role::Ancestor(k) => format!("ancestor:{k}"),
+                        };
+                        let primitive = instance.primitive_drawing(accessor, vertex).unwrap_or(0);
+                        return Err(invalid(format!(
+                            "decoded content outside bounding volume: content={} depth={} volume={volume} node={} mesh={} primitive={primitive} vertex={vertex}",
+                            self.member,
+                            self.depth,
+                            instance.node(),
+                            instance.mesh(),
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 struct ArchiveResources<'a> {
     archive: &'a mut Archive,
     names: HashSet<String>,
@@ -382,6 +892,14 @@ struct Check<'a> {
     payloads: HashMap<String, PayloadReport>,
     not_inspected: BTreeSet<String>,
     expansion_budget: crate::implicit::ExpansionBudget,
+    c2: Containment,
+}
+/// The C2 level-chain link of a traversal task: the parent tile in the tile
+/// arena, and for an external-tileset root the referencing content volume.
+#[derive(Clone, Copy)]
+struct Link {
+    parent: Option<usize>,
+    external: Option<VolumeFacts>,
 }
 enum ValidationTask {
     Tileset {
@@ -389,6 +907,7 @@ enum ValidationTask {
         parent: Option<Volume>,
         parent_error: Option<f64>,
         depth: usize,
+        link: Link,
     },
     Node {
         node: Value,
@@ -396,6 +915,7 @@ enum ValidationTask {
         parent: Option<Volume>,
         parent_error: f64,
         depth: usize,
+        link: Link,
     },
     ExitTileset(String),
 }
@@ -404,6 +924,7 @@ impl Check<'_> {
         if let Some(report) = self.payloads.get(name) {
             return Ok(report.clone());
         }
+        let bytes_before = self.resources.bytes_read;
         let bytes = read_member(
             self.resources.archive,
             name,
@@ -412,34 +933,58 @@ impl Check<'_> {
             self.resources.limits.member_bytes,
         )?;
         let remaining = self.resources.limits.total_payload_elements - self.elements;
-        let kind = match name.to_ascii_lowercase().rsplit_once('.') {
-            Some((_, "glb")) => payload::PayloadKind::Glb,
-            Some((_, "gltf")) => payload::PayloadKind::LocalGltf,
-            Some((_, "b3dm")) => payload::PayloadKind::B3dm,
-            _ => {
-                return Err(Error::unsupported(
-                    "payload format outside GLB/local glTF 2.0",
-                ))
-            }
+        let kind = payload_kind(name)?;
+        let mut consumer = FactConsumer {
+            arena: &mut self.c2.arena,
+            caps: self.c2.caps,
+            stack: Vec::new(),
+            bounds: None,
+            t: 0,
+            nodes: Some(0),
+            idx: 0,
+            max_depth: 0,
+            quaternion_window: false,
         };
-        let facts = payload::inspect(
+        let resources = &mut self.resources;
+        let facts = payload::inspect_scene(
             kind,
             &bytes,
-            self.resources.content_limits,
+            resources.content_limits,
             remaining,
             |value, maximum| {
                 let resource = uri(name, value)?;
-                self.resources.reference(resource.clone())?;
+                resources.reference(resource.clone())?;
                 read_member(
-                    self.resources.archive,
+                    resources.archive,
                     &resource,
-                    &mut self.resources.bytes_read,
-                    &self.resources.limits,
+                    &mut resources.bytes_read,
+                    &resources.limits,
                     maximum as u64,
                 )
             },
+            &mut consumer,
         )
-        .map_err(payload_error)?;
+        .map_err(scene_error)?;
+        let mut exclusions = content_reasons(&facts.exclusions);
+        if consumer.quaternion_window {
+            exclusions |= Reason::QuaternionWindow.bit();
+        }
+        let uri_facts = UriFacts {
+            bounds: consumer.bounds,
+            t: consumer.t,
+            nodes: consumer.nodes,
+            idx: consumer.idx,
+            e: facts.elements_checked,
+            dec: facts.materialized_bytes,
+            b: self.resources.bytes_read - bytes_before,
+            max_depth: consumer.max_depth,
+            exclusions,
+        };
+        self.c2.uri_index.try_reserve(1).map_err(|_| refused())?;
+        try_push(&mut self.c2.uris, (name.to_owned(), uri_facts))?;
+        self.c2
+            .uri_index
+            .insert(name.to_owned(), self.c2.uris.len() - 1);
         self.elements = self
             .elements
             .checked_add(facts.elements_checked)
@@ -457,6 +1002,50 @@ impl Check<'_> {
         };
         self.payloads.insert(name.into(), report.clone());
         Ok(report)
+    }
+    /// Phase 2 (outcome 4): serial per-reference streaming, in traversal order.
+    /// Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
+    fn stream(&mut self) -> Result<(), Error> {
+        let mut arena = match self.c2.arena.take() {
+            Some(arena) => arena,
+            None => Arena::reserve(self.c2.caps).map_err(|_| refused())?,
+        };
+        let mut bitmap = Vec::new();
+        let mut reread = 0u64;
+        let cap = self.resources.limits.containment_bytes_read;
+        let limits = self.resources.content_limits;
+        let references = std::mem::take(&mut self.c2.references);
+        for reference in &references {
+            self.c2.build_levels(reference.tile, reference.content)?;
+            let name = self.c2.uris[reference.uri].0.as_str();
+            let archive = &mut *self.resources.archive;
+            let bytes = read_rerun(archive, name, &mut reread, cap, limits.member_bytes as u64)?;
+            let mut consumer = StreamConsumer {
+                arena: &mut arena,
+                bitmap: &mut bitmap,
+                levels: &self.c2.levels,
+                member: name,
+                depth: self.c2.tiles[reference.tile].depth,
+            };
+            payload::inspect_scene(
+                payload_kind(name)?,
+                &bytes,
+                limits,
+                limits.accessor_components,
+                |value, maximum| {
+                    read_rerun(
+                        archive,
+                        &uri(name, value)?,
+                        &mut reread,
+                        cap,
+                        maximum as u64,
+                    )
+                },
+                &mut consumer,
+            )
+            .map_err(scene_error)?;
+        }
+        Ok(())
     }
     fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<(), Error> {
         if let Some(value) = doc.get("schemaUri") {
@@ -485,6 +1074,10 @@ impl Check<'_> {
             parent: parent.cloned(),
             parent_error,
             depth,
+            link: Link {
+                parent: None,
+                external: None,
+            },
         }];
         while let Some(task) = pending.pop() {
             self.task_visits = self
@@ -498,6 +1091,7 @@ impl Check<'_> {
                     parent,
                     parent_error,
                     depth,
+                    link,
                 } => {
                     if depth > 128 {
                         return Err(Error::limit("hierarchy exceeds validation depth limit"));
@@ -513,6 +1107,7 @@ impl Check<'_> {
                         parent,
                         parent_error: parent_error.map_or(error, |parent| parent.min(error)),
                         depth,
+                        link,
                     });
                 }
                 ValidationTask::Node {
@@ -521,6 +1116,7 @@ impl Check<'_> {
                     parent,
                     parent_error,
                     depth,
+                    link,
                 } => {
                     self.node(
                         node,
@@ -528,6 +1124,7 @@ impl Check<'_> {
                         parent.as_ref(),
                         parent_error,
                         depth,
+                        link,
                         &mut pending,
                     )?;
                 }
@@ -550,10 +1147,47 @@ impl Check<'_> {
         }
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         self.metadata_schema(name, &doc)?;
+        self.tileset_exclusions(&doc);
         let doc = self.expand_implicit(name, doc)?;
         Ok((doc, error))
     }
 
+    /// Document-level C2 exclusion facts, before implicit expansion.
+    fn tileset_exclusions(&mut self, doc: &Value) {
+        if doc["root"].get("implicitTiling").is_some() {
+            self.c2.exclude(Reason::ImplicitTiling);
+        }
+        if let Some(axis) = doc["asset"].get("gltfUpAxis") {
+            if axis.as_str() != Some("Y") {
+                self.c2.exclude(Reason::UpAxisOverride);
+            }
+        }
+        for key in ["extensionsUsed", "extensionsRequired"] {
+            if let Some(names) = doc.get(key) {
+                let listed = names.as_array().is_none_or(|names| {
+                    names.iter().any(|name| {
+                        name.as_str()
+                            .is_none_or(|name| !TILESET_ALLOWLIST.contains(&name))
+                    })
+                });
+                if listed {
+                    self.c2.exclude(Reason::TilesetExtension);
+                }
+            }
+        }
+        self.extension_object(doc);
+    }
+    /// An `extensions` object naming anything outside the tileset allowlist.
+    fn extension_object(&mut self, owner: &Value) {
+        if let Some(extensions) = owner.get("extensions") {
+            if extensions
+                .as_object()
+                .is_none_or(|e| e.keys().any(|k| !TILESET_ALLOWLIST.contains(&k.as_str())))
+            {
+                self.c2.exclude(Reason::TilesetExtension);
+            }
+        }
+    }
     fn expand_implicit(&mut self, name: &str, mut doc: Value) -> Result<Value, Error> {
         if doc["root"].get("implicitTiling").is_some() {
             // Raw immutable vector payloads remain reachable through the native
@@ -623,6 +1257,7 @@ impl Check<'_> {
         parent: Option<&Volume>,
         parent_error: f64,
         depth: usize,
+        link: Link,
         pending: &mut Vec<ValidationTask>,
     ) -> Result<(), Error> {
         if depth as u64 > self.resources.limits.hierarchy_depth {
@@ -643,6 +1278,18 @@ impl Check<'_> {
         }
         let bounds = volume(&node["boundingVolume"])?;
         let m = transform(&node)?;
+        if node.get("metadata").is_some() {
+            self.c2.exclude(Reason::TileMetadata);
+        }
+        self.extension_object(&node);
+        self.extension_object(&node["boundingVolume"]);
+        let tile = self.c2.tile(TileFact {
+            transform: node.get("transform").map(|_| std::array::from_fn(|i| m[i])),
+            volume: volume_facts(&bounds),
+            external: link.external,
+            parent: link.parent,
+            depth,
+        })?;
         if let Some(parent) = parent {
             if !contains(parent, &bounds, &m)? {
                 return Err(invalid(format!(
@@ -678,12 +1325,21 @@ impl Check<'_> {
             let name = uri(base, value)?;
             self.resources.reference(name.clone())?;
             self.contents += 1;
-            if let Some(v) = content.get("boundingVolume") {
-                let cb = volume(v)?;
-                if !contains(&bounds, &cb, &IDENTITY)? {
-                    return Err(invalid("content bounds escape tile"));
-                }
+            if content.get("metadata").is_some() {
+                self.c2.exclude(Reason::TileMetadata);
             }
+            self.extension_object(&content);
+            let content_volume = match content.get("boundingVolume") {
+                Some(v) => {
+                    self.extension_object(v);
+                    let cb = volume(v)?;
+                    if !contains(&bounds, &cb, &IDENTITY)? {
+                        return Err(invalid("content bounds escape tile"));
+                    }
+                    Some(cb)
+                }
+                None => None,
+            };
             bytes = bytes
                 .checked_add(
                     self.resources
@@ -699,10 +1355,16 @@ impl Check<'_> {
                     parent: Some(bounds.clone()),
                     parent_error: Some(error),
                     depth: depth + 1,
+                    link: Link {
+                        parent: Some(tile),
+                        external: content_volume.as_ref().map(volume_facts),
+                    },
                 });
                 continue;
             }
             let inspected = self.payload(&name)?;
+            let uri = self.c2.uri_index[&name];
+            self.c2.reference(tile, content_volume.as_ref(), uri)?;
             vertices = vertices
                 .checked_add(inspected.vertices)
                 .ok_or_else(|| invalid("tile vertex count overflow"))?;
@@ -742,6 +1404,10 @@ impl Check<'_> {
                     parent: Some(bounds.clone()),
                     parent_error: error,
                     depth: depth + 1,
+                    link: Link {
+                        parent: Some(tile),
+                        external: None,
+                    },
                 });
             }
         }
@@ -867,6 +1533,7 @@ pub(crate) fn inspect_selected(
     } else {
         Value::Null
     };
+    let c2 = Containment::new(&limits);
     let mut check = Check {
         expansion_budget: crate::implicit::ExpansionBudget::new(
             usize::try_from(limits.hierarchy_visits)
@@ -899,6 +1566,7 @@ pub(crate) fn inspect_selected(
             "../docs/schema/tileset.schema.json"
         ))?)
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
+        c2,
     };
     if check.resources.names.contains("conversion.json") {
         check.resources.used.insert("conversion.json".into());
@@ -946,6 +1614,25 @@ pub(crate) fn inspect_selected(
             unused.join(", ")
         )));
     }
+    // C2 outcome precedence after C1 success: exclusions, then the precheck,
+    // then streaming (Outside or allocation refusal), otherwise Contained.
+    let reasons = if check.c2.exclusions != 0 {
+        check.c2.exclusions
+    } else {
+        check.c2.precheck.map_or(0, Reason::bit)
+    };
+    let contained = reasons == 0;
+    if contained {
+        check.stream()?;
+        check.not_inspected.remove("decodedContentBounds");
+        check.not_inspected.remove("scene transforms");
+    } else {
+        for reason in REASONS.iter().filter(|r| reasons & r.bit() != 0) {
+            check
+                .not_inspected
+                .insert(format!("decodedContentBounds.{}", reason.name()));
+        }
+    }
     let after = source.metadata()?;
     if before.len() != after.len()
         || before.modified()? != after.modified()?
@@ -979,6 +1666,7 @@ pub(crate) fn inspect_selected(
             "recordedBudgets",
         ]
         .into_iter()
+        .chain(contained.then_some("decodedContentContainment"))
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
@@ -1333,5 +2021,716 @@ fn archive_uri_decodes_segments_once_and_confines_paths() {
         "bad%2g",
     ] {
         assert!(uri("model/source.gltf", value).is_err(), "{value}");
+    }
+}
+
+/// C2 operation controls through the real `inspect_selected` entry point.
+#[cfg(test)]
+mod containment_controls {
+    use super::*;
+    use serde_json::json;
+    use std::path::PathBuf;
+
+    fn glb(doc: &Value, bin: &[u8]) -> Vec<u8> {
+        let mut json = serde_json::to_vec(doc).unwrap();
+        while !json.len().is_multiple_of(4) {
+            json.push(b' ');
+        }
+        let mut bin = bin.to_vec();
+        while !bin.len().is_multiple_of(4) {
+            bin.push(0);
+        }
+        let mut out = b"glTF".to_vec();
+        out.extend(2u32.to_le_bytes());
+        let chunks = if bin.is_empty() { 0 } else { 8 + bin.len() };
+        out.extend((20 + json.len() as u32 + chunks as u32).to_le_bytes());
+        out.extend((json.len() as u32).to_le_bytes());
+        out.extend(b"JSON");
+        out.extend(json);
+        if !bin.is_empty() {
+            out.extend((bin.len() as u32).to_le_bytes());
+            out.extend(b"BIN\0");
+            out.extend(bin);
+        }
+        out
+    }
+    /// POINTS over FLOAT positions, one selected scene, the given node list.
+    fn points_doc(positions: &[[f32; 3]], nodes: Value) -> (Value, Vec<u8>) {
+        let mut bin = Vec::new();
+        for p in positions {
+            for c in p {
+                bin.extend(c.to_le_bytes());
+            }
+        }
+        let bound = |f: fn(f32, f32) -> f32, start: f32| -> Vec<f64> {
+            (0..3)
+                .map(|c| f64::from(positions.iter().map(|p| p[c]).fold(start, f)))
+                .collect()
+        };
+        let doc = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":nodes,
+            "buffers":[{"byteLength":bin.len()}],"bufferViews":[{"buffer":0,"byteLength":bin.len()}],
+            "accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":positions.len(),
+                "min":bound(f32::min, f32::INFINITY),"max":bound(f32::max, f32::NEG_INFINITY)}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        (doc, bin)
+    }
+    fn points(positions: &[[f32; 3]]) -> Vec<u8> {
+        let (doc, bin) = points_doc(positions, json!([{"mesh":0}]));
+        glb(&doc, &bin)
+    }
+    fn boxed(center: [f64; 3], half: [f64; 3]) -> Value {
+        json!({"box":[center[0],center[1],center[2],half[0],0,0,0,half[1],0,0,0,half[2]]})
+    }
+    fn tile(volume: Value) -> Value {
+        json!({"boundingVolume":volume,"geometricError":0})
+    }
+    fn content_tile(volume: Value, uri: &str) -> Value {
+        let mut tile = tile(volume);
+        tile["content"] = json!({"uri":uri});
+        tile
+    }
+    fn tileset(root: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({"asset":{"version":"1.1"},"geometricError":0,"root":root}))
+            .unwrap()
+    }
+    fn package(files: &[(&str, Vec<u8>)]) -> (tempfile::TempDir, PathBuf) {
+        let work = tempfile::tempdir().unwrap();
+        let data = work.path().join("data");
+        for (name, bytes) in files {
+            let file = data.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, bytes).unwrap();
+        }
+        let output = work.path().join("test.3tz");
+        crate::package::package(
+            crate::package::PackageRequest::directory(&data, &output),
+            &crate::RunControl::default(),
+        )
+        .unwrap();
+        (work, output)
+    }
+    fn run_with(
+        files: &[(&str, Vec<u8>)],
+        limits: ValidationLimits,
+    ) -> Result<ValidationReport, Error> {
+        let (_work, path) = package(files);
+        inspect_selected(ValidationRequest::new(&path), limits)
+    }
+    fn run(files: &[(&str, Vec<u8>)]) -> Result<ValidationReport, Error> {
+        run_with(files, ValidationLimits::default())
+    }
+    fn single(volume: Value, payload: Vec<u8>) -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("tileset.json", tileset(content_tile(volume, "a.glb"))),
+            ("a.glb", payload),
+        ]
+    }
+    fn contained(report: &ValidationReport) -> bool {
+        let listed = report
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment");
+        let bounds = report
+            .not_inspected
+            .iter()
+            .any(|c| c == "decodedContentBounds");
+        assert_eq!(listed, !bounds, "{report:?}");
+        assert_eq!(
+            listed,
+            !report.not_inspected.iter().any(|c| c == "scene transforms"),
+            "{report:?}"
+        );
+        listed
+    }
+    /// The `decodedContentBounds.<reason>` entries, in report order.
+    fn reasons(report: &ValidationReport) -> Vec<&str> {
+        report
+            .not_inspected
+            .iter()
+            .filter_map(|c| c.strip_prefix("decodedContentBounds."))
+            .collect()
+    }
+    fn not_inspected(result: Result<ValidationReport, Error>) -> Vec<String> {
+        let report = result.unwrap();
+        assert!(!contained(&report), "{report:?}");
+        reasons(&report).into_iter().map(String::from).collect()
+    }
+    fn outside(result: Result<ValidationReport, Error>) -> String {
+        match result {
+            Err(Error::InvalidInput(message)) => message,
+            other => panic!("expected Outside, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invalid_state_category_is_invalid_state_exit_one() {
+        let failure = containment_fault();
+        assert!(matches!(failure, Error::InvalidState(_)));
+        assert_eq!(failure.category(), ("invalid_state", 1));
+        assert_eq!(
+            crate::Error::Validation(failure).category(),
+            ("invalid_state", 1)
+        );
+    }
+
+    #[test]
+    fn boundary_vertex_is_contained_and_one_ulp_inside_box_is_outside() {
+        // glTF (1, 2, 3) is (1, -3, 2) in the z-up tile frame after U.
+        let payload = points(&[[1., 2., 3.]]);
+        let report = run(&single(boxed([0.; 3], [1., 3., 2.]), payload.clone())).unwrap();
+        assert!(contained(&report), "{report:?}");
+        assert!(report
+            .not_inspected
+            .iter()
+            .any(|c| c == "skins, animations, morph targets and rendered extent"));
+        // Non-integer centre, vertex exactly on the face.
+        let report = run(&single(
+            boxed([0.5, -1.5, 1.], [0.5, 1.5, 1.]),
+            payload.clone(),
+        ));
+        assert!(contained(&report.unwrap()));
+        for half in [
+            [1f64.next_down(), 3., 2.],
+            [1., 3f64.next_down(), 2.],
+            [1., 3., 2f64.next_down()],
+        ] {
+            assert_eq!(
+                outside(run(&single(boxed([0.; 3], half), payload.clone()))),
+                "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+            );
+        }
+        // Omitting U would accept a box that only holds the y-up point.
+        assert!(outside(run(&single(boxed([0.; 3], [1., 2., 3.]), payload))).contains("volume=own"));
+    }
+
+    #[test]
+    fn sphere_membership_is_exact() {
+        let payload = points(&[[3., 0., 4.]]);
+        let sphere = |r: f64| json!({"sphere":[0,0,0,r]});
+        assert!(contained(
+            &run(&single(sphere(5.), payload.clone())).unwrap()
+        ));
+        assert!(outside(run(&single(sphere(5f64.next_down()), payload))).contains("volume=own"));
+    }
+
+    #[test]
+    fn undrawn_vertices_are_not_tested_and_drawn_ones_are() {
+        let (mut doc, mut bin) = points_doc(
+            &[[1., 1., 1.], [1000., -1000., 1000.], [0., 0., 0.]],
+            json!([{"mesh":0}]),
+        );
+        bin.extend([0u8, 2, 0, 0]);
+        doc["buffers"][0]["byteLength"] = json!(40);
+        doc["bufferViews"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"buffer":0,"byteOffset":36,"byteLength":3}));
+        doc["accessors"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"bufferView":1,"componentType":5121,"type":"SCALAR","count":3}));
+        doc["meshes"][0]["primitives"][0]["indices"] = json!(1);
+        let volume = boxed([0.; 3], [2., 2., 2.]);
+        assert!(contained(
+            &run(&single(volume.clone(), glb(&doc, &bin))).unwrap()
+        ));
+        bin[37] = 1;
+        assert_eq!(
+            outside(run(&single(volume, glb(&doc, &bin)))),
+            "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=1"
+        );
+    }
+
+    #[test]
+    fn content_ancestor_and_external_content_roles_are_reported() {
+        let payload = points(&[[5., 0., 0.]]);
+        // Content volume.
+        let mut root = content_tile(boxed([0.; 3], [10.; 3]), "a.glb");
+        root["content"]["boundingVolume"] = boxed([0.; 3], [4.; 3]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            ("a.glb", payload.clone()),
+        ]));
+        assert!(message.contains("depth=0 volume=content "), "{message}");
+        // Ancestor (I1): the child volume passes C1's tolerant hierarchy check.
+        let edge = 10f32 + f32::EPSILON * 8.;
+        let mut root = tile(boxed([0.; 3], [10.; 3]));
+        root["children"] = json!([content_tile(boxed([0.; 3], [10.000002, 10., 10.]), "a.glb")]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            ("a.glb", points(&[[edge, 0., 0.]])),
+        ]));
+        assert!(message.contains("depth=1 volume=ancestor:1 "), "{message}");
+        // External-reference content volume (I2), tested in the referencing frame.
+        let mut root = tile(boxed([0.; 3], [100.; 3]));
+        root["content"] = json!({"uri":"ext.json","boundingVolume":boxed([0.; 3], [1.; 3])});
+        let message = outside(run(&[
+            ("tileset.json", tileset(root)),
+            (
+                "ext.json",
+                tileset(content_tile(boxed([0.; 3], [50.; 3]), "a.glb")),
+            ),
+            ("a.glb", payload),
+        ]));
+        assert!(
+            message.contains("depth=1 volume=externalContent:1 "),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn external_root_transform_is_a_chain_step() {
+        let mut root = tile(boxed([3., 0., 0.], [1.; 3]));
+        root["content"] = json!({"uri":"ext.json"});
+        let mut external = content_tile(boxed([0.; 3], [1.; 3]), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 3.;
+        external["transform"] = json!(m);
+        let files = |x: f32| {
+            vec![
+                ("tileset.json", tileset(root.clone())),
+                ("ext.json", tileset(external.clone())),
+                ("a.glb", points(&[[x, 0., 0.]])),
+            ]
+        };
+        // Skipping the external root transform would put -0.9 outside [2, 4].
+        assert!(contained(&run(&files(-0.9)).unwrap()));
+        assert!(contained(&run(&files(0.9)).unwrap()));
+    }
+
+    #[test]
+    fn same_uri_is_tested_per_reference() {
+        let mut first = content_tile(boxed([0.; 3], [1.; 3]), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 5.;
+        first["transform"] = json!(m);
+        let second = content_tile(boxed([0.; 3], [0.4, 1., 1.]), "a.glb");
+        let mut root = tile(boxed([0.; 3], [10.; 3]));
+        root["children"] = json!([first.clone(), second]);
+        let message = outside(run(&[
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", points(&[[0.5, 0., 0.]])),
+        ]));
+        assert!(message.contains("depth=1 volume=own "), "{message}");
+        root["children"] = json!([first.clone(), first]);
+        assert!(contained(
+            &run(&[
+                ("tileset.json", tileset(root)),
+                ("a.glb", points(&[[0.5, 0., 0.]])),
+            ])
+            .unwrap()
+        ));
+    }
+
+    fn with_doc(patch: impl Fn(&mut Value)) -> Vec<u8> {
+        let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"mesh":0}]));
+        patch(&mut doc);
+        glb(&doc, &bin)
+    }
+    fn wide() -> Value {
+        boxed([0.; 3], [10.; 3])
+    }
+
+    #[test]
+    fn each_exclusion_reason_is_reported_without_streaming() {
+        let payload = points(&[[0., 0., 0.]]);
+        let mut cases: Vec<(&str, Vec<(&str, Vec<u8>)>)> = Vec::new();
+        let mut doc = json!({"asset":{"version":"1.1"},"geometricError":0,
+            "extensionsUsed":["3DTILES_bounding_volume_S2"],"root":content_tile(wide(), "a.glb")});
+        cases.push((
+            "tilesetExtension",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        doc = json!({"asset":{"version":"1.1"},"geometricError":0,"root":content_tile(wide(), "a.glb")});
+        doc["root"]["extensions"] = json!({"ACME_tile":{}});
+        cases.push((
+            "tilesetExtension",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        let mut root = content_tile(wide(), "a.glb");
+        root["metadata"] = json!({"class":"c"});
+        cases.push((
+            "tileMetadata",
+            vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())],
+        ));
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["metadata"] = json!({"class":"c"});
+        cases.push((
+            "tileMetadata",
+            vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())],
+        ));
+        doc = json!({"asset":{"version":"1.1","gltfUpAxis":"Z"},"geometricError":0,"root":content_tile(wide(), "a.glb")});
+        cases.push((
+            "upAxisOverride",
+            vec![
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload.clone()),
+            ],
+        ));
+        cases.push((
+            "regionVolume",
+            single(json!({"region":[-0.1,-0.1,0.1,0.1,0,10]}), payload.clone()),
+        ));
+        cases.push((
+            "rotatedBox",
+            single(json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]}), payload.clone()),
+        ));
+        cases.push((
+            "gltfExtension",
+            single(
+                wide(),
+                with_doc(|d| {
+                    d["extensionsUsed"] = json!(["CESIUM_RTC"]);
+                    d["extensions"] = json!({"CESIUM_RTC":{"center":[1,2,3]}});
+                }),
+            ),
+        ));
+        cases.push((
+            "sceneSelection",
+            single(
+                wide(),
+                with_doc(|d| {
+                    d.as_object_mut().unwrap().remove("scene");
+                    d["scenes"] = json!([{"nodes":[0]}, {"nodes":[0]}]);
+                }),
+            ),
+        ));
+        cases.push((
+            "skin",
+            single(wide(), with_doc(|d| d["nodes"][0]["skin"] = json!(0))),
+        ));
+        cases.push((
+            "morphTargets",
+            single(wide(), with_doc(|d| d["nodes"][0]["weights"] = json!([0]))),
+        ));
+        cases.push((
+            "animation",
+            single(
+                wide(),
+                with_doc(|d| d["animations"] = json!([{"channels":[],"samplers":[]}])),
+            ),
+        ));
+        cases.push((
+            "quaternionWindow",
+            single(
+                wide(),
+                with_doc(|d| d["nodes"][0]["rotation"] = json!([0, 0, 0, 0.999])),
+            ),
+        ));
+        for (reason, files) in cases {
+            assert_eq!(not_inspected(run(&files)), [reason], "{reason}");
+        }
+    }
+
+    fn b3dm(glb: &[u8], table: &[u8], body: usize) -> Vec<u8> {
+        let mut table = table.to_vec();
+        while !(28 + table.len()).is_multiple_of(8) {
+            table.push(b' ');
+        }
+        let mut out = b"b3dm".to_vec();
+        out.extend(1u32.to_le_bytes());
+        out.extend(0u32.to_le_bytes());
+        out.extend((table.len() as u32).to_le_bytes());
+        out.extend((body as u32).to_le_bytes());
+        out.extend([0u8; 8]);
+        out.extend(table);
+        out.extend(vec![0u8; body]);
+        out.extend(glb);
+        while !out.len().is_multiple_of(8) {
+            out.push(0);
+        }
+        let length = out.len() as u32;
+        out[8..12].copy_from_slice(&length.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn rtc_center_in_json_or_binary_form_excludes_and_plain_b3dm_streams() {
+        let payload = points(&[[0., 0., 0.]]);
+        let files = |b3dm: Vec<u8>| {
+            vec![
+                ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
+                ("a.b3dm", b3dm),
+            ]
+        };
+        let plain = b3dm(&payload, br#"{"BATCH_LENGTH":0}"#, 0);
+        assert!(contained(&run(&files(plain)).unwrap()));
+        for (table, body) in [
+            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":[1,2,3]}"#[..], 0),
+            (
+                &br#"{"BATCH_LENGTH":0,"RTC_CENTER":{"byteOffset":0}}"#[..],
+                16,
+            ),
+        ] {
+            assert_eq!(
+                not_inspected(run(&files(b3dm(&payload, table, body)))),
+                ["rtcCenter"]
+            );
+        }
+    }
+
+    #[test]
+    fn implicit_archives_are_not_inspected() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/c1/implicit_no_content.3tz");
+        let reasons = not_inspected(inspect(ValidationRequest::new(path)));
+        assert!(
+            reasons.contains(&"implicitTiling".to_owned()),
+            "{reasons:?}"
+        );
+    }
+
+    #[test]
+    fn allowlisted_and_default_values_do_not_exclude() {
+        let doc = json!({"asset":{"version":"1.1","gltfUpAxis":"Y"},"geometricError":0,
+            "extensionsUsed":["3DTILES_content_gltf_vector"],"root":content_tile(wide(), "a.glb")});
+        let payload = with_doc(|d| {
+            d["extensionsUsed"] = json!(["KHR_materials_unlit", "EXT_mesh_features"]);
+            d["nodes"][0]["rotation"] = json!([0, 0, 0, 1]);
+            d["animations"] = json!([]);
+        });
+        assert!(contained(
+            &run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", payload),
+            ])
+            .unwrap()
+        ));
+        // |q|^2 - 1 exactly 2^-18 is inside the window; one ulp more is not.
+        let edge = 2f64.powi(-9);
+        let q = |x: f64| {
+            single(
+                wide(),
+                with_doc(|d| d["nodes"][0]["rotation"] = json!([x, 0, 0, 1])),
+            )
+        };
+        assert!(contained(&run(&q(edge)).unwrap()));
+        assert_eq!(not_inspected(run(&q(edge.next_up()))), ["quaternionWindow"]);
+    }
+
+    #[test]
+    fn all_reasons_are_listed_sorted_and_deduplicated() {
+        let skinned = with_doc(|d| {
+            d["nodes"][0]["skin"] = json!(0);
+            d["animations"] = json!([{"channels":[],"samplers":[]}]);
+        });
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(wide(), "a.glb"), content_tile(wide(), "b.glb")]);
+        let doc =
+            json!({"asset":{"version":"1.1","gltfUpAxis":"X"},"geometricError":0,"root":root});
+        assert_eq!(
+            not_inspected(run(&[
+                ("tileset.json", serde_json::to_vec(&doc).unwrap()),
+                ("a.glb", skinned.clone()),
+                ("b.glb", skinned),
+            ])),
+            ["animation", "skin", "upAxisOverride"]
+        );
+    }
+
+    #[test]
+    fn outcome_precedence() {
+        // Malformed node beats an exclusion (here rtcCenter).
+        let malformed = with_doc(|d| {
+            d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+            d["nodes"][0]["scale"] = json!([1, 1, 1]);
+        });
+        let failure = run(&[
+            ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
+            (
+                "a.b3dm",
+                b3dm(&malformed, br#"{"BATCH_LENGTH":0,"RTC_CENTER":[0,0,0]}"#, 0),
+            ),
+        ])
+        .unwrap_err();
+        assert!(
+            matches!(&failure, Error::InvalidInput(m) if m.contains("matrix must not coexist")),
+            "{failure:?}"
+        );
+        // An exclusion beats the precheck and a would-be Outside.
+        let far = points(&[[100., 0., 0.]]);
+        let (mut doc, bin) = points_doc(&[[100., 0., 0.]], json!([{"mesh":0}]));
+        doc["animations"] = json!([{"channels":[],"samplers":[]}]);
+        let limits = ValidationLimits {
+            containment_span_bits: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&single(wide(), glb(&doc, &bin)), limits.clone())),
+            ["animation"]
+        );
+        // The precheck beats a would-be Outside.
+        assert_eq!(
+            not_inspected(run_with(&single(wide(), far.clone()), limits)),
+            ["numericSpan"]
+        );
+        assert!(outside(run(&single(wide(), far.clone()))).contains("volume=own"));
+        // A C1 failure beats every C2 outcome.
+        let failure = run(&[
+            ("tileset.json", tileset(content_tile(wide(), "a.glb"))),
+            ("a.glb", far),
+            ("stray.bin", vec![0; 4]),
+        ])
+        .unwrap_err();
+        assert!(failure.to_string().contains("unreferenced archive entries"));
+    }
+
+    #[test]
+    fn precheck_records_only_the_first_violation_in_traversal_order() {
+        // `deep` violates the node-depth cap; `float` violates the span cap
+        // (FLOAT position pair spans 277 bits) while `small` u8 words do not.
+        let deep = {
+            let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"children":[1]},{"mesh":0}]));
+            doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+            doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+            doc["accessors"][0]["componentType"] = json!(5121);
+            doc["accessors"][0]["min"] = json!([0, 0, 0]);
+            doc["accessors"][0]["max"] = json!([0, 0, 0]);
+            doc["buffers"][0]["byteLength"] = json!(4);
+            doc["bufferViews"][0]["byteLength"] = json!(4);
+            drop(bin);
+            glb(&doc, &[0; 4])
+        };
+        let float = points(&[[0., 0., 0.]]);
+        let limits = ValidationLimits {
+            containment_span_bits: 100,
+            containment_node_depth: 1,
+            ..ValidationLimits::default()
+        };
+        let files = |first: &str, second: &str| {
+            let mut root = tile(wide());
+            root["children"] = json!([content_tile(wide(), first), content_tile(wide(), second)]);
+            vec![
+                ("tileset.json", tileset(root)),
+                ("deep.glb", deep.clone()),
+                ("float.glb", float.clone()),
+            ]
+        };
+        assert_eq!(
+            not_inspected(run_with(&files("deep.glb", "float.glb"), limits.clone())),
+            ["workLimit"]
+        );
+        assert_eq!(
+            not_inspected(run_with(&files("float.glb", "deep.glb"), limits.clone())),
+            ["numericSpan"]
+        );
+        // Each alone, at caps that admit it, is contained.
+        let relaxed = ValidationLimits {
+            containment_node_depth: 2,
+            ..limits
+        };
+        assert!(contained(
+            &run_with(&single(wide(), deep.clone()), relaxed).unwrap()
+        ));
+    }
+
+    #[test]
+    fn identity_node_forms_share_spans_at_the_cap_and_one_over() {
+        // FLOAT pair (-149, 127) spans 277 bits; centre and half-lengths add none.
+        for node in [
+            json!({"mesh":0}),
+            json!({"mesh":0,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1]}),
+            json!({"mesh":0,"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}),
+        ] {
+            let (doc, bin) = points_doc(&[[0., 0., 0.]], json!([node.clone()]));
+            let files = single(wide(), glb(&doc, &bin));
+            let limits = |bits| ValidationLimits {
+                containment_span_bits: bits,
+                ..ValidationLimits::default()
+            };
+            assert!(contained(&run_with(&files, limits(277)).unwrap()), "{node}");
+            assert_eq!(
+                not_inspected(run_with(&files, limits(276))),
+                ["numericSpan"],
+                "{node}"
+            );
+        }
+    }
+
+    #[test]
+    fn work_bytes_decoded_and_depth_caps_at_the_sum_and_one_below() {
+        // One FLOAT vertex, a skipped {"mesh":0} node, one level of span 277:
+        // units = T·⌈277/64⌉² + Nodes + Idx + E = 1·25 + 1 + 1 + 3 = 30.
+        let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"children":[1]},{"mesh":0}]));
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let gltf = serde_json::to_vec(&doc).unwrap();
+        let files = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.gltf"))),
+            ("a.gltf", gltf.clone()),
+            ("a.bin", bin.clone()),
+        ];
+        let read = (gltf.len() + bin.len()) as u64;
+        let units = 25 + 2 + 1 + 3;
+        for (field, at_cap) in [
+            ("units", units),
+            ("bytes", read),
+            ("decoded", bin.len() as u64),
+            ("depth", 2),
+        ] {
+            let limits = |cap: u64| {
+                let mut limits = ValidationLimits::default();
+                match field {
+                    "units" => limits.containment_work_units = cap,
+                    "bytes" => limits.containment_bytes_read = cap,
+                    "decoded" => limits.containment_decoded_bytes = cap,
+                    _ => limits.containment_node_depth = cap,
+                }
+                limits
+            };
+            assert!(
+                contained(&run_with(&files, limits(at_cap)).unwrap()),
+                "{field} at cap"
+            );
+            assert_eq!(
+                not_inspected(run_with(&files, limits(at_cap - 1))),
+                ["workLimit"],
+                "{field} one below"
+            );
+        }
+    }
+
+    #[test]
+    fn worked_example_is_in_domain_at_29_and_numeric_span_at_28() {
+        // Contract "Worked example": TRS node, u16 normalized POSITION, own box
+        // c=(1.5,0,2) h=(100,0,50), child transform (1000.25,-20,0), parent h=2048.
+        let doc = json!({
+            "asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],
+            "extensionsRequired":["KHR_mesh_quantization"],"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0,"translation":[10.5,0,-3],"scale":[2,4,0.25]}],
+            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8}],
+            "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"type":"VEC3",
+                "count":1,"min":[0,0,0],"max":[0,0,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let mut child = content_tile(json!({"box":[1.5,0,2,100,0,0,0,0,0,0,0,50]}), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 1000.25;
+        m[13] = -20.;
+        child["transform"] = json!(m);
+        let mut root = tile(boxed([0.; 3], [2048.; 3]));
+        root["children"] = json!([child]);
+        let files = vec![
+            ("tileset.json", tileset(root)),
+            ("a.glb", glb(&doc, &[0; 8])),
+        ];
+        let limits = |bits| ValidationLimits {
+            containment_span_bits: bits,
+            ..ValidationLimits::default()
+        };
+        // In domain at 29: streamed, and the vertex (10.5, 3, 0) misses the
+        // zero-height own box row, so the verdict is a proven Outside.
+        assert_eq!(
+            outside(run_with(&files, limits(29))),
+            "decoded content outside bounding volume: content=a.glb depth=1 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+        assert_eq!(not_inspected(run_with(&files, limits(28))), ["numericSpan"]);
     }
 }
