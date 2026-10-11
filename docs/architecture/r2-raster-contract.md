@@ -62,7 +62,9 @@ capacities. It charges source and target logical pyramids, requested RGBA tiles,
 finite source facts/paths, sequential coherence or display scratch, exactly
 N+3 member tuples, native argument/config payload and fixed operation owners.
 Logical work, physical staged file inventory and native opaque allocations are
-distinct; this is not an RSS bound. Actual epoch08 retained grid sizes are GridPlan608 and TargetGrid56 bytes;
+distinct; this is not an RSS bound. The ledger charges output path lengths,
+so it gates admission but is not published: `report.json` bytes do not depend
+on the output location. Actual epoch08 retained grid sizes are GridPlan608 and TargetGrid56 bytes;
 source/member capacities and small-input controls are recorded with their exact
 source and path identities. These observations do not establish an RSS bound.
 

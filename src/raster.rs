@@ -184,7 +184,6 @@ pub struct RasterReport {
     pub display: RasterDisplay,
     pub limits: RasterLimits,
     pub tiles: u64,
-    pub logical_working_bytes: u64,
     /// Closed COG and PNG bytes, before the two bounded JSON members.
     pub artifact_bytes: u64,
     pub requested_workers: u8,
@@ -511,8 +510,10 @@ fn run_native(
             root_work(&request, &source, &staging, attempt, grid.total_tiles())?,
         ])
     });
-    let work = match work {
-        Ok(work) if work <= request.limits.max_working_bytes => work,
+    // The ledger charges output-location path lengths, so it gates admission
+    // but is not published: report bytes must not depend on where they land.
+    match work {
+        Ok(work) if work <= request.limits.max_working_bytes => {}
         Ok(_) => {
             let closed = source.finish_failure(error(
                 JobErrorKind::ResourceLimit,
@@ -528,7 +529,7 @@ fn run_native(
             failure.secondary.extend(closed.secondary);
             return Err(failure);
         }
-    };
+    }
     let native = match native::produce(source, &grid, staging.path(), attempt) {
         Ok(native) => native,
         Err(child) => {
@@ -564,7 +565,6 @@ fn run_native(
             display: request.display,
             limits: request.limits,
             tiles: grid.total_tiles(),
-            logical_working_bytes: work,
             artifact_bytes,
             requested_workers: request.limits.workers,
             resolved_workers: workers,
