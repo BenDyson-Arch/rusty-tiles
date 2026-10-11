@@ -2,6 +2,28 @@
 
 These runs execute PO's frozen checker and probes, the perf lane and the A-8 reuse timing on real
 outputs of the combined head `feat/implicit-forest` at `e3a67bf`. No production code was changed.
+
+**Evidence binding (P final review F-4).** Every acceptance binary below was built at `e3a67bf`,
+and every archive in this record comes from those binaries. After `e3a67bf`, P changed in only two
+places:
+- **`tests/fixtures/implicit_levels.cjs`** (`1ef4edb`). The probe was re-run 3/3 green with the
+  e3a67bf archives (§5).
+- **The P-review F-1 guard in `restore_payload`** (`src/implicit/tileset.rs`, `14dddd6`). It
+  refuses an oversized recorded JSON length.
+  - `implicit/tileset.rs` is part of the vector encoder hash, so the guard also changes vector
+    archives.
+  - All 36 producer runs were repeated with a binary built from `b51f83d`, the same compiled
+    source as `28042c6` (`60584d3d…`), and compared member by member with the e3a67bf outputs
+    (`binding-e3a67bf-to-b51f83d.json`).
+  - **Point-cloud, mesh, glb-wrapper and `--noMeshopt` outputs are byte-identical.**
+  - Every vector archive (default and `--explicit`) differs only in:
+    - `tileset.json` `asset.extras.vectorBuildStateSha256`;
+    - `vector-build.json` `config.encoder`;
+    - its per-record `signature`s.
+  - Layout, documents, subtrees and payloads are byte-identical, so every verdict below holds for
+    the current head.
+
+The other post-e3a67bf source changes are I1's (`walk.rs`, and the `lib.rs` test module).
 The binaries, inputs and producer commands are shared with the I1 record
 (`../../implicit_read/acceptance/README.md`, `producer-runs.json`):
 
@@ -39,7 +61,7 @@ at `nice -n 10`.
 
 Results are in `forest-check/*.verdict.json`.
 
-- **Vector, with `--explicit` as H.** Every required rule passes on all 13 cases:
+- **Vector, with `--explicit` as H.** Every required rule passes on all 19 cases:
   - W4 ×6;
   - vec-perf default, `--quantize` and `--meshopt`;
   - mf2-lod3 (12,530 tiles, 189 documents, 188 links, 1,225 roots);
@@ -66,9 +88,12 @@ Results are in `forest-check/*.verdict.json`.
   criterion. Develop's defaults were 37.8 MB and 149.3 MB.
 - **P7 (`determinism-p7.json`).** All 34 archives from two head builds are byte-identical,
   `conversion.json` included. Point cloud has no `--reproducible` flag and is identical anyway.
-- **Compact JSON.** Point-cloud `--explicit` `tileset.json` is now compact (pc-deep 2.93 MB →
-  0.42 MB) with identical parsed JSON and identical payloads. That is the only change on
-  explicit outputs.
+- **Explicit outputs keep their layout and payloads, but their files change.**
+  - Point-cloud `--explicit` `tileset.json` is now compact (pc-deep 2.93 MB → 0.42 MB), with
+    identical parsed JSON and identical payloads.
+  - Vector `--explicit` archives change in `tileset.json` (state hash) and `vector-build.json`:
+    encoder revision and the empty `payloads` map.
+  - Mesh `--explicit` is byte-identical to develop.
 
 ## 4. Perf lane (`perf/`)
 
@@ -131,6 +156,8 @@ busy share was 11–24% during the runs. Siblings 12 and 14 stayed ≤ 2%.
   (0 views). The mesh case therefore used `--noMeshopt` builds of the W6d recipe:
   - develop `a699f7a8…`, head `b701588a…`;
   - the head build also passes the checker.
+- The `--noMeshopt` producer argv and hashes are in `extra-producers.json`; the e3a67bf and b51f83d
+  heads produce the same bytes.
 - The meshopt default itself is covered by the checker and by I1 only. The use of `--noMeshopt`
   builds for the mesh case is now recorded in the P contract's A-5.2.
 
@@ -147,7 +174,7 @@ The fixtures follow CONTRIBUTING's recipe on the head binary:
 - `p1_point_oracle.py --variant deep` with `--source-crs local --max-points 16`: 61 tiles, 21
   levels, 1 link, `tileset-d1.json`, 1 root.
 
-Both archives pass `forest_check.py` and `validate`. They were served by `rusty-tiles preview`
+Both archives pass `forest_check.py` (`implicit-levels/{mesh,cloud}.forest-check.verdict.json`) and `validate`. The fixture argv and hashes are in `extra-producers.json`. They were served by `rusty-tiles preview`
 with an unpacked head vector output as the annotations layer, which the probe only hides.
 
 1. On CPUs 13 and 15 the point cloud did not settle within the probe's window (SwiftShader on 2
