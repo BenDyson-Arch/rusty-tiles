@@ -190,15 +190,21 @@ def family_a():
     case("A-5", implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("tile", 23))])), "InvalidInput",
          pair="BQ", ref="A-5", note="one bit")
     # A-6: content bit at (2,0,1), whose tile bit is 0 (local level 2, morton 2 -> index 5 + 2).
-    case("A-6", implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("content", 5 + morton([0, 1])))])),
-         "InvalidInput", pair="BQ", ref="A-6", note="one bit")
+    # Post-freeze amendment 5: ship the member the drop-content-implies-tile mutant names (R's report: the stray
+    # bit is indexed to the empty neighbour (2,1,1)), so only content => tile refuses the archive.
+    m = implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("content", 5 + morton([0, 1])))]))
+    m["content/2/1/1.glb"] = glb_point(cell(BQ_BOX, False, 2, 1, 1, 0)[0:3])
+    case("A-6", m, "InvalidInput", pair="BQ", ref="A-6",
+         note="one content bit; ships content/2/1/1.glb (amendment 5) so the mutant reaches no missing entry")
     # A-7: child bit (3,0,2): its parent (2,0,1) is unavailable.
     case("A-7", implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("child", morton([0, 2])))])),
          "InvalidInput", pair="BQ", ref="A-7", note="one bit")
     # A-8: child bit under the available (5,9,1) in subtree (3,2,0): g + L = 6 >= A = 6.
-    case("A-8", implicit_archive(BQ(subtree_hooks=[ir_hook(bq_sub(3, 2, 0),
-                                                           set_bit("child", morton([9 - 8, 1 - 0]) * 4))])),
-         "InvalidInput", pair="BQ", ref="A-8", note="one bit; the parent tile is available")
+    # Post-freeze amendment 5: the child bit under (5,9,1) plus the subtree it names (6,18,2), with its tile, row,
+    # content bit and payload, so the ge-vs-gt-on-A mutant reaches no missing entry; only the A rule refuses.
+    case("A-8", implicit_archive(BQ(tiles=BQ_TILES + [(6, 18, 2, 0)])), "InvalidInput", pair="BQ", ref="A-8",
+         note="child bit (morton 12) in subtree (3,2,0) under the available (5,9,1); ships subtrees/6/18/2.subtree "
+              "and content/6/18/2.glb (amendment 5)")
     case("A-9.32", implicit_archive(BQ(A=32)), "Accepted", pair="BQ", facts=("equal", "BQ"), ref="A-9 (looser A, OD-8)")
     case("A-9.33", implicit_archive(BQ(A=33)), "Unsupported", pair="A-9.32", ref="A-9")
 

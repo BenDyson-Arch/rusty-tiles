@@ -145,9 +145,11 @@
    "sha256": "5e7f7e5f89f2751c17a08779442e9551a8d9156c7219d56f2fc1670d7cd842fe"
   },
   {
-   "bytes": 19094,
+   "bytes": 19612,
    "diff": {
-    "added": [],
+    "added": [
+     "content/2/1/1.glb"
+    ],
     "changed": {
      "subtrees/0/0/0.subtree": 1
     },
@@ -157,11 +159,11 @@
    "file": "fixtures/A-6.3tz",
    "id": "A-6",
    "limits": {},
-   "members": 28,
-   "note": "one bit",
+   "members": 29,
+   "note": "one content bit; ships content/2/1/1.glb (amendment 5) so the mutant reaches no missing entry",
    "pair": "BQ",
    "ref": "A-6",
-   "sha256": "6b224c720a47e2e82c5b5a4426a6d92128f65eff754a9585d2eb938d793c23de"
+   "sha256": "fa6ae6c15069ad9235a17c5c159780425ebaa8e6b1b5fa9abc99029043d9c314"
   },
   {
    "bytes": 19094,
@@ -183,9 +185,12 @@
    "sha256": "bde0670f36d157b370e271c8b5dbdf207637c9c6adfc549b4f5983a00cf39240"
   },
   {
-   "bytes": 19094,
+   "bytes": 20516,
    "diff": {
-    "added": [],
+    "added": [
+     "content/6/18/2.glb",
+     "subtrees/6/18/2.subtree"
+    ],
     "changed": {
      "subtrees/3/2/0.subtree": 1
     },
@@ -195,11 +200,11 @@
    "file": "fixtures/A-8.3tz",
    "id": "A-8",
    "limits": {},
-   "members": 28,
-   "note": "one bit; the parent tile is available",
+   "members": 30,
+   "note": "child bit (morton 12) in subtree (3,2,0) under the available (5,9,1); ships subtrees/6/18/2.subtree and content/6/18/2.glb (amendment 5)",
    "pair": "BQ",
    "ref": "A-8",
-   "sha256": "db1dc32d6504ee9f7b2f40083bda1e99b5343b6b41efe91e86d27e40ced6151b"
+   "sha256": "04488b5bbfeb5572bb59acd95e25b439e2d7e024593f77dc6ed32847e2220c24"
   },
   {
    "bytes": 19095,
