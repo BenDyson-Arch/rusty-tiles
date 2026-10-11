@@ -343,3 +343,249 @@ pub(super) fn admit<E>(
         live_bytes: *live - start,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::*;
+    use super::super::{admit_root, ImplicitError, VisitedTile};
+    use super::FormatError;
+    use serde_json::{json, Value};
+
+    const ROOT: &str = "s/0/0/0.subtree";
+
+    /// QUADTREE `L = 1`, `A = 1`, no content: one subtree, one tile.
+    fn one(member: Vec<u8>) -> Result<Vec<VisitedTile>, FormatError> {
+        let tile = root_tile("QUADTREE", 1, 1, &[]);
+        format(walk(&tile, &mut Archive::default().with(ROOT, member)))
+    }
+    fn minimal() -> Sub {
+        Sub::new().tile(Av::Const(1)).child(Av::Const(0))
+    }
+    /// A one-byte tile bitstream: BIN of 8 bytes, buffer byteLength 1.
+    fn with_bin() -> Sub {
+        Sub::new().tile(Av::Bits(bits(1, &[0]))).child(Av::Const(0))
+    }
+    fn patch(sub: &Sub, key: &str, value: Value) -> Vec<u8> {
+        sub.clone().set(key, value).build()
+    }
+
+    #[test]
+    fn header_and_json_chunk() {
+        assert_eq!(one(minimal().build()).unwrap().len(), 1);
+        let good = minimal().build();
+        // D-4 (version) and truncation.
+        let mut bad = good.clone();
+        bad[4] = 2;
+        assert_invalid(one(bad), "version must be 1");
+        assert_invalid(one(b"subt\x01\0\0\0".to_vec()), "header is truncated");
+        // D-7: JSON-format subtrees (no `subt` magic).
+        let json =
+            br#"{"tileAvailability":{"constant":1},"childSubtreeAvailability":{"constant":0}}"#;
+        assert_unsupported(one(json.to_vec()), "JSON-format subtree s/0/0/0.subtree");
+        let mut magic = good.clone();
+        magic[3] = b'x';
+        assert_unsupported(one(magic), "JSON-format subtree");
+        // Chunk lengths.
+        for (at, value) in [(8, 0u64), (8, 12), (16, 4)] {
+            let mut bad = good.clone();
+            bad[at..at + 8].copy_from_slice(&value.to_le_bytes());
+            assert_invalid(one(bad), "chunk lengths");
+        }
+        let mut longer = good.clone();
+        longer.extend([0; 8]);
+        assert_invalid(one(longer), "chunk lengths");
+        // D-8: a JSON chunk ending in `\n` with no padding is admitted (RC-5).
+        let mut text = serde_json::to_vec(&json!({
+            "tileAvailability": {"constant": 1},
+            "childSubtreeAvailability": {"constant": 0}
+        }))
+        .unwrap();
+        while !(text.len() + 1).is_multiple_of(8) {
+            text.insert(1, b' ');
+        }
+        text.push(b'\n');
+        assert_eq!(one(container(&text, &[], b' ')).unwrap().len(), 1);
+        // Non-whitespace padding is not JSON; the top level must be an object.
+        let short =
+            br#"{"tileAvailability":{"constant":1},"childSubtreeAvailability":{"constant":0}}"#;
+        assert_invalid(one(container(short, &[], 0)), "invalid JSON");
+        assert_invalid(one(container(b"[1]", &[], b' ')), "must be an object");
+    }
+
+    #[test]
+    fn arrays_have_min_items() {
+        // D-9 and the other schema `minItems` arrays (RC-15).
+        for key in [
+            "buffers",
+            "bufferViews",
+            "propertyTables",
+            "contentAvailability",
+            "contentMetadata",
+        ] {
+            assert_invalid(one(patch(&minimal(), key, json!([]))), "at least 1 item");
+        }
+    }
+
+    #[test]
+    fn internal_buffer_and_bin_chunk() {
+        let sub = with_bin();
+        assert_eq!(one(sub.build()).unwrap().len(), 1);
+        // D-1: truncated BIN.
+        assert_invalid(
+            one(patch(&sub, "buffers", json!([{"byteLength": 9}]))),
+            "differs from BIN",
+        );
+        // BIN padding must be shorter than 8 and zero (D-3).
+        let mut two = with_bin();
+        two.view(&[0; 9]);
+        assert_invalid(
+            one(patch(&two, "buffers", json!([{"byteLength": 8}]))),
+            "differs from BIN",
+        );
+        let mut bad = sub.build();
+        *bad.last_mut().unwrap() = 1;
+        assert_invalid(one(bad), "nonzero BIN chunk padding");
+        assert_invalid(
+            one(patch(&sub, "buffers", json!([{"byteLength": 0}]))),
+            "at least 1",
+        );
+        // A non-empty BIN needs an internal buffer, which must be buffer 0.
+        assert_invalid(
+            one(patch(
+                &sub,
+                "buffers",
+                json!([{"uri": "b.bin", "byteLength": 1}]),
+            )),
+            "without an internal buffer",
+        );
+        let member = with_bin()
+            .set("buffers", json!([{"byteLength": 1}, {"byteLength": 1}]))
+            .build();
+        assert_invalid(one(member), "only buffer 0");
+        let no_bin = minimal().set("buffers", json!([{"byteLength": 1}])).build();
+        assert_invalid(one(no_bin), "requires a BIN chunk");
+    }
+
+    #[test]
+    fn buffer_views() {
+        let sub = with_bin();
+        let view = |value: Value| one(patch(&sub, "bufferViews", json!([value])));
+        assert!(view(json!({"buffer": 0, "byteOffset": 0, "byteLength": 1})).is_ok());
+        // D-2: byteOffset absent or unaligned.
+        assert_invalid(view(json!({"buffer": 0, "byteLength": 1})), "byteOffset");
+        let mut wide = with_bin();
+        wide.view(&[0; 16]);
+        let wide_view = |value: Value| {
+            one(patch(
+                &wide,
+                "bufferViews",
+                json!([{"buffer": 0, "byteOffset": 0, "byteLength": 1}, value]),
+            ))
+        };
+        assert_invalid(
+            wide_view(json!({"buffer": 0, "byteOffset": 1, "byteLength": 1})),
+            "multiple of 8",
+        );
+        assert!(wide_view(json!({"buffer": 0, "byteOffset": 8, "byteLength": 16})).is_ok());
+        assert_invalid(
+            wide_view(json!({"buffer": 0, "byteOffset": 8, "byteLength": 17})),
+            "exceeds its buffer",
+        );
+        assert_invalid(
+            wide_view(json!({"buffer": 0, "byteOffset": 8, "byteLength": 0})),
+            "at least 1",
+        );
+        assert_invalid(
+            wide_view(json!({"buffer": 1, "byteOffset": 8, "byteLength": 1})),
+            "names no buffer",
+        );
+        // Integers are non-negative and fit u64.
+        assert_invalid(
+            wide_view(json!({"buffer": 0, "byteOffset": -8, "byteLength": 1})),
+            "non-negative integer",
+        );
+        assert_invalid(
+            wide_view(json!({"buffer": 0, "byteOffset": 8.5, "byteLength": 1})),
+            "non-negative integer",
+        );
+    }
+
+    #[test]
+    fn external_buffers() {
+        let external = |uri: &str, length: u64| {
+            Sub::new()
+                .set("tileAvailability", json!({"bitstream": 0}))
+                .set("childSubtreeAvailability", json!({"constant": 0}))
+                .set("buffers", json!([{"uri": uri, "byteLength": length}]))
+                .set(
+                    "bufferViews",
+                    json!([{"buffer": 0, "byteOffset": 0, "byteLength": 1}]),
+                )
+                .build()
+        };
+        // D-6: a valid external buffer, resolved relative to the subtree member.
+        let member = external("b.bin", 1);
+        let size = member.len() as u64;
+        let tile = root_tile("QUADTREE", 1, 1, &[]);
+        let mut archive = Archive::default()
+            .with(ROOT, member)
+            .with("s/0/0/b.bin", vec![1, 0]);
+        let root = admit_root(&tile, "tileset.json", None).unwrap();
+        let mut limits = limits();
+        let (scan, refs) = (limits.scan_remaining, limits.refs_remaining);
+        assert_eq!(
+            walk_with(&root, &mut archive, &mut limits).unwrap().len(),
+            1
+        );
+        // The buffer read is charged to the live path after the member.
+        assert_eq!(
+            archive.reads,
+            vec![
+                (ROOT.to_owned(), 1 << 26),
+                ("s/0/0/b.bin".to_owned(), (1 << 26) - size)
+            ]
+        );
+        // Reads are mirrored (two references, member + buffer bytes) and the
+        // one-byte tile view is the whole scan.
+        assert_eq!(limits.refs_remaining, refs - 2);
+        assert_eq!(limits.scan_remaining, scan - size - 2 - 1);
+        // Shorter than byteLength.
+        let mut archive = Archive::default()
+            .with(ROOT, external("b.bin", 3))
+            .with("s/0/0/b.bin", vec![1, 0]);
+        assert_invalid(
+            format(walk(&tile, &mut archive)),
+            "shorter than its byteLength",
+        );
+        // D-5: data URIs, any case.
+        for uri in ["data:application/octet-stream;base64,AQ==", "DATA:,%01"] {
+            assert_invalid(one(external(uri, 1)), "cannot be data URIs");
+        }
+        // A missing external member is the resolver's failure.
+        let mut archive = Archive::default().with(ROOT, external("b.bin", 1));
+        assert!(matches!(
+            walk(&tile, &mut archive),
+            Err(ImplicitError::Resolver(message)) if message.contains("missing archive entry")
+        ));
+    }
+
+    #[test]
+    fn extensions_are_unsupported_anywhere_but_extras() {
+        assert_unsupported(
+            one(patch(&minimal(), "extensions", json!({}))),
+            "extensions in subtree JSON",
+        );
+        assert_unsupported(
+            one(patch(
+                &minimal(),
+                "tileAvailability",
+                json!({"constant": 1, "extensions": {"EXT_x": {}}}),
+            )),
+            "extensions in subtree JSON",
+        );
+        assert!(one(patch(&minimal(), "extras", json!({"extensions": {}}))).is_ok());
+        // Unknown other properties are ignored.
+        assert!(one(patch(&minimal(), "unknown", json!({"extensions": 1}))).is_err());
+        assert!(one(patch(&minimal(), "unknown", json!(1))).is_ok());
+    }
+}
