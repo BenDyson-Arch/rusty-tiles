@@ -30,8 +30,11 @@ The merged oracle replays exactly:
 `corpus/results.json` was regenerated from the merged oracle. mf2-lod3 `contentReferences` is
 now 12,715. The facts digests are unchanged.
 
-The harness now compares `contentReferences` directly. Its sha256 is
-`e7e8541e907578b7f52e6cf37c1fc75f4cd40e4c99098b3cb7ab44da0d9abb43`.
+The harness now compares `contentReferences` directly. Its sha256 was
+`e7e8541e907578b7f52e6cf37c1fc75f4cd40e4c99098b3cb7ab44da0d9abb43` for these runs; after
+`cargo fmt` (`456f614`, whitespace only) it is
+`4317291be4bf615ec84375d606c183628fe2e14abbe37d3ae57a5868b163b74a`. A debug re-run of both
+parity tests at `456f614` passes.
 
 | Run (release, merged head) | Cases | Agree | O-side | Production disagreements |
 | --- | --- | --- | --- | --- |
@@ -186,6 +189,33 @@ does. On mf2-lod3 it is therefore 12,715 = 12,527 emitted payloads + 188 link ti
 is 12,718 = |H| + links (PD-13). P's A-3 text ("`contentReferences` = emitted contents") holds
 only if link contents count as contents. O counts payload contents only (C-11, T-3.base and
 mf2-lod3 differ by exactly the number of external tilesets).
+
+## CI replay (local, `scripts/ci_replay.sh`, `ci-replay-summary.txt`)
+
+This replays `.github/workflows/ci.yml` at `dd05dc4`, a clean tree, using its own target
+directories, CPUs 0 and 1, `nice -n 10` and the shared cargo lock.
+
+| Job | Steps | Result |
+| --- | --- | --- |
+| `rust` | foundation model and monitor; `cargo test --features native-jpeg --test-threads=1` (lib 549 passed, 0 failed); payload-context receipt; the C1, F1a–F1d2, model-wrapping, vector and point oracles and resource probes (21 steps); portable JPEG | all pass |
+| `rust` | `cargo fmt --all --check` | **failed at `dd05dc4`** on this harness file only; fixed in `456f614`, after which it passes |
+| `rust` | `cargo package --locked --no-verify` | failed locally only because the gitignored, generated `controls/large/` archives are present; with them moved aside it passes (102.0 MiB, 9,276 files). CI never has them |
+| `python-wheel` (cargo and unittest steps) | `test_wheel_runners`; clippy `-p rusty-tiles-python -D warnings`; `cargo test -p rusty-tiles-python` | pass |
+| `portable` (host target) | `cargo test --locked --target x86_64-unknown-linux-gnu` | pass |
+| `native-geospatial` | `cargo test --features native-geospatial` (905 passed, 0 failed); native vector and point oracles; clippy `--all-targets --features native-geospatial -D warnings` | pass, and clippy is re-run clean at `456f614` |
+
+**Not replayed locally:**
+- `python`: it needs the conda GDAL/laspy/pyproj Python environment and npm-installed
+  Cesium/three/gltf-validator/Playwright;
+- the wheel build and installed-wheel test (no maturin here);
+- `python-free-runtime` (docker image);
+- `release-acceptance`.
+
+These stay with exact-head CI.
+
+The producer artifacts and the release binaries used for sections 1 and 2 are from `e3a67bf`.
+The merged changes do not touch producers (`5ffbf71` changes validation only), and the merged
+parity runs in this follow-up exercise validation at the merged head.
 
 ## Not established here
 
