@@ -66,8 +66,6 @@ enum Command {
     CreateTilesetJson(ModelManifestArgs),
     /// Tileset directory or tileset.json → .3tz (3d-tiles-tools convert)
     Convert(IoArgs),
-    /// Rewrite an eligible rusty-tiles explicit point/vector .3tz as implicit tiling
-    ConvertToImplicit(IoArgs),
     /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(ModelArchiveArgs),
@@ -98,7 +96,6 @@ impl Command {
             Self::EncodeVectorContent { .. } => "encode-vector-content",
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
-            Self::ConvertToImplicit(_) => "convert-to-implicit",
             Self::GlbTo3tz(_) => "glb-to-3tz",
             Self::MeshTo3tz(_) => "mesh-to-3tz",
             Self::MeshLocalTo3tz(_) => "mesh-local-to-3tz",
@@ -184,23 +181,27 @@ struct ModelManifestArgs {
     placement: RigidPlacementArgs,
 }
 
-fn doctor_commands() -> PossibleValuesParser {
+fn doctor_commands() -> impl clap::builder::TypedValueParser<Value = doctor::Command> {
+    use clap::builder::TypedValueParser;
     PossibleValuesParser::new(
-        doctor::COMMANDS
-            .iter()
-            .map(|(name, aliases)| PossibleValue::new(*name).aliases(aliases.iter().copied())),
+        doctor::Command::ALL
+            .map(|command| PossibleValue::new(command.name()).aliases(command.aliases())),
     )
+    .map(|name| doctor::Command::from_name(&name).expect("clap admits only doctor commands"))
 }
 
 #[derive(Args)]
 struct DoctorArgs {
     /// Check only these converters; repeat to select several
     #[arg(long = "command", value_parser = doctor_commands())]
-    commands: Vec<String>,
+    commands: Vec<doctor::Command>,
     /// Cesium Build/Cesium directory to look for (informational preview check;
-    /// defaults to the README install location)
-    #[arg(long)]
-    cesium: Option<PathBuf>,
+    /// the default is the README install location relative to the working directory)
+    #[arg(
+        long,
+        default_value = "target/preview-runtime/node_modules/cesium/Build/Cesium"
+    )]
+    cesium: PathBuf,
 }
 
 #[derive(Args)]
@@ -208,8 +209,10 @@ struct PreviewArgs {
     /// Cesium 1.146.0 Build/Cesium directory containing Cesium.js (IIFE)
     #[arg(long)]
     cesium: PathBuf,
+    /// Listen IP address. Any non-loopback address serves every host that
+    /// can reach it; names are not resolved.
     #[arg(long, default_value = "127.0.0.1")]
-    host: String,
+    host: std::net::IpAddr,
     #[arg(long, default_value_t = 9227)]
     port: u16,
     #[arg(long)]
@@ -651,7 +654,10 @@ fn main() -> ExitCode {
     match run(cli, &reporter) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {
             println!("{report}");
-            ExitCode::from(4)
+            let code = report["exitCode"]
+                .as_u64()
+                .and_then(|c| u8::try_from(c).ok());
+            ExitCode::from(code.unwrap_or(4))
         }
         Ok(outcome) => {
             reporter.progress("conversion", 1, 1);
@@ -1066,24 +1072,43 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             Outcome::Report(serde_json::to_value(report)?)
         }
         Command::Doctor(a) => {
-            let report = doctor::report(&a.commands, a.cesium.as_deref())?;
+            let report = doctor::report(&a.commands, Some(&a.cesium));
+            // Each not-ready command carries the failure kind its own execution
+            // check returns; present it with execution's category and status.
+            // The first not-ready command in name order decides the process exit.
+            let refused = |(name, capability): (&str, &doctor::Capability)| {
+                let kind = capability.refusal.unwrap_or(JobErrorKind::Unsupported);
+                let reason = capability.reason.as_deref().unwrap_or("not ready");
+                (kind, format!("{name}: {reason}"))
+            };
+            let failure = report.refusal().map(refused);
             if json {
-                let mut report = report;
-                report["ok"] = report["ready"].clone();
-                if report["ready"] != true {
-                    // Include the inventory in the single error result.
-                    report["error"] = json!({"code":"environment","message":"selected converters have missing dependencies"});
-                    report["exitCode"] = 4.into();
+                let mut value = serde_json::to_value(&report)?;
+                value["ok"] = report.ready.into();
+                for (name, readiness) in &report.commands {
+                    if let Some(kind) = readiness.capability.refusal {
+                        let (code, exit) = job_category(kind);
+                        value["commands"][*name]["refusal"] = json!({"code":code,"exitCode":exit});
+                    }
                 }
-                return Ok(Outcome::Report(report));
+                if let Some((kind, message)) = failure {
+                    // Include the inventory in the single error result.
+                    let (code, exit) = job_category(kind);
+                    value["error"] = json!({"code":code,"message":message});
+                    value["exitCode"] = exit.into();
+                }
+                return Ok(Outcome::Report(value));
             }
-            doctor::display(&report, false);
-            if report["ready"] != true {
-                return Err(Error::Environment(
-                    "selected converters have missing dependencies; see doctor report".into(),
-                ));
-            }
-            Outcome::Done
+            println!("{report}");
+            return match failure {
+                None => Ok(Outcome::Done),
+                Some((kind, message)) => Err(Error::Job(rusty_tiles::JobFailure {
+                    error: JobError::new(kind, format!("{message}; see doctor report")),
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })),
+            };
         }
         Command::Preview(a) => {
             let layers: Vec<_> = [
@@ -1096,7 +1121,8 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             .into_iter()
             .filter_map(|(name, path)| path.map(|path| (name.to_owned(), path)))
             .collect();
-            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?.serve(&a.host, a.port, json)?;
+            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?
+                .serve(std::net::SocketAddr::new(a.host, a.port), json)?;
             Outcome::Done
         }
         Command::EncodeVectorContent { input } => {
@@ -1169,14 +1195,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             };
             let request = PackageRequest::directory(a.input, a.output).with_policy(policy);
             Outcome::Pack(package(request, &run)?)
-        }
-        Command::ConvertToImplicit(a) => {
-            Outcome::Converted(rusty_tiles::convert_to_implicit_reported(
-                &a.input,
-                &a.output,
-                &rusty_tiles::ConvertToImplicitOptions { force: a.force },
-                reporter,
-            )?)
         }
         Command::GlbTo3tz(a) => {
             let request = ModelWrapRequest::local_gltf(a.io.input, a.io.output)
@@ -1695,21 +1713,20 @@ mod tests {
             if name == "doctor" {
                 continue;
             }
-            let (_, aliases) = doctor::COMMANDS
-                .iter()
-                .find(|(canonical, _)| *canonical == name)
-                .unwrap_or_else(|| panic!("doctor::COMMANDS lacks {name}"));
+            let readiness = doctor::Command::from_name(name)
+                .unwrap_or_else(|| panic!("doctor::Command lacks {name}"));
+            assert_eq!(readiness.name(), name);
             let mut expected: Vec<_> = command.get_all_aliases().collect();
-            let mut actual = aliases.to_vec();
+            let mut actual = readiness.aliases().to_vec();
             expected.sort_unstable();
             actual.sort_unstable();
             assert_eq!(actual, expected, "{name}");
-            for alias in aliases.iter() {
-                assert_eq!(doctor::canonical(alias), Some(name));
+            for alias in readiness.aliases() {
+                assert_eq!(doctor::Command::from_name(alias), Some(readiness));
             }
             seen.push(name);
         }
-        assert_eq!(seen.len(), doctor::COMMANDS.len());
+        assert_eq!(seen.len(), doctor::Command::ALL.len());
         let parsed = Cli::try_parse_from([
             "rusty-tiles",
             "doctor",
@@ -1722,7 +1739,13 @@ mod tests {
         let Command::Doctor(args) = parsed.command else {
             panic!("doctor")
         };
-        assert_eq!(args.commands, ["meshTo3tz", "create-tileset-json"]);
+        assert_eq!(
+            args.commands,
+            [
+                doctor::Command::MeshTo3tz,
+                doctor::Command::CreateTilesetJson
+            ]
+        );
     }
 
     #[test]

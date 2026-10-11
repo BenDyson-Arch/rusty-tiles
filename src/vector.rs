@@ -12,9 +12,11 @@ mod model;
 mod pipeline;
 mod source_fields;
 
+/// Readiness: execution's native availability check with execution's error
+/// classification (`job_error`).
 #[cfg(feature = "native-geospatial")]
-pub(crate) fn native_available() -> Result<(), Error> {
-    pipeline::available()
+pub(crate) fn native_available() -> Result<(), JobError> {
+    pipeline::available().map_err(job_error)
 }
 
 use crate::{

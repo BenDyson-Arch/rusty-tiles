@@ -265,6 +265,14 @@ pub(crate) fn capabilities() -> Result<RasterCapabilities, JobError> {
     native::capabilities()
 }
 
+/// Readiness: the same `init` and output-driver admission, in the same order,
+/// that source admission runs before any work (`raster/source.rs`).
+#[cfg(feature = "native-geospatial")]
+pub(crate) fn output_capability() -> Result<(), JobError> {
+    native::init()?;
+    native::output_drivers()
+}
+
 pub fn raster_to_pyramid(
     request: RasterRequest,
     control: &RunControl,

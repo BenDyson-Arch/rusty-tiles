@@ -36,7 +36,14 @@ fn preview() -> Command {
 }
 
 fn serve(cesium: &Path, layers: &[(&str, &Path)], cwd: &Path) -> Server {
+    serve_on(None, cesium, layers, cwd)
+}
+
+fn serve_on(host: Option<&str>, cesium: &Path, layers: &[(&str, &Path)], cwd: &Path) -> Server {
     let mut command = preview();
+    if let Some(host) = host {
+        command.args(["--host", host]);
+    }
     command.args(["--port", "0", "--cesium"]).arg(cesium);
     for (name, path) in layers {
         command.arg(format!("--{name}")).arg(path);
@@ -44,6 +51,7 @@ fn serve(cesium: &Path, layers: &[(&str, &Path)], cwd: &Path) -> Server {
     let mut child = command
         .current_dir(cwd)
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -80,15 +88,19 @@ struct Response {
 }
 
 fn request(address: &str, path: &str, method: &str) -> Response {
+    raw(
+        address,
+        &format!("{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"),
+    )
+}
+
+/// Send one literal request head; no client-side path or Host normalization.
+fn raw(address: &str, head: &str) -> Response {
     let mut socket = TcpStream::connect(address).unwrap();
     socket
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
-    write!(
-        socket,
-        "{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
-    )
-    .unwrap();
+    socket.write_all(head.as_bytes()).unwrap();
     let mut raw = Vec::new();
     socket.read_to_end(&mut raw).unwrap();
     let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
@@ -455,6 +467,8 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
     std::fs::write(&secret, "not selected").unwrap();
     std::os::unix::fs::symlink(&secret, mesh.join("escape.txt")).unwrap();
     std::os::unix::fs::symlink(root.path(), mesh.join("external")).unwrap();
+    // A sibling output exists on disk but is not selected.
+    std::os::unix::fs::symlink(layer(&layers, "terrain"), mesh.join("sibling")).unwrap();
     std::fs::write(mesh.join("valid file.bin"), b"selected").unwrap();
     let server = serve(&cesium, &[("mesh", mesh)], root.path());
     let address = server.address.as_str();
@@ -472,8 +486,42 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
         "/mesh/escape.txt",
         "/mesh/external/private.txt",
         "/mesh/%00private.txt",
+        "/mesh/..%2fprivate.txt",
+        "/mesh/%2e%2e%5cprivate.txt",
+        "/mesh/%252e%252e/private.txt",
+        "/mesh/./../private.txt",
+        "/mesh/tileset.json/",
+        "/mesh/tileset.json//",
+        "/mesh//tileset.json",
+        "/mesh/Tileset.json",
+        "/mesh/TILESET.JSON",
+        "/mesh/tileset.json.",
+        "/mesh/tileset.json%20",
+        "/mesh/tileset.json::$DATA",
+        "/mesh/tileset.json%3a%3a$DATA",
+        "/mesh/TILESE~1.JSO",
+        "/mesh/c:%5cprivate.txt",
+        "/mesh/%5c%5c127.0.0.1%5cc$%5cprivate.txt",
+        "/mesh/tile%01.glb",
+        "/mesh/tileset.json/..",
+        "/mesh",
+        "/MESH/tileset.json",
+        "/cesium/../mesh/tileset.json",
+        "/cesium/../private.txt",
+        "/mesh/../terrain/tileset.json",
+        "/mesh/sibling/tileset.json",
+        "/mesh/C:/private.txt",
+        "/../private.txt",
         &format!("/mesh/{}", secret.display()),
         &format!("/mesh/%2f{}", secret.display()),
+        &format!(
+            "/mesh/%2F{}",
+            secret.display().to_string().replace('/', "%2F")
+        ),
+        &format!(
+            "/mesh/{}",
+            layer(&layers, "terrain").join("tileset.json").display()
+        ),
     ] {
         let response = get(address, path);
         assert_eq!(response.status, 404, "{path}");
@@ -481,6 +529,224 @@ fn only_selected_roots_reject_listing_traversal_and_symlink_escape() {
         assert!(!String::from_utf8_lossy(&response.body).contains("not selected"));
     }
     assert_eq!(get(address, "/mesh/valid%20file.bin?x=1").body, b"selected");
+    // Overlong UTF-8 for "..": not valid text after one decode.
+    assert_eq!(get(address, "/mesh/%c0%ae%c0%ae/private.txt").status, 400);
+    // An absolute-form target is fenced like an origin-form path.
+    for target in [
+        "/mesh/../private.txt",
+        "/mesh/escape.txt",
+        "/terrain/tileset.json",
+    ] {
+        let response = raw(
+            address,
+            &format!("GET http://{address}{target} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"),
+        );
+        assert_eq!(response.status, 404, "{target}");
+    }
+    let response = raw(
+        address,
+        &format!("GET http://{address}/mesh/tileset.json HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"),
+    );
+    assert_eq!(response.status, 200);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_roots_inner_links_and_invalid_manifests() {
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let mesh = layer(&layers, "mesh");
+    std::fs::create_dir(mesh.join("nested")).unwrap();
+    std::fs::write(mesh.join("nested/tile.glb"), b"inner").unwrap();
+    std::os::unix::fs::symlink(mesh.join("nested/tile.glb"), mesh.join("alias.glb")).unwrap();
+    // The selected path is itself a link; the fence is its canonical target.
+    let link = root.path().join("mesh-link");
+    std::os::unix::fs::symlink(mesh, &link).unwrap();
+    std::fs::write(root.path().join("private.txt"), "not selected").unwrap();
+    let server = serve(&cesium, &[("mesh", &link)], root.path());
+    let address = server.address.as_str();
+    // Below the root, symlinks are refused even when they stay inside it.
+    assert_eq!(get(address, "/mesh/alias.glb").status, 404);
+    assert_eq!(get(address, "/mesh/nested/tile.glb").body, b"inner");
+    assert_eq!(get(address, "/mesh/tileset.json").status, 200);
+    assert_eq!(get(address, "/mesh/../private.txt").status, 404);
+    drop(server);
+    let run = |flag: &str, path: &Path| {
+        let output = preview()
+            .arg("--cesium")
+            .arg(&cesium)
+            .arg(flag)
+            .arg(path)
+            .output()
+            .unwrap();
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        (output.status.code(), report)
+    };
+    // A manifest that is a directory, a root that is a file, and a Cesium
+    // root without Cesium.js are data errors before binding.
+    let directory_manifest = root.path().join("directory-manifest");
+    std::fs::create_dir_all(directory_manifest.join("tileset.json")).unwrap();
+    let file_root = mesh.join("tileset.json");
+    for (flag, path) in [
+        ("--mesh", directory_manifest.as_path()),
+        ("--mesh", &file_root),
+    ] {
+        let (code, report) = run(flag, path);
+        assert_eq!(code, Some(3), "{path:?}: {report}");
+        assert_eq!(report["error"]["code"], "data");
+    }
+    let output = preview()
+        .arg("--cesium")
+        .arg(mesh)
+        .arg("--mesh")
+        .arg(mesh)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3));
+}
+
+#[test]
+fn loopback_listener_refuses_foreign_host_authorities() {
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let server = serve(&cesium, &[("mesh", layer(&layers, "mesh"))], root.path());
+    let address = server.address.as_str();
+    let port = address.rsplit_once(':').unwrap().1;
+    // DNS rebinding: a browser page for evil.example resolving to 127.0.0.1
+    // sends its own name as Host. Before T1 these were answered with 200.
+    for path in [
+        "/",
+        "/config.json",
+        "/mesh/tileset.json",
+        "/cesium/Cesium.js",
+    ] {
+        for host in [
+            format!("evil.example:{port}"),
+            format!("127.0.0.1.evil.example:{port}"),
+            "127.0.0.1".to_owned(),
+            format!("localhost:{}", port.parse::<u16>().unwrap() ^ 1),
+        ] {
+            let response = raw(
+                address,
+                &format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"),
+            );
+            assert_eq!(response.status, 421, "{path} {host}");
+            assert!(response.body.is_empty(), "{path} {host}");
+        }
+        let foreign_target = raw(
+            address,
+            &format!("GET http://evil.example:{port}{path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"),
+        );
+        assert_eq!(foreign_target.status, 421, "{path}");
+        let missing = raw(address, &format!("GET {path} HTTP/1.0\r\n\r\n"));
+        assert_eq!(missing.status, 421, "{path}");
+        for host in [
+            format!("localhost:{port}"),
+            format!("LocalHost:{port}"),
+            address.to_owned(),
+        ] {
+            let response = raw(
+                address,
+                &format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"),
+            );
+            assert_eq!(response.status, 200, "{path} {host}");
+        }
+    }
+}
+
+#[test]
+fn non_loopback_bind_is_an_announced_opt_in_and_names_are_not_resolved() {
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let mut server = serve_on(
+        Some("0.0.0.0"),
+        &cesium,
+        &[("mesh", layer(&layers, "mesh"))],
+        root.path(),
+    );
+    assert_eq!(server.ready["loopback"], false, "{}", server.ready);
+    let port = server.address.rsplit_once(':').unwrap().1.to_owned();
+    let local = format!("127.0.0.1:{port}");
+    let response = raw(
+        &local,
+        "GET /mesh/tileset.json HTTP/1.1\r\nHost: tiles.example\r\nConnection: close\r\n\r\n",
+    );
+    assert_eq!(response.status, 200);
+    let _ = server.child.kill();
+    let _ = server.child.wait();
+    let mut stderr = String::new();
+    server
+        .child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(stderr.contains("non-loopback"), "{stderr}");
+    // A host name is a usage error, so binding never depends on resolution.
+    let output = preview()
+        .args(["--host", "localhost", "--port", "0", "--cesium"])
+        .arg(&cesium)
+        .arg("--mesh")
+        .arg(layer(&layers, "mesh"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["error"]["code"], "usage");
+}
+
+// Linux binds IPv4-mapped addresses on a dual-stack socket by default.
+#[cfg(target_os = "linux")]
+#[test]
+fn ipv4_mapped_loopback_bind_keeps_the_host_fence() {
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    let server = serve_on(
+        Some("::ffff:127.0.0.1"),
+        &cesium,
+        &[("mesh", layer(&layers, "mesh"))],
+        root.path(),
+    );
+    assert_eq!(server.ready["loopback"], true, "{}", server.ready);
+    let address = server.address.as_str();
+    let port = address.rsplit_once(':').unwrap().1;
+    for (host, status) in [
+        (format!("evil.example:{port}"), 421),
+        (format!("localhost:{port}"), 200),
+    ] {
+        let response = raw(
+            address,
+            &format!("GET /config.json HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"),
+        );
+        assert_eq!(response.status, status, "{host}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn termination_signals_end_the_server_and_release_its_port() {
+    use std::os::unix::process::ExitStatusExt;
+    let root = tempfile::tempdir().unwrap();
+    let (cesium, layers) = fixture(root.path());
+    for signal in [libc::SIGTERM, libc::SIGINT] {
+        let mut server = serve(&cesium, &[("mesh", layer(&layers, "mesh"))], root.path());
+        let address = server.address.clone();
+        // An open keep-alive client does not extend the server's lifetime.
+        let mut idle = TcpStream::connect(&address).unwrap();
+        send_persistent(&mut idle, &address, "/config.json", "GET");
+        assert_eq!(get(&address, "/config.json").status, 200);
+        assert_eq!(
+            unsafe { libc::kill(server.child.id() as libc::pid_t, signal) },
+            0
+        );
+        let status = server.child.wait().unwrap();
+        assert_eq!(status.signal(), Some(signal));
+        assert!(
+            TcpStream::connect(&address).is_err(),
+            "{address} still accepts"
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -563,7 +829,8 @@ fn json_startup_line_reports_url_and_layers() {
     );
     let mut keys: Vec<_> = server.ready.as_object().unwrap().keys().collect();
     keys.sort_unstable();
-    assert_eq!(keys, ["layers", "ok", "url"]);
+    assert_eq!(keys, ["layers", "loopback", "ok", "url"]);
+    assert_eq!(server.ready["loopback"], true);
     assert_eq!(server.ready["ok"], true);
     assert_eq!(
         server.ready["url"],

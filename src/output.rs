@@ -20,15 +20,6 @@ pub(crate) fn parent_dir(output: &Path) -> &Path {
         .unwrap_or(Path::new("."))
 }
 
-/// Converters that read one source file reject anything else up front.
-pub(crate) fn require_file(input: &Path) -> Result<(), Error> {
-    if input.is_file() {
-        Ok(())
-    } else {
-        Err(Error::InputNotFound(input.into()))
-    }
-}
-
 /// Refuse to touch an existing output unless replacement was requested.
 pub(crate) fn check_output(output: &Path, force: bool) -> Result<(), Error> {
     if output.exists() && !force {
