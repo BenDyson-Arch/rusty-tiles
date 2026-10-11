@@ -695,16 +695,18 @@ fn x15_template_profile_is_unsupported() {
 
 #[test]
 fn x16_content_index_reservation_refuses_at_subtree_admission() {
-    // R9: 2,500 `Const1` slots naming the same members. The root subtree
-    // reserves E = 182,500; the first child subtree's reservation exceeds
-    // 262,144 references before its index allocation.
+    // R9 at the raised default `references` (2^20, #160): 7,200 `Const1`
+    // slots naming the same members. Each three-level OCTREE subtree has 73
+    // tiles, so the root subtree reserves E = 525,600 and the first child
+    // subtree's reservation (1,051,200 in total) exceeds 1,048,576 references
+    // before its index allocation.
     let mut root = implicit_root(3, 6, &[]);
     root["implicitTiling"]["subdivisionScheme"] = json!("OCTREE");
     root["implicitTiling"]["subtrees"]["uri"] = json!("s/{level}/{x}/{y}/{z}.subtree");
-    root["contents"] = (0..2_500)
+    root["contents"] = (0..7_200)
         .map(|_| json!({"uri":"c/{level}-{x}-{y}-{z}.glb"}))
         .collect();
-    let layers = json!(vec![constant(1); 2_500]);
+    let layers = json!(vec![constant(1); 7_200]);
     let sub = |child| {
         Sub::new(constant(1), constant(child))
             .set("contentAvailability", layers.clone())
