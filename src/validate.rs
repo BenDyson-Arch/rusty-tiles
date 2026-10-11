@@ -2645,11 +2645,11 @@ mod tests {
         root["refine"] = json!("REPLACE");
         root["children"] = json!(children);
         let mut manifest = json!({"asset":{"version":"1.1"},"geometricError":16,"root":root});
-        crate::implicit::write_tileset(
+        crate::implicit::write_forest(
             &mut manifest,
             &data,
             crate::implicit::SubdivisionScheme::Quadtree,
-            false,
+            &mut || Ok(()),
         )
         .unwrap();
         std::fs::write(

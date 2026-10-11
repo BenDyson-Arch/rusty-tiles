@@ -21,7 +21,6 @@ pub use tileset::{
     rebase_payload, restore_payload, write_forest, ForestOutput, RebaseRecord, TileRole,
     WrittenContent, WrittenTile,
 };
-pub(crate) use tileset::{write_tileset, write_tileset_recorded}; // TRANSITIONAL until PP and PV land
 
 type Bits = BitVec<u8, Lsb0>;
 

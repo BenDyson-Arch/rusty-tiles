@@ -1978,30 +1978,6 @@ impl<F: FnMut(&str) -> Result<Vec<u8>, Error>> Reader<'_, F> {
     }
 }
 
-// ---- TRANSITIONAL: the pre-forest entry points ----
-// Kept only so that the producers compile until PP and PV call `write_forest` themselves.
-// Both write the forest; neither retains raw sources. R deletes this block and its re-export
-// in `implicit.rs` when the producer integrations land.
-
-pub(crate) fn write_tileset(
-    manifest: &mut Value,
-    directory: &Path,
-    scheme: SubdivisionScheme,
-    _retain_sources: bool,
-) -> Result<(), Error> {
-    write_forest(manifest, directory, scheme, &mut || Ok(())).map(drop)
-}
-
-pub(crate) fn write_tileset_recorded(
-    manifest: &mut Value,
-    directory: &Path,
-    scheme: SubdivisionScheme,
-    _retain_sources: bool,
-    checkpoint: &mut impl FnMut() -> Result<(), Error>,
-) -> Result<Vec<String>, Error> {
-    write_forest(manifest, directory, scheme, checkpoint).map(|output| output.members)
-}
-
 #[cfg(test)]
 mod expansion_budget_tests {
     use super::*;
