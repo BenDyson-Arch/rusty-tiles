@@ -1,0 +1,807 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "baseline": null,
+    "rasterInsetDegrees": 0,
+    "scriptSha256": {
+      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
+      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.16220000000298,
+      "tilesLoadedEvents": 5,
+      "selectedTiles": 4,
+      "tilesetMemoryBytes": null,
+      "usedJSHeapSize": 42035974,
+      "failures": [],
+      "rootBoundingSphereRadius": 8344.139455469209,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "vector",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/vector.3tz",
+        "bytes": 37111810,
+        "sha256": "ac0c0cf914072f0c01c831fbf48c09fe7403a969ab62053f5155d38adc51b000"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/vector.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 41102
+        },
+        "subtree": {
+          "requests": 1,
+          "bytes": 5752
+        },
+        "content": {
+          "requests": 4,
+          "bytes": 1516936
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 6,
+        "requestBytes": 1563790,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "vector.png": "28db29fce794433d84945ad809da37f02fb3ffcabc0c61b45378560d7eda5fa3"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.6705999999940397,
+      "tilesLoadedEvents": 4,
+      "selectedTiles": 4,
+      "tilesetMemoryBytes": null,
+      "usedJSHeapSize": 42570242,
+      "failures": [],
+      "rootBoundingSphereRadius": 8344.139455469209,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "vector-explicit",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/vector-explicit.3tz",
+        "bytes": 19089031,
+        "sha256": "b74822ba3a1703f1f45f272ac57c88eeceb0bba8da2e813917005d6aca1f1f88"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/vector-explicit.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 360064
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 4,
+          "bytes": 1516664
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 5,
+        "requestBytes": 1876728,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "vector-explicit.png": "28db29fce794433d84945ad809da37f02fb3ffcabc0c61b45378560d7eda5fa3"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.83529999999702,
+      "tilesLoadedEvents": 10,
+      "selectedTiles": 8,
+      "tilesetMemoryBytes": 19505664,
+      "usedJSHeapSize": 75395419,
+      "failures": [],
+      "rootBoundingSphereRadius": 198.73945902697363,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": [
+          "Cannot create a texture for the property table \"points\" because it exceeds the maximum texture size of 8192."
+        ]
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "point-cloud",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud.3tz",
+        "bytes": 19553112,
+        "sha256": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/point-cloud.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 1487
+        },
+        "subtree": {
+          "requests": 1,
+          "bytes": 1848
+        },
+        "content": {
+          "requests": 9,
+          "bytes": 19546600
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 11,
+        "requestBytes": 19549935,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "point-cloud.png": "30aca3fcb2aded661bb7b4e1498d6b0bb3d43d71b9a6f0d58a5f92fc79509162"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.32079999999702,
+      "tilesLoadedEvents": 7,
+      "selectedTiles": 4,
+      "tilesetMemoryBytes": 9439200,
+      "usedJSHeapSize": 55734846,
+      "failures": [],
+      "rootBoundingSphereRadius": 198.73945902697363,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": [
+          "Cannot create a texture for the property table \"points\" because it exceeds the maximum texture size of 8192."
+        ]
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "point-cloud-explicit",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud-explicit.3tz",
+        "bytes": 20634718,
+        "sha256": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/point-cloud-explicit.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 10237
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 7,
+          "bytes": 9470300
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 8,
+        "requestBytes": 9480537,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "point-cloud-explicit.png": "41f51a93857efb96ea7c4e401761fe798f2b08882bd9663a99842c08c761f8bc"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.532,
+      "tilesLoadedEvents": 8,
+      "selectedTiles": 8,
+      "tilesetMemoryBytes": 10728744,
+      "usedJSHeapSize": 43770117,
+      "failures": [],
+      "rootBoundingSphereRadius": 283.0971244522437,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": [
+          "Cannot create a texture for the property table \"undefined\" because it exceeds the maximum texture size of 8192."
+        ]
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "mesh-local",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/mesh-local.3tz",
+        "bytes": 10497816,
+        "sha256": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh-local.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 2098
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 8,
+          "bytes": 9706432
+        },
+        "imagery": {
+          "requests": 1,
+          "bytes": 787072
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 10,
+        "requestBytes": 10495602,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGB": 1
+        }
+      },
+      "captureSha256": {
+        "mesh-local.png": "49faeff1b3d30471dcfea254bdd35e99fa5ac13d11a727daf152e6c97c641736"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.4749000000059604,
+      "tilesLoadedEvents": 1,
+      "selectedTiles": 1,
+      "tilesetMemoryBytes": 3186996,
+      "usedJSHeapSize": 29775579,
+      "failures": [],
+      "rootBoundingSphereRadius": 283.09712445224403,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "glb-wrap",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/glb-wrap.3tz",
+        "bytes": 2928597,
+        "sha256": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/glb-wrap.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 569
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 1,
+          "bytes": 2926576
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 2,
+        "requestBytes": 2927145,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "glb-wrap.png": "49faeff1b3d30471dcfea254bdd35e99fa5ac13d11a727daf152e6c97c641736"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.54470000000298,
+      "tilesLoadedEvents": 10,
+      "selectedTiles": 8,
+      "tilesetMemoryBytes": 17565851,
+      "usedJSHeapSize": 35052686,
+      "failures": [],
+      "rootBoundingSphereRadius": 283.0971244522436,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "mesh",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/mesh.3tz",
+        "bytes": 2584349,
+        "sha256": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 1041
+        },
+        "subtree": {
+          "requests": 1,
+          "bytes": 1848
+        },
+        "content": {
+          "requests": 9,
+          "bytes": 2579380
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 11,
+        "requestBytes": 2582269,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "mesh.png": "fe7a5d81f846e0ffeb81fabc74166415d664249a0d300227db5a10ce8d8dc893"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.436,
+      "tilesLoadedEvents": 9,
+      "selectedTiles": 8,
+      "tilesetMemoryBytes": 9102681,
+      "usedJSHeapSize": 33706998,
+      "failures": [],
+      "rootBoundingSphereRadius": 283.0971244522436,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "mesh-explicit",
+      "kind": "tileset",
+      "output": {
+        "archive": "/home/bend/.cache/perf-lane/work/baseline/head/mesh-explicit.3tz",
+        "bytes": 1689232,
+        "sha256": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh-explicit.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 2046
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 9,
+          "bytes": 1685908
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 10,
+        "requestBytes": 1687954,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "mesh-explicit.png": "d17197a6686413af0f23f054219a0a5e9e606a17cfd6e4eaec152b9381aa7879"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 1.9382000000029802,
+      "tilesLoadedEvents": 6,
+      "selectedTiles": 6,
+      "tilesetMemoryBytes": 14940,
+      "usedJSHeapSize": 27433189,
+      "failures": [],
+      "rootBoundingSphereRadius": 19586.588577105897,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "terrain-fixture",
+      "kind": "tileset",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/baseline/head/terrain-fixture",
+        "files": 8,
+        "bytes": 24597,
+        "treeSha256": "9affaec718afea0e6ffd1ce775336974f452ed7320198477fb283cf3d2d7d568"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/terrain-fixture.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 3656
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 6,
+          "bytes": 19968
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 7,
+        "requestBytes": 23624,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "terrain-fixture.png": "65faec875324484a5678f39baff2689f5fec4991579b6734bf694e45955995ba"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 45.85129999999702,
+      "tilesLoadedEvents": 289,
+      "selectedTiles": 289,
+      "tilesetMemoryBytes": 25636668,
+      "usedJSHeapSize": 30114400,
+      "failures": [],
+      "rootBoundingSphereRadius": 7109.4896829208465,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "terrain",
+      "kind": "tileset",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/baseline/head/terrain",
+        "files": 291,
+        "bytes": 26021688,
+        "treeSha256": "7c17c6b3638f1f669eebabd3dd85ef4afe44c64f883b9cc02cbe7aa171e0353f"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/terrain.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 137370
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 289,
+          "bytes": 25883288
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 290,
+        "requestBytes": 26020658,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "terrain.png": "264020ac1aa5964f2883d2049d94f56257ca7c64758e839683aec0dc11bf9efd"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "secondsToLoaded": 1.9389000000059604,
+          "changedPixelFraction": 0.6704152425130209,
+          "probes": [
+            {
+              "name": "overview/inside-hole",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            },
+            {
+              "name": "overview/outside-hole",
+              "expect": "content",
+              "samples": 176,
+              "contentFraction": 1,
+              "pass": true
+            }
+          ]
+        },
+        {
+          "name": "hole-edge",
+          "loaded": true,
+          "secondsToLoaded": 2.2145999999940393,
+          "changedPixelFraction": 0.5009765625,
+          "probes": [
+            {
+              "name": "hole-edge/west-of-edge",
+              "expect": "content",
+              "samples": 225,
+              "contentFraction": 1,
+              "pass": true
+            },
+            {
+              "name": "hole-edge/east-of-edge",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            }
+          ]
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 1.9389000000059604,
+      "imageryErrors": 0,
+      "probes": [
+        {
+          "name": "overview/inside-hole",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        },
+        {
+          "name": "overview/outside-hole",
+          "expect": "content",
+          "samples": 176,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/west-of-edge",
+          "expect": "content",
+          "samples": 225,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/east-of-edge",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        }
+      ],
+      "usedJSHeapSize": 43941267,
+      "failures": [],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "raster",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/baseline/head/raster",
+        "files": 3172,
+        "bytes": 66555715,
+        "treeSha256": "c4bf85aef6de8b54c2558d8514eb7ce93fa117c950835bf60d3a025af8a14dc7",
+        "pngColorTypes": {
+          "RGBA": 875,
+          "RGB": 2294
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/raster.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 235
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 73,
+          "bytes": 1956989
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 74,
+        "requestBytes": 1957224,
+        "duplicateRequests": 7,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 59,
+          "RGB": 14
+        }
+      },
+      "captureSha256": {
+        "raster.png": "64da31dfc62625e35614adee4aee14a517421509b7d0885fe1318d01dd610d1e",
+        "raster-overview.png": "3462bc27113390eb4dfe0bfdcbfad5384a24c5fb4b947552864ec2b423d5d1ec",
+        "raster-hole-edge.png": "7aaed74d3b2908530d99f180933704becc63ccc50f61b5c4cc4686504f3b80dd"
+      },
+      "problems": []
+    }
+  ]
+}

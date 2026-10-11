@@ -1,0 +1,465 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "baseline": null,
+    "rasterInsetDegrees": 1e-07,
+    "scriptSha256": {
+      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
+      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "secondsToLoaded": 1.2499000000059604,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": [
+            {
+              "name": "overview/inside-hole",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            },
+            {
+              "name": "overview/outside-hole",
+              "expect": "content",
+              "samples": 176,
+              "contentFraction": 1,
+              "pass": true
+            }
+          ]
+        },
+        {
+          "name": "hole-edge",
+          "loaded": true,
+          "secondsToLoaded": 2.8324000000059604,
+          "changedPixelFraction": 0.5019543965657552,
+          "probes": [
+            {
+              "name": "hole-edge/west-of-edge",
+              "expect": "content",
+              "samples": 225,
+              "contentFraction": 1,
+              "pass": true
+            },
+            {
+              "name": "hole-edge/east-of-edge",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            }
+          ]
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 1.2499000000059604,
+      "imageryErrors": 0,
+      "probes": [
+        {
+          "name": "overview/inside-hole",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        },
+        {
+          "name": "overview/outside-hole",
+          "expect": "content",
+          "samples": 176,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/west-of-edge",
+          "expect": "content",
+          "samples": 225,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/east-of-edge",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        }
+      ],
+      "usedJSHeapSize": 36987902,
+      "failures": [],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-out0-gdal",
+      "kind": "raster",
+      "output": {
+        "directory": "/tmp/r2-bench-20261011/out0",
+        "files": 1494,
+        "bytes": 393121909,
+        "treeSha256": "35a263fa928ab5d14f937390a86d358096813a680f1f54db1369c57299519974",
+        "pngColorTypes": {
+          "RGB": 1160,
+          "RGBA": 331
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-inset/screenshots/r2-out0-gdal.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 32,
+          "bytes": 2299288
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 33,
+        "requestBytes": 2299509,
+        "duplicateRequests": 3,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 22,
+          "RGB": 10
+        }
+      },
+      "captureSha256": {
+        "r2-out0-gdal.png": "bc5ff00aa8933a527557e01405d2a78c00b3b1e989f749ed85536701b2dd6624",
+        "r2-out0-gdal-overview.png": "7006f1574a398147481495a46e7f8a8377f876701c70f1ba96b4db20eabb815b",
+        "r2-out0-gdal-hole-edge.png": "1889f1af5550589b524341e25f9132a65cb062972dfa8280903b283135c7bab3"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "secondsToLoaded": 2.3089000000059605,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": [
+            {
+              "name": "overview/inside-hole",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            },
+            {
+              "name": "overview/outside-hole",
+              "expect": "content",
+              "samples": 176,
+              "contentFraction": 1,
+              "pass": true
+            }
+          ]
+        },
+        {
+          "name": "hole-edge",
+          "loaded": true,
+          "secondsToLoaded": 4.303299999997019,
+          "changedPixelFraction": 0.5019543965657552,
+          "probes": [
+            {
+              "name": "hole-edge/west-of-edge",
+              "expect": "content",
+              "samples": 225,
+              "contentFraction": 1,
+              "pass": true
+            },
+            {
+              "name": "hole-edge/east-of-edge",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            }
+          ]
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 2.3089000000059605,
+      "imageryErrors": 0,
+      "probes": [
+        {
+          "name": "overview/inside-hole",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        },
+        {
+          "name": "overview/outside-hole",
+          "expect": "content",
+          "samples": 176,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/west-of-edge",
+          "expect": "content",
+          "samples": 225,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/east-of-edge",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        }
+      ],
+      "usedJSHeapSize": 35853493,
+      "failures": [],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-out1-exact-fast",
+      "kind": "raster",
+      "output": {
+        "directory": "/tmp/r2-bench-20261011/out1",
+        "files": 1494,
+        "bytes": 451377349,
+        "treeSha256": "48f519632f1cc25e794342c80a4960fe3fa56ab1fe0d9320b72d30cff1564060",
+        "pngColorTypes": {
+          "RGBA": 1491
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-inset/screenshots/r2-out1-exact-fast.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 32,
+          "bytes": 4044482
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 33,
+        "requestBytes": 4044703,
+        "duplicateRequests": 3,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 32
+        }
+      },
+      "captureSha256": {
+        "r2-out1-exact-fast.png": "bc5ff00aa8933a527557e01405d2a78c00b3b1e989f749ed85536701b2dd6624",
+        "r2-out1-exact-fast-overview.png": "7006f1574a398147481495a46e7f8a8377f876701c70f1ba96b4db20eabb815b",
+        "r2-out1-exact-fast-hole-edge.png": "1889f1af5550589b524341e25f9132a65cb062972dfa8280903b283135c7bab3"
+      },
+      "problems": []
+    },
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "views": [
+        {
+          "name": "overview",
+          "loaded": true,
+          "secondsToLoaded": 1.2808999999910593,
+          "changedPixelFraction": 0.899871826171875,
+          "probes": [
+            {
+              "name": "overview/inside-hole",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            },
+            {
+              "name": "overview/outside-hole",
+              "expect": "content",
+              "samples": 176,
+              "contentFraction": 1,
+              "pass": true
+            }
+          ]
+        },
+        {
+          "name": "hole-edge",
+          "loaded": true,
+          "secondsToLoaded": 1.6585,
+          "changedPixelFraction": 0.5019543965657552,
+          "probes": [
+            {
+              "name": "hole-edge/west-of-edge",
+              "expect": "content",
+              "samples": 225,
+              "contentFraction": 1,
+              "pass": true
+            },
+            {
+              "name": "hole-edge/east-of-edge",
+              "expect": "background",
+              "samples": 225,
+              "contentFraction": 0,
+              "pass": true
+            }
+          ]
+        }
+      ],
+      "loaded": true,
+      "secondsToLoaded": 1.2808999999910593,
+      "imageryErrors": 0,
+      "probes": [
+        {
+          "name": "overview/inside-hole",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        },
+        {
+          "name": "overview/outside-hole",
+          "expect": "content",
+          "samples": 176,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/west-of-edge",
+          "expect": "content",
+          "samples": 225,
+          "contentFraction": 1,
+          "pass": true
+        },
+        {
+          "name": "hole-edge/east-of-edge",
+          "expect": "background",
+          "samples": 225,
+          "contentFraction": 0,
+          "pass": true
+        }
+      ],
+      "usedJSHeapSize": 41866355,
+      "failures": [],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-develop-f2238cd",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/r2/out2",
+        "files": 1494,
+        "bytes": 404853900,
+        "treeSha256": "cdda39ab899b97a40fe63e7e1aac6319724b86194fa10981b109d465c779d43c",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-inset/screenshots/r2-develop-f2238cd.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 32,
+          "bytes": 2608915
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 33,
+        "requestBytes": 2609136,
+        "duplicateRequests": 3,
+        "serverErrors": [],
+        "imageryColorTypes": {
+          "RGBA": 22,
+          "RGB": 10
+        }
+      },
+      "captureSha256": {
+        "r2-develop-f2238cd.png": "bc5ff00aa8933a527557e01405d2a78c00b3b1e989f749ed85536701b2dd6624",
+        "r2-develop-f2238cd-overview.png": "7006f1574a398147481495a46e7f8a8377f876701c70f1ba96b4db20eabb815b",
+        "r2-develop-f2238cd-hole-edge.png": "1889f1af5550589b524341e25f9132a65cb062972dfa8280903b283135c7bab3"
+      },
+      "problems": []
+    }
+  ]
+}

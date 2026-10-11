@@ -1,0 +1,214 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "baseline": null,
+    "rasterInsetDegrees": 0,
+    "scriptSha256": {
+      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
+      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+    }
+  },
+  "cases": [
+    {
+      "loaded": false,
+      "failures": [
+        "threw: TypeError: Cannot read properties of undefined (reading 'west')"
+      ],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-out0-gdal",
+      "kind": "raster",
+      "output": {
+        "directory": "/tmp/r2-bench-20261011/out0",
+        "files": 1494,
+        "bytes": 393121909,
+        "treeSha256": "35a263fa928ab5d14f937390a86d358096813a680f1f54db1369c57299519974",
+        "pngColorTypes": {
+          "RGB": 1160,
+          "RGBA": 331
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-exact/screenshots/r2-out0-gdal.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 1,
+        "requestBytes": 221,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "r2-out0-gdal.png": "11cbe32ae945ac8452645899d208ca03aa3151013f3622dfb981ec8637f3a4d6"
+      },
+      "problems": [
+        "load failed or timed out",
+        "failures: 1"
+      ]
+    },
+    {
+      "loaded": false,
+      "failures": [
+        "threw: TypeError: Cannot read properties of undefined (reading 'west')"
+      ],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-out1-exact-fast",
+      "kind": "raster",
+      "output": {
+        "directory": "/tmp/r2-bench-20261011/out1",
+        "files": 1494,
+        "bytes": 451377349,
+        "treeSha256": "48f519632f1cc25e794342c80a4960fe3fa56ab1fe0d9320b72d30cff1564060",
+        "pngColorTypes": {
+          "RGBA": 1491
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-exact/screenshots/r2-out1-exact-fast.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 1,
+        "requestBytes": 221,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "r2-out1-exact-fast.png": "11cbe32ae945ac8452645899d208ca03aa3151013f3622dfb981ec8637f3a4d6"
+      },
+      "problems": [
+        "load failed or timed out",
+        "failures: 1"
+      ]
+    },
+    {
+      "loaded": false,
+      "failures": [
+        "threw: TypeError: Cannot read properties of undefined (reading 'west')"
+      ],
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "r2-develop-f2238cd",
+      "kind": "raster",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/r2/out2",
+        "files": 1494,
+        "bytes": 404853900,
+        "treeSha256": "cdda39ab899b97a40fe63e7e1aac6319724b86194fa10981b109d465c779d43c",
+        "pngColorTypes": {
+          "RGBA": 331,
+          "RGB": 1160
+        }
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/r2/cesium-exact/screenshots/r2-develop-f2238cd.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 221
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 1,
+        "requestBytes": 221,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "r2-develop-f2238cd.png": "11cbe32ae945ac8452645899d208ca03aa3151013f3622dfb981ec8637f3a4d6"
+      },
+      "problems": [
+        "load failed or timed out",
+        "failures: 1"
+      ]
+    }
+  ]
+}

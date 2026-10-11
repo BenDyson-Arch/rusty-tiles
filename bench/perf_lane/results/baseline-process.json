@@ -1,0 +1,1771 @@
+{
+  "gate": {
+    "rule": "regression when head/base > ratio and absolute growth > floor for best wall time, peak RSS or output bytes, or when head fails a case base passes; --explain records a stated reason",
+    "ratio": 1.25,
+    "floors": {
+      "wallSeconds": 0.1,
+      "peakRssMiB": 16,
+      "outputBytes": 0
+    },
+    "regressions": [],
+    "explained": []
+  },
+  "environment": {
+    "recordedAtUtc": "2026-10-11T05:51:59.337027+00:00",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "niceness": 10,
+    "loadAverageBefore": [
+      4.89599609375,
+      7.2236328125,
+      6.9375
+    ],
+    "loadAverageAfter": [
+      3.5,
+      5.7890625,
+      6.43408203125
+    ],
+    "repeat": 3,
+    "python": "3.14.7",
+    "environment": {
+      "PATH": "",
+      "HOME": "/home/bend",
+      "RAYON_NUM_THREADS": "2",
+      "PROJ_NETWORK": "OFF",
+      "LC_ALL": "C"
+    },
+    "scriptSha256": {
+      "process.py": "513bec79b404a7961b00cf37692df299035393dd87bf03b4fcfd8ae760d46ff3",
+      "corpus.py": "a6cd738cbcd16a7c303402dd74dcdc75bd1596ec1a45fb5029f31bf123245258"
+    },
+    "binaries": {
+      "base": {
+        "path": "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd",
+        "sha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+        "version": "rusty-tiles 0.4.0",
+        "ready": {
+          "convert": true,
+          "convert-to-implicit": true,
+          "createTilesetJson": true,
+          "glb-to-3tz": true,
+          "mesh-local-to-3tz": true,
+          "mesh-to-3tz": true,
+          "point-cloud": true,
+          "preview": true,
+          "raster": true,
+          "raster-tile-to-directory": true,
+          "terrain": true,
+          "validate": true,
+          "vector": true
+        }
+      },
+      "head": {
+        "path": "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd",
+        "sha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+        "version": "rusty-tiles 0.4.0",
+        "ready": {
+          "convert": true,
+          "convert-to-implicit": true,
+          "createTilesetJson": true,
+          "glb-to-3tz": true,
+          "mesh-local-to-3tz": true,
+          "mesh-to-3tz": true,
+          "point-cloud": true,
+          "preview": true,
+          "raster": true,
+          "raster-tile-to-directory": true,
+          "terrain": true,
+          "validate": true,
+          "vector": true
+        }
+      }
+    },
+    "inputs": {
+      "points.las": "67eb91b0839cb8f244d52fc1c4ca7210aa4fd5d1e2bf4fbd5252ac57f50516e3",
+      "vector.geojson": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+      "mesh.glb": "6c53d2fbed365f976c4a0f897e3bb10cea2ecd9e2651348d00cb8619735cde06",
+      "rgba.tif": "2409501400b7641c3a503e10ba75129f8f30e965ed803af45d1684e6cdfa0d35",
+      "dem.tif": "197a8f6677d961d19e73a15dd42f517f17c311847ef141240da51a816cf32fa6",
+      "t1-multipatch-plane.tif": "77a132b786f4f451bd7e3329926ad733e2facd7523ed8649c9c5c74aba27d4d1"
+    },
+    "rasterHoleDegrees": [
+      12.608345749102691,
+      41.86575088640702,
+      12.694176437579255,
+      41.92963795674598
+    ]
+  },
+  "cases": [
+    {
+      "case": "vector",
+      "argv": [
+        "vector",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/vector.geojson",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/vector.3tz",
+        "--jobs",
+        "2"
+      ],
+      "sides": {
+        "base": {
+          "case": "vector",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.477757397995447,
+              "cpuSeconds": 4.152362,
+              "peakRssMiB": 90.15625,
+              "foreignCpuSeconds": 0.06763799999999975
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.51776427400182,
+              "cpuSeconds": 4.204047,
+              "peakRssMiB": 87.56640625,
+              "foreignCpuSeconds": 0.05595299999999992
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.5781491460074903,
+              "cpuSeconds": 4.263712,
+              "peakRssMiB": 87.2890625,
+              "foreignCpuSeconds": 0.08628799999999981
+            }
+          ],
+          "wallSeconds": 3.477757397995447,
+          "cpuSeconds": 4.152362,
+          "peakRssMiB": 90.15625,
+          "foreignCpuSeconds": 0.05595299999999992,
+          "outputBytes": 37111802,
+          "members": 1262,
+          "digest": "f020dc33afbd3433cb54c89cecc5c7f83e8c081fe8c0299b19ed67e9d503a99c",
+          "tiles": 1173,
+          "byExtension": {
+            ".json": 87,
+            ".jsonl": 1,
+            ".glb": 1088,
+            ".subtree": 85,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "vector",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.494139471993549,
+              "cpuSeconds": 4.176666,
+              "peakRssMiB": 90.1015625,
+              "foreignCpuSeconds": 0.06333400000000022
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.499339745991165,
+              "cpuSeconds": 4.187581,
+              "peakRssMiB": 87.09375,
+              "foreignCpuSeconds": 0.07241900000000012
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.525367035996169,
+              "cpuSeconds": 4.214131,
+              "peakRssMiB": 89.125,
+              "foreignCpuSeconds": 0.04586899999999983
+            }
+          ],
+          "wallSeconds": 3.494139471993549,
+          "cpuSeconds": 4.176666,
+          "peakRssMiB": 90.1015625,
+          "foreignCpuSeconds": 0.04586899999999983,
+          "outputBytes": 37111810,
+          "members": 1262,
+          "digest": "ac0c0cf914072f0c01c831fbf48c09fe7403a969ab62053f5155d38adc51b000",
+          "tiles": 1173,
+          "byExtension": {
+            ".json": 87,
+            ".jsonl": 1,
+            ".glb": 1088,
+            ".subtree": 85,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": false
+    },
+    {
+      "case": "validate:vector",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/vector.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:vector",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1662053449981613,
+              "cpuSeconds": 0.165538,
+              "peakRssMiB": 88.125,
+              "foreignCpuSeconds": 0.02446200000000001
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16382842500752304,
+              "cpuSeconds": 0.163236,
+              "peakRssMiB": 88.4453125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16353404699475504,
+              "cpuSeconds": 0.162933,
+              "peakRssMiB": 88.09375,
+              "foreignCpuSeconds": 0.007067000000000011
+            }
+          ],
+          "wallSeconds": 0.16353404699475504,
+          "cpuSeconds": 0.162933,
+          "peakRssMiB": 88.4453125,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:vector",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16419650200987235,
+              "cpuSeconds": 0.16366,
+              "peakRssMiB": 88.34375,
+              "foreignCpuSeconds": 0.01633999999999999
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16480809000495356,
+              "cpuSeconds": 0.164197,
+              "peakRssMiB": 88.32421875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1644509360048687,
+              "cpuSeconds": 0.16382199999999997,
+              "peakRssMiB": 88.44140625,
+              "foreignCpuSeconds": 0.006178000000000034
+            }
+          ],
+          "wallSeconds": 0.16419650200987235,
+          "cpuSeconds": 0.16366,
+          "peakRssMiB": 88.44140625,
+          "foreignCpuSeconds": 0
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "vector-explicit",
+      "argv": [
+        "vector",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/vector.geojson",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/vector-explicit.3tz",
+        "--jobs",
+        "2",
+        "--explicit"
+      ],
+      "sides": {
+        "base": {
+          "case": "vector-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.4704056439950364,
+              "cpuSeconds": 4.173665,
+              "peakRssMiB": 86.1015625,
+              "foreignCpuSeconds": 0.056335000000000246
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.441267230999074,
+              "cpuSeconds": 4.13351,
+              "peakRssMiB": 82.55859375,
+              "foreignCpuSeconds": 0.0464899999999997
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.432464556011837,
+              "cpuSeconds": 4.1229949999999995,
+              "peakRssMiB": 85.62109375,
+              "foreignCpuSeconds": 0.02700500000000039
+            }
+          ],
+          "wallSeconds": 3.432464556011837,
+          "cpuSeconds": 4.1229949999999995,
+          "peakRssMiB": 86.1015625,
+          "foreignCpuSeconds": 0.02700500000000039,
+          "outputBytes": 19089031,
+          "members": 549,
+          "digest": "18ce6fad22ec1dc831f05fe81e4b3b4073a8d746419319028891828363e4661b",
+          "tiles": 544,
+          "byExtension": {
+            ".json": 3,
+            ".jsonl": 1,
+            ".glb": 544,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "vector-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.465413345998968,
+              "cpuSeconds": 4.160654,
+              "peakRssMiB": 85.96484375,
+              "foreignCpuSeconds": 0.06934600000000057
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.466795429994818,
+              "cpuSeconds": 4.127009,
+              "peakRssMiB": 85.61328125,
+              "foreignCpuSeconds": 0.06299100000000046
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 3.476630432996899,
+              "cpuSeconds": 4.175286,
+              "peakRssMiB": 82.66015625,
+              "foreignCpuSeconds": 0.054714000000000707
+            }
+          ],
+          "wallSeconds": 3.465413345998968,
+          "cpuSeconds": 4.127009,
+          "peakRssMiB": 85.96484375,
+          "foreignCpuSeconds": 0.054714000000000707,
+          "outputBytes": 19089031,
+          "members": 549,
+          "digest": "b74822ba3a1703f1f45f272ac57c88eeceb0bba8da2e813917005d6aca1f1f88",
+          "tiles": 544,
+          "byExtension": {
+            ".json": 3,
+            ".jsonl": 1,
+            ".glb": 544,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": false
+    },
+    {
+      "case": "validate:vector-explicit",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/vector-explicit.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:vector-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11298972599615809,
+              "cpuSeconds": 0.112166,
+              "peakRssMiB": 92.3203125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1129872520104982,
+              "cpuSeconds": 0.112547,
+              "peakRssMiB": 92.265625,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11106732299958821,
+              "cpuSeconds": 0.110673,
+              "peakRssMiB": 91.80859375,
+              "foreignCpuSeconds": 0.009327000000000002
+            }
+          ],
+          "wallSeconds": 0.11106732299958821,
+          "cpuSeconds": 0.110673,
+          "peakRssMiB": 92.3203125,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:vector-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11338240800250787,
+              "cpuSeconds": 0.11258099999999999,
+              "peakRssMiB": 92.234375,
+              "foreignCpuSeconds": 0.007419000000000009
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11308891698718071,
+              "cpuSeconds": 0.112672,
+              "peakRssMiB": 91.94140625,
+              "foreignCpuSeconds": 0.007328000000000001
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11061159000382759,
+              "cpuSeconds": 0.110175,
+              "peakRssMiB": 92.09765625,
+              "foreignCpuSeconds": 0.009825000000000007
+            }
+          ],
+          "wallSeconds": 0.11061159000382759,
+          "cpuSeconds": 0.110175,
+          "peakRssMiB": 92.234375,
+          "foreignCpuSeconds": 0.007328000000000001
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "point-cloud",
+      "argv": [
+        "point-cloud",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/points.las",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud.3tz",
+        "--sourceCrs",
+        "EPSG:32756",
+        "--heightOffset",
+        "0"
+      ],
+      "sides": {
+        "base": {
+          "case": "point-cloud",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.13304630399215966,
+              "cpuSeconds": 0.11406899999999999,
+              "peakRssMiB": 45.17578125,
+              "foreignCpuSeconds": 0.005931000000000006
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1258302200003527,
+              "cpuSeconds": 0.11235,
+              "peakRssMiB": 46.37109375,
+              "foreignCpuSeconds": 0.007649999999999997
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.13400457600073423,
+              "cpuSeconds": 0.115899,
+              "peakRssMiB": 45.734375,
+              "foreignCpuSeconds": 0.01410100000000001
+            }
+          ],
+          "wallSeconds": 0.1258302200003527,
+          "cpuSeconds": 0.11235,
+          "peakRssMiB": 46.37109375,
+          "foreignCpuSeconds": 0.005931000000000006,
+          "outputBytes": 19553112,
+          "members": 13,
+          "digest": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2",
+          "tiles": 10,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 9,
+            ".subtree": 1,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "point-cloud",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.12674856001103763,
+              "cpuSeconds": 0.112263,
+              "peakRssMiB": 44.609375,
+              "foreignCpuSeconds": 0.007736999999999994
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.12717491100193,
+              "cpuSeconds": 0.112754,
+              "peakRssMiB": 45.0078125,
+              "foreignCpuSeconds": 0.017246000000000004
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.127172155000153,
+              "cpuSeconds": 0.11384999999999999,
+              "peakRssMiB": 46.42578125,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.12674856001103763,
+          "cpuSeconds": 0.112263,
+          "peakRssMiB": 46.42578125,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 19553112,
+          "members": 13,
+          "digest": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2",
+          "tiles": 10,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 9,
+            ".subtree": 1,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:point-cloud",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:point-cloud",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.05976916500367224,
+              "cpuSeconds": 0.059432,
+              "peakRssMiB": 86.890625,
+              "foreignCpuSeconds": 0.0005679999999999956
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.05854354900657199,
+              "cpuSeconds": 0.05820399999999999,
+              "peakRssMiB": 87.09375,
+              "foreignCpuSeconds": 0.0017960000000000025
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.06014305001008324,
+              "cpuSeconds": 0.059796999999999996,
+              "peakRssMiB": 86.9609375,
+              "foreignCpuSeconds": 0.00020300000000000006
+            }
+          ],
+          "wallSeconds": 0.05854354900657199,
+          "cpuSeconds": 0.05820399999999999,
+          "peakRssMiB": 87.09375,
+          "foreignCpuSeconds": 0.00020300000000000006
+        },
+        "head": {
+          "case": "validate:point-cloud",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.059723206009948626,
+              "cpuSeconds": 0.059391,
+              "peakRssMiB": 87.3046875,
+              "foreignCpuSeconds": 0.0006089999999999984
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.05867667100392282,
+              "cpuSeconds": 0.058357,
+              "peakRssMiB": 87.140625,
+              "foreignCpuSeconds": 0.0016429999999999986
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.059672307994333096,
+              "cpuSeconds": 0.059353,
+              "peakRssMiB": 87.15234375,
+              "foreignCpuSeconds": 0.0006469999999999983
+            }
+          ],
+          "wallSeconds": 0.05867667100392282,
+          "cpuSeconds": 0.058357,
+          "peakRssMiB": 87.3046875,
+          "foreignCpuSeconds": 0.0006089999999999984
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "point-cloud-explicit",
+      "argv": [
+        "point-cloud",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/points.las",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud-explicit.3tz",
+        "--sourceCrs",
+        "EPSG:32756",
+        "--heightOffset",
+        "0",
+        "--explicit"
+      ],
+      "sides": {
+        "base": {
+          "case": "point-cloud-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16152010900259484,
+              "cpuSeconds": 0.14603899999999997,
+              "peakRssMiB": 49.73046875,
+              "foreignCpuSeconds": 0.003961000000000006
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16205384299973957,
+              "cpuSeconds": 0.148836,
+              "peakRssMiB": 50.6953125,
+              "foreignCpuSeconds": 0.011164000000000007
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1614211720007006,
+              "cpuSeconds": 0.14687699999999998,
+              "peakRssMiB": 50.828125,
+              "foreignCpuSeconds": 0.0031230000000000008
+            }
+          ],
+          "wallSeconds": 0.1614211720007006,
+          "cpuSeconds": 0.14603899999999997,
+          "peakRssMiB": 50.828125,
+          "foreignCpuSeconds": 0.0031230000000000008,
+          "outputBytes": 20634718,
+          "members": 14,
+          "digest": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a",
+          "tiles": 11,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 11,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "point-cloud-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16512089100433514,
+              "cpuSeconds": 0.147801,
+              "peakRssMiB": 51.26953125,
+              "foreignCpuSeconds": 0.0021990000000000065
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1684077999962028,
+              "cpuSeconds": 0.14968900000000002,
+              "peakRssMiB": 50.57421875,
+              "foreignCpuSeconds": 0.02031100000000001
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.16390410500753205,
+              "cpuSeconds": 0.150501,
+              "peakRssMiB": 51.1875,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.16390410500753205,
+          "cpuSeconds": 0.147801,
+          "peakRssMiB": 51.26953125,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 20634718,
+          "members": 14,
+          "digest": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a",
+          "tiles": 11,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 11,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:point-cloud-explicit",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/point-cloud-explicit.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:point-cloud-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.061570261997985654,
+              "cpuSeconds": 0.061246999999999996,
+              "peakRssMiB": 87.40625,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.060941092000575736,
+              "cpuSeconds": 0.060155,
+              "peakRssMiB": 88.01953125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.06066685100086033,
+              "cpuSeconds": 0.060077,
+              "peakRssMiB": 87.46875,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.06066685100086033,
+          "cpuSeconds": 0.060077,
+          "peakRssMiB": 88.01953125,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:point-cloud-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.060828892994322814,
+              "cpuSeconds": 0.06045,
+              "peakRssMiB": 87.578125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.0603843400022015,
+              "cpuSeconds": 0.06003599999999999,
+              "peakRssMiB": 87.78125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.06092068200814538,
+              "cpuSeconds": 0.060431,
+              "peakRssMiB": 87.65625,
+              "foreignCpuSeconds": 0.009569000000000008
+            }
+          ],
+          "wallSeconds": 0.0603843400022015,
+          "cpuSeconds": 0.06003599999999999,
+          "peakRssMiB": 87.78125,
+          "foreignCpuSeconds": 0
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "mesh-local",
+      "argv": [
+        "mesh-local-to-3tz",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/mesh.glb",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh-local.3tz",
+        "--leaf-triangles",
+        "20000",
+        "--anchor",
+        "153.02",
+        "-27.47",
+        "10"
+      ],
+      "sides": {
+        "base": {
+          "case": "mesh-local",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11526197000057437,
+              "cpuSeconds": 0.100549,
+              "peakRssMiB": 60.19921875,
+              "foreignCpuSeconds": 0.009451000000000008
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.10931046699988656,
+              "cpuSeconds": 0.100516,
+              "peakRssMiB": 60.2578125,
+              "foreignCpuSeconds": 0.009484000000000008
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11751241999445483,
+              "cpuSeconds": 0.108988,
+              "peakRssMiB": 60.30078125,
+              "foreignCpuSeconds": 0.001011999999999999
+            }
+          ],
+          "wallSeconds": 0.10931046699988656,
+          "cpuSeconds": 0.100516,
+          "peakRssMiB": 60.30078125,
+          "foreignCpuSeconds": 0.001011999999999999,
+          "outputBytes": 10497816,
+          "members": 12,
+          "digest": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587",
+          "tiles": 9,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 8,
+            ".png": 1,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "mesh-local",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.10986375799984671,
+              "cpuSeconds": 0.10050999999999999,
+              "peakRssMiB": 60.50390625,
+              "foreignCpuSeconds": 0.009490000000000009
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11239174799993634,
+              "cpuSeconds": 0.10119,
+              "peakRssMiB": 60.37890625,
+              "foreignCpuSeconds": 0.008810000000000002
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1127405879960861,
+              "cpuSeconds": 0.10458799999999999,
+              "peakRssMiB": 60.3671875,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.10986375799984671,
+          "cpuSeconds": 0.10050999999999999,
+          "peakRssMiB": 60.50390625,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 10497816,
+          "members": 12,
+          "digest": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587",
+          "tiles": 9,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 8,
+            ".png": 1,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:mesh-local",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh-local.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:mesh-local",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.05617569301102776,
+              "cpuSeconds": 0.055008,
+              "peakRssMiB": 85.38671875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.05533060399466194,
+              "cpuSeconds": 0.05409099999999999,
+              "peakRssMiB": 85.66796875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.057819088993710466,
+              "cpuSeconds": 0.056532,
+              "peakRssMiB": 85.3359375,
+              "foreignCpuSeconds": 0.003467999999999999
+            }
+          ],
+          "wallSeconds": 0.05533060399466194,
+          "cpuSeconds": 0.05409099999999999,
+          "peakRssMiB": 85.66796875,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:mesh-local",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.055681144003756344,
+              "cpuSeconds": 0.054501999999999995,
+              "peakRssMiB": 85.34375,
+              "foreignCpuSeconds": 0.005498000000000003
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.055376392003381625,
+              "cpuSeconds": 0.054157,
+              "peakRssMiB": 85.1796875,
+              "foreignCpuSeconds": 0.0058429999999999975
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.0591819410037715,
+              "cpuSeconds": 0.057749999999999996,
+              "peakRssMiB": 85.49609375,
+              "foreignCpuSeconds": 0.022250000000000006
+            }
+          ],
+          "wallSeconds": 0.055376392003381625,
+          "cpuSeconds": 0.054157,
+          "peakRssMiB": 85.49609375,
+          "foreignCpuSeconds": 0.005498000000000003
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "glb-wrap",
+      "argv": [
+        "glb-to-3tz",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/mesh.glb",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/glb-wrap.3tz",
+        "--anchor",
+        "153.02",
+        "-27.47",
+        "10"
+      ],
+      "sides": {
+        "base": {
+          "case": "glb-wrap",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.15144728199811652,
+              "cpuSeconds": 0.145055,
+              "peakRssMiB": 58.296875,
+              "foreignCpuSeconds": 0.004945000000000007
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.14886136299173813,
+              "cpuSeconds": 0.143391,
+              "peakRssMiB": 58.23828125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.14866633999918122,
+              "cpuSeconds": 0.141596,
+              "peakRssMiB": 58.06640625,
+              "foreignCpuSeconds": 0.008404000000000007
+            }
+          ],
+          "wallSeconds": 0.14866633999918122,
+          "cpuSeconds": 0.141596,
+          "peakRssMiB": 58.296875,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 2928597,
+          "members": 4,
+          "digest": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c",
+          "tiles": 1,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 1,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "glb-wrap",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.14765321699087508,
+              "cpuSeconds": 0.14214,
+              "peakRssMiB": 57.89453125,
+              "foreignCpuSeconds": 0.007860000000000015
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.14909308300411794,
+              "cpuSeconds": 0.14209499999999997,
+              "peakRssMiB": 58.23046875,
+              "foreignCpuSeconds": 0.017905000000000018
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.14783501799684018,
+              "cpuSeconds": 0.142417,
+              "peakRssMiB": 58.1171875,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.14765321699087508,
+          "cpuSeconds": 0.14209499999999997,
+          "peakRssMiB": 58.23046875,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 2928597,
+          "members": 4,
+          "digest": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c",
+          "tiles": 1,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 1,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:glb-wrap",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/glb-wrap.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:glb-wrap",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.0420242039981531,
+              "cpuSeconds": 0.041389999999999996,
+              "peakRssMiB": 83.30078125,
+              "foreignCpuSeconds": 0.008610000000000003
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04290082899387926,
+              "cpuSeconds": 0.042464999999999996,
+              "peakRssMiB": 83.16015625,
+              "foreignCpuSeconds": 0.007535000000000007
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04280312199261971,
+              "cpuSeconds": 0.042438000000000003,
+              "peakRssMiB": 83.234375,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.0420242039981531,
+          "cpuSeconds": 0.041389999999999996,
+          "peakRssMiB": 83.30078125,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:glb-wrap",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04201538999041077,
+              "cpuSeconds": 0.041368,
+              "peakRssMiB": 83.28515625,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04240074699919205,
+              "cpuSeconds": 0.04171,
+              "peakRssMiB": 83.56640625,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04249494700343348,
+              "cpuSeconds": 0.0421,
+              "peakRssMiB": 83.54296875,
+              "foreignCpuSeconds": 0.007900000000000004
+            }
+          ],
+          "wallSeconds": 0.04201538999041077,
+          "cpuSeconds": 0.041368,
+          "peakRssMiB": 83.56640625,
+          "foreignCpuSeconds": 0
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "mesh",
+      "argv": [
+        "mesh-to-3tz",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/mesh.glb",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh.3tz",
+        "--cartographicPositionDegrees",
+        "153.02",
+        "-27.47",
+        "10"
+      ],
+      "sides": {
+        "base": {
+          "case": "mesh",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23311281199858058,
+              "cpuSeconds": 0.321951,
+              "peakRssMiB": 90.6015625,
+              "foreignCpuSeconds": 0.018049000000000034
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23206547398876864,
+              "cpuSeconds": 0.321339,
+              "peakRssMiB": 90.61328125,
+              "foreignCpuSeconds": 0.028661000000000016
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23233796599379275,
+              "cpuSeconds": 0.320467,
+              "peakRssMiB": 90.62890625,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.23206547398876864,
+          "cpuSeconds": 0.320467,
+          "peakRssMiB": 90.62890625,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 2584349,
+          "members": 13,
+          "digest": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b",
+          "tiles": 10,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 9,
+            ".subtree": 1,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "mesh",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23029894901264925,
+              "cpuSeconds": 0.317838,
+              "peakRssMiB": 90.7890625,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23418823500105646,
+              "cpuSeconds": 0.323229,
+              "peakRssMiB": 90.69921875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.23413183700176887,
+              "cpuSeconds": 0.323424,
+              "peakRssMiB": 90.76953125,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.23029894901264925,
+          "cpuSeconds": 0.317838,
+          "peakRssMiB": 90.7890625,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 2584349,
+          "members": 13,
+          "digest": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b",
+          "tiles": 10,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 9,
+            ".subtree": 1,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:mesh",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:mesh",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.044700979997287504,
+              "cpuSeconds": 0.04441199999999999,
+              "peakRssMiB": 84.1796875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04547330799687188,
+              "cpuSeconds": 0.045198999999999996,
+              "peakRssMiB": 84.4765625,
+              "foreignCpuSeconds": 0.004801000000000007
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04485110199311748,
+              "cpuSeconds": 0.044589000000000004,
+              "peakRssMiB": 84.23828125,
+              "foreignCpuSeconds": 0.005411000000000003
+            }
+          ],
+          "wallSeconds": 0.044700979997287504,
+          "cpuSeconds": 0.04441199999999999,
+          "peakRssMiB": 84.4765625,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:mesh",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.045098975009750575,
+              "cpuSeconds": 0.044833,
+              "peakRssMiB": 83.98828125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.045338562995311804,
+              "cpuSeconds": 0.045073999999999996,
+              "peakRssMiB": 83.9765625,
+              "foreignCpuSeconds": 0.024926000000000004
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04491393899661489,
+              "cpuSeconds": 0.044667,
+              "peakRssMiB": 84.2734375,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.04491393899661489,
+          "cpuSeconds": 0.044667,
+          "peakRssMiB": 84.2734375,
+          "foreignCpuSeconds": 0
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "mesh-explicit",
+      "argv": [
+        "mesh-to-3tz",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/mesh.glb",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh-explicit.3tz",
+        "--cartographicPositionDegrees",
+        "153.02",
+        "-27.47",
+        "10",
+        "--explicit"
+      ],
+      "sides": {
+        "base": {
+          "case": "mesh-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.12613930201041512,
+              "cpuSeconds": 0.16777799999999998,
+              "peakRssMiB": 71.953125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1260305969917681,
+              "cpuSeconds": 0.166927,
+              "peakRssMiB": 71.90234375,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1258523470023647,
+              "cpuSeconds": 0.166844,
+              "peakRssMiB": 72.03515625,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.1258523470023647,
+          "cpuSeconds": 0.166844,
+          "peakRssMiB": 72.03515625,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 1689232,
+          "members": 11,
+          "digest": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f",
+          "tiles": 9,
+          "byExtension": {
+            ".json": 1,
+            ".glb": 9,
+            "@3dtilesIndex1@": 1
+          }
+        },
+        "head": {
+          "case": "mesh-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1272551380097866,
+              "cpuSeconds": 0.169344,
+              "peakRssMiB": 71.6796875,
+              "foreignCpuSeconds": 0.030656000000000006
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.1266778190038167,
+              "cpuSeconds": 0.167341,
+              "peakRssMiB": 72.0859375,
+              "foreignCpuSeconds": 0.0026590000000000225
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.12526764700305648,
+              "cpuSeconds": 0.165916,
+              "peakRssMiB": 71.9765625,
+              "foreignCpuSeconds": 0.004084000000000011
+            }
+          ],
+          "wallSeconds": 0.12526764700305648,
+          "cpuSeconds": 0.165916,
+          "peakRssMiB": 72.0859375,
+          "foreignCpuSeconds": 0.0026590000000000225,
+          "outputBytes": 1689232,
+          "members": 11,
+          "digest": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f",
+          "tiles": 9,
+          "byExtension": {
+            ".json": 1,
+            ".glb": 9,
+            "@3dtilesIndex1@": 1
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "validate:mesh-explicit",
+      "argv": [
+        "validate",
+        "/home/bend/.cache/perf-lane/work/baseline/head/mesh-explicit.3tz"
+      ],
+      "sides": {
+        "base": {
+          "case": "validate:mesh-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04439209299744107,
+              "cpuSeconds": 0.04410499999999999,
+              "peakRssMiB": 84.19921875,
+              "foreignCpuSeconds": 0.005895000000000008
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04373714799294248,
+              "cpuSeconds": 0.043192999999999995,
+              "peakRssMiB": 84.29296875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04386980000708718,
+              "cpuSeconds": 0.043343,
+              "peakRssMiB": 84.1640625,
+              "foreignCpuSeconds": 0.006657000000000003
+            }
+          ],
+          "wallSeconds": 0.04373714799294248,
+          "cpuSeconds": 0.043192999999999995,
+          "peakRssMiB": 84.29296875,
+          "foreignCpuSeconds": 0
+        },
+        "head": {
+          "case": "validate:mesh-explicit",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04361753900593612,
+              "cpuSeconds": 0.043351,
+              "peakRssMiB": 84.30078125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.043627652994473465,
+              "cpuSeconds": 0.043295,
+              "peakRssMiB": 84.29296875,
+              "foreignCpuSeconds": 0.006705000000000003
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04384343700075988,
+              "cpuSeconds": 0.043463,
+              "peakRssMiB": 84.171875,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.04361753900593612,
+          "cpuSeconds": 0.043295,
+          "peakRssMiB": 84.30078125,
+          "foreignCpuSeconds": 0
+        }
+      },
+      "flags": []
+    },
+    {
+      "case": "terrain-fixture",
+      "argv": [
+        "terrain",
+        "-i",
+        "/tmp/rusty-tiles-perf/tests/fixtures/t1-multipatch-plane.tif",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/terrain-fixture",
+        "--cells-per-leaf",
+        "16",
+        "--height-offset",
+        "10",
+        "--fill-height",
+        "-999"
+      ],
+      "sides": {
+        "base": {
+          "case": "terrain-fixture",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.050436214994988404,
+              "cpuSeconds": 0.01988,
+              "peakRssMiB": 46.921875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04995388000679668,
+              "cpuSeconds": 0.019181,
+              "peakRssMiB": 46.7109375,
+              "foreignCpuSeconds": 0.010818999999999999
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.048804460995597765,
+              "cpuSeconds": 0.019461,
+              "peakRssMiB": 46.84375,
+              "foreignCpuSeconds": 0
+            }
+          ],
+          "wallSeconds": 0.048804460995597765,
+          "cpuSeconds": 0.019181,
+          "peakRssMiB": 46.921875,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 24597,
+          "members": 8,
+          "digest": "9affaec718afea0e6ffd1ce775336974f452ed7320198477fb283cf3d2d7d568",
+          "tiles": 6,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 6
+          }
+        },
+        "head": {
+          "case": "terrain-fixture",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.049616806994890794,
+              "cpuSeconds": 0.019852,
+              "peakRssMiB": 46.9296875,
+              "foreignCpuSeconds": 0.030148
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.052777028002310544,
+              "cpuSeconds": 0.01979,
+              "peakRssMiB": 46.76171875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04836130200419575,
+              "cpuSeconds": 0.019048,
+              "peakRssMiB": 46.6328125,
+              "foreignCpuSeconds": 0.010951999999999998
+            }
+          ],
+          "wallSeconds": 0.04836130200419575,
+          "cpuSeconds": 0.019048,
+          "peakRssMiB": 46.9296875,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 24597,
+          "members": 8,
+          "digest": "9affaec718afea0e6ffd1ce775336974f452ed7320198477fb283cf3d2d7d568",
+          "tiles": 6,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 6
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "terrain",
+      "argv": [
+        "terrain",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/dem.tif",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/terrain",
+        "--height-offset",
+        "0",
+        "--fill-height",
+        "0"
+      ],
+      "sides": {
+        "base": {
+          "case": "terrain",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.266985227004625,
+              "cpuSeconds": 0.210974,
+              "peakRssMiB": 56.546875,
+              "foreignCpuSeconds": 0.05902600000000003
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.301612221999676,
+              "cpuSeconds": 0.210862,
+              "peakRssMiB": 56.453125,
+              "foreignCpuSeconds": 0.029138000000000004
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.3340062800125452,
+              "cpuSeconds": 0.210106,
+              "peakRssMiB": 56.59765625,
+              "foreignCpuSeconds": 0.06989400000000004
+            }
+          ],
+          "wallSeconds": 1.266985227004625,
+          "cpuSeconds": 0.210106,
+          "peakRssMiB": 56.59765625,
+          "foreignCpuSeconds": 0.029138000000000004,
+          "outputBytes": 26021688,
+          "members": 291,
+          "digest": "7c17c6b3638f1f669eebabd3dd85ef4afe44c64f883b9cc02cbe7aa171e0353f",
+          "tiles": 289,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 289
+          }
+        },
+        "head": {
+          "case": "terrain",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.293731971993111,
+              "cpuSeconds": 0.20717199999999997,
+              "peakRssMiB": 56.5625,
+              "foreignCpuSeconds": 0.042828000000000026
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.3069221960031427,
+              "cpuSeconds": 0.20835399999999998,
+              "peakRssMiB": 56.33984375,
+              "foreignCpuSeconds": 0.011646000000000024
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.2479534980084281,
+              "cpuSeconds": 0.212123,
+              "peakRssMiB": 56.4375,
+              "foreignCpuSeconds": 0.04787700000000001
+            }
+          ],
+          "wallSeconds": 1.2479534980084281,
+          "cpuSeconds": 0.20717199999999997,
+          "peakRssMiB": 56.5625,
+          "foreignCpuSeconds": 0.011646000000000024,
+          "outputBytes": 26021688,
+          "members": 291,
+          "digest": "7c17c6b3638f1f669eebabd3dd85ef4afe44c64f883b9cc02cbe7aa171e0353f",
+          "tiles": 289,
+          "byExtension": {
+            ".json": 2,
+            ".glb": 289
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    },
+    {
+      "case": "raster",
+      "argv": [
+        "raster",
+        "-i",
+        "/home/bend/.cache/perf-lane/work/baseline/inputs/rgba.tif",
+        "-o",
+        "/home/bend/.cache/perf-lane/work/baseline/head/raster",
+        "--minZoom",
+        "10",
+        "--maxZoom",
+        "16",
+        "--jobs",
+        "2"
+      ],
+      "sides": {
+        "base": {
+          "case": "raster",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.550775811003405,
+              "cpuSeconds": 12.653382,
+              "peakRssMiB": 222.80859375,
+              "foreignCpuSeconds": 0.03661799999999982
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.447227554002893,
+              "cpuSeconds": 12.565386,
+              "peakRssMiB": 222.49609375,
+              "foreignCpuSeconds": 0.08461400000000108
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.691566360008437,
+              "cpuSeconds": 12.935351,
+              "peakRssMiB": 233.703125,
+              "foreignCpuSeconds": 0.22464899999999988
+            }
+          ],
+          "wallSeconds": 9.447227554002893,
+          "cpuSeconds": 12.565386,
+          "peakRssMiB": 233.703125,
+          "foreignCpuSeconds": 0.03661799999999982,
+          "outputBytes": 66555715,
+          "members": 3172,
+          "digest": "c4bf85aef6de8b54c2558d8514eb7ce93fa117c950835bf60d3a025af8a14dc7",
+          "tiles": 3169,
+          "byExtension": {
+            ".json": 2,
+            ".tif": 1,
+            ".png": 3169
+          }
+        },
+        "head": {
+          "case": "raster",
+          "ok": true,
+          "samples": [
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.39077652899141,
+              "cpuSeconds": 12.571422,
+              "peakRssMiB": 206.13671875,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.387613521001185,
+              "cpuSeconds": 12.628632,
+              "peakRssMiB": 225.15234375,
+              "foreignCpuSeconds": 0.04136800000000029
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 9.388510321994545,
+              "cpuSeconds": 12.582346999999999,
+              "peakRssMiB": 216.62109375,
+              "foreignCpuSeconds": 0.01765300000000014
+            }
+          ],
+          "wallSeconds": 9.387613521001185,
+          "cpuSeconds": 12.571422,
+          "peakRssMiB": 225.15234375,
+          "foreignCpuSeconds": 0,
+          "outputBytes": 66555715,
+          "members": 3172,
+          "digest": "c4bf85aef6de8b54c2558d8514eb7ce93fa117c950835bf60d3a025af8a14dc7",
+          "tiles": 3169,
+          "byExtension": {
+            ".json": 2,
+            ".tif": 1,
+            ".png": 3169
+          }
+        }
+      },
+      "flags": [],
+      "identicalOutput": true
+    }
+  ]
+}
