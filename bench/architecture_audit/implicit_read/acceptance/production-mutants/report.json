@@ -1,5 +1,5 @@
 {
- "base": "387a7bb",
+ "base": "387a7bb (all patches); clean baseline, drop-content-implies-tile and ge-vs-gt-on-A rerun on 3d23cd5 (oracle amendment 5); the other 33 rows are the 387a7bb runs",
  "rules": {
   "fiveSecondBound": [
    "R7",
@@ -18,13 +18,13 @@
   "corpus": [],
   "unitFailed": [],
   "timedWalls": {
-   "R7": 0.218039505,
-   "R7a": 0.219246889,
-   "R7b": 0.059864114,
-   "R7c": 0.613278976,
-   "R8": 0.167925694,
-   "R8a": 1.131738539,
-   "R8a.nopad": 0.969669783
+   "R7": 0.191618983,
+   "R7a": 0.194697379,
+   "R7b": 0.051626153,
+   "R7c": 0.595665152,
+   "R8": 0.171351615,
+   "R8a": 1.118803791,
+   "R8a.nopad": 0.956219244
   }
  },
  "mutants": [
@@ -349,15 +349,19 @@
    "paired": "A-6",
    "timingCase": null,
    "timedOut": false,
-   "controlsFlipped": [],
+   "controlsFlipped": [
+    "A-6"
+   ],
    "corpusFlipped": [],
    "boundBreaches": {},
    "probeClausesFailed": [],
-   "pairedFlipped": [],
+   "pairedFlipped": [
+    "A-6"
+   ],
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile"
    ],
-   "diagnosis": "FLIPS NO PARITY CONTROL: A-6 stays InvalidInput because the stray content bit is indexed to a neighbouring tile ('missing archive entry: content/2/1/1.glb'). Caught only by the unit test content_layers_and_content_implies_tile."
+   "diagnosis": "Rerun after oracle amendment 5 (A-6 ships content/2/1/1.glb, merge 3d23cd5): A-6 flips. Clean production gives InvalidInput 'content belongs to an unavailable tile'; under the mutant it is Accepted, the false Accept the re-check described. The content_layers_and_content_implies_tile unit test also fails."
   },
   {
    "name": "drop-child-implies-tile",
@@ -742,7 +746,7 @@
    "unitTestsFailed": [
     "content_integrity::implicit::availability::tests::levels_rule"
    ],
-   "diagnosis": "FLIPS NO PARITY CONTROL: A-8 stays InvalidInput because the admitted child subtree member is absent ('missing archive entry: subtrees/6/18/2.subtree'); A-9 exercises the 32-level cap, a different comparison. Caught only by the unit test levels_rule."
+   "diagnosis": "Rerun after oracle amendment 5 (A-8 ships subtrees/6/18/2.subtree and content/6/18/2.glb, merge 3d23cd5): A-8 does NOT flip. Clean production refuses at the parent's rule ('child subtree beyond availableLevels'); under the mutant the child subtree is admitted and its own root tile, at global level A = 6, is refused by the levels rule ('available tile beyond availableLevels'). This is verdict-equivalent for every input: an admitted child subtree must have its root tile available (\u00a72a step 5; constant-0 tile availability is disallowed), and a child subtree at global level g >= A puts that tile at level >= A, which \u00a72a step 6 refuses. So the mutant cannot cause a false Accept; it changes only which rule refuses. Parity compares verdict categories, not reasons, so no control can flip it. The levels_rule unit test fails under it."
   },
   {
    "name": "float32-with-float64-stride",
@@ -1312,16 +1316,14 @@
  ],
  "summary": {
   "total": 35,
-  "pairedControlFlips": 30,
+  "pairedControlFlips": 31,
   "pairedControlDoesNotFlip": [
    "msb-first",
-   "drop-content-implies-tile",
    "ge-vs-gt-on-A",
    "ignore-trailing-bits",
    "admit-json-templates"
   ],
   "flipsNoControl": [
-   "drop-content-implies-tile",
    "ge-vs-gt-on-A"
   ],
   "unitTestsDetect": 33

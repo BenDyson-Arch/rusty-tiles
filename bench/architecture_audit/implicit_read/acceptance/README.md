@@ -235,6 +235,19 @@ were run against `387a7bb` through this harness and the I1 unit tests, with a cl
   per-table-class-scan leaves R7c Accepted in 17.4 s: that breaks the 5 s bound but not the
   60 s timeout. Diagnoses are in `production-mutants/README.md`.
 
+**Re-check follow-up (`i1-recheck.md`).** Oracle amendment 5 (`c197d3c`) was merged as `3d23cd5`;
+large controls were regenerated and are byte-identical.
+- Parity at `3d23cd5` (`parity-3d23cd5-release.json`, `corpus-parity-3d23cd5-release.json`):
+  181/181 controls, 0 O-side, 0 disagreements, 41/41 corpus. A-6 refuses at "content belongs to
+  an unavailable tile", and A-8 at "child subtree beyond availableLevels".
+- **drop-content-implies-tile** now flips A-6: it is Accepted under the mutant.
+- **ge-vs-gt-on-A** still flips nothing, because it is verdict-equivalent; the proof is in
+  `production-mutants/README.md`. It cannot produce a false Accept, and only its unit test
+  observes it.
+- Records corrected: per-table-class-scan is flipped by R7c's 5 s bound, and
+  reservation-after-rank-table by R5b's probe clause. `build_report.py` now judges every timed
+  control by its own bound.
+
 **E2: R3 memory** (`r3-rss.json`; `os.wait4` on the release head `60584d3d…`, 5 runs each).
 
 | Case | Peak RSS | Against W1's 87.6 MiB |

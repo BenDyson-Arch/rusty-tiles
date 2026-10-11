@@ -32,9 +32,14 @@ The runner's 60 s and 300 s timeouts only cap a run. Under these rules:
 
 | Outcome | Mutants |
 | --- | --- |
-| Paired control flips (30 of 35) | all mutants except the five below, including:<br>- **per-table-class-scan**: R7c is Accepted in 17.4 s against its 5 s bound<br>- **reservation-after-rank-table**: R5b's probe records a rank-table allocation<br>- **no-source-memoization**: R7 exceeds the 60 s cap<br>- **resolve-raw-template-per-emission**: R8a exceeds the 300 s cap |
+| Paired control flips (31 of 35) | all mutants except the four below, including:<br>- **per-table-class-scan**: R7c is Accepted in 17.4 s against its 5 s bound<br>- **reservation-after-rank-table**: R5b's probe records a rank-table allocation<br>- **no-source-memoization**: R7 exceeds the 60 s cap<br>- **resolve-raw-template-per-emission**: R8a exceeds the 300 s cap<br>- **drop-content-implies-tile**: rerun on `3d23cd5`; A-6 is now Accepted under the mutant (a false Accept), so A-6 flips |
 | Detected only by other controls (3) | **msb-first**: A-3 stays InvalidInput with another reason; 78 controls and 18 corpus artifacts flip.<br>**ignore-trailing-bits**: A-5's trailing bit also changes the popcount; A-12c.trailing flips.<br>**admit-json-templates**: C-6 and W5u stay Unsupported through C1's payload refusal; C-4 and the never-available C-7 forms flip |
-| No control flips (2) | **drop-content-implies-tile** (A-6) and **ge-vs-gt-on-A** (A-8). The member each defect would name was absent, so both stay InvalidInput as "missing archive entry". The oracle amends A-6 and A-8 so that only the content ⇒ tile rule and the levels rule refuse them; see "A-6 and A-8 after the oracle amendment" |
+| **No control flips (1): ge-vs-gt-on-A** | Rerun on `3d23cd5`. A-8 still does not flip because the mutant is **verdict-equivalent**. An admitted child subtree must have its root tile available (§2a step 5), and a child subtree at global level ≥ A puts that tile at level ≥ A, which §2a step 6 refuses. The mutant cannot produce a false Accept: it changes only which rule refuses ("child subtree beyond availableLevels" becomes "available tile beyond availableLevels"). Parity compares verdict categories, not reasons, so no control can flip it. The `levels_rule` unit test fails under it |
+
+**Base.** The patches are diffs against `387a7bb`. Oracle amendment 5 (A-6 and A-8 ship the
+members their mutants name) was merged as `3d23cd5`. The clean baseline and the two A-6/A-8 mutants
+were then rerun on `3d23cd5` (`BASE`). The other 33 rows are the `387a7bb` runs; the I1 source is
+identical between the two commits.
 
 33 of 35 mutants fail at least one unit test.
 
