@@ -289,7 +289,7 @@ Preview is read-only. Before binding, each selected directory and the Cesium dir
 Every platform then applies the same two rules, and any path that fails either returns 404:
 
 - **Lexical rule:** the path consists of non-empty `/`-separated segments. No segment may be `.` or `..` or contain a backslash, `:` or a control character, so a trailing slash or `//` also fails.
-- **Exact-name rule:** each segment must name the stored file or directory exactly. A case or Unicode-normalization variant, a Windows short name or trailing dot, or any symlink below the selected directory fails, as do directories and unselected layers. The selected directory itself may be a symlink.
+- **Exact-name rule:** each segment must name the stored file or directory exactly. On case-sensitive filesystems a case variant names a different, usually missing, file; where the filesystem folds case or normalizes Unicode and reports stored names, the variant fails the exact-name comparison. A Windows short name or trailing dot, or any symlink below the selected directory, fails, as do directories and unselected layers. A file reached by a variant is always inside the selected directory. The selected directory itself may be a symlink.
 
 On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A request without `Host`, such as a bare HTTP/1.0 request, is refused too. The IPv4-mapped `::ffff:127.0.0.1` counts as loopback. A non-loopback `--host`, such as `0.0.0.0`, is an explicit opt-in to serve every host that can reach it: it accepts any `Host` and prints a warning on stderr.
 

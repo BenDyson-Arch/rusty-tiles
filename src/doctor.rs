@@ -803,8 +803,8 @@ mod tests {
 
     #[test]
     fn concurrent_reports_complete() {
-        // Without serialized native probes this aborted inside GDAL in 39 of
-        // 40 runs on four test threads.
+        // Before raster driver inventory used the shared once-guarded GDAL
+        // init, this aborted inside GDAL in 39 of 40 runs on four threads.
         let workers: Vec<_> = (0..4)
             .map(|_| {
                 std::thread::spawn(|| {
