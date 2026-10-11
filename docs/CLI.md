@@ -156,8 +156,7 @@ TileJSON and typed `report.json`. See the [imagery profile](FORMATS.md#imagery).
 All six limits must be positive. The finest zoom also has a fixed 2 GiB RGBA
 ceiling: at most 8192 finest 256×256 tiles, which bounds a pyramid over zooms 0
 through 24 to at most 16,451 tiles. The default `--max-tiles` therefore never
-refuses a request the ceiling would admit (it is checked first, so an
-oversized request reports the tile cap); set a lower value to cap tile count. JSON success includes `rasterReport`, equal to
+refuses a request the ceiling would admit; set a lower value to cap tile count. JSON success includes `rasterReport`, equal to
 published `report.json`; the precommit `raster_complete` progress reports the actual tile count.
 Replacement occurs only after the complete directory is closed and sealed.
 On Linux the output parent must be on ext, btrfs, tmpfs or xfs (kernel 4.9 or
