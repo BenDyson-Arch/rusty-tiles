@@ -909,15 +909,16 @@ enum ValidationTask {
         depth: usize,
         link: Link,
     },
-    Node {
-        node: Value,
-        base: String,
-        parent: Option<Volume>,
-        parent_error: f64,
-        depth: usize,
-        link: Link,
-    },
+    Node(NodeTask),
     ExitTileset(String),
+}
+struct NodeTask {
+    node: Value,
+    base: String,
+    parent: Option<Volume>,
+    parent_error: f64,
+    depth: usize,
+    link: Link,
 }
 impl Check<'_> {
     fn payload(&mut self, name: &str) -> Result<PayloadReport, Error> {
@@ -1101,32 +1102,17 @@ impl Check<'_> {
                     }
                     let (mut doc, error) = self.prepare_tileset(&name)?;
                     pending.push(ValidationTask::ExitTileset(name.clone()));
-                    pending.push(ValidationTask::Node {
+                    pending.push(ValidationTask::Node(NodeTask {
                         node: doc["root"].take(),
                         base: name,
                         parent,
                         parent_error: parent_error.map_or(error, |parent| parent.min(error)),
                         depth,
                         link,
-                    });
+                    }));
                 }
-                ValidationTask::Node {
-                    node,
-                    base,
-                    parent,
-                    parent_error,
-                    depth,
-                    link,
-                } => {
-                    self.node(
-                        node,
-                        &base,
-                        parent.as_ref(),
-                        parent_error,
-                        depth,
-                        link,
-                        &mut pending,
-                    )?;
+                ValidationTask::Node(task) => {
+                    self.node(task, &mut pending)?;
                 }
                 ValidationTask::ExitTileset(name) => {
                     self.active.remove(&name);
@@ -1250,16 +1236,15 @@ impl Check<'_> {
         }
         Ok(doc)
     }
-    fn node(
-        &mut self,
-        mut node: Value,
-        base: &str,
-        parent: Option<&Volume>,
-        parent_error: f64,
-        depth: usize,
-        link: Link,
-        pending: &mut Vec<ValidationTask>,
-    ) -> Result<(), Error> {
+    fn node(&mut self, task: NodeTask, pending: &mut Vec<ValidationTask>) -> Result<(), Error> {
+        let NodeTask {
+            mut node,
+            base,
+            parent,
+            parent_error,
+            depth,
+            link,
+        } = task;
         if depth as u64 > self.resources.limits.hierarchy_depth {
             return Err(Error::limit("hierarchy exceeds validation depth limit"));
         }
@@ -1290,7 +1275,7 @@ impl Check<'_> {
             parent: link.parent,
             depth,
         })?;
-        if let Some(parent) = parent {
+        if let Some(parent) = &parent {
             if !contains(parent, &bounds, &m)? {
                 return Err(invalid(format!(
                     "child bounds escape parent at depth {depth}"
@@ -1322,7 +1307,7 @@ impl Check<'_> {
                 .as_str()
                 .or_else(|| content["url"].as_str())
                 .ok_or_else(|| invalid("content.uri must be a string"))?;
-            let name = uri(base, value)?;
+            let name = uri(&base, value)?;
             self.resources.reference(name.clone())?;
             self.contents += 1;
             if content.get("metadata").is_some() {
@@ -1398,9 +1383,9 @@ impl Check<'_> {
                 return Err(invalid("children must be an array"));
             };
             for child in children {
-                descendants.push(ValidationTask::Node {
+                descendants.push(ValidationTask::Node(NodeTask {
                     node: child,
-                    base: base.into(),
+                    base: base.clone(),
                     parent: Some(bounds.clone()),
                     parent_error: error,
                     depth: depth + 1,
@@ -1408,7 +1393,7 @@ impl Check<'_> {
                         parent: Some(tile),
                         external: None,
                     },
-                });
+                }));
             }
         }
         pending.extend(descendants.into_iter().rev());
@@ -2340,7 +2325,8 @@ mod containment_controls {
     #[test]
     fn each_exclusion_reason_is_reported_without_streaming() {
         let payload = points(&[[0., 0., 0.]]);
-        let mut cases: Vec<(&str, Vec<(&str, Vec<u8>)>)> = Vec::new();
+        type Files = Vec<(&'static str, Vec<u8>)>;
+        let mut cases: Vec<(&str, Files)> = Vec::new();
         let mut doc = json!({"asset":{"version":"1.1"},"geometricError":0,
             "extensionsUsed":["3DTILES_bounding_volume_S2"],"root":content_tile(wide(), "a.glb")});
         cases.push((

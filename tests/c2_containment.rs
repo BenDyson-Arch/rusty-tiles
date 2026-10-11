@@ -16,7 +16,7 @@ fn point_glb(position: [f32; 3], node: Value) -> Vec<u8> {
         "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
     });
     let mut json = serde_json::to_vec(&doc).unwrap();
-    while json.len() % 4 != 0 {
+    while !json.len().is_multiple_of(4) {
         json.push(b' ');
     }
     let mut out = b"glTF".to_vec();
