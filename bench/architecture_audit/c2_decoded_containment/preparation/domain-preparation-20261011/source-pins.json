@@ -1,0 +1,119 @@
+{
+  "context": "read-only source observations from current R2 PR155 checkout; root identifies accepted local production commit d58b3650; final accepted R2 merge must be freshly bound before C2 implementation",
+  "records": [
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/AGENTS.md",
+      "snapshot": "source/AGENTS.md",
+      "bytes": 3752,
+      "sha256": "0c3404c6430a415efeb4f01a8bdc2abf9ef7e061228daff9605fa50c7a0f54c0"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/README.md",
+      "snapshot": "source/docs/architecture/README.md",
+      "bytes": 19172,
+      "sha256": "62c3521acaaa3b99183e48f91c088bb0d2a10ae05858babe760453e938ce6dcd"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/next-foundation-scopes.md",
+      "snapshot": "source/docs/architecture/next-foundation-scopes.md",
+      "bytes": 23286,
+      "sha256": "c0351ac0f2b46ec7243f61dc6782c0e68dd49ffbea4a585e0b706967c3abc62e"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/public-surface-inventory.md",
+      "snapshot": "source/docs/architecture/public-surface-inventory.md",
+      "bytes": 30579,
+      "sha256": "c5b81a3cc7f8be8c47f7f190d9117f5cab633064a535a34d85196b4b6f3d0c61"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/implicit-rewrite-contract.md",
+      "snapshot": "source/docs/architecture/implicit-rewrite-contract.md",
+      "bytes": 20379,
+      "sha256": "e9aff36c1321ab9d18be3eaa001b01a16d42015431b09925f396141c12c47ca8"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/architecture/c1-payload-integrity-contract.md",
+      "snapshot": "source/docs/architecture/c1-payload-integrity-contract.md",
+      "bytes": 35453,
+      "sha256": "3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/docs/VALIDATION.md",
+      "snapshot": "source/docs/VALIDATION.md",
+      "bytes": 8810,
+      "sha256": "3b5f542dd2db09b6954aa621c1433c346c11e1b4a5040ab3827a1c3016758c0e"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity.rs",
+      "snapshot": "source/src/content_integrity.rs",
+      "bytes": 1187,
+      "sha256": "faedaa701efb91671ba7cb1aaaee9c015d0f329561b1c30ddc7b56b85eaaf2f2"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/json.rs",
+      "snapshot": "source/src/content_integrity/json.rs",
+      "bytes": 19184,
+      "sha256": "dcd5c49212c5f4c7e1812de1205f8e098866d52d8dc5c58e37871c489ffe7e18"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/numbers.rs",
+      "snapshot": "source/src/content_integrity/numbers.rs",
+      "bytes": 3837,
+      "sha256": "d9df98565ac36231b537e6e3d7116e21485ec5a36b3cad64f4770b1ccb905dc7"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/meshopt.rs",
+      "snapshot": "source/src/content_integrity/meshopt.rs",
+      "bytes": 3105,
+      "sha256": "ccaf4ce61fa60fd23b4d0ec48ca6514911394cc4ae91286f0d964d571b7a8c7e"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload.rs",
+      "snapshot": "source/src/content_integrity/payload.rs",
+      "bytes": 64682,
+      "sha256": "316f5010db03b93b3b9a49430159977c859d58c80ef20bba2ffd31a544b2bce7"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload/records.rs",
+      "snapshot": "source/src/content_integrity/payload/records.rs",
+      "bytes": 8392,
+      "sha256": "e04a50f35ab88c9731ccc75c71dcb3e4a7582334a14c7e4c04168f6924a8a7a9"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/content_integrity/payload/numbers.rs",
+      "snapshot": "source/src/content_integrity/payload/numbers.rs",
+      "bytes": 884,
+      "sha256": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/archive3tz/read.rs",
+      "snapshot": "source/src/archive3tz/read.rs",
+      "bytes": 58673,
+      "sha256": "73c7c9edc9c466497d005b8a33a9eca4e6a167c2acb5350b82f129f0ceef5e06"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/validate.rs",
+      "snapshot": "source/src/validate.rs",
+      "bytes": 50701,
+      "sha256": "3ef33a49d547f2f7dd9260ac19e6105c5d53d09e2e9c639ae04e940fe0546563"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/validate/types.rs",
+      "snapshot": "source/src/validate/types.rs",
+      "bytes": 3219,
+      "sha256": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/src/main.rs",
+      "snapshot": "source/src/main.rs",
+      "bytes": 66627,
+      "sha256": "30ab98f78f15900983c5b5257c5700a5d398ebd0b04fa3618cc3fe524927b7ae"
+    },
+    {
+      "source": "/tmp/rusty-tiles-r2-foundation/bindings/python/src/lib.rs",
+      "snapshot": "source/bindings/python/src/lib.rs",
+      "bytes": 39210,
+      "sha256": "1677dd95342ed8972b7a705d7e26235aeb2e82566e86d56ec4d383079606ca2f"
+    }
+  ]
+}

@@ -1215,6 +1215,59 @@ class WheelAPI(unittest.TestCase):
             rusty_tiles.mesh_to_3tz(EXAMPLE, output, callback=42)
         self.assertFalse(output.exists())
 
+    def test_validate_reports_decoded_content_containment(self):
+        def package(name, half, position, node):
+            data = self.root / name
+            data.mkdir()
+            payload = struct.pack("<3f", *position)
+            bound = list(struct.unpack("<3f", payload))
+            document = json.dumps({
+                "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+                "nodes": [node], "buffers": [{"byteLength": 12}],
+                "bufferViews": [{"buffer": 0, "byteLength": 12}],
+                "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                               "count": 1, "min": bound, "max": bound}],
+                "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 0}]}],
+            }).encode()
+            document += b" " * (-len(document) % 4)
+            glb = (struct.pack("<4sII", b"glTF", 2, 28 + len(document) + 12)
+                   + struct.pack("<I4s", len(document), b"JSON") + document
+                   + struct.pack("<I4s", 12, b"BIN\0") + payload)
+            (data / "a.glb").write_bytes(glb)
+            (data / "tileset.json").write_text(json.dumps({
+                "asset": {"version": "1.1"}, "geometricError": 0,
+                "root": {"boundingVolume": {"box": [0, 0, 0, half[0], 0, 0, 0, half[1], 0, 0, 0, half[2]]},
+                         "geometricError": 0, "content": {"uri": "a.glb"}},
+            }))
+            return rusty_tiles.convert_to_3tz(data, self.root / f"{name}.3tz").output
+
+        # glTF (1, 2, 3) is (1, -3, 2) in the z-up tile frame: on the box faces.
+        report = rusty_tiles.validate(package("inside", (1, 3, 2), (1, 2, 3), {"mesh": 0}))
+        self.assertIn("decodedContentContainment", report["checks"])
+        self.assertNotIn("decodedContentBounds", report["notInspected"])
+        self.assertNotIn("scene transforms", report["notInspected"])
+        self.assertIn("skins, animations, morph targets and rendered extent", report["notInspected"])
+        self.assertEqual(
+            {key: report["limits"][key] for key in (
+                "containmentSpanBits", "containmentWorkUnits", "containmentBytesRead",
+                "containmentDecodedBytes", "containmentNodeDepth")},
+            {"containmentSpanBits": 4096, "containmentWorkUnits": 2**28,
+             "containmentBytesRead": 2**31, "containmentDecodedBytes": 2**31,
+             "containmentNodeDepth": 64},
+        )
+        with self.assertRaises(rusty_tiles.DataError) as caught:
+            rusty_tiles.validate(package("outside", (1, 3, 1.9999999999999998), (1, 2, 3), {"mesh": 0}))
+        self.assertEqual(
+            str(caught.exception),
+            "decoded content outside bounding volume: content=a.glb depth=0 volume=own "
+            "node=0 mesh=0 primitive=0 vertex=0",
+        )
+        report = rusty_tiles.validate(package("skinned", (1, 1, 1), (9, 9, 9), {"mesh": 0, "skin": 0}))
+        self.assertNotIn("decodedContentContainment", report["checks"])
+        self.assertIn("decodedContentBounds", report["notInspected"])
+        self.assertIn("decodedContentBounds.skin", report["notInspected"])
+        self.assertIn("scene transforms", report["notInspected"])
+
     def test_callback_exception_is_preserved(self):
         error = RuntimeError("callback failed")
         calls = []

@@ -1,0 +1,11 @@
+--- a/oracle/c2o/tileset.py
++++ b/oracle/c2o/tileset.py
+@@ -247,7 +247,7 @@
+                     level.volumes.append(LevelVolume("externalContent", distance, vol, cwhere))
+                 level.volumes.append(LevelVolume("ancestor", distance, frame.volume, frame.where))
+                 child = path[len(path) - distance]
+-                if child.transform is not None:
++                if child.transform is not None and not child.external_root:
+                     level.to_parent = [[exact(child.transform[4 * c + r]) for c in range(4)]
+                                        for r in range(4)]
+                     level.to_parent_pairs = [S.pair_of(exact(v)) for v in child.transform]

@@ -1,0 +1,63 @@
+{
+  "record": "C2 domain/frame proposal for separate combined precode assessment",
+  "implementation_authorized_by_this_package": false,
+  "production_or_target_execution": false,
+  "prerequisites": [
+    "R2 PR155 final-head acceptance and accepted develop merge freshly pinned",
+    "independent combined semantic/math/resource/ownership/oracle decision"
+  ],
+  "proposed_claim": "staticDecodedPositionContainment: every draw-referenced stored/decoded position, every selected core mesh instance, each own/content/explicit ancestor bound, using actual represented source semantics",
+  "profile": {
+    "scene": "explicit root scene; else sole scene only by named engineering selection",
+    "instances": "distinct core nodes sharing mesh all consumed; no mesh/URI verdict dedup",
+    "positions": "entire existing C1 admitted POSITION byte domain; indexed referenced positions only; restart markers skipped; unused values still C1 integrity checked",
+    "frames": "node local Matrix/TRS then U then b3dm RTC then owning/ancestor tile suffix products, including external tileset roots",
+    "bounds": "initial Cartesian box/sphere; math sibling adjudicates singular/degenerate basis; no geographic region claim",
+    "unsupported": "C2 selected skin/morph, nonempty animations, GPU instancing/CESIUM_RTC, unknown actual geometry extensions, active metadata positional overrides, ambiguous/library scene, non-Y legacy axis override, uncertifiable numerical admission",
+    "opaque": "extras/schema/nonpositional metadata remain opaque, not recursively classified as core extensions"
+  },
+  "proposed_numeric_admission": {
+    "quaternion_norm_squared_window": "1\u00b12^-20, components[-1,1], nonzero; sufficient approximate encoding profile, not exact unit proof",
+    "local_matrix_orthogonality": "squared dot<=2^-40*(squared norm product), zero columns allowed; approximate TRS compatibility only",
+    "repair": "none; actual supplied components/matrix preserved",
+    "ambiguous_or_uncertifiable": "Unsupported",
+    "spatial_slack": "none; math uses outward enclosure and explicit ambiguity refusal",
+    "rtc_json": "explicit f64->f32 nearest ties-even per float32 semantic then exact promotion; out-of-f32-range finite =>Unsupported; requires review"
+  },
+  "stream": {
+    "events": [
+      "NodeEnter(index,local Matrix16 or TRS)",
+      "DrawPosition(mesh,primitive,draw_index,raw3 exact-f64,normalization enum)",
+      "NodeExit"
+    ],
+    "normalization": [
+      "None",
+      "Signed127",
+      "Unsigned255",
+      "Signed32767",
+      "Unsigned65535"
+    ],
+    "owners": "format resolves immutable bytes/types/graph; math owns outward arithmetic/stack/membership; operation owns resources/selected limits/report/errors",
+    "causes": "Format, Resolver and Consumer remain distinct; no partial success"
+  },
+  "public_migration_unresolved": [
+    "strict default inspect versus explicit check selection",
+    "separately named stronger hierarchyBounds versus replace its default rejection",
+    "finite C2 check/counter/exclusion schema, repeated URI counts",
+    "all accepted producer scene/frame/volume classes inventoried before public default"
+  ],
+  "other_precise_remaining_decisions": [
+    "effective tile/content metadata overrides detection and finite geometry-extension allowlist",
+    "local numerical admission proposal independent review",
+    "RTC JSON float32 proposal and binary alignment/range controls independent review",
+    "joint decoder/source/frame/descriptor backing and actual counts/drop proof",
+    "mathematical box/degenerate/singular/region dispositions via sibling package"
+  ],
+  "witnesses": "13 literal inputs +17 context recipes, unmaterialized/unexecuted. No acceptance inferred from AST/JSON syntax or primary copying.",
+  "proof_limits": [
+    "Published OGC complete52MiB source not retained; selected web observation only, exact repo core pin not claimed identical full document",
+    "No complete glTF/metadata/material/implicit/rendering/LOD/source fidelity certification",
+    "No universal allocator/RSS/OOM guarantee; no default relaxation",
+    "Parents#113/#120/#125/#121/#126 remain open; no main/tag/publication authority"
+  ]
+}

@@ -27,11 +27,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -111,11 +113,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -205,11 +209,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -289,11 +295,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -373,11 +381,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -467,11 +477,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -555,11 +567,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -640,11 +654,13 @@
           "EXT_structural_metadata",
           "b3dm feature and batch table semantics",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -731,11 +747,13 @@
           "EXT_structural_metadata",
           "b3dm feature and batch table semantics",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -828,11 +846,13 @@
           "EXT_structural_metadata",
           "b3dm feature and batch table semantics",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -918,12 +938,15 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.implicitTiling",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "implicitAddressingAndAvailability",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1013,12 +1036,15 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.implicitTiling",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "implicitAddressingAndAvailability",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1114,11 +1140,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1198,11 +1226,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1282,11 +1312,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1376,11 +1408,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [
@@ -1460,11 +1494,13 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
+          "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
-          "scene transforms, skins, animations, morph targets and rendered bounds"
+          "scene transforms",
+          "skins, animations, morph targets and rendered extent"
         ],
         "ok": true,
         "payloads": [

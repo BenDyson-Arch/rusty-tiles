@@ -1,0 +1,137 @@
+{
+  "scope": "Tiny executed exact-rational enumeration only, no decoder or production call.",
+  "quaternions": [
+    {
+      "name": "unit",
+      "componentsHex": [
+        "0x1.0000000000000p+0",
+        "0x0.0p+0",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "1",
+      "expectedPolicy": "AdmittedEncodingWindow",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    },
+    {
+      "name": "rounded-f32-unit",
+      "componentsHex": [
+        "0x1.6a09e60000000p-1",
+        "0x1.6a09e60000000p-1",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "140737483538089/140737488355328",
+      "expectedPolicy": "AdmittedEncodingWindow",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    },
+    {
+      "name": "exact-upper-window",
+      "componentsHex": [
+        "0x1.0000000000000p+0",
+        "0x1.0000000000000p-10",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "1048577/1048576",
+      "expectedPolicy": "AdmittedEncodingWindow",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    },
+    {
+      "name": "one-ulp-beyond-window",
+      "componentsHex": [
+        "0x1.0000000000000p+0",
+        "0x1.0000000000001p-10",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "21267668214968257618140344110991540225/21267647932558653966460912964485513216",
+      "expectedPolicy": "UnsupportedEncodingWindow",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    },
+    {
+      "name": "zero",
+      "componentsHex": [
+        "0x0.0p+0",
+        "0x0.0p+0",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "0",
+      "expectedPolicy": "InvalidInput",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    },
+    {
+      "name": "component-outside",
+      "componentsHex": [
+        "0x1.0000000000001p+0",
+        "0x0.0p+0",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      "exactNormSquared": "20282409603651679431146506027009/20282409603651670423947251286016",
+      "expectedPolicy": "InvalidInput",
+      "note": "Exact rational policy enumeration only; not a unit-quaternion proof or executed Rust."
+    }
+  ],
+  "matrixColumnPairs": [
+    {
+      "name": "orthogonal",
+      "a": [
+        "1",
+        "0",
+        "0"
+      ],
+      "b": [
+        "0",
+        "1",
+        "0"
+      ],
+      "expectedPolicyAdmitted": true,
+      "exactSquaredDot": "0",
+      "exactWindowProduct": "1/1099511627776",
+      "note": "Approximate encoding policy, not exact TRS decomposition."
+    },
+    {
+      "name": "near-cos-window",
+      "a": [
+        "1",
+        "0",
+        "0"
+      ],
+      "b": [
+        "1/1048576",
+        "1",
+        "0"
+      ],
+      "expectedPolicyAdmitted": true,
+      "exactSquaredDot": "1/1099511627776",
+      "exactWindowProduct": "1099511627777/1208925819614629174706176",
+      "note": "Approximate encoding policy, not exact TRS decomposition."
+    },
+    {
+      "name": "outside-cos-window",
+      "a": [
+        "1",
+        "0",
+        "0"
+      ],
+      "b": [
+        "1/524288",
+        "1",
+        "0"
+      ],
+      "expectedPolicyAdmitted": false,
+      "exactSquaredDot": "1/274877906944",
+      "exactWindowProduct": "274877906945/302231454903657293676544",
+      "note": "Approximate encoding policy, not exact TRS decomposition."
+    }
+  ],
+  "f32NormSquaredPerturbationUpper": "16777217/70368744177664",
+  "lessThan2ToMinus21": true,
+  "actualNice": 10,
+  "actualAffinity": [
+    0,
+    1
+  ]
+}

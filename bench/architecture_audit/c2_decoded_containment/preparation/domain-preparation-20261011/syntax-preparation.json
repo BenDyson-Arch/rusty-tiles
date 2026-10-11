@@ -1,0 +1,21 @@
+{
+  "record": "Author preparation syntax only; no materialization, transforms, target, decoder, Cargo or native execution",
+  "utc": "2026-10-10T20:03:15.671818+00:00",
+  "python_ast": [
+    "materialize.py"
+  ],
+  "json_files": [
+    "decisions.json",
+    "ogc-web-observation.json",
+    "primary/node.schema.json",
+    "primary/scene.schema.json",
+    "primary-pins.json",
+    "reference-map.json",
+    "source-inventory.json",
+    "source-pins.json",
+    "witnesses.json"
+  ],
+  "literal_cases": 13,
+  "context_recipes": 17,
+  "semantic_acceptance": false
+}

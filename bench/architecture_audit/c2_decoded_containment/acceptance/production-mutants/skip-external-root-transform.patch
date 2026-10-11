@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 8a94975..e6a1281 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -602,7 +602,7 @@ impl Containment {
+             let level = self.levels.len() as u32;
+             let child = &self.tiles[current];
+             let fact = LevelFacts {
+-                to_parent: child.transform,
++                to_parent: child.transform.filter(|_| child.external.is_none()),
+                 volumes: [
+                     Some((Role::Ancestor(level), self.tiles[parent].volume)),
+                     None,

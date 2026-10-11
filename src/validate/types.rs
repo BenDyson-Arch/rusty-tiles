@@ -25,6 +25,9 @@ pub enum ValidationFailure {
     ResourceLimit(String),
     #[error(transparent)]
     Io(#[from] io::Error),
+    /// An internal invariant of the validator itself failed; never a verdict on the input.
+    #[error("{0}")]
+    InvalidState(String),
 }
 impl ValidationFailure {
     pub fn category(&self) -> (&'static str, u8) {
@@ -33,6 +36,7 @@ impl ValidationFailure {
             Self::Unsupported(_) => ("unsupported", 2),
             Self::ResourceLimit(_) => ("resource_limit", 3),
             Self::Io(_) => ("io", 1),
+            Self::InvalidState(_) => ("invalid_state", 1),
         }
     }
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
@@ -63,6 +67,16 @@ pub struct ValidationLimits {
     pub source_archive_bytes: u64,
     pub central_directory_bytes: u64,
     pub document_items: u64,
+    /// C2 decoded-content containment: maximum normative bit span of any exact quantity.
+    pub containment_span_bits: u64,
+    /// C2 precheck: maximum accumulated work units over all content references.
+    pub containment_work_units: u64,
+    /// C2 precheck: maximum archive bytes re-read by containment streaming.
+    pub containment_bytes_read: u64,
+    /// C2 precheck: maximum bytes materialized by containment re-decoding.
+    pub containment_decoded_bytes: u64,
+    /// C2 precheck: maximum selected glTF node path depth.
+    pub containment_node_depth: u64,
 }
 impl Default for ValidationLimits {
     fn default() -> Self {
@@ -82,6 +96,11 @@ impl Default for ValidationLimits {
             source_archive_bytes: 1024 * 1024 * 1024,
             central_directory_bytes: 16 * 1024 * 1024,
             document_items: 65536,
+            containment_span_bits: 4096,
+            containment_work_units: 1 << 28,
+            containment_bytes_read: 2 * 1024 * 1024 * 1024,
+            containment_decoded_bytes: 2 * 1024 * 1024 * 1024,
+            containment_node_depth: 64,
         }
     }
 }
